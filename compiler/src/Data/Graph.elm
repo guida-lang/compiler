@@ -4,10 +4,12 @@ module Data.Graph exposing
     , Graph
     , SCC(..)
     , Table
-    , Vertex
-      -- , bcc
-    , buildG
-      -- , components
+    ,  Vertex
+       -- , bcc
+
+    ,  buildG
+       -- , components
+
     , dff
     , dfs
     , edges
@@ -16,14 +18,16 @@ module Data.Graph exposing
     , graphFromEdges
     , graphFromEdges_
     , indegree
-    , outdegree
-      -- , path
-      -- , reachable
-      -- , reverseTopSort
+    ,  outdegree
+       -- , path
+       -- , reachable
+       -- , reverseTopSort
+
     , scc
     , stronglyConnComp
-    , stronglyConnCompR
-      -- , topSort
+    ,  stronglyConnCompR
+       -- , topSort
+
     , transposeG
     , vertices
     )
@@ -521,11 +525,13 @@ bind : (a -> SetM s b) -> SetM s a -> SetM s b
 bind f (SetM v) =
     SetM
         (\s ->
-            case v s of
-                ( x, s_ ) ->
-                    case f x of
-                        SetM v_ ->
-                            v_ s_
+            let
+                ( x, s_ ) =
+                    v s
+            in
+            case f x of
+                SetM v_ ->
+                    v_ s_
         )
 
 
@@ -533,9 +539,11 @@ fmap : (a -> b) -> SetM s a -> SetM s b
 fmap f (SetM v) =
     SetM
         (\s ->
-            case v s of
-                ( x, s_ ) ->
-                    ( f x, s_ )
+            let
+                ( x, s_ ) =
+                    v s
+            in
+            ( f x, s_ )
         )
 
 
@@ -548,11 +556,14 @@ apply : SetM s (a -> b) -> SetM s a -> SetM s b
 apply (SetM f) (SetM v) =
     SetM
         (\s ->
-            case f s of
-                ( k, s_ ) ->
-                    case v s_ of
-                        ( x, s__ ) ->
-                            ( k x, s__ )
+            let
+                ( k, s_ ) =
+                    f s
+
+                ( x, s__ ) =
+                    v s_
+            in
+            ( k x, s__ )
         )
 
 

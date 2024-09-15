@@ -1,6 +1,7 @@
 node_modules
 elm-stuff
 .DS_Store
+.idea
 
 # Guida
 bin/guida.js

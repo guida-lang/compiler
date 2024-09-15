@@ -17,10 +17,10 @@ getPossibilities (KnownVersions latest previous) =
             List.reverse (latest :: previous)
 
         minorPoints =
-            List.map List.head (Utils.listGroupBy sameMajor allVersions) |> List.filterMap identity
+            List.filterMap List.head (Utils.listGroupBy sameMajor allVersions)
 
         patchPoints =
-            List.map List.head (Utils.listGroupBy sameMinor allVersions) |> List.filterMap identity
+            List.filterMap List.head (Utils.listGroupBy sameMinor allVersions)
     in
     ( latest, V.bumpMajor latest, M.MAJOR )
         :: List.map (\v -> ( v, V.bumpMinor v, M.MINOR )) minorPoints

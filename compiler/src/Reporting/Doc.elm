@@ -26,14 +26,16 @@ module Reporting.Doc exposing
     , fromPackage
     , fromVersion
     , green
-    , hang
-      -- , hcat
+    ,  hang
+       -- , hcat
+
     , hsep
     , indent
     , intToOrdinal
     , join
-    , link
-      -- , magenta
+    ,  link
+       -- , magenta
+
     , makeLink
     , makeNakedLink
     , moreArgs
@@ -99,7 +101,7 @@ encode : Doc -> E.Value
 encode doc =
     let
         _ =
-            Debug.log "doc" (Debug.toString (P.pretty 0 doc))
+            Debug.toString (P.pretty 0 doc)
     in
     -- E.array (toJsonHelp noStyle [] (P.renderPretty 1 80 doc))
     E.array []

@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.15",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "elm-review": "^2.12.0"
   },
   "devDependencies": {
     "elm": "^0.19.1-6",

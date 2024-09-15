@@ -58,22 +58,17 @@ config port_ =
 
 
 -- INDEX
-
-
-directoryConfig : DirectoryConfig m
-directoryConfig =
-    fancyDirectoryConfig
-        { indexFiles = []
-        , indexGenerator =
-            \pwd ->
-                do modifyResponse <|
-                    setContentType "text/html;charset=utf-8"
-                        writeBuilder
-                        =<< liftIO (Index.generate pwd)
-        }
-
-
-
+--directoryConfig : DirectoryConfig m
+--directoryConfig =
+--    fancyDirectoryConfig
+--        { indexFiles = []
+--        , indexGenerator =
+--            \pwd ->
+--                do modifyResponse <|
+--                    setContentType "text/html;charset=utf-8"
+--                        writeBuilder
+--                        =<< liftIO (Index.generate pwd)
+--        }
 -- NOT FOUND
 
 

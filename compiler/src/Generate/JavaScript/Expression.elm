@@ -279,7 +279,7 @@ generateCtor mode (Opt.Global home name) index arity =
 ctorToInt : ModuleName.Canonical -> Name.Name -> Index.ZeroBased -> Int
 ctorToInt home name index =
     if home == ModuleName.dict && (name == "RBNode_elm_builtin" || name == "RBEmpty_elm_builtin") then
-        0 - Index.toHuman index
+        -(Index.toHuman index)
 
     else
         Index.toMachine index

@@ -167,7 +167,7 @@ makeLevel level oldTabs =
 
 commaSep : List String -> String
 commaSep builders =
-    String.join "" (List.intersperse ", " builders)
+    String.join ", " builders
 
 
 commaNewlineSep : Level -> List String -> String
@@ -176,7 +176,7 @@ commaNewlineSep (Level _ nextLevel) builders =
         (Level deeperIndent _) =
             nextLevel ()
     in
-    String.join "" (List.intersperse (",\n" ++ deeperIndent) builders)
+    String.join (",\n" ++ deeperIndent) builders
 
 
 
@@ -185,7 +185,7 @@ commaNewlineSep (Level _ nextLevel) builders =
 
 fromStmtBlock : Level -> List Stmt -> String
 fromStmtBlock level stmts =
-    String.join "" (List.map (fromStmt level) stmts)
+    String.concat (List.map (fromStmt level) stmts)
 
 
 fromStmt : Level -> Stmt -> String
@@ -217,7 +217,7 @@ fromStmt ((Level indent nextLevel) as level) statement =
                 ++ "switch ("
                 ++ Tuple.second (fromExpr level Whatever expr)
                 ++ ") {\n"
-                ++ String.join "" (List.map (fromClause (nextLevel ())) clauses)
+                ++ String.concat (List.map (fromClause (nextLevel ())) clauses)
                 ++ indent
                 ++ "}\n"
 
@@ -243,7 +243,7 @@ fromStmt ((Level indent nextLevel) as level) statement =
             indent ++ "continue " ++ label ++ ";\n"
 
         Labelled label stmt ->
-            String.join ""
+            String.concat
                 [ indent
                 , label
                 , ":\n"

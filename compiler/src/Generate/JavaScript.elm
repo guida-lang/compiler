@@ -372,7 +372,7 @@ drawCycle names =
         bottomLine =
             "\\n  └─────┘"
     in
-    String.join "" (topLine :: List.intersperse midLine (List.map nameLine names) ++ [ bottomLine ])
+    String.concat (topLine :: List.intersperse midLine (List.map nameLine names) ++ [ bottomLine ])
 
 
 generateKernel : Mode.Mode -> List K.Chunk -> String

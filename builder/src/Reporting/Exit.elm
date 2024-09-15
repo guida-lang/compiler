@@ -2200,7 +2200,7 @@ toHttpErrorReport title err context =
                                 -- ++ show (length responses)
                                 ++ "(TODO)"
                                 ++ " redirects:"
-                        , D.indent 4 <| D.vcat <| List.map toRedirectDoc []
+                        , D.indent 4 <| D.vcat <| []
                         , D.reflow <|
                             "Is it possible that your internet connection intercepts certain requests? That sometimes causes problems for folks in schools, businesses, airports, hotels, and certain countries. Try asking for help locally or in a community forum!"
                         ]

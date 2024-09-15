@@ -1049,7 +1049,7 @@ forkIO : IO () -> IO ThreadId
 forkIO ioArg =
     IO
         (\next ->
-            ( IO.Process (Decode.map next (Decode.succeed ThreadId))
+            ( IO.Process (Decode.succeed (next ThreadId))
             , IO.NoOp
             , Just ioArg
             )

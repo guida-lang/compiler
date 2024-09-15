@@ -429,8 +429,7 @@ chompUntilDocs =
             let
                 ( ( isDocs, newPos ), ( newRow, newCol ) ) =
                     untilDocs src pos end row col
-            in
-            let
+
                 newState =
                     P.State src newPos end indent newRow newCol
             in

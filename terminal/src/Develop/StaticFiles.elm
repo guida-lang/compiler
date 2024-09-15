@@ -68,41 +68,41 @@ sansFontPath =
 
 
 
--- ELM
-
-
-elm : String
-elm =
-    bsToExp =<< runIO Build.buildReactorFrontEnd
-
-
-
--- CSS
-
-
-css : String
-css =
-    bsToExp =<< runIO (Build.readAsset "styles.css")
-
-
-
--- FONTS
-
-
-codeFont : String
-codeFont =
-    bsToExp =<< runIO (Build.readAsset "source-code-pro.ttf")
-
-
-sansFont : String
-sansFont =
-    bsToExp =<< runIO (Build.readAsset "source-sans-pro.ttf")
-
-
-
--- IMAGES
-
-
-favicon : String
-favicon =
-    bsToExp =<< runIO (Build.readAsset "favicon.ico")
+---- ELM
+--
+--
+--elm : String
+--elm =
+--    bsToExp =<< runIO Build.buildReactorFrontEnd
+--
+--
+--
+---- CSS
+--
+--
+--css : String
+--css =
+--    bsToExp =<< runIO (Build.readAsset "styles.css")
+--
+--
+--
+---- FONTS
+--
+--
+--codeFont : String
+--codeFont =
+--    bsToExp =<< runIO (Build.readAsset "source-code-pro.ttf")
+--
+--
+--sansFont : String
+--sansFont =
+--    bsToExp =<< runIO (Build.readAsset "source-sans-pro.ttf")
+--
+--
+--
+---- IMAGES
+--
+--
+--favicon : String
+--favicon =
+--    bsToExp =<< runIO (Build.readAsset "favicon.ico")

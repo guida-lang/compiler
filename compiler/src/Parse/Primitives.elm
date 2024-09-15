@@ -449,7 +449,7 @@ getCharWidth word =
         -- TODO this is currently required because of `src/Cards` chars ('🂡', '🂢', '🂣', '🂤', '🂥', '🂦', '🂧', '🂨', '🂩', '🂪', '🂫', '🂭', '🂮')
         2
 
-    else if List.member word [ '—' ] then
+    else if word == '—' then
         -- TODO this is currently required because of the `HttpQuotes` from "Elm Try!" examples
         2
 
