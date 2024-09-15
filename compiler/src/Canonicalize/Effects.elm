@@ -6,7 +6,7 @@ module Canonicalize.Effects exposing
 import AST.Canonical as Can
 import AST.Source as Src
 import AST.Utils.Type as Type
-import Basics exposing (..)
+import Basics
 import Canonicalize.Environment as Env
 import Canonicalize.Type as Type
 import Data.Map as Dict exposing (Dict)

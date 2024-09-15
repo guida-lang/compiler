@@ -747,13 +747,15 @@ fpSplitDirectories : String -> List String
 fpSplitDirectories path =
     String.split "/" path
         |> List.filter ((/=) "")
-        |> (++)
-            (if String.startsWith "/" path then
-                [ "/" ]
+        |> (\a ->
+                (if String.startsWith "/" path then
+                    [ "/" ]
 
-             else
-                []
-            )
+                 else
+                    []
+                )
+                    ++ a
+           )
 
 
 fpSplitExtension : String -> ( String, String )

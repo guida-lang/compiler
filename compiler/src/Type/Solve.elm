@@ -608,7 +608,12 @@ adjustRankContent youngMark visitMark groupRank content =
 
 introduce : Int -> Pools -> List Variable -> IO ()
 introduce rank pools variables =
-    IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((++) variables) rank
+    IO.mVectorModify
+        (Decode.list UF.variableDecoder)
+        (Encode.list UF.variableEncoder)
+        pools
+        (\a -> variables ++ a)
+        rank
         |> IO.bind
             (\_ ->
                 Utils.forM_ variables
@@ -763,7 +768,7 @@ srcTypeToVariable rank pools freeVars srcType =
     Utils.mapTraverseWithKey compare makeVar freeVars
         |> IO.bind
             (\flexVars ->
-                IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((++) (Dict.values flexVars)) rank
+                IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools (\a -> Dict.values flexVars ++ a) rank
                     |> IO.bind (\_ -> srcTypeToVar rank pools flexVars srcType)
             )
 

@@ -12,10 +12,10 @@ import Data.Map as Dict exposing (Dict)
 import Data.Name as Name exposing (Name)
 import Elm.ModuleName as ModuleName
 import Reporting.Annotation as A
-import Reporting.Error.Type as E exposing (..)
+import Reporting.Error.Type as E exposing (Category(..), Context(..), Expected(..), MaybeName(..), PContext(..), PExpected(..), SubContext(..))
 import Type.Constrain.Pattern as Pattern
 import Type.Instantiate as Instantiate
-import Type.Type as Type exposing (..)
+import Type.Type as Type exposing (Constraint(..), Type(..))
 import Type.UnionFind as UF
 import Utils.Main as Utils
 
@@ -67,10 +67,10 @@ constrain rtv (A.At region expression) expected =
             IO.pure (CEqual region Char Type.char expected)
 
         Can.Int _ ->
-            mkFlexNumber
+            Type.mkFlexNumber
                 |> IO.fmap
                     (\var ->
-                        exists [ var ] (CEqual region E.Number (VarN var) expected)
+                        Type.exists [ var ] (CEqual region E.Number (VarN var) expected)
                     )
 
         Can.Float _ ->
@@ -80,7 +80,7 @@ constrain rtv (A.At region expression) expected =
             constrainList rtv region elements expected
 
         Can.Negate expr ->
-            mkFlexNumber
+            Type.mkFlexNumber
                 |> IO.bind
                     (\numberVar ->
                         let
@@ -94,7 +94,7 @@ constrain rtv (A.At region expression) expected =
                                         negateCon =
                                             CEqual region E.Number numberType expected
                                     in
-                                    exists [ numberVar ] (CAnd [ numberCon, negateCon ])
+                                    Type.exists [ numberVar ] (CAnd [ numberCon, negateCon ])
                                 )
                     )
 
@@ -126,10 +126,10 @@ constrain rtv (A.At region expression) expected =
                 (constrain rtv body expected)
 
         Can.Accessor field ->
-            mkFlexVar
+            Type.mkFlexVar
                 |> IO.bind
                     (\extVar ->
-                        mkFlexVar
+                        Type.mkFlexVar
                             |> IO.fmap
                                 (\fieldVar ->
                                     let
@@ -142,15 +142,15 @@ constrain rtv (A.At region expression) expected =
                                         recordType =
                                             RecordN (Dict.singleton field fieldType) extType
                                     in
-                                    exists [ fieldVar, extVar ] (CEqual region (Accessor field) (FunN recordType fieldType) expected)
+                                    Type.exists [ fieldVar, extVar ] (CEqual region (Accessor field) (FunN recordType fieldType) expected)
                                 )
                     )
 
         Can.Access expr (A.At accessRegion field) ->
-            mkFlexVar
+            Type.mkFlexVar
                 |> IO.bind
                     (\extVar ->
-                        mkFlexVar
+                        Type.mkFlexVar
                             |> IO.bind
                                 (\fieldVar ->
                                     let
@@ -169,7 +169,7 @@ constrain rtv (A.At region expression) expected =
                                     constrain rtv expr (FromContext region context recordType)
                                         |> IO.fmap
                                             (\recordCon ->
-                                                exists [ fieldVar, extVar ] (CAnd [ recordCon, CEqual region (Access field) fieldType expected ])
+                                                Type.exists [ fieldVar, extVar ] (CAnd [ recordCon, CEqual region (Access field) fieldType expected ])
                                             )
                                 )
                     )
@@ -202,7 +202,7 @@ constrainLambda rtv region args body expected =
                 constrain rtv body (NoExpectation resultType)
                     |> IO.fmap
                         (\bodyCon ->
-                            exists vars <|
+                            Type.exists vars <|
                                 CAnd
                                     [ CLet []
                                         pvars
@@ -225,10 +225,10 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
         maybeName =
             getName func
     in
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\funcVar ->
-                mkFlexVar
+                Type.mkFlexVar
                     |> IO.bind
                         (\resultVar ->
                             let
@@ -251,7 +251,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
                                                         category =
                                                             CallResult maybeName
                                                     in
-                                                    exists (funcVar :: resultVar :: argVars)
+                                                    Type.exists (funcVar :: resultVar :: argVars)
                                                         (CAnd
                                                             [ funcCon
                                                             , CEqual funcRegion category funcType (FromContext region (CallArity maybeName (List.length args)) arityType)
@@ -267,7 +267,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
 
 constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( UF.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\argVar ->
                 let
@@ -329,13 +329,13 @@ getAccessName (A.At _ expr) =
 
 constrainBinop : RTV -> A.Region -> Name.Name -> Can.Annotation -> Can.Expr -> Can.Expr -> E.Expected Type -> IO Constraint
 constrainBinop rtv region op annotation leftExpr rightExpr expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\leftVar ->
-                mkFlexVar
+                Type.mkFlexVar
                     |> IO.bind
                         (\rightVar ->
-                            mkFlexVar
+                            Type.mkFlexVar
                                 |> IO.bind
                                     (\answerVar ->
                                         let
@@ -360,7 +360,7 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
                                                     constrain rtv rightExpr (FromContext region (OpRight op) rightType)
                                                         |> IO.fmap
                                                             (\rightCon ->
-                                                                exists [ leftVar, rightVar, answerVar ]
+                                                                Type.exists [ leftVar, rightVar, answerVar ]
                                                                     (CAnd
                                                                         [ opCon
                                                                         , leftCon
@@ -381,7 +381,7 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
 
 constrainList : RTV -> A.Region -> List Can.Expr -> E.Expected Type -> IO Constraint
 constrainList rtv region entries expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\entryVar ->
                 let
@@ -394,7 +394,7 @@ constrainList rtv region entries expected =
                 Utils.indexedTraverse (constrainListEntry rtv region entryType) entries
                     |> IO.fmap
                         (\entryCons ->
-                            exists [ entryVar ]
+                            Type.exists [ entryVar ]
                                 (CAnd
                                     [ CAnd entryCons
                                     , CEqual region List listType expected
@@ -434,7 +434,7 @@ constrainIf rtv region branches final expected =
                                 )
 
                     _ ->
-                        mkFlexVar
+                        Type.mkFlexVar
                             |> IO.bind
                                 (\branchVar ->
                                     let
@@ -447,7 +447,7 @@ constrainIf rtv region branches final expected =
                                         )
                                         |> IO.fmap
                                             (\branchCons ->
-                                                exists [ branchVar ]
+                                                Type.exists [ branchVar ]
                                                     (CAnd
                                                         [ CAnd condCons
                                                         , CAnd branchCons
@@ -465,7 +465,7 @@ constrainIf rtv region branches final expected =
 
 constrainCase : RTV -> A.Region -> Can.Expr -> List Can.CaseBranch -> Expected Type -> IO Constraint
 constrainCase rtv region expr branches expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\ptrnVar ->
                 let
@@ -486,11 +486,11 @@ constrainCase rtv region expr branches expected =
                                         )
                                         |> IO.fmap
                                             (\branchCons ->
-                                                exists [ ptrnVar ] (CAnd (exprCon :: branchCons))
+                                                Type.exists [ ptrnVar ] (CAnd (exprCon :: branchCons))
                                             )
 
                                 _ ->
-                                    mkFlexVar
+                                    Type.mkFlexVar
                                         |> IO.bind
                                             (\branchVar ->
                                                 let
@@ -506,7 +506,7 @@ constrainCase rtv region expr branches expected =
                                                     )
                                                     |> IO.fmap
                                                         (\branchCons ->
-                                                            exists [ ptrnVar, branchVar ]
+                                                            Type.exists [ ptrnVar, branchVar ]
                                                                 (CAnd
                                                                     [ exprCon
                                                                     , CAnd branchCons
@@ -554,13 +554,13 @@ constrainRecord rtv region fields expected =
                     cons =
                         Dict.foldr (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
                 in
-                exists vars (CAnd cons)
+                Type.exists vars (CAnd cons)
             )
 
 
 constrainField : RTV -> Can.Expr -> IO ( UF.Variable, Type, Constraint )
 constrainField rtv expr =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\var ->
                 let
@@ -581,13 +581,13 @@ constrainField rtv expr =
 
 constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict Name.Name Can.FieldUpdate -> Expected Type -> IO Constraint
 constrainUpdate rtv region name expr fields expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\extVar ->
                 Utils.mapTraverseWithKey compare (constrainUpdateField rtv region) fields
                     |> IO.bind
                         (\fieldDict ->
-                            mkFlexVar
+                            Type.mkFlexVar
                                 |> IO.bind
                                     (\recordVar ->
                                         let
@@ -611,7 +611,7 @@ constrainUpdate rtv region name expr fields expected =
                                                 Dict.foldr (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] fieldDict
                                         in
                                         constrain rtv expr (FromContext region (RecordUpdateKeys name fields) recordType)
-                                            |> IO.fmap (\con -> exists vars (CAnd (fieldsCon :: con :: cons)))
+                                            |> IO.fmap (\con -> Type.exists vars (CAnd (fieldsCon :: con :: cons)))
                                     )
                         )
             )
@@ -619,7 +619,7 @@ constrainUpdate rtv region name expr fields expected =
 
 constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( UF.Variable, Type, Constraint )
 constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\var ->
                 let
@@ -637,10 +637,10 @@ constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
 
 constrainTuple : RTV -> A.Region -> Can.Expr -> Can.Expr -> Maybe Can.Expr -> Expected Type -> IO Constraint
 constrainTuple rtv region a b maybeC expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\aVar ->
-                mkFlexVar
+                Type.mkFlexVar
                     |> IO.bind
                         (\bVar ->
                             let
@@ -665,10 +665,10 @@ constrainTuple rtv region a b maybeC expected =
                                                                 tupleCon =
                                                                     CEqual region Tuple tupleType expected
                                                             in
-                                                            IO.pure (exists [ aVar, bVar ] (CAnd [ aCon, bCon, tupleCon ]))
+                                                            IO.pure (Type.exists [ aVar, bVar ] (CAnd [ aCon, bCon, tupleCon ]))
 
                                                         Just c ->
-                                                            mkFlexVar
+                                                            Type.mkFlexVar
                                                                 |> IO.bind
                                                                     (\cVar ->
                                                                         let
@@ -685,7 +685,7 @@ constrainTuple rtv region a b maybeC expected =
                                                                                         tupleCon =
                                                                                             CEqual region Tuple tupleType expected
                                                                                     in
-                                                                                    exists [ aVar, bVar, cVar ] (CAnd [ aCon, bCon, cCon, tupleCon ])
+                                                                                    Type.exists [ aVar, bVar, cVar ] (CAnd [ aCon, bCon, cCon, tupleCon ])
                                                                                 )
                                                                     )
                                                 )
@@ -700,10 +700,10 @@ constrainTuple rtv region a b maybeC expected =
 
 constrainShader : A.Region -> Shader.Types -> Expected Type -> IO Constraint
 constrainShader region (Shader.Types attributes uniforms varyings) expected =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\attrVar ->
-                mkFlexVar
+                Type.mkFlexVar
                     |> IO.fmap
                         (\unifVar ->
                             let
@@ -721,7 +721,7 @@ constrainShader region (Shader.Types attributes uniforms varyings) expected =
                                         , toShaderRecord varyings EmptyRecordN
                                         ]
                             in
-                            exists [ attrVar, unifVar ] (CEqual region Shader shaderType expected)
+                            Type.exists [ attrVar, unifVar ] (CEqual region Shader shaderType expected)
                         )
             )
 
@@ -766,7 +766,7 @@ glToType glType =
 
 constrainDestruct : RTV -> A.Region -> Can.Pattern -> Can.Expr -> Constraint -> IO Constraint
 constrainDestruct rtv region pattern expr bodyCon =
-    mkFlexVar
+    Type.mkFlexVar
         |> IO.bind
             (\patternVar ->
                 let
@@ -817,7 +817,7 @@ constrainDef rtv def bodyCon =
                 newNames =
                     Dict.diff freeVars rtv
             in
-            Utils.mapTraverseWithKey compare (\n _ -> nameToRigid n) newNames
+            Utils.mapTraverseWithKey compare (\n _ -> Type.nameToRigid n) newNames
                 |> IO.bind
                     (\newRigids ->
                         let
@@ -916,7 +916,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                         newNames =
                             Dict.diff freeVars rtv
                     in
-                    Utils.mapTraverseWithKey compare (\n _ -> nameToRigid n) newNames
+                    Utils.mapTraverseWithKey compare (\n _ -> Type.nameToRigid n) newNames
                         |> IO.bind
                             (\newRigids ->
                                 let
@@ -971,7 +971,7 @@ argsHelp : List Can.Pattern -> Pattern.State -> IO Args
 argsHelp args state =
     case args of
         [] ->
-            mkFlexVar
+            Type.mkFlexVar
                 |> IO.fmap
                     (\resultVar ->
                         let
@@ -982,7 +982,7 @@ argsHelp args state =
                     )
 
         pattern :: otherArgs ->
-            mkFlexVar
+            Type.mkFlexVar
                 |> IO.bind
                     (\argVar ->
                         let

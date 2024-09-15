@@ -181,7 +181,7 @@ apply (Decoder decodeArg) (Decoder decodeFunc) =
         \ast ->
             Result.andThen
                 (\a ->
-                    Result.map ((|>) a)
+                    Result.map (\b -> a |> b)
                         (decodeFunc ast)
                 )
                 (decodeArg ast)
