@@ -56,14 +56,14 @@ suite =
             , Test.test "Em Dash" <|
                 \_ ->
                     P.getCharWidth '—'
-                        |> Expect.equal 2
+                        |> Expect.equal 1
             , Test.test "Rainbow" <|
                 \_ ->
                     P.getCharWidth '🌈'
-                        |> Expect.equal 4
+                        |> Expect.equal 2
             , Test.test "Fire" <|
                 \_ ->
                     P.getCharWidth '🔥'
-                        |> Expect.equal 4
+                        |> Expect.equal 2
             ]
         ]

@@ -405,11 +405,11 @@ word2 w1 w2 toError =
 
 unsafeIndex : String -> Int -> Char
 unsafeIndex str index =
-    case String.toList (String.slice index (index + 1) str) of
-        char :: _ ->
+    case String.uncons (String.dropLeft index str) of
+        Just ( char, _ ) ->
             char
 
-        _ ->
+        Nothing ->
             Debug.todo "Error on unsafeIndex!"
 
 
@@ -420,45 +420,11 @@ isWord src pos end word =
 
 getCharWidth : Char -> Int
 getCharWidth word =
-    -- let
-    --     code =
-    --         Char.toCode word
-    -- in
-    -- if code < 0x80 then
-    --     1
-    -- else if code < 0xC0 then
-    --     let
-    --         _ =
-    --             Debug.log "getCharWidth (code < 0xC0)" ( word, code )
-    --     in
-    --     Debug.todo "Need UTF-8 encoded input. Ran into unrecognized bits."
-    -- else if code < 0xE0 then
-    --     2
-    -- else if code < 0xF0 then
-    --     3
-    -- else if code < 0xF8 then
-    --     4
-    -- else
-    --     let
-    --         _ =
-    --             Debug.log "getCharWidth (else)" ( word, code, Bytes.width (Bytes.Encode.encode (Bytes.Encode.unsignedInt32 Bytes.BE code)) )
-    --     in
-    --     Debug.todo "Need UTF-8 encoded input. Ran into unrecognized bits."
-    --
-    if isNaN (toFloat (Char.toCode word)) then
-        -- TODO this is currently required because of `src/Cards` chars ('🂡', '🂢', '🂣', '🂤', '🂥', '🂦', '🂧', '🂨', '🂩', '🂪', '🂫', '🂭', '🂮')
+    if Char.toCode word > 0xFFFF then
         2
-
-    else if word == '—' then
-        -- TODO this is currently required because of the `HttpQuotes` from "Elm Try!" examples
-        2
-
-    else if List.member word [ '…', '▸', '▾', '▼', '❤', '█', '░', '✗', '✓' ] then
-        -- TODO these are currently required because of `elm/browser` and `elm-explorations/test`
-        1
 
     else
-        Bytes.Encode.getStringWidth (String.fromChar word)
+        1
 
 
 
