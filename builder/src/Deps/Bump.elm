@@ -3,6 +3,7 @@ module Deps.Bump exposing (getPossibilities)
 import Deps.Registry exposing (KnownVersions(..))
 import Elm.Magnitude as M
 import Elm.Version as V
+import List.Extra
 import Utils.Main as Utils
 
 
@@ -17,10 +18,10 @@ getPossibilities (KnownVersions latest previous) =
             List.reverse (latest :: previous)
 
         minorPoints =
-            List.filterMap List.head (Utils.listGroupBy sameMajor allVersions)
+            List.filterMap List.Extra.last (Utils.listGroupBy sameMajor allVersions)
 
         patchPoints =
-            List.filterMap List.head (Utils.listGroupBy sameMinor allVersions)
+            List.filterMap List.Extra.last (Utils.listGroupBy sameMinor allVersions)
     in
     ( latest, V.bumpMajor latest, M.MAJOR )
         :: List.map (\v -> ( v, V.bumpMinor v, M.MINOR )) minorPoints

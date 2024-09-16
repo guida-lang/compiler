@@ -2192,7 +2192,7 @@ toHttpErrorReport title err context =
                             "This may mean some online endpoint changed in an unexpected way, so if does not seem like something on your side is causing this (e.g. firewall) please report this to https://github.com/elm/compiler/issues with your operating system, Elm version, the command you ran, the terminal output, and any additional information that can help others reproduce the error!"
                         ]
 
-                Http.TooManyRedirects _ ->
+                Http.TooManyRedirects responses ->
                     toHttpReport (context ++ ", so I tried to fetch:")
                         url
                         [ D.reflow <|
@@ -2200,7 +2200,7 @@ toHttpErrorReport title err context =
                                 -- ++ show (length responses)
                                 ++ "(TODO)"
                                 ++ " redirects:"
-                        , D.indent 4 <| D.vcat <| []
+                        , D.indent 4 <| D.vcat <| List.map toRedirectDoc responses
                         , D.reflow <|
                             "Is it possible that your internet connection intercepts certain requests? That sometimes causes problems for folks in schools, businesses, airports, hotels, and certain countries. Try asking for help locally or in a community forum!"
                         ]

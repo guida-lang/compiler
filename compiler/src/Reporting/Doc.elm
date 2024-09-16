@@ -101,7 +101,7 @@ encode : Doc -> E.Value
 encode doc =
     let
         _ =
-            Debug.toString (P.pretty 0 doc)
+            Debug.log "doc" (Debug.toString (P.pretty 0 doc))
     in
     -- E.array (toJsonHelp noStyle [] (P.renderPretty 1 80 doc))
     E.array []
