@@ -30,11 +30,11 @@ const examples = [
   ["DragAndDrop", ["no-flags", "debug"]],
   ["ImagePreviews", defaultFlags],
   // WebGL
-  // ["Triangle", defaultFlags],
-  // ["Cube", defaultFlags],
-  // ["Crate", defaultFlags],
-  // ["Thwomp", defaultFlags],
-  // ["FirstPerson", defaultFlags],
+  ["Triangle", defaultFlags],
+  ["Cube", defaultFlags],
+  ["Crate", defaultFlags],
+  ["Thwomp", defaultFlags],
+  ["FirstPerson", defaultFlags],
   // Playground
   ["Picture", defaultFlags],
   ["Animation", defaultFlags],
