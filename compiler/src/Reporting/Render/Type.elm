@@ -73,8 +73,7 @@ tuple : D.Doc -> D.Doc -> List D.Doc -> D.Doc
 tuple a b cs =
     let
         entries =
-            List.interweave (D.fromChars "(" :: List.repeat (List.length (b :: cs)) (D.fromChars ",")) (a :: b :: cs)
-                |> List.intersperse (D.fromChars " ")
+            List.interweave (D.fromChars "( " :: List.repeat (List.length (b :: cs)) (D.fromChars ", ")) (a :: b :: cs)
     in
     D.align <| D.sep [ D.cat entries, D.fromChars ")" ]
 

@@ -4,12 +4,10 @@ module Data.Graph exposing
     , Graph
     , SCC(..)
     , Table
-    ,  Vertex
-       -- , bcc
-
-    ,  buildG
-       -- , components
-
+    , Vertex
+      -- , bcc
+    , buildG
+      -- , components
     , dff
     , dfs
     , edges
@@ -18,16 +16,14 @@ module Data.Graph exposing
     , graphFromEdges
     , graphFromEdges_
     , indegree
-    ,  outdegree
-       -- , path
-       -- , reachable
-       -- , reverseTopSort
-
+    , outdegree
+      -- , path
+      -- , reachable
+      -- , reverseTopSort
     , scc
     , stronglyConnComp
-    ,  stronglyConnCompR
-       -- , topSort
-
+    , stronglyConnCompR
+      -- , topSort
     , transposeG
     , vertices
     )

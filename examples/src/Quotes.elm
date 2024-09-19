@@ -1,4 +1,4 @@
-module HttpQuotes exposing (main)
+module Quotes exposing (main)
 
 -- Press a button to send a GET request for random quotes.
 --

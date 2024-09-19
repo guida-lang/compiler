@@ -4,10 +4,47 @@ const childProcess = require("child_process");
 const os = require("os");
 const tmpDir = os.tmpdir();
 
-const examples = ["Hello", "Buttons", "Clock", "HttpQuotes", "Cards"];
-const flags = ["no-flags", "debug", "optimize"];
+const defaultFlags = ["no-flags", "debug", "optimize"];
 
-const generateFlags = function (flag) {
+const examples = [
+  // HTML
+  ["Hello", defaultFlags],
+  ["Groceries", defaultFlags],
+  ["Shapes", defaultFlags],
+  // User Input
+  ["Buttons", defaultFlags],
+  ["TextFields", defaultFlags],
+  ["Forms", defaultFlags],
+  // Random
+  ["Numbers", defaultFlags],
+  ["Cards", defaultFlags],
+  ["Positions", defaultFlags],
+  // HTTP
+  ["Book", defaultFlags],
+  ["Quotes", defaultFlags],
+  // Time
+  ["CurrentTime", defaultFlags],
+  ["Clock", defaultFlags],
+  // Files
+  ["Upload", ["no-flags", "debug"]],
+  ["DragAndDrop", ["no-flags", "debug"]],
+  ["ImagePreviews", defaultFlags],
+  // WebGL
+  // ["Triangle", defaultFlags],
+  // ["Cube", defaultFlags],
+  // ["Crate", defaultFlags],
+  // ["Thwomp", defaultFlags],
+  // ["FirstPerson", defaultFlags],
+  // Playground
+  ["Picture", defaultFlags],
+  ["Animation", defaultFlags],
+  ["Mouse", defaultFlags],
+  ["Keyboard", defaultFlags],
+  ["Turtle", defaultFlags],
+  ["Mario", defaultFlags],
+];
+
+const generateCommandFlags = function (flag) {
   if (flag === "no-flags") {
     return "";
   } else {
@@ -18,15 +55,15 @@ const generateFlags = function (flag) {
 describe("backwards compatibility", () => {
   describe.each(examples)(
     "produces the same code as elm for the %s example",
-    (example) => {
-      test.each(flags)("%s", (flagOpt) => {
-        const elmOutput = `${tmpDir}/guida-test-elm-${example}-${flagOpt}-${process.pid}.js`;
-        const guidaOutput = `${tmpDir}/guida-test-guida-${example}-${flagOpt}-${process.pid}.js`;
-        const flag = generateFlags(flagOpt);
+    (example, currentFlags) => {
+      test.each(currentFlags)("%s", (flag) => {
+        const elmOutput = `${tmpDir}/guida-test-elm-${example}-${flag}-${process.pid}.js`;
+        const guidaOutput = `${tmpDir}/guida-test-guida-${example}-${flag}-${process.pid}.js`;
+        const commandFlag = generateCommandFlags(flag);
 
         try {
           childProcess.execSync(
-            `elm make ./src/${example}.elm ${flag} --output ${elmOutput}`,
+            `elm make ./src/${example}.elm ${commandFlag} --output ${elmOutput}`,
             { cwd: path.join(__dirname, "..", "examples") }
           );
         } catch (e) {
@@ -35,7 +72,7 @@ describe("backwards compatibility", () => {
 
         try {
           childProcess.execSync(
-            `../bin/index.js make ./src/${example}.elm ${flag} --output ${guidaOutput}`,
+            `../bin/index.js make ./src/${example}.elm ${commandFlag} --output ${guidaOutput}`,
             { cwd: path.join(__dirname, "..", "examples") }
           );
         } catch (e) {
