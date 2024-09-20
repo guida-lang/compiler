@@ -3,7 +3,7 @@ module Parse.Shader exposing (shader)
 import AST.Source as Src
 import AST.Utils.Shader as Shader
 import Data.Map as Dict
-import Language.GLSL.Parser as GLP
+import Language.GLSL.Parser2 as GLP
 import Language.GLSL.Syntax as GLS
 import Parse.Primitives as P exposing (Col, Parser, Row)
 import Reporting.Annotation as A
@@ -67,7 +67,7 @@ parseBlock =
                                 newPos - pos6
 
                             block =
-                                String.slice off len src
+                                String.left len (String.dropLeft off src)
 
                             newState =
                                 P.State src (newPos + 2) end indent newRow (newCol + 2)
@@ -117,7 +117,7 @@ eatShader src pos end row col =
 parseGlsl : Row -> Col -> String -> Parser E.Expr Shader.Types
 parseGlsl startRow startCol src =
     case GLP.parse src of
-        Ok (GLS.TranslationUnit decls) ->
+        Ok ( _, _, GLS.TranslationUnit decls ) ->
             P.pure (List.foldr addInput emptyTypes (List.concatMap extractInputs decls))
 
         Err err ->
@@ -141,7 +141,7 @@ parseGlsl startRow startCol src =
             --     failure startRow (startCol + 6 + col) msg
             -- else
             --     failure (startRow + row - 1) col msg
-            Debug.todo "parseGlsl"
+            Debug.todo ("parseGlsl: " ++ Debug.toString err)
 
 
 failure : Row -> Col -> String -> Parser E.Expr a

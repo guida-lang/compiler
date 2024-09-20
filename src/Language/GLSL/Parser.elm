@@ -1,5 +1,8 @@
 module Language.GLSL.Parser exposing (parse)
 
+{-| Reference: <https://hackage.haskell.org/package/language-glsl-0.3.0/docs/src/Language.GLSL.Parser.html>
+-}
+
 import Hex
 import Language.GLSL.Syntax exposing (..)
 import Parser exposing ((|.), (|=), Parser)
@@ -161,131 +164,154 @@ type Operator tok st a
     | Postfix (P (a -> a))
 
 
-buildExpressionParser : List (List (Operator Char S a)) -> P a -> P a
+buildExpressionParser : List (List (Operator Char S Expr)) -> P Expr -> P Expr
 buildExpressionParser operators simpleExpr =
-    -- let
-    --     makeParser ops term =
-    --         let
-    --             { rassoc, lassoc, nassoc, prefix, postfix } =
-    --                 List.foldr splitOp { rassoc = [], lassoc = [], nassoc = [], prefix = [], postfix = [] } ops
-    --             rassocOp =
-    --                 choice rassoc
-    --             lassocOp =
-    --                 choice lassoc
-    --             nassocOp =
-    --                 choice nassoc
-    --             prefixOp =
-    --                 -- Parser.succeed identity
-    --                 --     |= choice prefix
-    --                 --     |. Parser.problem ""
-    --                 Debug.todo "prefixOp"
-    --             postfixOp =
-    --                 -- Parser.succeed identity
-    --                 --     |= choice postfix
-    --                 --     |. Parser.problem ""
-    --                 Debug.todo "postfixOp"
-    --             ambiguous assoc op =
-    --                 try
-    --                     (Parser.succeed identity
-    --                         |= op
-    --                         |. Parser.problem ("ambiguous use of a " ++ assoc ++ " associative operator")
-    --                     )
-    --             ambiguousRight =
-    --                 ambiguous "right" rassocOp
-    --             ambiguousLeft =
-    --                 ambiguous "left" lassocOp
-    --             ambiguousNon =
-    --                 ambiguous "non" nassocOp
-    --             termP =
-    --                 Parser.succeed (\pre x post -> post (pre x))
-    --                     |= prefixP
-    --                     |= term
-    --                     |= postfixP
-    --             postfixP =
-    --                 Parser.oneOf
-    --                     [ postfixOp
-    --                     , Parser.succeed identity
-    --                     ]
-    --             prefixP =
-    --                 Parser.oneOf
-    --                     [ prefixOp
-    --                     , Parser.succeed identity
-    --                     ]
-    --             rassocP x =
-    --                 -- Parser.oneOf
-    --                 --     [ Parser.succeed (\f y -> f x y)
-    --                 --         |= rassocOp
-    --                 --         |= Parser.andThen rassocP1 termP
-    --                 --     , ambiguousLeft
-    --                 --     , ambiguousNon
-    --                 --     , Parser.succeed x
-    --                 --     ]
-    --                 Debug.todo "rassocP"
-    --             rassocP1 x =
-    --                 Parser.oneOf
-    --                     [ rassocP x
-    --                     , Parser.succeed x
-    --                     ]
-    --             lassocP x =
-    --                 -- Parser.oneOf
-    --                 --     [ Parser.succeed (\f y -> f x y)
-    --                 --         |= lassocOp
-    --                 --         |= Parser.andThen lassocP1 termP
-    --                 --     , ambiguousRight
-    --                 --     , ambiguousNon
-    --                 --     , Parser.succeed x
-    --                 --     ]
-    --                 Debug.todo "lassocP"
-    --             lassocP1 x =
-    --                 Parser.oneOf
-    --                     [ lassocP x
-    --                     , Parser.succeed x
-    --                     ]
-    --             nassocP x =
-    --                 -- Parser.succeed Tuple.pair
-    --                 --     |= nassocOp
-    --                 --     |= termP
-    --                 --     |> Parser.andThen
-    --                 --         (\( f, y ) ->
-    --                 --             Parser.oneOf
-    --                 --                 [ ambiguousRight
-    --                 --                 , ambiguousLeft
-    --                 --                 , ambiguousNon
-    --                 --                 , Parser.succeed (f x y)
-    --                 --                 ]
-    --                 --         )
-    --                 Debug.todo "nassocP"
-    --         in
-    --         Parser.succeed identity
-    --             |= termP
-    --             |> Parser.andThen
-    --                 (\x ->
-    --                     Parser.succeed identity
-    --                         |= Parser.oneOf
-    --                             [ rassocP x
-    --                             , lassocP x
-    --                             , nassocP x
-    --                             , Parser.succeed x
-    --                             ]
-    --                         |. Parser.problem "operator"
-    --                 )
-    --     splitOp singleOperator acc =
-    --         case singleOperator of
-    --             Infix op assoc ->
-    --                 case assoc of
-    --                     AssocNone ->
-    --                         { acc | nassoc = op :: acc.nassoc }
-    --                     AssocLeft ->
-    --                         { acc | lassoc = op :: acc.lassoc }
-    --                     AssocRight ->
-    --                         { acc | rassoc = op :: acc.rassoc }
-    --             Prefix op ->
-    --                 { acc | prefix = op :: acc.prefix }
-    --             Postfix op ->
-    --                 { acc | postfix = op :: acc.postfix }
-    -- in
-    -- List.foldl makeParser simpleExpr operators
-    Debug.todo "buildExpressionParser"
+    let
+        makeParser : List (Operator Char S Expr) -> P Expr -> P Expr
+        makeParser ops term =
+            let
+                { rassoc, lassoc, nassoc, prefix, postfix } =
+                    List.foldr splitOp { rassoc = [], lassoc = [], nassoc = [], prefix = [], postfix = [] } ops
+
+                rassocOp =
+                    choice rassoc
+
+                lassocOp =
+                    choice lassoc
+
+                nassocOp =
+                    choice nassoc
+
+                prefixOp =
+                    Parser.succeed identity
+                        |= choice prefix
+                        |. Parser.problem ""
+
+                postfixOp =
+                    Parser.succeed identity
+                        |= choice postfix
+                        |. Parser.problem ""
+
+                ambiguous assoc op =
+                    try
+                        (Parser.succeed identity
+                            |= op
+                            |. Parser.problem ("ambiguous use of a " ++ assoc ++ " associative operator")
+                        )
+
+                ambiguousRight =
+                    ambiguous "right" rassocOp
+
+                ambiguousLeft =
+                    ambiguous "left" lassocOp
+
+                ambiguousNon =
+                    ambiguous "non" nassocOp
+
+                termP =
+                    Parser.succeed (\pre x post -> post (pre x))
+                        |= prefixP
+                        |= term
+                        |= postfixP
+
+                postfixP =
+                    Parser.oneOf
+                        [ postfixOp
+                        , Parser.succeed identity
+                        ]
+
+                prefixP =
+                    Parser.oneOf
+                        [ prefixOp
+                        , Parser.succeed identity
+                        ]
+
+                rassocP x =
+                    Parser.oneOf
+                        [ Parser.succeed (\f y -> f x y)
+                            |= rassocOp
+                            |= Parser.andThen rassocP1 termP
+                        , ambiguousLeft
+                        , ambiguousNon
+                        , Parser.succeed x
+                        ]
+
+                rassocP1 x =
+                    Parser.oneOf
+                        [ rassocP x
+                        , Parser.succeed x
+                        ]
+
+                lassocP x =
+                    Parser.lazy
+                        (\_ ->
+                            Parser.oneOf
+                                [ Parser.succeed (\f y -> f x y)
+                                    |= lassocOp
+                                    |= Parser.andThen lassocP1 termP
+                                , ambiguousRight
+                                , ambiguousNon
+                                , Parser.succeed x
+                                ]
+                        )
+
+                lassocP1 x =
+                    Parser.lazy
+                        (\_ ->
+                            Parser.oneOf
+                                [ Parser.lazy (\_ -> lassocP x)
+                                , Parser.succeed x
+                                ]
+                        )
+
+                nassocP x =
+                    Parser.succeed Tuple.pair
+                        |= nassocOp
+                        |= termP
+                        |> Parser.andThen
+                            (\( f, y ) ->
+                                Parser.oneOf
+                                    [ ambiguousRight
+                                    , ambiguousLeft
+                                    , ambiguousNon
+                                    , Parser.succeed (f x y)
+                                    ]
+                            )
+            in
+            Parser.succeed identity
+                |= termP
+                |> Parser.andThen
+                    (\x ->
+                        Parser.succeed identity
+                            |= Parser.oneOf
+                                [ rassocP x
+                                , lassocP x
+                                , nassocP x
+                                , Parser.succeed x
+                                ]
+                            |. Parser.problem "operator"
+                    )
+
+        splitOp singleOperator acc =
+            case singleOperator of
+                Infix op assoc ->
+                    case assoc of
+                        AssocNone ->
+                            { acc | nassoc = op :: acc.nassoc }
+
+                        AssocLeft ->
+                            { acc | lassoc = op :: acc.lassoc }
+
+                        AssocRight ->
+                            { acc | rassoc = op :: acc.rassoc }
+
+                Prefix op ->
+                    { acc | prefix = op :: acc.prefix }
+
+                Postfix op ->
+                    { acc | postfix = op :: acc.postfix }
+    in
+    List.foldl makeParser simpleExpr operators
 
 
 
@@ -381,25 +407,18 @@ reservedWords =
 ----------------------------------------------------------------------
 -- Convenience parsers
 ----------------------------------------------------------------------
-
-
-comment : P ()
-comment =
-    Parser.oneOf
-        [ Parser.lineComment "//"
-        , Parser.multiComment "/*" "*/" Parser.NotNestable
-        ]
-
-
-blank : P ()
-blank =
-    Parser.oneOf
-        [ try comment
-        , Parser.spaces
-        ]
-
-
-
+-- comment : P ()
+-- comment =
+--     Parser.oneOf
+--         [ Parser.lineComment "//"
+--         , Parser.multiComment "/*" "*/" Parser.NotNestable
+--         ]
+-- blank : P ()
+-- blank =
+--     Parser.oneOf
+--         [ try comment
+--         , Parser.spaces
+--         ]
 -- Acts like p and discards any following space character.
 
 
@@ -879,15 +898,15 @@ postfixExpression =
         |= Parser.oneOf
             [ try
                 (Parser.succeed (\( i, p ) -> FunctionCall i p)
-                    |= Parser.lazy (\_ -> functionCallGeneric)
+                    |= functionCallGeneric
                 )
-            , Parser.lazy (\_ -> primaryExpression)
+            , primaryExpression
             ]
         |= many
             (choice
                 [ Parser.succeed (Utils.flip Bracket)
-                    |= between lbracket rbracket (Parser.lazy (\_ -> integerExpression))
-                , Parser.lazy (\_ -> dotFunctionCallGeneric)
+                    |= between lbracket rbracket integerExpression
+                , dotFunctionCallGeneric
                 , dotFieldSelection
                 , Parser.succeed PostInc
                     |. operator "++"
@@ -903,7 +922,7 @@ dotFunctionCallGeneric =
         |= lexeme
             (Parser.succeed identity
                 |. try (string ".")
-                |= Parser.lazy (\_ -> functionCallGeneric)
+                |= functionCallGeneric
             )
 
 
@@ -919,7 +938,7 @@ dotFieldSelection =
 
 integerExpression : P Expr
 integerExpression =
-    Parser.lazy (\_ -> expression)
+    expression
 
 
 
@@ -931,7 +950,7 @@ integerExpression =
 functionCallGeneric : P ( FunctionIdentifier, Parameters )
 functionCallGeneric =
     Parser.succeed Tuple.pair
-        |= Parser.lazy (\_ -> functionCallHeader)
+        |= functionCallHeader
         |= choice
             [ Parser.succeed ParamVoid
                 |. keyword "void"
@@ -950,7 +969,7 @@ functionCallGeneric =
 functionCallHeader : P FunctionIdentifier
 functionCallHeader =
     Parser.succeed identity
-        |= Parser.lazy (\_ -> functionIdentifier)
+        |= functionIdentifier
         |. lparen
 
 
@@ -958,11 +977,11 @@ functionIdentifier : P FunctionIdentifier
 functionIdentifier =
     choice
         [ Parser.succeed FuncId
-            |= try (Parser.lazy (\_ -> identifier))
+            |= try identifier
 
         -- TODO if the 'identifier' is declared as a type, should be this case
         , Parser.succeed FuncIdTypeSpec
-            |= Parser.lazy (\_ -> typeSpecifier)
+            |= typeSpecifier
 
         -- no need for fieldSelection
         ]
@@ -987,7 +1006,7 @@ unaryExpression =
                     |. operator "~"
                 ]
             )
-        |= Parser.lazy (\_ -> postfixExpression)
+        |= postfixExpression
 
 
 
@@ -1010,7 +1029,7 @@ unaryExpression =
 conditionalExpression : P Expr
 conditionalExpression =
     Parser.succeed Tuple.pair
-        |= buildExpressionParser conditionalTable (Parser.lazy (\_ -> unaryExpression))
+        |= buildExpressionParser conditionalTable unaryExpression
         |= optionMaybe
             (Parser.succeed Tuple.pair
                 |. lexeme (string "?")
@@ -1031,7 +1050,7 @@ conditionalExpression =
 
 assignmentExpression : P Expr
 assignmentExpression =
-    buildExpressionParser assignmentTable (Parser.lazy (\_ -> conditionalExpression))
+    Parser.lazy (\_ -> buildExpressionParser assignmentTable conditionalExpression)
 
 
 expression : P Expr
@@ -1041,7 +1060,7 @@ expression =
 
 constantExpression : P Expr
 constantExpression =
-    Parser.lazy (\_ -> conditionalExpression)
+    conditionalExpression
 
 
 
@@ -1072,7 +1091,7 @@ declaration =
         , Parser.succeed Precision
             |. keyword "precision"
             |= precisionQualifier
-            |= Parser.lazy (\_ -> typeSpecifierNoPrecision)
+            |= typeSpecifierNoPrecision
             |. semicolon
         , typeQualifier
             |> Parser.andThen
@@ -1083,7 +1102,7 @@ declaration =
                         , Parser.succeed (Block q)
                             |= identifier
                             |. lbrace
-                            |= Parser.lazy (\_ -> structDeclarationList)
+                            |= structDeclarationList
                             |. rbrace
                             |= optionMaybe
                                 (Parser.succeed Tuple.pair
@@ -1318,15 +1337,15 @@ typeSpecifier =
     choice
         [ Parser.succeed (\q s -> TypeSpec (Just q) s)
             |= try precisionQualifier
-            |= Parser.lazy (\_ -> typeSpecifierNoPrecision)
+            |= typeSpecifierNoPrecision
         , Parser.succeed (TypeSpec Nothing)
-            |= Parser.lazy (\_ -> typeSpecifierNoPrecision)
+            |= typeSpecifierNoPrecision
         ]
 
 
 typeSpecifierNoPrecision : P TypeSpecifierNoPrecision
 typeSpecifierNoPrecision =
-    Parser.lazy (\_ -> typeSpecifierNonArray)
+    typeSpecifierNonArray
         |> Parser.andThen
             (\s ->
                 choice
@@ -1478,7 +1497,7 @@ typeSpecifierNonArray =
             |. keyword "isampler2DMSArray"
         , Parser.succeed USampler2DMSArray
             |. keyword "usampler2DMSArray"
-        , Parser.lazy (\_ -> structSpecifier)
+        , structSpecifier
 
         -- verify if it is declared
         , Parser.succeed TypeName
@@ -1504,7 +1523,7 @@ structSpecifier =
         |. keyword "struct"
         |= optionMaybe identifier
         |. lbrace
-        |= Parser.lazy (\_ -> structDeclarationList)
+        |= structDeclarationList
         |. rbrace
 
 
@@ -1518,50 +1537,46 @@ structDeclaration =
     Parser.succeed Field
         |= optionMaybe typeQualifier
         |= typeSpecifier
-        |= Parser.lazy (\_ -> structDeclaratorList)
+        |= structDeclaratorList
         |. semicolon
 
 
 structDeclaratorList : P (List StructDeclarator)
 structDeclaratorList =
-    sepBy (Parser.lazy (\_ -> structDeclarator)) comma
+    sepBy structDeclarator comma
 
 
 structDeclarator : P StructDeclarator
 structDeclarator =
-    -- Parser.lazy (\_ -> identifier)
-    --     |> Parser.andThen
-    --         (\i ->
-    --             choice
-    --                 [ Parser.succeed (\e -> StructDeclarator i (Just e))
-    --                     |. lbracket
-    --                     |= optionMaybe (Parser.lazy (\_ -> constantExpression))
-    --                     |. rbracket
-    --                 , Parser.succeed (StructDeclarator i Nothing)
-    --                 ]
-    --         )
-    Parser.lazy (\_ -> Debug.todo "structDeclarator")
+    identifier
+        |> Parser.andThen
+            (\i ->
+                choice
+                    [ Parser.succeed (\e -> StructDeclarator i (Just e))
+                        |. lbracket
+                        |= optionMaybe constantExpression
+                        |. rbracket
+                    , Parser.succeed (StructDeclarator i Nothing)
+                    ]
+            )
 
 
 initializer : P Expr
 initializer =
-    -- assignmentExpression
-    Debug.todo "initializer"
+    assignmentExpression
 
 
 declarationStatement : P Declaration
 declarationStatement =
-    -- declaration
-    Debug.todo "declarationStatement"
+    declaration
 
 
 statement : P Statement
 statement =
-    -- Parser.oneOf
-    --     [ Parser.map CompoundStatement (Parser.lazy (\_ -> compoundStatement))
-    --     , Parser.lazy (\_ -> simpleStatement)
-    --     ]
-    Debug.todo "statement"
+    Parser.oneOf
+        [ Parser.map CompoundStatement compoundStatement
+        , Parser.lazy (\_ -> simpleStatement)
+        ]
 
 
 simpleStatement : P Statement
@@ -1575,7 +1590,7 @@ simpleStatement =
         , switchStatement
         , Parser.succeed CaseLabel
             |= caseLabel
-        , iterationStatement
+        , Parser.lazy (\_ -> iterationStatement)
         , jumpStatement
         ]
 
@@ -1696,7 +1711,7 @@ iterationStatement =
             |. lparen
             |= condition
             |. rparen
-            |= Parser.lazy (\_ -> statementNoNewScope)
+            |= statementNoNewScope
         , Parser.succeed DoWhile
             |. keyword "do"
             |= statement
@@ -1713,7 +1728,7 @@ iterationStatement =
             |. semicolon
             |= optionMaybe expression
             |. rparen
-            |= Parser.lazy (\_ -> statementNoNewScope)
+            |= statementNoNewScope
         ]
 
 
@@ -1771,26 +1786,24 @@ translationUnit =
 externalDeclaration : P ExternalDeclaration
 externalDeclaration =
     choice
-        [ --  try functionPrototype
-          -- |> Parser.andThen
-          --     (\p ->
-          --         choice
-          --             [ Parser.succeed (FunctionDeclaration p)
-          --                 |. semicolon
-          --             , Parser.succeed (FunctionDefinition p)
-          --                 |= compoundStatementNoNewScope
-          --             ]
-          --     )
-          Parser.map Declaration declaration
+        [ try functionPrototype
+            |> Parser.andThen
+                (\p ->
+                    choice
+                        [ Parser.succeed (FunctionDeclaration p)
+                            |. semicolon
+                        , Parser.succeed (FunctionDefinition p)
+                            |= compoundStatementNoNewScope
+                        ]
+                )
+        , Parser.map Declaration declaration
         ]
 
 
 
 -- inside externalDeclaration, used only in tests
-
-
-functionDefinition : P ExternalDeclaration
-functionDefinition =
-    Parser.succeed FunctionDefinition
-        |= functionPrototype
-        |= compoundStatementNoNewScope
+-- functionDefinition : P ExternalDeclaration
+-- functionDefinition =
+--     Parser.succeed FunctionDefinition
+--         |= functionPrototype
+--         |= compoundStatementNoNewScope

@@ -10,6 +10,7 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
+            "andre-dietrich/parser-combinators": "4.1.0",
             "dasch/levenshtein": "1.0.3",
             "elm/browser": "1.0.2",
             "elm/bytes": "1.0.8",
@@ -29,8 +30,10 @@
         },
         "indirect": {
             "elm/random": "1.0.0",
+            "elm/regex": "1.0.0",
             "elm/url": "1.0.0",
-            "elm/virtual-dom": "1.0.3"
+            "elm/virtual-dom": "1.0.3",
+            "pilatch/flip": "1.0.0"
         }
     },
     "test-dependencies": {

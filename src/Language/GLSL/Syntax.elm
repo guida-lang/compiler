@@ -1,5 +1,8 @@
 module Language.GLSL.Syntax exposing (..)
 
+{-| Reference: <https://hackage.haskell.org/package/language-glsl-0.3.0/docs/src/Language.GLSL.Syntax.html>
+-}
+
 -- TODO:
 -- - add support for 'array of strings' ?
 -- - add support for macro preprocessing
