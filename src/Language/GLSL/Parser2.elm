@@ -1,4 +1,4 @@
-module Language.GLSL.Parser2 exposing (..)
+module Language.GLSL.Parser2 exposing (parse)
 
 {-| Reference: <https://hackage.haskell.org/package/language-glsl-0.3.0/docs/src/Language.GLSL.Parser.html>
 -}
@@ -10,9 +10,9 @@ import Language.GLSL.Syntax exposing (..)
 import Utils.Main as Utils
 
 
-try : Combine.Parser s a -> Combine.Parser s a
+try : P a -> P a
 try =
-    Combine.lookAhead
+    identity
 
 
 letter : P Char
@@ -27,13 +27,16 @@ alphaNum =
 
 notFollowedBy : P a -> P ()
 notFollowedBy p =
-    try
-        (Combine.or
-            (try p
-                |> Combine.andThen (\c -> Combine.fail (Debug.toString c))
+    Combine.maybe p
+        |> Combine.andThen
+            (\result ->
+                case result of
+                    Just _ ->
+                        Combine.fail "Unexpected match"
+
+                    Nothing ->
+                        Combine.succeed ()
             )
-            (Combine.succeed ())
-        )
 
 
 type Assoc
@@ -50,7 +53,170 @@ type Operator tok st a
 
 buildExpressionParser : List (List (Operator Char S Expr)) -> P Expr -> P Expr
 buildExpressionParser operators simpleExpr =
-    Debug.todo "buildExpressionParser"
+    let
+        makeParser : List (Operator Char S Expr) -> P Expr -> P Expr
+        makeParser ops term =
+            let
+                -- { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
+                { rassoc, lassoc, nassoc, prefix, postfix } =
+                    List.foldr splitOp { rassoc = [], lassoc = [], nassoc = [], prefix = [], postfix = [] } ops
+
+                rassocOp : P (Expr -> Expr -> Expr)
+                rassocOp =
+                    Combine.choice rassoc
+
+                lassocOp : P (Expr -> Expr -> Expr)
+                lassocOp =
+                    Combine.choice lassoc
+
+                nassocOp : P (Expr -> Expr -> Expr)
+                nassocOp =
+                    Combine.choice nassoc
+
+                prefixOp : P (Expr -> Expr)
+                prefixOp =
+                    Combine.choice prefix |> Combine.mapError (\_ -> [ "" ])
+
+                postfixOp : P (Expr -> Expr)
+                postfixOp =
+                    Combine.choice postfix |> Combine.mapError (\_ -> [ "" ])
+
+                ambiguous : String -> P a -> P b
+                ambiguous assoc op =
+                    try
+                        (op
+                            |> Combine.andThen
+                                (\_ ->
+                                    Combine.fail
+                                        ("ambiguous use of a "
+                                            ++ assoc
+                                            ++ " associative operator"
+                                        )
+                                )
+                        )
+
+                ambiguousRight : P Expr
+                ambiguousRight =
+                    ambiguous "right" rassocOp
+
+                ambiguousLeft : P Expr
+                ambiguousLeft =
+                    ambiguous "left" lassocOp
+
+                ambiguousNon : P Expr
+                ambiguousNon =
+                    ambiguous "non" nassocOp
+
+                termP : P Expr
+                termP =
+                    prefixP
+                        |> Combine.andThen
+                            (\pre ->
+                                term
+                                    |> Combine.andThen
+                                        (\x ->
+                                            postfixP
+                                                |> Combine.map (\post -> post (pre x))
+                                        )
+                            )
+
+                postfixP : P (Expr -> Expr)
+                postfixP =
+                    Combine.or postfixOp (Combine.succeed identity)
+
+                prefixP : P (Expr -> Expr)
+                prefixP =
+                    Combine.or prefixOp (Combine.succeed identity)
+
+                rassocP : Expr -> P Expr
+                rassocP x =
+                    Combine.choice
+                        [ rassocOp
+                            |> Combine.andThen
+                                (\f ->
+                                    termP
+                                        |> Combine.andThen rassocP1
+                                        |> Combine.map (f x)
+                                )
+                        , ambiguousLeft
+                        , ambiguousNon
+                        ]
+
+                rassocP1 : Expr -> P Expr
+                rassocP1 x =
+                    Combine.or (rassocP x) (Combine.succeed x)
+
+                lassocP : Expr -> P Expr
+                lassocP x =
+                    Combine.choice
+                        [ lassocOp
+                            |> Combine.andThen
+                                (\f ->
+                                    termP
+                                        |> Combine.andThen lassocP1
+                                        |> Combine.map (f x)
+                                )
+                        , ambiguousRight
+                        , ambiguousNon
+                        ]
+
+                lassocP1 : Expr -> P Expr
+                lassocP1 x =
+                    Combine.or (lassocP x) (Combine.succeed x)
+
+                nassocP : Expr -> P Expr
+                nassocP x =
+                    nassocOp
+                        |> Combine.andThen
+                            (\f ->
+                                termP
+                                    |> Combine.andThen
+                                        (\y ->
+                                            Combine.choice
+                                                [ ambiguousRight
+                                                , ambiguousLeft
+                                                , ambiguousNon
+                                                , Combine.succeed (f x y)
+                                                ]
+                                        )
+                            )
+            in
+            termP
+                |> Combine.andThen
+                    (\x ->
+                        Combine.choice
+                            [ rassocP x
+                            , lassocP x
+                            , nassocP x
+                            , Combine.succeed x
+                            ]
+                            |> Combine.mapError (\_ -> [ "operator" ])
+                    )
+
+        splitOp :
+            Operator Char S Expr
+            -> { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
+            -> { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
+        splitOp singleOperator acc =
+            case singleOperator of
+                Infix op assoc ->
+                    case assoc of
+                        AssocNone ->
+                            { acc | nassoc = op :: acc.nassoc }
+
+                        AssocLeft ->
+                            { acc | lassoc = op :: acc.lassoc }
+
+                        AssocRight ->
+                            { acc | rassoc = op :: acc.rassoc }
+
+                Prefix op ->
+                    { acc | prefix = op :: acc.prefix }
+
+                Postfix op ->
+                    { acc | postfix = op :: acc.postfix }
+    in
+    List.foldl makeParser simpleExpr operators
 
 
 
@@ -254,11 +420,14 @@ rparen =
 
 keyword : String -> P ()
 keyword w =
-    lexeme <|
-        try
-            (Combine.string w
-                |> Combine.keep (notFollowedBy identifierTail)
-            )
+    Combine.lazy
+        (\() ->
+            lexeme <|
+                try
+                    (Combine.string w
+                        |> Combine.keep (notFollowedBy identifierTail)
+                    )
+        )
 
 
 
