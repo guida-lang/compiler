@@ -3,7 +3,7 @@ module Parse.Shader exposing (shader)
 import AST.Source as Src
 import AST.Utils.Shader as Shader
 import Data.Map as Dict
-import Language.GLSL.Parser2 as GLP
+import Language.GLSL.Parser as GLP
 import Language.GLSL.Syntax as GLS
 import Parse.Primitives as P exposing (Col, Parser, Row)
 import Reporting.Annotation as A

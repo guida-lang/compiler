@@ -3,153 +3,72 @@ module Language.GLSL.Parser exposing (parse)
 {-| Reference: <https://hackage.haskell.org/package/language-glsl-0.3.0/docs/src/Language.GLSL.Parser.html>
 -}
 
+import Combine
+import Combine.Char
 import Hex
-import Language.GLSL.Syntax exposing (..)
-import Parser exposing ((|.), (|=), Parser)
+import Language.GLSL.Syntax
+    exposing
+        ( CaseLabel(..)
+        , Compound(..)
+        , Condition(..)
+        , Declaration(..)
+        , Expr(..)
+        , ExternalDeclaration(..)
+        , Field(..)
+        , FullType(..)
+        , FunctionIdentifier(..)
+        , FunctionPrototype(..)
+        , InitDeclarator(..)
+        , IntConstantKind(..)
+        , InterpolationQualifier(..)
+        , InvariantOrType(..)
+        , InvariantQualifier(..)
+        , LayoutQualifier(..)
+        , LayoutQualifierId(..)
+        , ParameterDeclaration(..)
+        , ParameterQualifier(..)
+        , ParameterTypeQualifier(..)
+        , Parameters(..)
+        , PrecisionQualifier(..)
+        , Statement(..)
+        , StorageQualifier(..)
+        , StructDeclarator(..)
+        , TranslationUnit(..)
+        , TypeQualifier(..)
+        , TypeSpecifier(..)
+        , TypeSpecifierNoPrecision(..)
+        , TypeSpecifierNonArray(..)
+        )
 import Utils.Main as Utils
 
 
-char : Char -> Parser Char
-char c =
-    Parser.getChompedString (Parser.symbol (String.fromChar c))
-        |> extractCharHelper
-
-
-try : Parser a -> Parser a
+try : P a -> P a
 try =
-    Parser.backtrackable
-
-
-choice : List (Parser a) -> Parser a
-choice =
-    Parser.oneOf
-
-
-optionMaybe : Parser a -> Parser (Maybe a)
-optionMaybe p =
-    Parser.oneOf
-        [ Parser.map Just p
-        , Parser.succeed Nothing
-        ]
-
-
-between : Parser () -> Parser () -> Parser a -> Parser a
-between open close p =
-    Parser.succeed identity
-        |. open
-        |= p
-        |. close
-
-
-many : Parser a -> Parser (List a)
-many p =
-    Parser.loop [] (manyHelp p)
-
-
-manyHelp : Parser a -> List a -> Parser (Parser.Step (List a) (List a))
-manyHelp p revStmts =
-    Parser.oneOf
-        [ Parser.succeed (\stmt -> Parser.Loop (stmt :: revStmts))
-            |= p
-        , Parser.succeed ()
-            |> Parser.map (\_ -> Parser.Done (List.reverse revStmts))
-        ]
-
-
-many1 : Parser a -> Parser (List a)
-many1 p =
-    Parser.succeed (::)
-        |= p
-        |= many p
-
-
-string : String -> P String
-string =
-    Parser.getChompedString << Parser.keyword
-
-
-notFollowedBy : P a -> P ()
-notFollowedBy p =
-    try
-        (Parser.oneOf
-            [ try p
-                |> Parser.andThen (\c -> Parser.problem (Debug.toString c))
-            , Parser.succeed ()
-            ]
-        )
-
-
-hexDigit : P Char
-hexDigit =
-    Parser.getChompedString (Parser.chompIf Char.isHexDigit)
-        |> extractCharHelper
-
-
-oneOf : String -> P Char
-oneOf cs =
-    Parser.getChompedString (Parser.chompIf (\c -> String.contains (String.fromChar c) cs))
-        |> extractCharHelper
+    identity
 
 
 letter : P Char
 letter =
-    Parser.getChompedString (Parser.chompIf Char.isAlpha)
-        |> extractCharHelper
-
-
-extractCharHelper : P String -> P Char
-extractCharHelper =
-    Parser.andThen
-        (\cs ->
-            case String.toList cs of
-                c :: [] ->
-                    Parser.succeed c
-
-                _ ->
-                    Parser.problem "Failed to extract single char..."
-        )
-
-
-octDigit : P Char
-octDigit =
-    Parser.getChompedString (Parser.chompIf Char.isOctDigit)
-        |> extractCharHelper
+    Combine.lazy (\() -> Combine.Char.satisfy Char.isAlpha)
 
 
 alphaNum : P Char
 alphaNum =
-    Parser.getChompedString (Parser.chompIf Char.isAlphaNum)
-        |> extractCharHelper
+    Combine.lazy (\() -> Combine.Char.satisfy Char.isAlphaNum)
 
 
-digit : P Char
-digit =
-    Parser.getChompedString (Parser.chompIf Char.isDigit)
-        |> extractCharHelper
+notFollowedBy : P a -> P ()
+notFollowedBy p =
+    Combine.maybe p
+        |> Combine.andThen
+            (\result ->
+                case result of
+                    Just _ ->
+                        Combine.fail "Unexpected match"
 
-
-sepBy : P a -> P sep -> P (List a)
-sepBy p sep =
-    Parser.oneOf
-        [ sepBy1 p sep
-        , Parser.succeed []
-        ]
-
-
-sepBy1 : P a -> P sep -> P (List a)
-sepBy1 p sep =
-    Parser.succeed (::)
-        |= p
-        |= many
-            (Parser.succeed identity
-                |. sep
-                |= p
+                    Nothing ->
+                        Combine.succeed ()
             )
-
-
-octFromString : String -> Result String Int
-octFromString _ =
-    Debug.todo "octFromString"
 
 
 type Assoc
@@ -170,128 +89,146 @@ buildExpressionParser operators simpleExpr =
         makeParser : List (Operator Char S Expr) -> P Expr -> P Expr
         makeParser ops term =
             let
+                -- { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
                 { rassoc, lassoc, nassoc, prefix, postfix } =
                     List.foldr splitOp { rassoc = [], lassoc = [], nassoc = [], prefix = [], postfix = [] } ops
 
+                rassocOp : P (Expr -> Expr -> Expr)
                 rassocOp =
-                    choice rassoc
+                    Combine.choice rassoc
 
+                lassocOp : P (Expr -> Expr -> Expr)
                 lassocOp =
-                    choice lassoc
+                    Combine.choice lassoc
 
+                nassocOp : P (Expr -> Expr -> Expr)
                 nassocOp =
-                    choice nassoc
+                    Combine.choice nassoc
 
+                prefixOp : P (Expr -> Expr)
                 prefixOp =
-                    Parser.succeed identity
-                        |= choice prefix
-                        |. Parser.problem ""
+                    Combine.choice prefix |> Combine.mapError (\_ -> [ "" ])
 
+                postfixOp : P (Expr -> Expr)
                 postfixOp =
-                    Parser.succeed identity
-                        |= choice postfix
-                        |. Parser.problem ""
+                    Combine.choice postfix |> Combine.mapError (\_ -> [ "" ])
 
+                ambiguous : String -> P a -> P b
                 ambiguous assoc op =
                     try
-                        (Parser.succeed identity
-                            |= op
-                            |. Parser.problem ("ambiguous use of a " ++ assoc ++ " associative operator")
+                        (op
+                            |> Combine.andThen
+                                (\_ ->
+                                    Combine.fail
+                                        ("ambiguous use of a "
+                                            ++ assoc
+                                            ++ " associative operator"
+                                        )
+                                )
                         )
 
+                ambiguousRight : P Expr
                 ambiguousRight =
                     ambiguous "right" rassocOp
 
+                ambiguousLeft : P Expr
                 ambiguousLeft =
                     ambiguous "left" lassocOp
 
+                ambiguousNon : P Expr
                 ambiguousNon =
                     ambiguous "non" nassocOp
 
+                termP : P Expr
                 termP =
-                    Parser.succeed (\pre x post -> post (pre x))
-                        |= prefixP
-                        |= term
-                        |= postfixP
+                    prefixP
+                        |> Combine.andThen
+                            (\pre ->
+                                term
+                                    |> Combine.andThen
+                                        (\x ->
+                                            postfixP
+                                                |> Combine.map (\post -> post (pre x))
+                                        )
+                            )
 
+                postfixP : P (Expr -> Expr)
                 postfixP =
-                    Parser.oneOf
-                        [ postfixOp
-                        , Parser.succeed identity
-                        ]
+                    Combine.or postfixOp (Combine.succeed identity)
 
+                prefixP : P (Expr -> Expr)
                 prefixP =
-                    Parser.oneOf
-                        [ prefixOp
-                        , Parser.succeed identity
-                        ]
+                    Combine.or prefixOp (Combine.succeed identity)
 
+                rassocP : Expr -> P Expr
                 rassocP x =
-                    Parser.oneOf
-                        [ Parser.succeed (\f y -> f x y)
-                            |= rassocOp
-                            |= Parser.andThen rassocP1 termP
+                    Combine.choice
+                        [ rassocOp
+                            |> Combine.andThen
+                                (\f ->
+                                    termP
+                                        |> Combine.andThen rassocP1
+                                        |> Combine.map (f x)
+                                )
                         , ambiguousLeft
                         , ambiguousNon
-                        , Parser.succeed x
                         ]
 
+                rassocP1 : Expr -> P Expr
                 rassocP1 x =
-                    Parser.oneOf
-                        [ rassocP x
-                        , Parser.succeed x
+                    Combine.or (rassocP x) (Combine.succeed x)
+
+                lassocP : Expr -> P Expr
+                lassocP x =
+                    Combine.choice
+                        [ lassocOp
+                            |> Combine.andThen
+                                (\f ->
+                                    termP
+                                        |> Combine.andThen lassocP1
+                                        |> Combine.map (f x)
+                                )
+                        , ambiguousRight
+                        , ambiguousNon
                         ]
 
-                lassocP x =
-                    Parser.lazy
-                        (\_ ->
-                            Parser.oneOf
-                                [ Parser.succeed (\f y -> f x y)
-                                    |= lassocOp
-                                    |= Parser.andThen lassocP1 termP
-                                , ambiguousRight
-                                , ambiguousNon
-                                , Parser.succeed x
-                                ]
-                        )
-
+                lassocP1 : Expr -> P Expr
                 lassocP1 x =
-                    Parser.lazy
-                        (\_ ->
-                            Parser.oneOf
-                                [ Parser.lazy (\_ -> lassocP x)
-                                , Parser.succeed x
-                                ]
-                        )
+                    Combine.or (lassocP x) (Combine.succeed x)
 
+                nassocP : Expr -> P Expr
                 nassocP x =
-                    Parser.succeed Tuple.pair
-                        |= nassocOp
-                        |= termP
-                        |> Parser.andThen
-                            (\( f, y ) ->
-                                Parser.oneOf
-                                    [ ambiguousRight
-                                    , ambiguousLeft
-                                    , ambiguousNon
-                                    , Parser.succeed (f x y)
-                                    ]
+                    nassocOp
+                        |> Combine.andThen
+                            (\f ->
+                                termP
+                                    |> Combine.andThen
+                                        (\y ->
+                                            Combine.choice
+                                                [ ambiguousRight
+                                                , ambiguousLeft
+                                                , ambiguousNon
+                                                , Combine.succeed (f x y)
+                                                ]
+                                        )
                             )
             in
-            Parser.succeed identity
-                |= termP
-                |> Parser.andThen
+            termP
+                |> Combine.andThen
                     (\x ->
-                        Parser.succeed identity
-                            |= Parser.oneOf
-                                [ rassocP x
-                                , lassocP x
-                                , nassocP x
-                                , Parser.succeed x
-                                ]
-                            |. Parser.problem "operator"
+                        Combine.choice
+                            [ rassocP x
+                            , lassocP x
+                            , nassocP x
+                            , Combine.succeed x
+                            ]
+                            |> Combine.mapError (\_ -> [ "operator" ])
                     )
 
+        splitOp :
+            Operator Char S Expr
+            -> { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
+            -> { rassoc : List (P (Expr -> Expr -> Expr)), lassoc : List (P (Expr -> Expr -> Expr)), nassoc : List (P (Expr -> Expr -> Expr)), prefix : List (P (Expr -> Expr)), postfix : List (P (Expr -> Expr)) }
         splitOp singleOperator acc =
             case singleOperator of
                 Infix op assoc ->
@@ -320,12 +257,12 @@ buildExpressionParser operators simpleExpr =
 ----------------------------------------------------------------------
 
 
-type S
-    = S
+type alias S =
+    ()
 
 
 type alias P a =
-    Parser a
+    Combine.Parser S a
 
 
 
@@ -337,38 +274,37 @@ type alias P a =
 
 keywords : List String
 keywords =
-    List.concat <|
-        List.map String.words <|
-            [ "attribute const uniform varying"
-            , "layout"
-            , "centroid flat smooth noperspective"
-            , "break continue do for while switch case default"
-            , "if else"
-            , "in out inout"
-            , "float int void bool true false"
-            , "invariant"
-            , "discard return"
-            , "mat2 mat3 mat4"
-            , "mat2x2 mat2x3 mat2x4"
-            , "mat3x2 mat3x3 mat3x4"
-            , "mat4x2 mat4x3 mat4x4"
-            , "vec2 vec3 vec4 ivec2 ivec3 ivec4 bvec2 bvec3 bvec4"
-            , "uint uvec2 uvec3 uvec4"
-            , "lowp mediump highp precision"
-            , "sampler1D sampler2D sampler3D samplerCube"
-            , "sampler1DShadow sampler2DShadow samplerCubeShadow"
-            , "sampler1DArray sampler2DArray"
-            , "sampler1DArrayShadow sampler2DArrayShadow"
-            , "isampler1D isampler2D isampler3D isamplerCube"
-            , "isampler1DArray isampler2DArray"
-            , "usampler1D usampler2D usampler3D usamplerCube"
-            , "usampler1DArray usampler2DArray"
-            , "sampler2DRect sampler2DRectShadow isampler2DRect usampler2DRect"
-            , "samplerBuffer isamplerBuffer usamplerBuffer"
-            , "sampler2DMS isampler2DMS usampler2DMS"
-            , "sampler2DMSArray isampler2DMSArray usampler2DMSArray"
-            , "struct"
-            ]
+    List.concatMap String.words
+        [ "attribute const uniform varying"
+        , "layout"
+        , "centroid flat smooth noperspective"
+        , "break continue do for while switch case default"
+        , "if else"
+        , "in out inout"
+        , "float int void bool true false"
+        , "invariant"
+        , "discard return"
+        , "mat2 mat3 mat4"
+        , "mat2x2 mat2x3 mat2x4"
+        , "mat3x2 mat3x3 mat3x4"
+        , "mat4x2 mat4x3 mat4x4"
+        , "vec2 vec3 vec4 ivec2 ivec3 ivec4 bvec2 bvec3 bvec4"
+        , "uint uvec2 uvec3 uvec4"
+        , "lowp mediump highp precision"
+        , "sampler1D sampler2D sampler3D samplerCube"
+        , "sampler1DShadow sampler2DShadow samplerCubeShadow"
+        , "sampler1DArray sampler2DArray"
+        , "sampler1DArrayShadow sampler2DArrayShadow"
+        , "isampler1D isampler2D isampler3D isamplerCube"
+        , "isampler1DArray isampler2DArray"
+        , "usampler1D usampler2D usampler3D usamplerCube"
+        , "usampler1DArray usampler2DArray"
+        , "sampler2DRect sampler2DRectShadow isampler2DRect usampler2DRect"
+        , "samplerBuffer isamplerBuffer usamplerBuffer"
+        , "sampler2DMS isampler2DMS usampler2DMS"
+        , "sampler2DMSArray isampler2DMSArray usampler2DMSArray"
+        , "struct"
+        ]
 
 
 
@@ -377,65 +313,84 @@ keywords =
 
 reservedWords : List String
 reservedWords =
-    List.concat <|
-        List.map String.words <|
-            [ "common partition active"
-            , "asm"
-            , "class union enum typedef template this packed"
-            , "goto"
-            , "inline noinline volatile public static extern external interface"
-            , "long short double half fixed unsigned superp"
-            , "input output"
-            , "hvec2 hvec3 hvec4 dvec2 dvec3 dvec4 fvec2 fvec3 fvec4"
-            , "sampler3DRect"
-            , "filter"
-            , "image1D image2D image3D imageCube"
-            , "iimage1D iimage2D iimage3D iimageCube"
-            , "uimage1D uimage2D uimage3D uimageCube"
-            , "image1DArray image2DArray"
-            , "iimage1DArray iimage2DArray uimage1DArray uimage2DArray"
-            , "image1DShadow image2DShadow"
-            , "image1DArrayShadow image2DArrayShadow"
-            , "imageBuffer iimageBuffer uimageBuffer"
-            , "sizeof cast"
-            , "namespace using"
-            , "row_major"
-            ]
+    List.concatMap String.words
+        [ "common partition active"
+        , "asm"
+        , "class union enum typedef template this packed"
+        , "goto"
+        , "inline noinline volatile public static extern external interface"
+        , "long short double half fixed unsigned superp"
+        , "input output"
+        , "hvec2 hvec3 hvec4 dvec2 dvec3 dvec4 fvec2 fvec3 fvec4"
+        , "sampler3DRect"
+        , "filter"
+        , "image1D image2D image3D imageCube"
+        , "iimage1D iimage2D iimage3D iimageCube"
+        , "uimage1D uimage2D uimage3D uimageCube"
+        , "image1DArray image2DArray"
+        , "iimage1DArray iimage2DArray uimage1DArray uimage2DArray"
+        , "image1DShadow image2DShadow"
+        , "image1DArrayShadow image2DArrayShadow"
+        , "imageBuffer iimageBuffer uimageBuffer"
+        , "sizeof cast"
+        , "namespace using"
+        , "row_major"
+        ]
 
 
 
 ----------------------------------------------------------------------
 -- Convenience parsers
 ----------------------------------------------------------------------
--- comment : P ()
--- comment =
---     Parser.oneOf
---         [ Parser.lineComment "//"
---         , Parser.multiComment "/*" "*/" Parser.NotNestable
---         ]
--- blank : P ()
--- blank =
---     Parser.oneOf
---         [ try comment
---         , Parser.spaces
---         ]
--- Acts like p and discards any following space character.
+
+
+comment : P ()
+comment =
+    Combine.lazy
+        (\() ->
+            Combine.Char.char '/'
+                |> Combine.keep
+                    (Combine.choice
+                        [ Combine.Char.char '*'
+                            |> Combine.ignore (Combine.manyTill Combine.Char.anyChar (try <| Combine.string "*/"))
+                            |> Combine.onsuccess ()
+                        , Combine.Char.char '/'
+                            |> Combine.ignore
+                                (Combine.manyTill Combine.Char.anyChar
+                                    (Combine.choice
+                                        [ Combine.Char.newline |> Combine.onsuccess ()
+                                        , Combine.end
+                                        ]
+                                    )
+                                )
+                            |> Combine.onsuccess ()
+                        ]
+                    )
+        )
+
+
+blank : P ()
+blank =
+    Combine.lazy
+        (\() ->
+            Combine.or
+                comment
+                (Combine.whitespace |> Combine.onsuccess ())
+        )
 
 
 lexeme : P a -> P a
 lexeme p =
-    Parser.succeed identity
-        |= p
-        |. Parser.spaces
+    p
+        |> Combine.ignore (Combine.skipMany blank)
 
 
-parse : String -> Result (List Parser.DeadEnd) TranslationUnit
+parse : String -> Result (Combine.ParseError ()) (Combine.ParseOk () TranslationUnit)
 parse =
-    Parser.run
-        (Parser.succeed identity
-            |. Parser.spaces
-            |= translationUnit
-            |. Parser.end
+    Combine.parse
+        (Combine.skipMany blank
+            |> Combine.keep translationUnit
+            |> Combine.ignore Combine.end
         )
 
 
@@ -447,56 +402,47 @@ parse =
 
 semicolon : P ()
 semicolon =
-    Parser.succeed ()
-        |. lexeme (char ';')
+    Combine.lazy (\() -> lexeme (Combine.Char.char ';' |> Combine.onsuccess ()))
 
 
 comma : P ()
 comma =
-    Parser.succeed ()
-        |. lexeme (char ',')
+    Combine.lazy (\() -> lexeme (Combine.Char.char ',' |> Combine.onsuccess ()))
 
 
 colon : P ()
 colon =
-    Parser.succeed ()
-        |. lexeme (char ':')
+    Combine.lazy (\() -> lexeme (Combine.Char.char ':' |> Combine.onsuccess ()))
 
 
 lbrace : P ()
 lbrace =
-    Parser.succeed ()
-        |. lexeme (char '{')
+    Combine.lazy (\() -> lexeme (Combine.Char.char '{' |> Combine.onsuccess ()))
 
 
 rbrace : P ()
 rbrace =
-    Parser.succeed ()
-        |. lexeme (char '}')
+    Combine.lazy (\() -> lexeme (Combine.Char.char '}' |> Combine.onsuccess ()))
 
 
 lbracket : P ()
 lbracket =
-    Parser.succeed ()
-        |. lexeme (char '[')
+    Combine.lazy (\() -> lexeme (Combine.Char.char '[' |> Combine.onsuccess ()))
 
 
 rbracket : P ()
 rbracket =
-    Parser.succeed ()
-        |. lexeme (char ']')
+    Combine.lazy (\() -> lexeme (Combine.Char.char ']' |> Combine.onsuccess ()))
 
 
 lparen : P ()
 lparen =
-    Parser.succeed ()
-        |. lexeme (char '(')
+    Combine.lazy (\() -> lexeme (Combine.Char.char '(' |> Combine.onsuccess ()))
 
 
 rparen : P ()
 rparen =
-    Parser.succeed ()
-        |. lexeme (char ')')
+    Combine.lazy (\() -> lexeme (Combine.Char.char ')' |> Combine.onsuccess ()))
 
 
 
@@ -506,12 +452,14 @@ rparen =
 
 keyword : String -> P ()
 keyword w =
-    lexeme <|
-        try
-            (Parser.succeed ()
-                |. string w
-                |. notFollowedBy identifierTail
-            )
+    Combine.lazy
+        (\() ->
+            lexeme <|
+                try
+                    (Combine.string w
+                        |> Combine.keep (notFollowedBy identifierTail)
+                    )
+        )
 
 
 
@@ -522,35 +470,43 @@ keyword w =
 
 identifier : P String
 identifier =
-    let
-        check : String -> P String
-        check i =
-            if List.member i reservedWords then
-                Parser.problem (i ++ " is reserved")
+    Combine.lazy
+        (\() ->
+            let
+                check : String -> P String
+                check i =
+                    if List.member i reservedWords then
+                        Combine.fail (i ++ " is reserved")
 
-            else if List.member i keywords then
-                Parser.problem (i ++ " is a keyword")
+                    else if List.member i keywords then
+                        Combine.fail (i ++ " is a keyword")
 
-            else
-                checkUnderscore i (String.toList i)
+                    else
+                        checkUnderscore i (String.toList i)
 
-        checkUnderscore : String -> List Char -> P String
-        checkUnderscore i i2 =
-            case i2 of
-                '_' :: '_' :: _ ->
-                    Parser.problem (i ++ " is reserved (two consecutive underscores)")
+                checkUnderscore : String -> List Char -> P String
+                checkUnderscore i i2 =
+                    case i2 of
+                        '_' :: '_' :: _ ->
+                            Combine.fail (i ++ " is reserved (two consecutive underscores)")
 
-                _ :: cs ->
-                    checkUnderscore i cs
+                        _ :: cs ->
+                            checkUnderscore i cs
 
-                [] ->
-                    Parser.succeed i
-    in
-    lexeme
-        (Parser.succeed (\h t -> String.fromList (h :: t))
-            |= identifierHead
-            |= many identifierTail
-            |> Parser.andThen check
+                        [] ->
+                            Combine.succeed i
+            in
+            lexeme
+                (identifierHead
+                    |> Combine.andThen
+                        (\h ->
+                            Combine.many identifierTail
+                                |> Combine.andThen
+                                    (\t ->
+                                        check (String.fromList (h :: t))
+                                    )
+                        )
+                )
         )
 
 
@@ -560,21 +516,28 @@ identifier =
 
 intConstant : P Expr
 intConstant =
-    choice
-        [ hexadecimal
-        , octal
-        , badOctal |> Parser.andThen (\_ -> Parser.problem "Invalid octal number")
-        , decimal
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ hexadecimal
+                , octal
+                , badOctal
+                    |> Combine.andThen (\_ -> Combine.fail "Invalid octal number")
+                , decimal
+                ]
+        )
 
 
 floatingConstant : P Expr
 floatingConstant =
-    choice
-        [ floatExponent
-        , floatPoint
-        , pointFloat
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ floatExponent
+                , floatPoint
+                , pointFloat
+                ]
+        )
 
 
 
@@ -584,7 +547,7 @@ floatingConstant =
 
 operator : String -> P String
 operator =
-    lexeme << try << string
+    lexeme << try << Combine.string
 
 
 
@@ -595,181 +558,246 @@ operator =
 
 identifierHead : P Char
 identifierHead =
-    Parser.oneOf
-        [ letter
-        , char '_'
-        ]
+    Combine.lazy (\() -> Combine.or letter (Combine.Char.char '_'))
 
 
 identifierTail : P Char
 identifierTail =
-    Parser.oneOf
-        [ alphaNum
-        , char '_'
-        ]
+    Combine.lazy (\() -> Combine.or alphaNum (Combine.Char.char '_'))
 
 
 hexadecimal : P Expr
 hexadecimal =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\d ->
-                    case Hex.fromString d of
-                        Ok val ->
-                            Parser.succeed (IntConstant Hexadecimal val)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.Char.char '0'
+                        |> Combine.ignore (Combine.Char.oneOf [ 'X', 'x' ])
+                        |> Combine.keep (Combine.many1 Combine.Char.hexDigit)
+                        |> Combine.andThen
+                            (\d ->
+                                -- TODO
+                                Combine.maybe (Combine.Char.oneOf [ 'U', 'u' ])
+                                    |> Combine.andThen
+                                        (\_ ->
+                                            case Hex.fromString (String.fromList d) of
+                                                Ok val ->
+                                                    Combine.succeed (IntConstant Hexadecimal val)
 
-                        Err err ->
-                            Parser.problem err
+                                                Err err ->
+                                                    Combine.fail err
+                                        )
+                            )
+                    )
                 )
-                (Parser.succeed identity
-                    |. Parser.keyword "0"
-                    |. oneOf "Xx"
-                    |= Parser.getChompedString (Parser.chompWhile Char.isHexDigit)
-                    -- TODO
-                    |. optionMaybe (oneOf "Uu")
-                )
+        )
 
 
 octal : P Expr
 octal =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\d ->
-                    case octFromString d of
-                        Ok val ->
-                            Parser.succeed (IntConstant Octal val)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.Char.char '0'
+                        |> Combine.keep (Combine.many1 Combine.Char.octDigit)
+                        |> Combine.andThen
+                            (\d ->
+                                -- TODO
+                                Combine.maybe (Combine.Char.oneOf [ 'U', 'u' ])
+                                    |> Combine.andThen
+                                        (\_ ->
+                                            case octFromString (String.fromList d) of
+                                                Ok val ->
+                                                    Combine.succeed (IntConstant Octal val)
 
-                        Err err ->
-                            Parser.problem err
+                                                Err err ->
+                                                    Combine.fail err
+                                        )
+                            )
+                    )
                 )
-                (Parser.succeed String.fromList
-                    |. char '0'
-                    |= many1 octDigit
-                    -- TODO
-                    |. optionMaybe (oneOf "Uu")
-                )
+        )
+
+
+octFromString : String -> Result String Int
+octFromString _ =
+    Debug.todo "octFromString"
 
 
 badOctal : P ()
 badOctal =
-    lexeme <|
-        try <|
-            Parser.succeed ()
-                |. char '0'
-                |. many1 hexDigit
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.Char.char '0'
+                        |> Combine.keep (Combine.many1 Combine.Char.hexDigit)
+                        |> Combine.onsuccess ()
+                    )
+                )
+        )
 
 
 decimal : P Expr
 decimal =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\d ->
-                    case String.toInt d of
-                        Just val ->
-                            Parser.succeed (IntConstant Decimal val)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.many1 Combine.Char.digit
+                        |> Combine.ignore (notFollowedBy (Combine.or (Combine.Char.char '.') (exponent |> Combine.onsuccess ' ')))
+                        |> Combine.ignore
+                            -- TODO
+                            (Combine.maybe (Combine.Char.oneOf [ 'U', 'u' ]))
+                        |> Combine.andThen
+                            (\d ->
+                                case String.toInt (String.fromList d) of
+                                    Just val ->
+                                        Combine.succeed (IntConstant Decimal val)
 
-                        Nothing ->
-                            Parser.problem "Invalid decimal number"
+                                    Nothing ->
+                                        Combine.fail "Invalid decimal number"
+                            )
+                    )
                 )
-                (Parser.succeed String.fromList
-                    |= many1 digit
-                    |. notFollowedBy
-                        (Parser.oneOf
-                            [ char '.'
-                            , Parser.succeed ' '
-                                |. exponent
-                            ]
-                        )
-                    -- TODO
-                    |. optionMaybe (oneOf "Uu")
-                )
+        )
 
 
 floatExponent : P Expr
 floatExponent =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\( d, e ) ->
-                    case String.toFloat (String.fromList d ++ e) of
-                        Just val ->
-                            Parser.succeed (FloatConstant val)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.many1 Combine.Char.digit
+                        |> Combine.andThen
+                            (\d ->
+                                exponent
+                                    |> Combine.andThen
+                                        (\e ->
+                                            Combine.maybe (Combine.Char.oneOf [ 'F', 'f' ])
+                                                -- TODO
+                                                |> Combine.andThen
+                                                    (\_ ->
+                                                        case String.toFloat (String.fromList d ++ e) of
+                                                            Just val ->
+                                                                Combine.succeed (FloatConstant val)
 
-                        Nothing ->
-                            Parser.problem "Invalid float exponent number"
+                                                            Nothing ->
+                                                                Combine.fail "Invalid float exponent number"
+                                                    )
+                                        )
+                            )
+                    )
                 )
-                (Parser.succeed Tuple.pair
-                    |= many1 digit
-                    |= exponent
-                    -- TODO
-                    |. optionMaybe (oneOf "Ff")
-                )
+        )
 
 
 floatPoint : P Expr
 floatPoint =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\( d, d_, e ) ->
-                    let
-                        d__ =
-                            if String.isEmpty d_ then
-                                "0"
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.many1 Combine.Char.digit
+                        |> Combine.andThen
+                            (\d ->
+                                Combine.Char.char '.'
+                                    |> Combine.andThen
+                                        (\_ ->
+                                            Combine.many Combine.Char.digit
+                                                |> Combine.andThen
+                                                    (\d_ ->
+                                                        let
+                                                            d__ =
+                                                                if List.isEmpty d_ then
+                                                                    "0"
 
-                            else
-                                d_
-                    in
-                    case String.toFloat (d ++ "." ++ d__ ++ Maybe.withDefault "" e) of
-                        Just val ->
-                            Parser.succeed (FloatConstant val)
+                                                                else
+                                                                    String.fromList d_
+                                                        in
+                                                        Combine.maybe exponent
+                                                            |> Combine.andThen
+                                                                (\e ->
+                                                                    Combine.maybe (Combine.Char.oneOf [ 'F', 'f' ])
+                                                                        -- TODO
+                                                                        |> Combine.andThen
+                                                                            (\_ ->
+                                                                                case String.toFloat (String.fromList d ++ "." ++ d__ ++ Maybe.withDefault "" e) of
+                                                                                    Just val ->
+                                                                                        Combine.succeed (FloatConstant val)
 
-                        Nothing ->
-                            Parser.problem "Invalid float point number"
+                                                                                    Nothing ->
+                                                                                        Combine.fail "Invalid float point number"
+                                                                            )
+                                                                )
+                                                    )
+                                        )
+                            )
+                    )
                 )
-                (Parser.succeed (\d d_ e -> ( String.fromList d, String.fromList d_, e ))
-                    |= many1 digit
-                    |. char '.'
-                    |= many digit
-                    |= optionMaybe exponent
-                    -- TODO
-                    |. optionMaybe (oneOf "Ff")
-                )
+        )
 
 
 pointFloat : P Expr
 pointFloat =
-    lexeme <|
-        try <|
-            Parser.andThen
-                (\( d, e ) ->
-                    case String.toFloat ("0." ++ d ++ Maybe.withDefault "" e) of
-                        Just val ->
-                            Parser.succeed (FloatConstant val)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.Char.char '.'
+                        |> Combine.andThen
+                            (\_ ->
+                                Combine.many1 Combine.Char.digit
+                                    |> Combine.andThen
+                                        (\d ->
+                                            Combine.maybe exponent
+                                                |> Combine.andThen
+                                                    (\e ->
+                                                        Combine.maybe (Combine.Char.oneOf [ 'F', 'f' ])
+                                                            |> Combine.andThen
+                                                                (\_ ->
+                                                                    case String.toFloat ("0." ++ String.fromList d ++ Maybe.withDefault "" e) of
+                                                                        Just val ->
+                                                                            Combine.succeed (FloatConstant val)
 
-                        Nothing ->
-                            Parser.problem "Invalid point float number"
+                                                                        Nothing ->
+                                                                            Combine.fail "Invalid point float number"
+                                                                )
+                                                    )
+                                        )
+                            )
+                    )
                 )
-                (Parser.succeed (\d e -> ( String.fromList d, e ))
-                    |. char '.'
-                    |= many1 digit
-                    |= optionMaybe exponent
-                    -- TODO
-                    |. optionMaybe (oneOf "Ff")
-                )
+        )
 
 
 exponent : P String
 exponent =
-    lexeme <|
-        try <|
-            Parser.succeed (\s d -> "e" ++ Maybe.withDefault "" s ++ d)
-                |. Parser.oneOf [ Parser.keyword "U", Parser.keyword "u" ]
-                |= optionMaybe (Parser.getChompedString (Parser.oneOf [ Parser.keyword "+", Parser.keyword "-" ]))
-                |= Parser.getChompedString (Parser.chompWhile Char.isDigit)
+    Combine.lazy
+        (\() ->
+            lexeme
+                (try
+                    (Combine.Char.oneOf [ 'E', 'e' ]
+                        |> Combine.andThen
+                            (\_ ->
+                                Combine.maybe (Combine.Char.oneOf [ '+', '-' ])
+                                    |> Combine.andThen
+                                        (\s ->
+                                            Combine.many1 Combine.Char.digit
+                                                |> Combine.map
+                                                    (\d ->
+                                                        "e"
+                                                            ++ Maybe.withDefault "" (Maybe.map String.fromChar s)
+                                                            ++ String.fromList d
+                                                    )
+                                        )
+                            )
+                    )
+                )
+        )
 
 
 
@@ -780,22 +808,17 @@ exponent =
 
 infixLeft : String -> (a -> a -> a) -> Operator Char S a
 infixLeft s r =
-    Infix
-        (Parser.succeed r
-            |. lexeme (try (string s))
-        )
-        AssocLeft
+    Infix (lexeme (try <| Combine.string s) |> Combine.onsuccess r) AssocLeft
 
 
 infixLeft_ : String -> (a -> a -> a) -> Operator Char S a
 infixLeft_ s r =
     Infix
-        (Parser.succeed r
-            |. lexeme
-                (Parser.succeed ()
-                    |. try (string s)
-                    |. notFollowedBy (char '=')
-                )
+        (lexeme
+            (try (Combine.string s)
+                |> Combine.ignore (notFollowedBy (Combine.Char.char '='))
+            )
+            |> Combine.onsuccess r
         )
         AssocLeft
 
@@ -803,23 +826,18 @@ infixLeft_ s r =
 infixLeft__ : Char -> (a -> a -> a) -> Operator Char S a
 infixLeft__ c r =
     Infix
-        (Parser.succeed r
-            |. lexeme
-                (Parser.succeed ()
-                    |. try (char c)
-                    |. notFollowedBy (oneOf (String.cons c "="))
-                )
+        (lexeme
+            (try (Combine.Char.char c)
+                |> Combine.ignore (notFollowedBy (Combine.Char.oneOf [ c, '=' ]))
+            )
+            |> Combine.onsuccess r
         )
         AssocLeft
 
 
 infixRight : String -> (a -> a -> a) -> Operator Char S a
 infixRight s r =
-    Infix
-        (Parser.succeed r
-            |. lexeme (try (string s))
-        )
-        AssocRight
+    Infix (lexeme (try <| Combine.string s) |> Combine.onsuccess r) AssocRight
 
 
 conditionalTable : List (List (Operator Char S Expr))
@@ -871,74 +889,77 @@ expressionTable =
 
 primaryExpression : P Expr
 primaryExpression =
-    choice
-        [ Parser.map Variable (try identifier)
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ Combine.map Variable (try identifier)
 
-        -- int constant
-        , intConstant
+                -- int constant
+                , intConstant
 
-        -- uint constant
-        -- float constant
-        , floatingConstant
+                -- uint constant
+                -- float constant
+                , floatingConstant
 
-        -- bool constant
-        , Parser.succeed (BoolConstant True)
-            |. keyword "true"
-        , Parser.succeed (BoolConstant False)
-            |. keyword "false"
+                -- bool constant
+                , keyword "true" |> Combine.onsuccess (BoolConstant True)
+                , keyword "false" |> Combine.onsuccess (BoolConstant False)
 
-        -- expression within parentheses
-        , between lparen rparen expression
-        ]
+                -- expression within parentheses
+                , Combine.between lparen rparen expression
+                ]
+        )
 
 
 postfixExpression : P Expr
 postfixExpression =
-    Parser.succeed (List.foldl (<|))
-        |= Parser.oneOf
-            [ try
-                (Parser.succeed (\( i, p ) -> FunctionCall i p)
-                    |= functionCallGeneric
+    Combine.lazy
+        (\() ->
+            Combine.or
+                (try
+                    (functionCallGeneric
+                        |> Combine.map (\( i, p ) -> FunctionCall i p)
+                    )
                 )
-            , primaryExpression
-            ]
-        |= many
-            (choice
-                [ Parser.succeed (Utils.flip Bracket)
-                    |= between lbracket rbracket integerExpression
-                , dotFunctionCallGeneric
-                , dotFieldSelection
-                , Parser.succeed PostInc
-                    |. operator "++"
-                , Parser.succeed PostDec
-                    |. operator "--"
-                ]
-            )
+                primaryExpression
+                |> Combine.andThen
+                    (\e ->
+                        Combine.many
+                            (Combine.choice
+                                [ Combine.between lbracket rbracket integerExpression
+                                    |> Combine.map (Utils.flip Bracket)
+                                , dotFunctionCallGeneric
+                                , dotFieldSelection
+                                , operator "++" |> Combine.onsuccess PostInc
+                                , operator "--" |> Combine.onsuccess PostDec
+                                ]
+                            )
+                            |> Combine.map (\p -> List.foldl (<|) e p)
+                    )
+        )
 
 
 dotFunctionCallGeneric : P (Expr -> Expr)
 dotFunctionCallGeneric =
-    Parser.succeed (\( i, p ) e -> MethodCall e i p)
-        |= lexeme
-            (Parser.succeed identity
-                |. try (string ".")
-                |= functionCallGeneric
-            )
+    Combine.lazy
+        (\() ->
+            lexeme (try (Combine.string ".") |> Combine.keep functionCallGeneric)
+                |> Combine.map (\( i, p ) e -> MethodCall e i p)
+        )
 
 
 dotFieldSelection : P (Expr -> Expr)
 dotFieldSelection =
-    Parser.succeed (Utils.flip FieldSelection)
-        |= lexeme
-            (Parser.succeed identity
-                |. try (string ".")
-                |= identifier
-            )
+    Combine.lazy
+        (\() ->
+            lexeme (try (Combine.string ".") |> Combine.keep identifier)
+                |> Combine.map (Utils.flip FieldSelection)
+        )
 
 
 integerExpression : P Expr
 integerExpression =
-    expression
+    Combine.lazy (\() -> expression)
 
 
 
@@ -949,15 +970,23 @@ integerExpression =
 
 functionCallGeneric : P ( FunctionIdentifier, Parameters )
 functionCallGeneric =
-    Parser.succeed Tuple.pair
-        |= functionCallHeader
-        |= choice
-            [ Parser.succeed ParamVoid
-                |. keyword "void"
-            , Parser.succeed Params
-                |= sepBy assignmentExpression comma
-            ]
-        |. rparen
+    Combine.lazy
+        (\() ->
+            functionCallHeader
+                |> Combine.andThen
+                    (\i ->
+                        Combine.choice
+                            [ keyword "void" |> Combine.onsuccess ParamVoid
+                            , Combine.sepBy comma assignmentExpression
+                                |> Combine.map Params
+                            ]
+                            |> Combine.andThen
+                                (\p ->
+                                    rparen
+                                        |> Combine.onsuccess ( i, p )
+                                )
+                    )
+        )
 
 
 
@@ -968,45 +997,55 @@ functionCallGeneric =
 
 functionCallHeader : P FunctionIdentifier
 functionCallHeader =
-    Parser.succeed identity
-        |= functionIdentifier
-        |. lparen
+    Combine.lazy
+        (\() ->
+            functionIdentifier
+                |> Combine.andThen
+                    (\i ->
+                        lparen
+                            |> Combine.onsuccess i
+                    )
+        )
 
 
 functionIdentifier : P FunctionIdentifier
 functionIdentifier =
-    choice
-        [ Parser.succeed FuncId
-            |= try identifier
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ try identifier |> Combine.map FuncId
 
-        -- TODO if the 'identifier' is declared as a type, should be this case
-        , Parser.succeed FuncIdTypeSpec
-            |= typeSpecifier
+                -- TODO if the 'identifier' is declared as a type, should be this case
+                , typeSpecifier |> Combine.map FuncIdTypeSpec
 
-        -- no need for fieldSelection
-        ]
+                -- no need for fieldSelection
+                ]
+        )
 
 
 unaryExpression : P Expr
 unaryExpression =
-    Parser.succeed (\p e -> List.foldr (<|) e p)
-        |= many
-            (choice
-                [ Parser.succeed PreInc
-                    |. operator "++"
-                , Parser.succeed PreDec
-                    |. operator "--"
-                , Parser.succeed UnaryPlus
-                    |. operator "+"
-                , Parser.succeed UnaryNegate
-                    |. operator "-"
-                , Parser.succeed UnaryNot
-                    |. operator "!"
-                , Parser.succeed UnaryOneComplement
-                    |. operator "~"
-                ]
-            )
-        |= postfixExpression
+    Combine.lazy
+        (\() ->
+            Combine.many
+                (Combine.choice
+                    [ operator "++" |> Combine.onsuccess PreInc
+                    , operator "--" |> Combine.onsuccess PreDec
+                    , operator "+" |> Combine.onsuccess UnaryPlus
+                    , operator "-" |> Combine.onsuccess UnaryNegate
+                    , operator "!" |> Combine.onsuccess UnaryNot
+                    , operator "~" |> Combine.onsuccess UnaryOneComplement
+                    ]
+                )
+                |> Combine.andThen
+                    (\p ->
+                        postfixExpression
+                            |> Combine.map
+                                (\e ->
+                                    List.foldr (<|) e p
+                                )
+                    )
+        )
 
 
 
@@ -1028,39 +1067,47 @@ unaryExpression =
 
 conditionalExpression : P Expr
 conditionalExpression =
-    Parser.succeed Tuple.pair
-        |= buildExpressionParser conditionalTable unaryExpression
-        |= optionMaybe
-            (Parser.succeed Tuple.pair
-                |. lexeme (string "?")
-                |= expression
-                |. lexeme (string ":")
-                |= assignmentExpression
-            )
-        |> Parser.map
-            (\( loe, ter ) ->
-                case ter of
-                    Nothing ->
-                        loe
+    Combine.lazy
+        (\() ->
+            buildExpressionParser conditionalTable unaryExpression
+                |> Combine.andThen
+                    (\loe ->
+                        Combine.maybe
+                            (lexeme (Combine.string "?")
+                                |> Combine.keep expression
+                                |> Combine.ignore (lexeme (Combine.string ":"))
+                                |> Combine.andThen
+                                    (\e ->
+                                        assignmentExpression
+                                            |> Combine.map (\a -> ( e, a ))
+                                    )
+                            )
+                            |> Combine.map
+                                (\ter ->
+                                    case ter of
+                                        Nothing ->
+                                            loe
 
-                    Just ( e, a ) ->
-                        Selection loe e a
-            )
+                                        Just ( e, a ) ->
+                                            Selection loe e a
+                                )
+                    )
+        )
 
 
 assignmentExpression : P Expr
 assignmentExpression =
-    Parser.lazy (\_ -> buildExpressionParser assignmentTable conditionalExpression)
+    Combine.lazy (\() -> buildExpressionParser assignmentTable conditionalExpression)
 
 
 expression : P Expr
 expression =
-    buildExpressionParser expressionTable assignmentExpression
+    Combine.lazy (\() -> buildExpressionParser expressionTable assignmentExpression)
 
 
 constantExpression : P Expr
 constantExpression =
-    conditionalExpression
+    Combine.lazy (\() -> conditionalExpression)
 
 
 
@@ -1071,66 +1118,98 @@ constantExpression =
 
 declaration : P Declaration
 declaration =
-    let
-        idecl =
-            Parser.succeed InitDecl
-                |= identifier
-                |= optionMaybe (between lbracket rbracket (optionMaybe constantExpression))
-                |= optionMaybe (Parser.succeed identity |. lexeme (string "=") |= initializer)
-    in
-    choice
-        [ try <|
-            Parser.succeed (\t l -> InitDeclaration (TypeDeclarator t) l)
-                |= fullySpecifiedType
-                |= sepBy idecl comma
-                |. semicolon
-        , Parser.succeed (InitDeclaration InvariantDeclarator)
-            |. keyword "invariant"
-            |= sepBy idecl comma
-            |. semicolon
-        , Parser.succeed Precision
-            |. keyword "precision"
-            |= precisionQualifier
-            |= typeSpecifierNoPrecision
-            |. semicolon
-        , typeQualifier
-            |> Parser.andThen
-                (\q ->
-                    choice
-                        [ Parser.succeed (TQ q)
-                            |. semicolon
-                        , Parser.succeed (Block q)
-                            |= identifier
-                            |. lbrace
-                            |= structDeclarationList
-                            |. rbrace
-                            |= optionMaybe
-                                (Parser.succeed Tuple.pair
-                                    |= identifier
-                                    |= optionMaybe
-                                        (between lbracket
-                                            rbracket
-                                            (optionMaybe constantExpression)
+    Combine.lazy
+        (\() ->
+            let
+                idecl =
+                    identifier
+                        |> Combine.andThen
+                            (\i ->
+                                Combine.maybe (Combine.between lbracket rbracket (Combine.maybe constantExpression))
+                                    |> Combine.andThen
+                                        (\m ->
+                                            Combine.maybe (lexeme (Combine.string "=") |> Combine.keep initializer)
+                                                |> Combine.map (InitDecl i m)
                                         )
-                                )
-                            |. semicolon
-                        ]
-                )
-        ]
+                            )
+            in
+            Combine.choice
+                [ try
+                    (fullySpecifiedType
+                        |> Combine.andThen
+                            (\t ->
+                                Combine.sepBy comma idecl
+                                    |> Combine.ignore semicolon
+                                    |> Combine.map (InitDeclaration (TypeDeclarator t))
+                            )
+                    )
+                , keyword "invariant"
+                    |> Combine.keep (Combine.sepBy comma idecl)
+                    |> Combine.ignore semicolon
+                    |> Combine.map (InitDeclaration InvariantDeclarator)
+                , keyword "precision"
+                    |> Combine.keep precisionQualifier
+                    |> Combine.andThen
+                        (\q ->
+                            typeSpecifierNoPrecision
+                                |> Combine.ignore semicolon
+                                |> Combine.map (Precision q)
+                        )
+                , typeQualifier
+                    |> Combine.andThen
+                        (\q ->
+                            Combine.choice
+                                [ semicolon |> Combine.onsuccess (TQ q)
+                                , identifier
+                                    |> Combine.ignore lbrace
+                                    |> Combine.andThen
+                                        (\i ->
+                                            structDeclarationList
+                                                |> Combine.ignore rbrace
+                                                |> Combine.andThen
+                                                    (\s ->
+                                                        Combine.maybe
+                                                            (identifier
+                                                                |> Combine.andThen
+                                                                    (\j ->
+                                                                        Combine.maybe (Combine.between lbracket rbracket (Combine.maybe constantExpression))
+                                                                            |> Combine.map (\n -> ( j, n ))
+                                                                    )
+                                                            )
+                                                            |> Combine.ignore semicolon
+                                                            |> Combine.map (\m -> Block q i s m)
+                                                    )
+                                        )
+                                ]
+                        )
+                ]
+        )
 
 
 functionPrototype : P FunctionPrototype
 functionPrototype =
-    Parser.succeed (\( t, i, p ) -> FuncProt t i p)
-        |= functionDeclarator
-        |. rparen
+    Combine.lazy
+        (\() ->
+            functionDeclarator
+                |> Combine.andThen
+                    (\( t, i, p ) ->
+                        rparen
+                            |> Combine.onsuccess (FuncProt t i p)
+                    )
+        )
 
 
 functionDeclarator : P ( FullType, String, List ParameterDeclaration )
 functionDeclarator =
-    Parser.succeed (\( t, i ) p -> ( t, i, p ))
-        |= functionHeader
-        |= sepBy parameterDeclaration comma
+    Combine.lazy
+        (\() ->
+            functionHeader
+                |> Combine.andThen
+                    (\( t, i ) ->
+                        Combine.sepBy comma parameterDeclaration
+                            |> Combine.map (\p -> ( t, i, p ))
+                    )
+        )
 
 
 
@@ -1140,10 +1219,19 @@ functionDeclarator =
 
 functionHeader : P ( FullType, String )
 functionHeader =
-    Parser.succeed (\t i -> ( t, i ))
-        |= fullySpecifiedType
-        |= identifier
-        |. lparen
+    Combine.lazy
+        (\() ->
+            fullySpecifiedType
+                |> Combine.andThen
+                    (\t ->
+                        identifier
+                            |> Combine.andThen
+                                (\i ->
+                                    lparen
+                                        |> Combine.onsuccess ( t, i )
+                                )
+                    )
+        )
 
 
 
@@ -1161,29 +1249,44 @@ functionHeader =
 
 parameterDeclaration : P ParameterDeclaration
 parameterDeclaration =
-    Parser.succeed ParameterDeclaration
-        |= optionMaybe parameterTypeQualifier
-        |= optionMaybe parameterQualifier
-        |= typeSpecifier
-        |= optionMaybe
-            (Parser.succeed Tuple.pair
-                |= identifier
-                -- FIXME can't the bracket be empty, i.e. a[] ?
-                |= optionMaybe (between lbracket rbracket constantExpression)
-            )
+    Combine.lazy
+        (\() ->
+            Combine.maybe parameterTypeQualifier
+                |> Combine.andThen
+                    (\tq ->
+                        Combine.maybe parameterQualifier
+                            |> Combine.andThen
+                                (\q ->
+                                    typeSpecifier
+                                        |> Combine.andThen
+                                            (\s ->
+                                                Combine.maybe
+                                                    (identifier
+                                                        |> Combine.andThen
+                                                            (\i ->
+                                                                -- FIXME can't the bracket be empty, i.e. a[] ?
+                                                                Combine.maybe (Combine.between lbracket rbracket constantExpression)
+                                                                    |> Combine.map (\b -> ( i, b ))
+                                                            )
+                                                    )
+                                                    |> Combine.map (\m -> ParameterDeclaration tq q s m)
+                                            )
+                                )
+                    )
+        )
 
 
 parameterQualifier : P ParameterQualifier
 parameterQualifier =
-    choice
-        -- "empty" case handled in the caller
-        [ Parser.succeed InOutParameter
-            |. (try << lexeme << string) "inout"
-        , Parser.succeed InParameter
-            |. (try << lexeme << string) "in"
-        , Parser.succeed OutParameter
-            |. (try << lexeme << string) "out"
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                -- "empty" case handled in the caller
+                [ (try << lexeme << Combine.string) "inout" |> Combine.onsuccess InOutParameter
+                , (try << lexeme << Combine.string) "in" |> Combine.onsuccess InParameter
+                , (try << lexeme << Combine.string) "out" |> Combine.onsuccess OutParameter
+                ]
+        )
 
 
 
@@ -1204,40 +1307,46 @@ parameterQualifier =
 
 fullySpecifiedType : P FullType
 fullySpecifiedType =
-    choice
-        [ Parser.succeed (FullType Nothing)
-            |= try typeSpecifier
-        , Parser.succeed (\q s -> FullType (Just q) s)
-            |= typeQualifier
-            |= typeSpecifier
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ try typeSpecifier |> Combine.map (FullType Nothing)
+                , typeQualifier
+                    |> Combine.andThen
+                        (\q ->
+                            typeSpecifier
+                                |> Combine.map (FullType (Just q))
+                        )
+                ]
+        )
 
 
 invariantQualifier : P InvariantQualifier
 invariantQualifier =
-    Parser.succeed Invariant
-        |. keyword "invariant"
+    Combine.lazy (\() -> keyword "invariant" |> Combine.onsuccess Invariant)
 
 
 interpolationQualifier : P InterpolationQualifier
 interpolationQualifier =
-    choice
-        [ Parser.succeed Smooth
-            |. keyword "smooth"
-        , Parser.succeed Flat
-            |. keyword "flat"
-        , Parser.succeed NoPerspective
-            |. keyword "noperspective"
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "smooth" |> Combine.onsuccess Smooth
+                , keyword "flat" |> Combine.onsuccess Flat
+                , keyword "noperspective" |> Combine.onsuccess NoPerspective
+                ]
+        )
 
 
 layoutQualifier : P LayoutQualifier
 layoutQualifier =
-    Parser.succeed Layout
-        |. keyword "layout"
-        |. lparen
-        |= sepBy layoutQualifierId comma
-        |. rparen
+    Combine.lazy
+        (\() ->
+            Combine.sequence [ keyword "layout", lparen ]
+                |> Combine.keep (Combine.sepBy comma layoutQualifierId)
+                |> Combine.ignore rparen
+                |> Combine.map Layout
+        )
 
 
 
@@ -1247,19 +1356,20 @@ layoutQualifier =
 
 layoutQualifierId : P LayoutQualifierId
 layoutQualifierId =
-    Parser.succeed LayoutQualId
-        |= identifier
-        |= optionMaybe
-            (Parser.succeed identity
-                |. lexeme (string "=")
-                |= intConstant
-            )
+    Combine.lazy
+        (\() ->
+            identifier
+                |> Combine.andThen
+                    (\i ->
+                        Combine.maybe (lexeme (Combine.string "=") |> Combine.keep intConstant)
+                            |> Combine.map (LayoutQualId i)
+                    )
+        )
 
 
 parameterTypeQualifier : P ParameterTypeQualifier
 parameterTypeQualifier =
-    Parser.succeed ConstParameter
-        |. keyword "const"
+    Combine.lazy (\() -> keyword "const" |> Combine.onsuccess ConstParameter)
 
 
 
@@ -1272,27 +1382,39 @@ parameterTypeQualifier =
 
 typeQualifier : P TypeQualifier
 typeQualifier =
-    choice
-        [ Parser.succeed TypeQualSto
-            |= storageQualifier
-        , Parser.succeed TypeQualLay
-            |= layoutQualifier
-            |= optionMaybe storageQualifier
-        , Parser.succeed TypeQualInt
-            |= interpolationQualifier
-            |= optionMaybe storageQualifier
-        , invariantQualifier
-            |> Parser.andThen
-                (\i ->
-                    choice
-                        [ Parser.succeed (TypeQualInv3 i)
-                            |= interpolationQualifier
-                            |= storageQualifier
-                        , Parser.succeed (TypeQualInv i)
-                            |= optionMaybe storageQualifier
-                        ]
-                )
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ storageQualifier
+                    |> Combine.map TypeQualSto
+                , layoutQualifier
+                    |> Combine.andThen
+                        (\l ->
+                            Combine.maybe storageQualifier
+                                |> Combine.map (TypeQualLay l)
+                        )
+                , interpolationQualifier
+                    |> Combine.andThen
+                        (\i ->
+                            Combine.maybe storageQualifier
+                                |> Combine.map (TypeQualInt i)
+                        )
+                , invariantQualifier
+                    |> Combine.andThen
+                        (\i ->
+                            Combine.choice
+                                [ interpolationQualifier
+                                    |> Combine.andThen
+                                        (\j ->
+                                            storageQualifier
+                                                |> Combine.map (TypeQualInv3 i j)
+                                        )
+                                , Combine.maybe storageQualifier
+                                    |> Combine.map (TypeQualInv i)
+                                ]
+                        )
+                ]
+        )
 
 
 
@@ -1301,63 +1423,64 @@ typeQualifier =
 
 storageQualifier : P StorageQualifier
 storageQualifier =
-    choice
-        [ Parser.succeed Const
-            |. keyword "const"
-
-        -- TODO vertex only, is deprecated
-        , Parser.succeed Attribute
-            |. keyword "attribute"
-
-        -- deprecated
-        , Parser.succeed Varying
-            |. keyword "varying"
-        , Parser.succeed In
-            |. keyword "in"
-        , Parser.succeed Out
-            |. keyword "out"
-        , Parser.succeed identity
-            |. keyword "centroid"
-            |= choice
-                [ -- deprecated
-                  Parser.succeed CentroidVarying
-                    |. keyword "varying"
-                , Parser.succeed CentroidIn
-                    |. keyword "in"
-                , Parser.succeed CentroidOut
-                    |. keyword "out"
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "const" |> Combine.onsuccess Const
+                , keyword "attribute" |> Combine.onsuccess Attribute -- TODO vertex only, is deprecated
+                , keyword "varying" |> Combine.onsuccess Varying -- deprecated
+                , keyword "in" |> Combine.onsuccess In
+                , keyword "out" |> Combine.onsuccess Out
+                , keyword "centroid"
+                    |> Combine.keep
+                        (Combine.choice
+                            [ keyword "varying" |> Combine.onsuccess CentroidVarying -- deprecated
+                            , keyword "in" |> Combine.onsuccess CentroidIn
+                            , keyword "out" |> Combine.onsuccess CentroidOut
+                            ]
+                        )
+                , keyword "uniform" |> Combine.onsuccess Uniform
                 ]
-        , Parser.succeed Uniform
-            |. keyword "uniform"
-        ]
+        )
 
 
 typeSpecifier : P TypeSpecifier
 typeSpecifier =
-    choice
-        [ Parser.succeed (\q s -> TypeSpec (Just q) s)
-            |= try precisionQualifier
-            |= typeSpecifierNoPrecision
-        , Parser.succeed (TypeSpec Nothing)
-            |= typeSpecifierNoPrecision
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ try precisionQualifier
+                    |> Combine.andThen
+                        (\q ->
+                            typeSpecifierNoPrecision
+                                |> Combine.map (\s -> TypeSpec (Just q) s)
+                        )
+                , typeSpecifierNoPrecision |> Combine.map (TypeSpec Nothing)
+                ]
+        )
 
 
 typeSpecifierNoPrecision : P TypeSpecifierNoPrecision
 typeSpecifierNoPrecision =
-    typeSpecifierNonArray
-        |> Parser.andThen
-            (\s ->
-                choice
-                    [ Parser.succeed (TypeSpecNoPrecision s (Just Nothing))
-                        |. try (Parser.succeed () |. lbracket |. rbracket)
-                    , Parser.succeed (TypeSpecNoPrecision s << Just << Just)
-                        |. lbracket
-                        |= constantExpression
-                        |. rbracket
-                    , Parser.succeed (TypeSpecNoPrecision s Nothing)
-                    ]
-            )
+    Combine.lazy
+        (\() ->
+            typeSpecifierNonArray
+                |> Combine.andThen
+                    (\s ->
+                        Combine.choice
+                            [ try (Combine.sequence [ lbracket, rbracket ])
+                                |> Combine.onsuccess (TypeSpecNoPrecision s (Just Nothing))
+                            , lbracket
+                                |> Combine.keep constantExpression
+                                |> Combine.andThen
+                                    (\c ->
+                                        rbracket
+                                            |> Combine.onsuccess (TypeSpecNoPrecision s (Just (Just c)))
+                                    )
+                            , Combine.succeed (TypeSpecNoPrecision s Nothing)
+                            ]
+                    )
+        )
 
 
 
@@ -1366,289 +1489,257 @@ typeSpecifierNoPrecision =
 
 typeSpecifierNonArray : P TypeSpecifierNonArray
 typeSpecifierNonArray =
-    choice
-        [ Parser.succeed Void
-            |. keyword "void"
-        , Parser.succeed Float
-            |. keyword "float"
-        , Parser.succeed Int
-            |. keyword "int"
-        , Parser.succeed UInt
-            |. keyword "uint"
-        , Parser.succeed Bool
-            |. keyword "bool"
-        , Parser.succeed Vec2
-            |. keyword "vec2"
-        , Parser.succeed Vec3
-            |. keyword "vec3"
-        , Parser.succeed Vec4
-            |. keyword "vec4"
-        , Parser.succeed BVec2
-            |. keyword "bvec2"
-        , Parser.succeed BVec3
-            |. keyword "bvec3"
-        , Parser.succeed BVec4
-            |. keyword "bvec4"
-        , Parser.succeed IVec2
-            |. keyword "ivec2"
-        , Parser.succeed IVec3
-            |. keyword "ivec3"
-        , Parser.succeed IVec4
-            |. keyword "ivec4"
-        , Parser.succeed UVec2
-            |. keyword "uvec2"
-        , Parser.succeed UVec3
-            |. keyword "uvec3"
-        , Parser.succeed UVec4
-            |. keyword "uvec4"
-        , Parser.succeed Mat2
-            |. keyword "mat2"
-        , Parser.succeed Mat3
-            |. keyword "mat3"
-        , Parser.succeed Mat4
-            |. keyword "mat4"
-        , Parser.succeed Mat2x2
-            |. keyword "mat2x2"
-        , Parser.succeed Mat2x3
-            |. keyword "mat2x3"
-        , Parser.succeed Mat2x4
-            |. keyword "mat2x4"
-        , Parser.succeed Mat3x2
-            |. keyword "mat3x2"
-        , Parser.succeed Mat3x3
-            |. keyword "mat3x3"
-        , Parser.succeed Mat3x4
-            |. keyword "mat3x4"
-        , Parser.succeed Mat4x2
-            |. keyword "mat4x2"
-        , Parser.succeed Mat4x3
-            |. keyword "mat4x3"
-        , Parser.succeed Mat4x4
-            |. keyword "mat4x4"
-        , Parser.succeed Sampler1D
-            |. keyword "sampler1D"
-        , Parser.succeed Sampler2D
-            |. keyword "sampler2D"
-        , Parser.succeed Sampler3D
-            |. keyword "sampler3D"
-        , Parser.succeed SamplerCube
-            |. keyword "samplerCube"
-        , Parser.succeed Sampler1DShadow
-            |. keyword "sampler1DShadow"
-        , Parser.succeed Sampler2DShadow
-            |. keyword "sampler2DShadow"
-        , Parser.succeed SamplerCubeShadow
-            |. keyword "samplerCubeShadow"
-        , Parser.succeed Sampler1DArray
-            |. keyword "sampler1DArray"
-        , Parser.succeed Sampler2DArray
-            |. keyword "sampler2DArray"
-        , Parser.succeed Sampler1DArrayShadow
-            |. keyword "sampler1DArrayShadow"
-        , Parser.succeed Sampler2DArrayShadow
-            |. keyword "sampler2DArrayShadow"
-        , Parser.succeed ISampler1D
-            |. keyword "isampler1D"
-        , Parser.succeed ISampler2D
-            |. keyword "isampler2D"
-        , Parser.succeed ISampler3D
-            |. keyword "isampler3D"
-        , Parser.succeed ISamplerCube
-            |. keyword "isamplerCube"
-        , Parser.succeed ISampler1DArray
-            |. keyword "isampler1DArray"
-        , Parser.succeed ISampler2DArray
-            |. keyword "isampler2DArray"
-        , Parser.succeed USampler1D
-            |. keyword "usampler1D"
-        , Parser.succeed USampler2D
-            |. keyword "usampler2D"
-        , Parser.succeed USampler3D
-            |. keyword "usampler3D"
-        , Parser.succeed USamplerCube
-            |. keyword "usamplerCube"
-        , Parser.succeed USampler1DArray
-            |. keyword "usampler1DArray"
-        , Parser.succeed USampler2DArray
-            |. keyword "usampler2DArray"
-        , Parser.succeed Sampler2DRect
-            |. keyword "sampler2DRect"
-        , Parser.succeed Sampler2DRectShadow
-            |. keyword "sampler2DRectShadow"
-        , Parser.succeed ISampler2DRect
-            |. keyword "isampler2DRect"
-        , Parser.succeed USampler2DRect
-            |. keyword "usampler2DRect"
-        , Parser.succeed SamplerBuffer
-            |. keyword "samplerBuffer"
-        , Parser.succeed ISamplerBuffer
-            |. keyword "isamplerBuffer"
-        , Parser.succeed USamplerBuffer
-            |. keyword "usamplerBuffer"
-        , Parser.succeed Sampler2DMS
-            |. keyword "sampler2DMS"
-        , Parser.succeed ISampler2DMS
-            |. keyword "isampler2DMS"
-        , Parser.succeed USampler2DMS
-            |. keyword "usampler2DMS"
-        , Parser.succeed Sampler2DMSArray
-            |. keyword "sampler2DMSArray"
-        , Parser.succeed ISampler2DMSArray
-            |. keyword "isampler2DMSArray"
-        , Parser.succeed USampler2DMSArray
-            |. keyword "usampler2DMSArray"
-        , structSpecifier
-
-        -- verify if it is declared
-        , Parser.succeed TypeName
-            |= identifier
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "void" |> Combine.onsuccess Void
+                , keyword "float" |> Combine.onsuccess Float
+                , keyword "int" |> Combine.onsuccess Int
+                , keyword "uint" |> Combine.onsuccess UInt
+                , keyword "bool" |> Combine.onsuccess Bool
+                , keyword "vec2" |> Combine.onsuccess Vec2
+                , keyword "vec3" |> Combine.onsuccess Vec3
+                , keyword "vec4" |> Combine.onsuccess Vec4
+                , keyword "bvec2" |> Combine.onsuccess BVec2
+                , keyword "bvec3" |> Combine.onsuccess BVec3
+                , keyword "bvec4" |> Combine.onsuccess BVec4
+                , keyword "ivec2" |> Combine.onsuccess IVec2
+                , keyword "ivec3" |> Combine.onsuccess IVec3
+                , keyword "ivec4" |> Combine.onsuccess IVec4
+                , keyword "uvec2" |> Combine.onsuccess UVec2
+                , keyword "uvec3" |> Combine.onsuccess UVec3
+                , keyword "uvec4" |> Combine.onsuccess UVec4
+                , keyword "mat2" |> Combine.onsuccess Mat2
+                , keyword "mat3" |> Combine.onsuccess Mat3
+                , keyword "mat4" |> Combine.onsuccess Mat4
+                , keyword "mat2x2" |> Combine.onsuccess Mat2x2
+                , keyword "mat2x3" |> Combine.onsuccess Mat2x3
+                , keyword "mat2x4" |> Combine.onsuccess Mat2x4
+                , keyword "mat3x2" |> Combine.onsuccess Mat3x2
+                , keyword "mat3x3" |> Combine.onsuccess Mat3x3
+                , keyword "mat3x4" |> Combine.onsuccess Mat3x4
+                , keyword "mat4x2" |> Combine.onsuccess Mat4x2
+                , keyword "mat4x3" |> Combine.onsuccess Mat4x3
+                , keyword "mat4x4" |> Combine.onsuccess Mat4x4
+                , keyword "sampler1D" |> Combine.onsuccess Sampler1D
+                , keyword "sampler2D" |> Combine.onsuccess Sampler2D
+                , keyword "sampler3D" |> Combine.onsuccess Sampler3D
+                , keyword "samplerCube" |> Combine.onsuccess SamplerCube
+                , keyword "sampler1DShadow" |> Combine.onsuccess Sampler1DShadow
+                , keyword "sampler2DShadow" |> Combine.onsuccess Sampler2DShadow
+                , keyword "samplerCubeShadow" |> Combine.onsuccess SamplerCubeShadow
+                , keyword "sampler1DArray" |> Combine.onsuccess Sampler1DArray
+                , keyword "sampler2DArray" |> Combine.onsuccess Sampler2DArray
+                , keyword "sampler1DArrayShadow" |> Combine.onsuccess Sampler1DArrayShadow
+                , keyword "sampler2DArrayShadow" |> Combine.onsuccess Sampler2DArrayShadow
+                , keyword "isampler1D" |> Combine.onsuccess ISampler1D
+                , keyword "isampler2D" |> Combine.onsuccess ISampler2D
+                , keyword "isampler3D" |> Combine.onsuccess ISampler3D
+                , keyword "isamplerCube" |> Combine.onsuccess ISamplerCube
+                , keyword "isampler1DArray" |> Combine.onsuccess ISampler1DArray
+                , keyword "isampler2DArray" |> Combine.onsuccess ISampler2DArray
+                , keyword "usampler1D" |> Combine.onsuccess USampler1D
+                , keyword "usampler2D" |> Combine.onsuccess USampler2D
+                , keyword "usampler3D" |> Combine.onsuccess USampler3D
+                , keyword "usamplerCube" |> Combine.onsuccess USamplerCube
+                , keyword "usampler1DArray" |> Combine.onsuccess USampler1DArray
+                , keyword "usampler2DArray" |> Combine.onsuccess USampler2DArray
+                , keyword "sampler2DRect" |> Combine.onsuccess Sampler2DRect
+                , keyword "sampler2DRectShadow" |> Combine.onsuccess Sampler2DRectShadow
+                , keyword "isampler2DRect" |> Combine.onsuccess ISampler2DRect
+                , keyword "usampler2DRect" |> Combine.onsuccess USampler2DRect
+                , keyword "samplerBuffer" |> Combine.onsuccess SamplerBuffer
+                , keyword "isamplerBuffer" |> Combine.onsuccess ISamplerBuffer
+                , keyword "usamplerBuffer" |> Combine.onsuccess USamplerBuffer
+                , keyword "sampler2DMS" |> Combine.onsuccess Sampler2DMS
+                , keyword "isampler2DMS" |> Combine.onsuccess ISampler2DMS
+                , keyword "usampler2DMS" |> Combine.onsuccess USampler2DMS
+                , keyword "sampler2DMSArray" |> Combine.onsuccess Sampler2DMSArray
+                , keyword "isampler2DMSArray" |> Combine.onsuccess ISampler2DMSArray
+                , keyword "usampler2DMSArray" |> Combine.onsuccess USampler2DMSArray
+                , structSpecifier
+                , identifier |> Combine.map TypeName -- verify if it is declared
+                ]
+        )
 
 
 precisionQualifier : P PrecisionQualifier
 precisionQualifier =
-    choice
-        [ Parser.succeed HighP
-            |. keyword "highp"
-        , Parser.succeed MediumP
-            |. keyword "mediump"
-        , Parser.succeed LowP
-            |. keyword "lowp"
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "highp" |> Combine.onsuccess HighP
+                , keyword "mediump" |> Combine.onsuccess MediumP
+                , keyword "lowp" |> Combine.onsuccess LowP
+                ]
+        )
 
 
 structSpecifier : P TypeSpecifierNonArray
 structSpecifier =
-    Parser.succeed StructSpecifier
-        |. keyword "struct"
-        |= optionMaybe identifier
-        |. lbrace
-        |= structDeclarationList
-        |. rbrace
+    Combine.lazy
+        (\() ->
+            keyword "struct"
+                |> Combine.keep (Combine.maybe identifier)
+                |> Combine.andThen
+                    (\i ->
+                        lbrace
+                            |> Combine.keep structDeclarationList
+                            |> Combine.andThen
+                                (\d ->
+                                    rbrace
+                                        |> Combine.map (\_ -> StructSpecifier i d)
+                                )
+                    )
+        )
 
 
 structDeclarationList : P (List Field)
 structDeclarationList =
-    many1 (Parser.lazy (\_ -> structDeclaration))
+    Combine.lazy (\() -> Combine.many1 structDeclaration)
 
 
 structDeclaration : P Field
 structDeclaration =
-    Parser.succeed Field
-        |= optionMaybe typeQualifier
-        |= typeSpecifier
-        |= structDeclaratorList
-        |. semicolon
+    Combine.lazy
+        (\() ->
+            Combine.maybe typeQualifier
+                |> Combine.andThen
+                    (\q ->
+                        typeSpecifier
+                            |> Combine.andThen
+                                (\s ->
+                                    structDeclaratorList
+                                        |> Combine.andThen
+                                            (\l ->
+                                                semicolon
+                                                    |> Combine.map (\_ -> Field q s l)
+                                            )
+                                )
+                    )
+        )
 
 
 structDeclaratorList : P (List StructDeclarator)
 structDeclaratorList =
-    sepBy structDeclarator comma
+    Combine.lazy (\() -> Combine.sepBy comma structDeclarator)
 
 
 structDeclarator : P StructDeclarator
 structDeclarator =
-    identifier
-        |> Parser.andThen
-            (\i ->
-                choice
-                    [ Parser.succeed (\e -> StructDeclarator i (Just e))
-                        |. lbracket
-                        |= optionMaybe constantExpression
-                        |. rbracket
-                    , Parser.succeed (StructDeclarator i Nothing)
-                    ]
-            )
+    Combine.lazy
+        (\() ->
+            identifier
+                |> Combine.andThen
+                    (\i ->
+                        Combine.choice
+                            [ lbracket
+                                |> Combine.keep (Combine.maybe constantExpression)
+                                |> Combine.ignore rbracket
+                                |> Combine.map (\e -> StructDeclarator i (Just e))
+                            , Combine.succeed (StructDeclarator i Nothing)
+                            ]
+                    )
+        )
 
 
 initializer : P Expr
 initializer =
-    assignmentExpression
+    Combine.lazy (\() -> assignmentExpression)
 
 
 declarationStatement : P Declaration
 declarationStatement =
-    declaration
+    Combine.lazy (\() -> declaration)
 
 
 statement : P Statement
 statement =
-    Parser.oneOf
-        [ Parser.map CompoundStatement compoundStatement
-        , Parser.lazy (\_ -> simpleStatement)
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.or (Combine.map CompoundStatement (Combine.lazy (\() -> compoundStatement)))
+                (Combine.lazy (\() -> simpleStatement))
+        )
 
 
 simpleStatement : P Statement
 simpleStatement =
-    choice
-        [ Parser.succeed DeclarationStatement
-            |= declarationStatement
-        , Parser.succeed ExpressionStatement
-            |= expressionStatement
-        , selectionStatement
-        , switchStatement
-        , Parser.succeed CaseLabel
-            |= caseLabel
-        , Parser.lazy (\_ -> iterationStatement)
-        , jumpStatement
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ declarationStatement |> Combine.map DeclarationStatement
+                , expressionStatement |> Combine.map ExpressionStatement
+                , selectionStatement
+                , switchStatement
+                , caseLabel |> Combine.map CaseLabel
+                , iterationStatement
+                , jumpStatement
+                ]
+        )
 
 
 compoundStatement : P Compound
 compoundStatement =
-    choice
-        [ Parser.succeed (Compound [])
-            |. try
-                (Parser.succeed ()
-                    |. lbrace
-                    |. rbrace
-                )
-        , Parser.succeed Compound
-            |= between lbrace rbrace (Parser.lazy (\_ -> statementList))
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ try (Combine.sequence [ lbrace, rbrace ])
+                    |> Combine.onsuccess (Compound [])
+                , Combine.between lbrace rbrace (Combine.lazy (\() -> statementList))
+                    |> Combine.map Compound
+                ]
+        )
 
 
 statementNoNewScope : P Statement
 statementNoNewScope =
-    Parser.oneOf
-        [ Parser.map CompoundStatement compoundStatementNoNewScope
-        , simpleStatement
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.or
+                (Combine.map CompoundStatement compoundStatementNoNewScope)
+                simpleStatement
+        )
 
 
 compoundStatementNoNewScope : P Compound
 compoundStatementNoNewScope =
-    compoundStatement
+    Combine.lazy (\() -> compoundStatement)
 
 
 statementList : P (List Statement)
 statementList =
-    many1 statement
+    Combine.lazy (\() -> Combine.many1 (Combine.lazy (\() -> statement)))
 
 
 expressionStatement : P (Maybe Expr)
 expressionStatement =
-    choice
-        [ Parser.succeed Nothing |. semicolon
-        , expression
-            |> Parser.andThen (\e -> Parser.succeed (Just e) |. semicolon)
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ semicolon |> Combine.onsuccess Nothing
+                , expression |> Combine.andThen (\e -> semicolon |> Combine.onsuccess (Just e))
+                ]
+        )
 
 
 selectionStatement : P Statement
 selectionStatement =
-    Parser.succeed SelectionStatement
-        |. keyword "if"
-        |. lparen
-        |= expression
-        |. rparen
-        |= statement
-        |= optionMaybe
-            (Parser.succeed identity
-                |. keyword "else"
-                |= statement
-            )
+    Combine.lazy
+        (\() ->
+            keyword "if"
+                |> Combine.ignore lparen
+                |> Combine.keep expression
+                |> Combine.ignore rparen
+                |> Combine.andThen
+                    (\c ->
+                        statement
+                            |> Combine.andThen
+                                (\t ->
+                                    Combine.maybe (keyword "else" |> Combine.keep statement)
+                                        |> Combine.map (SelectionStatement c t)
+                                )
+                    )
+        )
 
 
 
@@ -1658,88 +1749,118 @@ selectionStatement =
 
 condition : P Condition
 condition =
-    choice
-        [ Parser.succeed Condition
-            |= expression
-        , Parser.succeed InitializedCondition
-            |= fullySpecifiedType
-            |= identifier
-            |. lexeme (string "=")
-            |= initializer
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ expression
+                    |> Combine.map Condition
+                , fullySpecifiedType
+                    |> Combine.andThen
+                        (\t ->
+                            identifier
+                                |> Combine.ignore (lexeme (Combine.string "="))
+                                |> Combine.andThen
+                                    (\i ->
+                                        initializer
+                                            |> Combine.map (InitializedCondition t i)
+                                    )
+                        )
+                ]
+        )
 
 
 switchStatement : P Statement
 switchStatement =
-    Parser.succeed SwitchStatement
-        |. keyword "switch"
-        |. lparen
-        |= expression
-        |. rparen
-        |. lbrace
-        |= switchStatementList
-        |. rbrace
+    Combine.lazy
+        (\() ->
+            keyword "switch"
+                |> Combine.ignore lparen
+                |> Combine.keep expression
+                |> Combine.ignore rparen
+                |> Combine.ignore lbrace
+                |> Combine.andThen
+                    (\e ->
+                        switchStatementList
+                            |> Combine.ignore rbrace
+                            |> Combine.map (SwitchStatement e)
+                    )
+        )
 
 
 switchStatementList : P (List Statement)
 switchStatementList =
-    many statement
+    Combine.lazy (\() -> Combine.many statement)
 
 
 caseLabel : P CaseLabel
 caseLabel =
-    choice
-        [ Parser.succeed identity
-            |. keyword "case"
-            |= expression
-            |> Parser.andThen
-                (\e ->
-                    Parser.succeed (Case e)
-                        |. colon
-                )
-        , Parser.succeed Default
-            |. keyword "default"
-            |. colon
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "case"
+                    |> Combine.keep expression
+                    |> Combine.andThen
+                        (\e ->
+                            colon
+                                |> Combine.onsuccess (Case e)
+                        )
+                , keyword "default"
+                    |> Combine.keep (Combine.succeed Default)
+                ]
+        )
 
 
 iterationStatement : P Statement
 iterationStatement =
-    choice
-        [ Parser.succeed While
-            |. keyword "while"
-            |. lparen
-            |= condition
-            |. rparen
-            |= statementNoNewScope
-        , Parser.succeed DoWhile
-            |. keyword "do"
-            |= statement
-            |. keyword "while"
-            |. lparen
-            |= expression
-            |. rparen
-            |. semicolon
-        , Parser.succeed For
-            |. keyword "for"
-            |. lparen
-            |= forInitStatement
-            |= optionMaybe condition
-            |. semicolon
-            |= optionMaybe expression
-            |. rparen
-            |= statementNoNewScope
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ keyword "while"
+                    |> Combine.ignore lparen
+                    |> Combine.keep condition
+                    |> Combine.ignore rparen
+                    |> Combine.andThen
+                        (\c ->
+                            statementNoNewScope
+                                |> Combine.map (While c)
+                        )
+                , keyword "do"
+                    |> Combine.keep statement
+                    |> Combine.ignore (keyword "while")
+                    |> Combine.ignore lparen
+                    |> Combine.andThen
+                        (\s ->
+                            expression
+                                |> Combine.ignore rparen
+                                |> Combine.ignore semicolon
+                                |> Combine.map (DoWhile s)
+                        )
+                , keyword "for"
+                    |> Combine.ignore lparen
+                    |> Combine.keep forInitStatement
+                    |> Combine.andThen
+                        (\i ->
+                            Combine.maybe condition
+                                |> Combine.ignore semicolon
+                                |> Combine.andThen
+                                    (\c ->
+                                        Combine.maybe expression
+                                            |> Combine.ignore rparen
+                                            |> Combine.andThen
+                                                (\e ->
+                                                    statementNoNewScope
+                                                        |> Combine.map (For i c e)
+                                                )
+                                    )
+                        )
+                ]
+        )
 
 
 forInitStatement : P (Result (Maybe Expr) Declaration)
 forInitStatement =
-    Parser.oneOf
-        [ Parser.succeed Err
-            |= expressionStatement
-        , Parser.succeed Ok
-            |= declarationStatement
-        ]
+    Combine.or (expressionStatement |> Combine.map Err)
+        (declarationStatement |> Combine.map Ok)
 
 
 
@@ -1751,59 +1872,56 @@ forInitStatement =
 
 jumpStatement : P Statement
 jumpStatement =
-    choice
-        [ Parser.succeed Continue
-            |. keyword "continue"
-            |. semicolon
-        , Parser.succeed Break
-            |. keyword "break"
-            |. semicolon
-        , Parser.succeed (Return Nothing)
-            |. try
-                (Parser.succeed ()
-                    |. keyword "return"
-                    |. semicolon
-                )
-        , Parser.succeed identity
-            |. keyword "return"
-            |= expression
-            |> Parser.andThen
+    Combine.choice
+        [ Combine.sequence [ keyword "continue", semicolon ] |> Combine.onsuccess Continue
+        , Combine.sequence [ keyword "break", semicolon ] |> Combine.onsuccess Break
+        , try (Combine.sequence [ keyword "return", semicolon ]) |> Combine.onsuccess (Return Nothing)
+        , keyword "return"
+            |> Combine.keep expression
+            |> Combine.andThen
                 (\e ->
-                    Parser.succeed (Return <| Just e)
-                        |. semicolon
+                    semicolon
+                        |> Combine.onsuccess (Return (Just e))
                 )
-        , Parser.succeed Discard
-            |. keyword "discard"
-            |. semicolon
+        , Combine.sequence [ keyword "discard", semicolon ] |> Combine.onsuccess Discard
         ]
 
 
 translationUnit : P TranslationUnit
 translationUnit =
-    Parser.map TranslationUnit (many1 externalDeclaration)
+    Combine.lazy (\() -> Combine.map TranslationUnit (Combine.many1 externalDeclaration))
 
 
 externalDeclaration : P ExternalDeclaration
 externalDeclaration =
-    choice
-        [ try functionPrototype
-            |> Parser.andThen
-                (\p ->
-                    choice
-                        [ Parser.succeed (FunctionDeclaration p)
-                            |. semicolon
-                        , Parser.succeed (FunctionDefinition p)
-                            |= compoundStatementNoNewScope
-                        ]
-                )
-        , Parser.map Declaration declaration
-        ]
+    Combine.lazy
+        (\() ->
+            Combine.choice
+                [ functionPrototype
+                    |> Combine.andThen
+                        (\p ->
+                            Combine.choice
+                                [ semicolon |> Combine.onsuccess (FunctionDeclaration p)
+                                , compoundStatementNoNewScope |> Combine.map (FunctionDefinition p)
+                                ]
+                        )
+                , Combine.map Declaration declaration
+                ]
+        )
 
 
 
 -- inside externalDeclaration, used only in tests
--- functionDefinition : P ExternalDeclaration
--- functionDefinition =
---     Parser.succeed FunctionDefinition
---         |= functionPrototype
---         |= compoundStatementNoNewScope
+
+
+functionDefinition : P ExternalDeclaration
+functionDefinition =
+    Combine.lazy
+        (\() ->
+            functionPrototype
+                |> Combine.andThen
+                    (\fp ->
+                        compoundStatementNoNewScope
+                            |> Combine.map (FunctionDefinition fp)
+                    )
+        )

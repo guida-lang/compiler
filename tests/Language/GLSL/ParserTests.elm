@@ -2,12 +2,44 @@ module Language.GLSL.ParserTests exposing (suite)
 
 import Combine
 import Expect
-import Language.GLSL.Parser2 as P
-import Language.GLSL.Syntax as P exposing (..)
+import Language.GLSL.Parser as P
+import Language.GLSL.Syntax
+    exposing
+        ( CaseLabel(..)
+        , Compound(..)
+        , Condition(..)
+        , Declaration(..)
+        , Expr(..)
+        , ExternalDeclaration(..)
+        , Field(..)
+        , FullType(..)
+        , FunctionIdentifier(..)
+        , FunctionPrototype(..)
+        , InitDeclarator(..)
+        , IntConstantKind(..)
+        , InterpolationQualifier(..)
+        , InvariantOrType(..)
+        , InvariantQualifier(..)
+        , LayoutQualifier(..)
+        , LayoutQualifierId(..)
+        , ParameterDeclaration(..)
+        , ParameterQualifier(..)
+        , ParameterTypeQualifier(..)
+        , Parameters(..)
+        , PrecisionQualifier(..)
+        , Statement(..)
+        , StorageQualifier(..)
+        , StructDeclarator(..)
+        , TranslationUnit(..)
+        , TypeQualifier(..)
+        , TypeSpecifier(..)
+        , TypeSpecifierNoPrecision(..)
+        , TypeSpecifierNonArray(..)
+        )
 import Test exposing (Test)
 
 
-parse : String -> Result (Combine.ParseError ()) P.TranslationUnit
+parse : String -> Result (Combine.ParseError ()) TranslationUnit
 parse =
     P.parse >> Result.map (\( _, _, result ) -> result)
 
@@ -31,7 +63,7 @@ suite =
                         """
                         |> Expect.equal
                             (Ok
-                                (P.TranslationUnit
+                                (TranslationUnit
                                     [ Declaration (InitDeclaration (TypeDeclarator (FullType (Just (TypeQualSto Attribute)) (TypeSpec Nothing (TypeSpecNoPrecision Vec3 Nothing)))) [ InitDecl "position" Nothing Nothing ])
                                     , Declaration (InitDeclaration (TypeDeclarator (FullType (Just (TypeQualSto Attribute)) (TypeSpec Nothing (TypeSpecNoPrecision Vec3 Nothing)))) [ InitDecl "color" Nothing Nothing ])
                                     , Declaration (InitDeclaration (TypeDeclarator (FullType (Just (TypeQualSto Uniform)) (TypeSpec Nothing (TypeSpecNoPrecision Mat4 Nothing)))) [ InitDecl "perspective" Nothing Nothing ])
@@ -73,7 +105,7 @@ suite =
                         """
                         |> Expect.equal
                             (Ok
-                                (P.TranslationUnit
+                                (TranslationUnit
                                     [ Declaration (Precision MediumP (TypeSpecNoPrecision Float Nothing))
                                     , Declaration
                                         (InitDeclaration
