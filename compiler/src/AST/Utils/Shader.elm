@@ -63,7 +63,7 @@ fromString =
 
 escape : String -> String
 escape =
-    String.foldl
+    String.foldr
         (\char acc ->
             case char of
                 '\u{000D}' ->
