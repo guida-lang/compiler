@@ -1,6 +1,6 @@
 {
   "name": "guida",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha",
   "description": "Guida is a functional programming language that builds upon the solid foundation of Elm, offering backward compatibility with all existing Elm 0.19.1 projects",
   "author": "Decio Ferreira",
   "license": "BSD-3-Clause",
