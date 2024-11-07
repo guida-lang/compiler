@@ -7,6 +7,7 @@ module Compiler.Parse.Primitives exposing
     , Snippet(..)
     , State(..)
     , Status(..)
+    , Step(..)
     , addEnd
     , addLocation
     , bind
@@ -17,6 +18,7 @@ module Compiler.Parse.Primitives exposing
     , getPosition
     , inContext
     , isWord
+    , loop
     , oneOf
     , oneOfWithFallback
     , pure
@@ -416,3 +418,53 @@ snippetDecoder =
         (Decode.field "length" Decode.int)
         (Decode.field "offRow" Decode.int)
         (Decode.field "offCol" Decode.int)
+
+
+
+-- LOOP
+
+
+type Step state a
+    = Loop state
+    | Done a
+
+
+loop : (state -> Parser x (Step state a)) -> state -> Parser x a
+loop callback loopState =
+    Parser <|
+        \state ->
+            loopHelp callback state loopState (\a s -> Ok (POk Empty a s)) (\row col toError -> Err (PErr Empty row col toError))
+
+
+loopHelp :
+    (state -> Parser x (Step state a))
+    -> State
+    -> state
+    -> (a -> State -> Result (PErr x) (POk a))
+    -> (Row -> Col -> (Row -> Col -> x) -> Result (PErr x) (POk a))
+    -> Result (PErr x) (POk a)
+loopHelp callback state loopState eok eerr =
+    case callback loopState of
+        Parser parser ->
+            case parser state of
+                Ok (POk Consumed (Loop newLoopState) newState) ->
+                    loopHelp callback
+                        newState
+                        newLoopState
+                        (\a s -> Ok (POk Consumed a s))
+                        (\row col toError -> Err (PErr Consumed row col toError))
+
+                Ok (POk Consumed (Done a) newState) ->
+                    Ok (POk Consumed a newState)
+
+                Ok (POk Empty (Loop newLoopState) newState) ->
+                    loopHelp callback newState newLoopState eok eerr
+
+                Ok (POk Empty (Done a) newState) ->
+                    eok a newState
+
+                Err (PErr Consumed r c t) ->
+                    Err (PErr Consumed r c t)
+
+                Err (PErr Empty r c t) ->
+                    eerr r c t

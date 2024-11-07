@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --stack-size=8192
+#!/usr/bin/env node
 
 const fs = require("node:fs");
 const child_process = require("node:child_process");

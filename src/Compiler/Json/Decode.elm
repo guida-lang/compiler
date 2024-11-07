@@ -586,7 +586,7 @@ pObject =
                         |> P.bind
                             (\entry ->
                                 spaces
-                                    |> P.bind (\_ -> pObjectHelp [ entry ])
+                                    |> P.bind (\_ -> P.loop pObjectHelp [ entry ])
                             )
                     , P.word1 '}' ObjectEnd
                         |> P.fmap (\_ -> Object [])
@@ -594,7 +594,7 @@ pObject =
             )
 
 
-pObjectHelp : List ( P.Snippet, AST ) -> Parser AST_
+pObjectHelp : List ( P.Snippet, AST ) -> Parser (P.Step (List ( P.Snippet, AST )) AST_)
 pObjectHelp revEntries =
     P.oneOf ObjectEnd
         [ P.word1 ',' ObjectEnd
@@ -603,21 +603,15 @@ pObjectHelp revEntries =
             |> P.bind
                 (\entry ->
                     spaces
-                        |> P.bind (\_ -> pObjectHelp (entry :: revEntries))
+                        |> P.fmap (\_ -> P.Loop (entry :: revEntries))
                 )
         , P.word1 '}' ObjectEnd
-            |> P.fmap (\_ -> Object (List.reverse revEntries))
+            |> P.fmap (\_ -> P.Done (Object (List.reverse revEntries)))
         ]
 
 
 pField : Parser ( P.Snippet, AST )
 pField =
-    --   do  key <- pString ObjectField
-    --       spaces
-    --       P.word1 0x3A {-:-} ObjectColon
-    --       spaces
-    --       value <- pValue
-    --       return (key, value)
     pString ObjectField
         |> P.bind
             (\key ->
