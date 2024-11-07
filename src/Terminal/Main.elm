@@ -13,7 +13,6 @@ import Terminal.Diff as Diff
 import Terminal.Init as Init
 import Terminal.Install as Install
 import Terminal.Make as Make
-import Terminal.Publish as Publish
 import Terminal.Repl as Repl
 import Terminal.Terminal as Terminal
 import Terminal.Terminal.Chomp as Chomp
@@ -734,7 +733,6 @@ main_ =
         , install
         , bump
         , diff
-        , publish
         ]
 
 
@@ -970,47 +968,6 @@ install =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Install.run args flags)
-
-
-
--- PUBLISH
-
-
-publish : Terminal.Command
-publish =
-    let
-        details : String
-        details =
-            "The `publish` command publishes your package on <https://package.elm-lang.org> so that anyone in the Elm community can use it."
-
-        example : D.Doc
-        example =
-            stack
-                [ reflow
-                    "Think hard if you are ready to publish NEW packages though!"
-                , reflow
-                    "Part of what makes Elm great is the packages ecosystem. The fact that there is usually one option (usually very well done) makes it way easier to pick packages and become productive. So having a million packages would be a failure in Elm. We do not need twenty of everything, all coded in a single weekend."
-                , reflow
-                    "So as community members gain wisdom through experience, we want them to share that through thoughtful API design and excellent documentation. It is more about sharing ideas and insights than just sharing code! The first step may be asking for advice from people you respect, or in community forums. The second step may be using it at work to see if it is as nice as you think. Maybe it ends up as an experiment on GitHub only. Point is, try to be respectful of the community and package ecosystem!"
-                , reflow
-                    "Check out <https://package.elm-lang.org/help/design-guidelines> for guidance on how to create great packages!"
-                ]
-    in
-    Terminal.Command "publish" Terminal.Uncommon details example Terminal.noArgs Terminal.noFlags <|
-        \chunks ->
-            Chomp.chomp Nothing
-                chunks
-                [ Chomp.chompExactly (Chomp.pure ())
-                ]
-                (Chomp.pure ()
-                    |> Chomp.bind
-                        (\value ->
-                            Chomp.checkForUnknownFlags Terminal.noFlags
-                                |> Chomp.fmap (\_ -> value)
-                        )
-                )
-                |> Tuple.second
-                |> Result.map (\( args, flags ) -> Publish.run args flags)
 
 
 
