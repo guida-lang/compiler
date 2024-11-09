@@ -9,12 +9,14 @@ module Compiler.Data.Index exposing
     , third
     , toHuman
     , toMachine
+    , zeroBasedCodec
     , zeroBasedDecoder
     , zeroBasedEncoder
     )
 
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -111,3 +113,8 @@ zeroBasedEncoder (ZeroBased zeroBased) =
 zeroBasedDecoder : Decode.Decoder ZeroBased
 zeroBasedDecoder =
     Decode.map ZeroBased Decode.int
+
+
+zeroBasedCodec : Codec e ZeroBased
+zeroBasedCodec =
+    Serialize.int |> Serialize.map ZeroBased (\(ZeroBased zeroBased) -> zeroBased)

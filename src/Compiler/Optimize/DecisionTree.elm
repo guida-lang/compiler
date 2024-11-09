@@ -3,8 +3,10 @@ module Compiler.Optimize.DecisionTree exposing
     , Path(..)
     , Test(..)
     , compile
+    , pathCodec
     , pathDecoder
     , pathEncoder
+    , testCodec
     , testDecoder
     , testEncoder
     )
@@ -29,6 +31,7 @@ import Data.Set as EverySet
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -791,6 +794,26 @@ pathDecoder =
             )
 
 
+pathCodec : Codec e Path
+pathCodec =
+    Serialize.customType
+        (\indexEncoder unboxEncoder emptyEncoder value ->
+            case value of
+                Index index path ->
+                    indexEncoder index path
+
+                Unbox path ->
+                    unboxEncoder path
+
+                Empty ->
+                    emptyEncoder
+        )
+        |> Serialize.variant2 Index Index.zeroBasedCodec (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant1 Unbox (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant0 Empty
+        |> Serialize.finishCustomType
+
+
 testEncoder : Test -> Encode.Value
 testEncoder test =
     case test of
@@ -882,3 +905,51 @@ testDecoder =
                     _ ->
                         Decode.fail ("Unknown Test's type: " ++ type_)
             )
+
+
+testCodec : Codec e Test
+testCodec =
+    Serialize.customType
+        (\isCtorEncoder isConsEncoder isNilEncoder isTupleEncoder isIntEncoder isChrEncoder isStrEncoder isBoolEncoder test ->
+            case test of
+                IsCtor home name index numAlts opts ->
+                    isCtorEncoder home name index numAlts opts
+
+                IsCons ->
+                    isConsEncoder
+
+                IsNil ->
+                    isNilEncoder
+
+                IsTuple ->
+                    isTupleEncoder
+
+                IsInt value ->
+                    isIntEncoder value
+
+                IsChr value ->
+                    isChrEncoder value
+
+                IsStr value ->
+                    isStrEncoder value
+
+                IsBool value ->
+                    isBoolEncoder value
+        )
+        -- Encode.object
+        --     [ ( "type", Encode.string "IsCtor" )
+        --     , ( "home", ModuleName.canonicalEncoder home )
+        --     , ( "name", Encode.string name )
+        --     , ( "index", Index.zeroBasedEncoder index )
+        --     , ( "numAlts", Encode.int numAlts )
+        --     , ( "opts", Can.ctorOptsEncoder opts )
+        --     ]
+        |> Serialize.variant5 IsCtor ModuleName.canonicalCodec Serialize.string Index.zeroBasedCodec Serialize.int Can.ctorOptsCodec
+        |> Serialize.variant0 IsCons
+        |> Serialize.variant0 IsNil
+        |> Serialize.variant0 IsTuple
+        |> Serialize.variant1 IsInt Serialize.int
+        |> Serialize.variant1 IsChr Serialize.string
+        |> Serialize.variant1 IsStr Serialize.string
+        |> Serialize.variant1 IsBool Serialize.bool
+        |> Serialize.finishCustomType

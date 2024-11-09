@@ -23,10 +23,12 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
+import Compiler.Serialize as S
 import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -56,13 +58,23 @@ knownVersionsEncoder (KnownVersions version versions) =
         ]
 
 
+knownVersionsCodec : Codec e KnownVersions
+knownVersionsCodec =
+    Serialize.customType
+        (\knownVersionsCodecEncoder (KnownVersions version versions) ->
+            knownVersionsCodecEncoder version versions
+        )
+        |> Serialize.variant2 KnownVersions V.jsonCodec (Serialize.list V.jsonCodec)
+        |> Serialize.finishCustomType
+
+
 
 -- READ
 
 
 read : Stuff.PackageCache -> IO (Maybe Registry)
 read cache =
-    File.readBinary registryDecoder (Stuff.registry cache)
+    File.readBinary registryCodec (Stuff.registry cache)
 
 
 
@@ -86,7 +98,7 @@ fetch manager cache =
                 path =
                     Stuff.registry cache
             in
-            File.writeBinary registryEncoder path registry
+            File.writeBinary registryCodec path registry
                 |> IO.fmap (\_ -> registry)
 
 
@@ -144,7 +156,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         newRegistry =
                             Registry newSize newPkgs
                     in
-                    File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
+                    File.writeBinary registryCodec (Stuff.registry cache) newRegistry
                         |> IO.fmap (\_ -> newRegistry)
 
 
@@ -263,3 +275,13 @@ registryEncoder (Registry size versions) =
         [ ( "size", Encode.int size )
         , ( "packages", E.assocListDict Pkg.nameEncoder knownVersionsEncoder versions )
         ]
+
+
+registryCodec : Codec e Registry
+registryCodec =
+    Serialize.customType
+        (\registryCodecEncoder (Registry size packages) ->
+            registryCodecEncoder size packages
+        )
+        |> Serialize.variant2 Registry Serialize.int (S.assocListDict Pkg.compareName Pkg.nameCodec knownVersionsCodec)
+        |> Serialize.finishCustomType

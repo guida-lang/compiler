@@ -3,6 +3,7 @@ module Compiler.Elm.ModuleName exposing
     , Raw
     , array
     , basics
+    , canonicalCodec
     , canonicalDecoder
     , canonicalEncoder
     , char
@@ -18,6 +19,7 @@ module Compiler.Elm.ModuleName exposing
     , matrix4
     , maybe
     , platform
+    , rawCodec
     , rawDecoder
     , rawEncoder
     , result
@@ -43,6 +45,7 @@ import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -337,6 +340,16 @@ canonicalDecoder =
         (Decode.field "name" Decode.string)
 
 
+canonicalCodec : Codec e Canonical
+canonicalCodec =
+    Serialize.customType
+        (\canonicalCodecEncoder (Canonical pkgName name) ->
+            canonicalCodecEncoder pkgName name
+        )
+        |> Serialize.variant2 Canonical Pkg.nameCodec Serialize.string
+        |> Serialize.finishCustomType
+
+
 rawEncoder : Raw -> Encode.Value
 rawEncoder =
     Encode.string
@@ -345,3 +358,8 @@ rawEncoder =
 rawDecoder : Decode.Decoder Raw
 rawDecoder =
     Decode.string
+
+
+rawCodec : Codec e Raw
+rawCodec =
+    Serialize.string

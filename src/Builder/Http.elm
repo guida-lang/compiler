@@ -12,6 +12,7 @@ module Builder.Http exposing
     , getArchive
     , getManager
     , jsonPart
+    , managerCodec
     , managerDecoder
     , managerEncoder
     , post
@@ -26,6 +27,7 @@ import Compiler.Elm.Version as V
 import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Url.Builder
 import Utils.Main as Utils exposing (SomeException)
 
@@ -55,6 +57,11 @@ managerDecoder =
                     _ ->
                         Decode.fail "Failed to decode Http.Manager"
             )
+
+
+managerCodec : Codec e Manager
+managerCodec =
+    Debug.todo "managerCodec"
 
 
 getManager : IO Manager

@@ -13,6 +13,7 @@ module Compiler.Type.UnionFind exposing
     , redundant
     , set
     , union
+    , variableCodec
     , variableDecoder
     , variableEncoder
     )
@@ -33,11 +34,12 @@ module Compiler.Type.UnionFind exposing
 
 import Compiler.Data.Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
+import Compiler.Serialize as S
 import Data.IO as IO exposing (IO, IORef)
-import Data.Map as Dict exposing (Dict)
+import Data.Map exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 
 
@@ -49,28 +51,14 @@ type Descriptor
     = Descriptor Content Int Mark (Maybe Variable)
 
 
-descriptorEncoder : Descriptor -> Encode.Value
-descriptorEncoder (Descriptor content rank mark copy) =
-    Encode.object
-        [ ( "type", Encode.string "Descriptor" )
-        , ( "content", contentEncoder content )
-        , ( "rank", Encode.int rank )
-        , ( "mark", markEncoder mark )
-        , ( "copy"
-          , copy
-                |> Maybe.map variableEncoder
-                |> Maybe.withDefault Encode.null
-          )
-        ]
-
-
-descriptorDecoder : Decode.Decoder Descriptor
-descriptorDecoder =
-    Decode.map4 Descriptor
-        (Decode.field "content" contentDecoder)
-        (Decode.field "rank" Decode.int)
-        (Decode.field "mark" markDecoder)
-        (Decode.field "copy" (Decode.maybe variableDecoder))
+descriptorCodec : Codec e Descriptor
+descriptorCodec =
+    Serialize.customType
+        (\descriptorCodecEncoder (Descriptor content rank mark copy) ->
+            descriptorCodecEncoder content rank mark copy
+        )
+        |> Serialize.variant4 Descriptor contentCodec Serialize.int markCodec (Serialize.maybe variableCodec)
+        |> Serialize.finishCustomType
 
 
 type Content
@@ -83,105 +71,44 @@ type Content
     | Error
 
 
-contentEncoder : Content -> Encode.Value
-contentEncoder content =
-    case content of
-        FlexVar maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexVar" )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
+contentCodec : Codec e Content
+contentCodec =
+    Serialize.customType
+        (\flexVarEncoder flexSuperEncoder rigidVarEncoder rigidSuperEncoder structureEncoder aliasEncoder errorEncoder content ->
+            case content of
+                FlexVar maybeName ->
+                    flexVarEncoder maybeName
 
-        FlexSuper superType maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
+                FlexSuper superType maybeName ->
+                    flexSuperEncoder superType maybeName
 
-        RigidVar name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidVar" )
-                , ( "name", Encode.string name )
-                ]
+                RigidVar name ->
+                    rigidVarEncoder name
 
-        RigidSuper superType name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name", Encode.string name )
-                ]
+                RigidSuper superType name ->
+                    rigidSuperEncoder superType name
 
-        Structure flatType ->
-            Encode.object
-                [ ( "type", Encode.string "Structure" )
-                , ( "flatType", flatTypeEncoder flatType )
-                ]
+                Structure flatType ->
+                    structureEncoder flatType
 
-        Alias canonical name variableList variable ->
-            Encode.object
-                [ ( "type", Encode.string "Alias" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.object (List.map (Tuple.mapSecond variableEncoder) variableList) )
-                , ( "variable", variableEncoder variable )
-                ]
+                Alias canonical name variableList variable ->
+                    aliasEncoder canonical name variableList variable
 
-        Error ->
-            Encode.object
-                [ ( "type", Encode.string "Error" )
-                ]
-
-
-contentDecoder : Decode.Decoder Content
-contentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FlexVar" ->
-                        Decode.map FlexVar
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "FlexSuper" ->
-                        Decode.map2 FlexSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "RigidVar" ->
-                        Decode.map RigidVar
-                            (Decode.field "name" Decode.string)
-
-                    "RigidSuper" ->
-                        Decode.map2 RigidSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" Decode.string)
-
-                    "Structure" ->
-                        Decode.map Structure
-                            (Decode.field "flatType" flatTypeDecoder)
-
-                    "Alias" ->
-                        Decode.map4 Alias
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.keyValuePairs variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Error" ->
-                        Decode.succeed Error
-
-                    _ ->
-                        Decode.fail ("Unknown Content's type: " ++ type_)
-            )
+                Error ->
+                    errorEncoder
+        )
+        |> Serialize.variant1 FlexVar (Serialize.maybe Serialize.string)
+        |> Serialize.variant2 FlexSuper superTypeCodec (Serialize.maybe Serialize.string)
+        |> Serialize.variant1 RigidVar Serialize.string
+        |> Serialize.variant2 RigidSuper superTypeCodec Serialize.string
+        |> Serialize.variant1 Structure flatTypeCodec
+        |> Serialize.variant4 Alias
+            ModuleName.canonicalCodec
+            Serialize.string
+            (Serialize.list (Serialize.tuple Serialize.string variableCodec))
+            variableCodec
+        |> Serialize.variant0 Error
+        |> Serialize.finishCustomType
 
 
 type SuperType
@@ -191,43 +118,28 @@ type SuperType
     | CompAppend
 
 
-superTypeEncoder : SuperType -> Encode.Value
-superTypeEncoder superType =
-    case superType of
-        Number ->
-            Encode.string "Number"
+superTypeCodec : Codec e SuperType
+superTypeCodec =
+    Serialize.customType
+        (\numberEncoder comparableEncoder appendableEncoder compAppendEncoder superType ->
+            case superType of
+                Number ->
+                    numberEncoder
 
-        Comparable ->
-            Encode.string "Comparable"
+                Comparable ->
+                    comparableEncoder
 
-        Appendable ->
-            Encode.string "Appendable"
+                Appendable ->
+                    appendableEncoder
 
-        CompAppend ->
-            Encode.string "CompAppend"
-
-
-superTypeDecoder : Decode.Decoder SuperType
-superTypeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Number" ->
-                        Decode.succeed Number
-
-                    "Comparable" ->
-                        Decode.succeed Comparable
-
-                    "Appendable" ->
-                        Decode.succeed Appendable
-
-                    "CompAppend" ->
-                        Decode.succeed CompAppend
-
-                    _ ->
-                        Decode.fail ("Failed to decode SuperType: " ++ str)
-            )
+                CompAppend ->
+                    compAppendEncoder
+        )
+        |> Serialize.variant0 Number
+        |> Serialize.variant0 Comparable
+        |> Serialize.variant0 Appendable
+        |> Serialize.variant0 CompAppend
+        |> Serialize.finishCustomType
 
 
 type FlatType
@@ -239,114 +151,45 @@ type FlatType
     | Tuple1 Variable Variable (Maybe Variable)
 
 
-flatTypeEncoder : FlatType -> Encode.Value
-flatTypeEncoder flatType =
-    case flatType of
-        App1 canonical name variableList ->
-            Encode.object
-                [ ( "type", Encode.string "App1" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.list variableEncoder variableList )
-                ]
+flatTypeCodec : Codec e FlatType
+flatTypeCodec =
+    Serialize.customType
+        (\app1Encoder fun1Encoder emptyRecord1Encoder record1Encoder unit1Encoder tuple1Encoder flatType ->
+            case flatType of
+                App1 canonical name variableList ->
+                    app1Encoder canonical name variableList
 
-        Fun1 var1 var2 ->
-            Encode.object
-                [ ( "type", Encode.string "Fun1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                ]
+                Fun1 var1 var2 ->
+                    fun1Encoder var1 var2
 
-        EmptyRecord1 ->
-            Encode.object
-                [ ( "type", Encode.string "EmptyRecord1" )
-                ]
+                EmptyRecord1 ->
+                    emptyRecord1Encoder
 
-        Record1 variableDict variable ->
-            Encode.object
-                [ ( "type", Encode.string "Record1" )
-                , ( "variableDict"
-                  , Dict.toList variableDict
-                        |> Encode.list
-                            (\( name, var ) ->
-                                Encode.object
-                                    [ ( "a", Encode.string name )
-                                    , ( "b", variableEncoder var )
-                                    ]
-                            )
-                  )
-                , ( "variable", variableEncoder variable )
-                ]
+                Record1 variableDict variable ->
+                    record1Encoder variableDict variable
 
-        Unit1 ->
-            Encode.object
-                [ ( "type", Encode.string "Unit1" )
-                ]
+                Unit1 ->
+                    unit1Encoder
 
-        Tuple1 var1 var2 maybeVariable ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                , ( "maybeVariable"
-                  , maybeVariable
-                        |> Maybe.map variableEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-
-flatTypeDecoder : Decode.Decoder FlatType
-flatTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "App1" ->
-                        Decode.map3 App1
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.list variableDecoder))
-
-                    "Fun1" ->
-                        Decode.map2 Fun1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-
-                    "EmptyRecord1" ->
-                        Decode.succeed EmptyRecord1
-
-                    "Record1" ->
-                        Decode.map2 Record1
-                            (Decode.field "variableDict" (D.assocListDict compare Decode.string variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Unit1" ->
-                        Decode.succeed Unit1
-
-                    "Tuple1" ->
-                        Decode.map3 Tuple1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-                            (Decode.field "maybeVariable" (Decode.maybe variableDecoder))
-
-                    _ ->
-                        Decode.fail ("Unknown FlatType's type: " ++ type_)
-            )
+                Tuple1 var1 var2 maybeVariable ->
+                    tuple1Encoder var1 var2 maybeVariable
+        )
+        |> Serialize.variant3 App1 ModuleName.canonicalCodec Serialize.string (Serialize.list variableCodec)
+        |> Serialize.variant2 Fun1 variableCodec variableCodec
+        |> Serialize.variant0 EmptyRecord1
+        |> Serialize.variant2 Record1 (S.assocListDict compare Serialize.string variableCodec) variableCodec
+        |> Serialize.variant0 Unit1
+        |> Serialize.variant3 Tuple1 variableCodec variableCodec (Serialize.maybe variableCodec)
+        |> Serialize.finishCustomType
 
 
 type Mark
     = Mark Int
 
 
-markEncoder : Mark -> Encode.Value
-markEncoder (Mark value) =
-    Encode.int value
-
-
-markDecoder : Decode.Decoder Mark
-markDecoder =
-    Decode.map Mark Decode.int
+markCodec : Codec e Mark
+markCodec =
+    Serialize.int |> Serialize.map Mark (\(Mark value) -> value)
 
 
 type alias Variable =
@@ -361,6 +204,11 @@ variableEncoder =
 variableDecoder : Decode.Decoder Variable
 variableDecoder =
     pointDecoder
+
+
+variableCodec : Codec e Variable
+variableCodec =
+    pointCodec
 
 
 
@@ -381,46 +229,30 @@ pointDecoder =
     Decode.map Pt IO.ioRefDecoder
 
 
+pointCodec : Codec e Point
+pointCodec =
+    IO.ioRefCodec |> Serialize.map Pt (\(Pt ioRef) -> ioRef)
+
+
 type PointInfo
     = Info (IORef Int) (IORef Descriptor)
     | Link Point
 
 
-pointInfoEncoder : PointInfo -> Encode.Value
-pointInfoEncoder pointInfo =
-    case pointInfo of
-        Info weight desc ->
-            Encode.object
-                [ ( "type", Encode.string "Info" )
-                , ( "weight", IO.ioRefEncoder weight )
-                , ( "desc", IO.ioRefEncoder desc )
-                ]
+pointInfoCodec : Codec e PointInfo
+pointInfoCodec =
+    Serialize.customType
+        (\infoEncoder linkEncoder value ->
+            case value of
+                Info weight desc ->
+                    infoEncoder weight desc
 
-        Link point ->
-            Encode.object
-                [ ( "type", Encode.string "Link" )
-                , ( "point", pointEncoder point )
-                ]
-
-
-pointInfoDecoder : Decode.Decoder PointInfo
-pointInfoDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Info" ->
-                        Decode.map2 Info
-                            (Decode.field "weight" IO.ioRefDecoder)
-                            (Decode.field "desc" IO.ioRefDecoder)
-
-                    "Link" ->
-                        Decode.map Link
-                            (Decode.field "point" pointDecoder)
-
-                    _ ->
-                        Decode.fail ("Unknown PointInfo's type: " ++ type_)
-            )
+                Link point ->
+                    linkEncoder point
+        )
+        |> Serialize.variant2 Info IO.ioRefCodec IO.ioRefCodec
+        |> Serialize.variant1 Link pointCodec
+        |> Serialize.finishCustomType
 
 
 
@@ -429,18 +261,18 @@ pointInfoDecoder =
 
 fresh : Descriptor -> IO Variable
 fresh value =
-    IO.newIORef Encode.int 1
+    IO.newIORef Serialize.int 1
         |> IO.bind
             (\weight ->
-                IO.newIORef descriptorEncoder value
-                    |> IO.bind (\desc -> IO.newIORef pointInfoEncoder (Info weight desc))
+                IO.newIORef descriptorCodec value
+                    |> IO.bind (\desc -> IO.newIORef pointInfoCodec (Info weight desc))
                     |> IO.fmap (\link -> Pt link)
             )
 
 
 repr : Point -> IO Point
 repr ((Pt ref) as point) =
-    IO.readIORef pointInfoDecoder ref
+    IO.readIORef pointInfoCodec ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
@@ -452,10 +284,10 @@ repr ((Pt ref) as point) =
                             |> IO.bind
                                 (\point2 ->
                                     if point2 /= point1 then
-                                        IO.readIORef pointInfoDecoder ref1
+                                        IO.readIORef pointInfoCodec ref1
                                             |> IO.bind
                                                 (\pInfo1 ->
-                                                    IO.writeIORef pointInfoEncoder ref pInfo1
+                                                    IO.writeIORef pointInfoCodec ref pInfo1
                                                         |> IO.fmap (\_ -> point2)
                                                 )
 
@@ -467,20 +299,20 @@ repr ((Pt ref) as point) =
 
 get : Point -> IO Descriptor
 get ((Pt ref) as point) =
-    IO.readIORef pointInfoDecoder ref
+    IO.readIORef pointInfoCodec ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.readIORef descriptorDecoder descRef
+                        IO.readIORef descriptorCodec descRef
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IO.readIORef pointInfoCodec ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.readIORef descriptorDecoder descRef
+                                            IO.readIORef descriptorCodec descRef
 
                                         Link _ ->
                                             IO.bind get (repr point)
@@ -490,20 +322,20 @@ get ((Pt ref) as point) =
 
 set : Point -> Descriptor -> IO ()
 set ((Pt ref) as point) newDesc =
-    IO.readIORef pointInfoDecoder ref
+    IO.readIORef pointInfoCodec ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.writeIORef descriptorEncoder descRef newDesc
+                        IO.writeIORef descriptorCodec descRef newDesc
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IO.readIORef pointInfoCodec ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.writeIORef descriptorEncoder descRef newDesc
+                                            IO.writeIORef descriptorCodec descRef newDesc
 
                                         Link _ ->
                                             repr point
@@ -517,20 +349,20 @@ set ((Pt ref) as point) newDesc =
 
 modify : Point -> (Descriptor -> Descriptor) -> IO ()
 modify ((Pt ref) as point) func =
-    IO.readIORef pointInfoDecoder ref
+    IO.readIORef pointInfoCodec ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.modifyIORef descriptorDecoder descriptorEncoder descRef func
+                        IO.modifyIORef descriptorCodec descRef func
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IO.readIORef pointInfoCodec ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.modifyIORef descriptorDecoder descriptorEncoder descRef func
+                                            IO.modifyIORef descriptorCodec descRef func
 
                                         Link _ ->
                                             repr point
@@ -547,22 +379,22 @@ union p1 p2 newDesc =
                 repr p2
                     |> IO.bind
                         (\((Pt ref2) as point2) ->
-                            IO.readIORef pointInfoDecoder ref1
+                            IO.readIORef pointInfoCodec ref1
                                 |> IO.bind
                                     (\pointInfo1 ->
-                                        IO.readIORef pointInfoDecoder ref2
+                                        IO.readIORef pointInfoCodec ref2
                                             |> IO.bind
                                                 (\pointInfo2 ->
                                                     case ( pointInfo1, pointInfo2 ) of
                                                         ( Info w1 d1, Info w2 d2 ) ->
                                                             if point1 == point2 then
-                                                                IO.writeIORef descriptorEncoder d1 newDesc
+                                                                IO.writeIORef descriptorCodec d1 newDesc
 
                                                             else
-                                                                IO.readIORef Decode.int w1
+                                                                IO.readIORef Serialize.int w1
                                                                     |> IO.bind
                                                                         (\weight1 ->
-                                                                            IO.readIORef Decode.int w2
+                                                                            IO.readIORef Serialize.int w2
                                                                                 |> IO.bind
                                                                                     (\weight2 ->
                                                                                         let
@@ -571,14 +403,14 @@ union p1 p2 newDesc =
                                                                                                 weight1 + weight2
                                                                                         in
                                                                                         if weight1 >= weight2 then
-                                                                                            IO.writeIORef pointInfoEncoder ref2 (Link point1)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef Encode.int w1 newWeight)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef descriptorEncoder d1 newDesc)
+                                                                                            IO.writeIORef pointInfoCodec ref2 (Link point1)
+                                                                                                |> IO.bind (\_ -> IO.writeIORef Serialize.int w1 newWeight)
+                                                                                                |> IO.bind (\_ -> IO.writeIORef descriptorCodec d1 newDesc)
 
                                                                                         else
-                                                                                            IO.writeIORef pointInfoEncoder ref1 (Link point2)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef Encode.int w2 newWeight)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef descriptorEncoder d2 newDesc)
+                                                                                            IO.writeIORef pointInfoCodec ref1 (Link point2)
+                                                                                                |> IO.bind (\_ -> IO.writeIORef Serialize.int w2 newWeight)
+                                                                                                |> IO.bind (\_ -> IO.writeIORef descriptorCodec d2 newDesc)
                                                                                     )
                                                                         )
 
@@ -602,7 +434,7 @@ equivalent p1 p2 =
 
 redundant : Point -> IO Bool
 redundant (Pt ref) =
-    IO.readIORef pointInfoDecoder ref
+    IO.readIORef pointInfoCodec ref
         |> IO.fmap
             (\pInfo ->
                 case pInfo of

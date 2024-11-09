@@ -3,6 +3,7 @@ module Compiler.AST.Utils.Shader exposing
     , Type(..)
     , Types(..)
     , fromString
+    , sourceCodec
     , sourceDecoder
     , sourceEncoder
     , toJsStringBuilder
@@ -15,6 +16,7 @@ import Compiler.Json.Encode as E
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -107,6 +109,11 @@ sourceEncoder (Source src) =
 sourceDecoder : Decode.Decoder Source
 sourceDecoder =
     Decode.map Source Decode.string
+
+
+sourceCodec : Codec e Source
+sourceCodec =
+    Serialize.string |> Serialize.map Source (\(Source src) -> src)
 
 
 typesEncoder : Types -> Encode.Value

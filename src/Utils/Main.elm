@@ -1,6 +1,5 @@
 module Utils.Main exposing
-    ( AsyncException(..)
-    , ChItem
+    ( ChItem
     , Chan
     , FilePath
     , HttpExceptionContent(..)
@@ -83,6 +82,7 @@ module Utils.Main exposing
     , listTraverseStateT
     , listTraverse_
     , lockWithFileLock
+    , mVarCodec
     , mVarDecoder
     , mVarEncoder
     , mapFindMin
@@ -158,6 +158,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import Serialize exposing (Codec)
 import Time
 import Utils.Crash exposing (crash)
 
@@ -1027,10 +1028,6 @@ type SomeException
     = SomeException
 
 
-type AsyncException
-    = UserInterrupt
-
-
 bracket : IO a -> (a -> IO b) -> (a -> IO c) -> IO c
 bracket before after thing =
     before
@@ -1078,40 +1075,40 @@ type MVar a
     = MVar Int
 
 
-newMVar : (a -> Encode.Value) -> a -> IO (MVar a)
-newMVar encoder value =
+newMVar : Codec e a -> a -> IO (MVar a)
+newMVar codec value =
     newEmptyMVar
         |> IO.bind
             (\mvar ->
-                putMVar encoder mvar value
+                putMVar codec mvar value
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) =
-    IO.make decoder (IO.ReadMVar ref)
+readMVar : Codec e a -> MVar a -> IO a
+readMVar codec (MVar ref) =
+    IO.make (Serialize.getJsonDecoder (\_ -> "failure on readMVar...") codec) (IO.ReadMVar ref)
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
-modifyMVar decoder encoder m io =
-    takeMVar decoder m
+modifyMVar : Codec e a -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar codec m io =
+    takeMVar codec m
         |> IO.bind io
         |> IO.bind
             (\( a, b ) ->
-                putMVar encoder m a
+                putMVar codec m a
                     |> IO.fmap (\_ -> b)
             )
 
 
-takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) =
-    IO.make decoder (IO.TakeMVar ref)
+takeMVar : Codec e a -> MVar a -> IO a
+takeMVar codec (MVar ref) =
+    IO.make (Serialize.getJsonDecoder (\_ -> "failure on takeMVar") codec) (IO.TakeMVar ref)
 
 
-putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value =
-    IO.make (Decode.succeed ()) (IO.PutMVar ref (encoder value))
+putMVar : Codec e a -> MVar a -> a -> IO ()
+putMVar codec (MVar ref) value =
+    IO.make (Decode.succeed ()) (IO.PutMVar ref (Serialize.encodeToJson codec value))
 
 
 newEmptyMVar : IO (MVar a)
@@ -1135,15 +1132,15 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
-newChan encoder =
+newChan : Codec e (MVar (ChItem a)) -> IO (Chan a)
+newChan codec =
     newEmptyMVar
         |> IO.bind
             (\hole ->
-                newMVar encoder hole
+                newMVar codec hole
                     |> IO.bind
                         (\readVar ->
-                            newMVar encoder hole
+                            newMVar codec hole
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
@@ -1152,11 +1149,11 @@ newChan encoder =
             )
 
 
-readChan : Decode.Decoder a -> Chan a -> IO a
-readChan decoder (Chan readVar _) =
-    modifyMVar mVarDecoder mVarEncoder readVar <|
+readChan : Codec e a -> Chan a -> IO a
+readChan codec (Chan readVar _) =
+    modifyMVar mVarCodec readVar <|
         \read_end ->
-            readMVar (chItemDecoder decoder) read_end
+            readMVar (chItemCodec codec) read_end
                 |> IO.fmap
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
@@ -1165,16 +1162,16 @@ readChan decoder (Chan readVar _) =
                     )
 
 
-writeChan : (a -> Encode.Value) -> Chan a -> a -> IO ()
-writeChan encoder (Chan _ writeVar) val =
+writeChan : Codec e a -> Chan a -> a -> IO ()
+writeChan codec (Chan _ writeVar) val =
     newEmptyMVar
         |> IO.bind
             (\new_hole ->
-                takeMVar mVarDecoder writeVar
+                takeMVar mVarCodec writeVar
                     |> IO.bind
                         (\old_hole ->
-                            putMVar (chItemEncoder encoder) old_hole (ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                            putMVar (chItemCodec codec) old_hole (ChItem val new_hole)
+                                |> IO.bind (\_ -> putMVar mVarCodec writeVar new_hole)
                         )
             )
 
@@ -1206,20 +1203,20 @@ builderHPutBuilder handle str =
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
-binaryDecodeFileOrFail decoder filename =
+binaryDecodeFileOrFail : Codec e a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail codec filename =
     IO.make
         (Decode.oneOf
-            [ Decode.map Ok decoder
+            [ Decode.map Ok (Serialize.getJsonDecoder (\_ -> "Could not find file " ++ filename) codec)
             , Decode.succeed (Err ( 0, "Could not find file " ++ filename ))
             ]
         )
         (IO.BinaryDecodeFileOrFail filename)
 
 
-binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value =
-    IO.make (Decode.succeed ()) (IO.Write path (encoder value))
+binaryEncodeFile : Codec e a -> FilePath -> a -> IO ()
+binaryEncodeFile codec path value =
+    IO.make (Decode.succeed ()) (IO.Write path (Serialize.encodeToJson codec value))
 
 
 
@@ -1295,28 +1292,29 @@ statePut encoder s =
 -- ENCODERS and DECODERS
 
 
-mVarDecoder : Decode.Decoder (MVar a)
-mVarDecoder =
-    Decode.map MVar Decode.int
-
-
 mVarEncoder : MVar a -> Encode.Value
 mVarEncoder (MVar ref) =
     Encode.int ref
 
 
-chItemEncoder : (a -> Encode.Value) -> ChItem a -> Encode.Value
-chItemEncoder valueEncoder (ChItem value hole) =
-    Encode.object
-        [ ( "type", Encode.string "ChItem" )
-        , ( "value", valueEncoder value )
-        , ( "hole", mVarEncoder hole )
-        ]
+mVarDecoder : Decode.Decoder (MVar a)
+mVarDecoder =
+    Decode.map MVar Decode.int
 
 
-chItemDecoder : Decode.Decoder a -> Decode.Decoder (ChItem a)
-chItemDecoder decoder =
-    Decode.map2 ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
+mVarCodec : Codec e (MVar a)
+mVarCodec =
+    Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref)
+
+
+chItemCodec : Codec e a -> Codec e (ChItem a)
+chItemCodec codec =
+    Serialize.customType
+        (\chItemCodecEncoder (ChItem value hole) ->
+            chItemCodecEncoder value hole
+        )
+        |> Serialize.variant2 ChItem codec mVarCodec
+        |> Serialize.finishCustomType
 
 
 someExceptionEncoder : SomeException -> Encode.Value

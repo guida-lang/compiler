@@ -10,6 +10,7 @@ module Compiler.Elm.Docs exposing
     , decoder
     , encode
     , fromModule
+    , jsonCodec
     , jsonDecoder
     , jsonEncoder
     , jsonModuleDecoder
@@ -39,6 +40,7 @@ import Compiler.Reporting.Result as Result
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Main as Utils
 
 
@@ -778,6 +780,11 @@ jsonEncoder =
 jsonDecoder : Decode.Decoder Documentation
 jsonDecoder =
     Decode.map toDict (Decode.list jsonModuleDecoder)
+
+
+jsonCodec : Codec e Documentation
+jsonCodec =
+    Debug.todo "jsonCodec"
 
 
 jsonModuleEncoder : Module -> Encode.Value

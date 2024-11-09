@@ -7,6 +7,7 @@ module Compiler.Elm.Compiler.Type.Extract exposing
     , fromType
     , merge
     , mergeMany
+    , typesCodec
     , typesDecoder
     , typesEncoder
     )
@@ -25,6 +26,7 @@ import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import Serialize exposing (Codec)
 import Utils.Main as Utils
 
 
@@ -322,6 +324,11 @@ typesEncoder (Types types) =
 typesDecoder : Decode.Decoder Types
 typesDecoder =
     Decode.map Types (D.assocListDict ModuleName.compareCanonical ModuleName.canonicalDecoder types_Decoder)
+
+
+typesCodec : Codec e Types
+typesCodec =
+    Debug.todo "typesCodec"
 
 
 types_Encoder : Types_ -> Encode.Value

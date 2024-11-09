@@ -24,17 +24,22 @@ module Compiler.AST.Canonical exposing
     , Port(..)
     , Type(..)
     , Union(..)
+    , aliasCodec
     , aliasDecoder
     , aliasEncoder
+    , annotationCodec
     , annotationDecoder
     , annotationEncoder
+    , ctorOptsCodec
     , ctorOptsDecoder
     , ctorOptsEncoder
     , fieldUpdateDecoder
     , fieldUpdateEncoder
     , fieldsToList
+    , typeCodec
     , typeDecoder
     , typeEncoder
+    , unionCodec
     , unionDecoder
     , unionEncoder
     )
@@ -67,9 +72,11 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Annotation as A
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -334,6 +341,16 @@ annotationDecoder =
         (Decode.field "tipe" typeDecoder)
 
 
+annotationCodec : Codec e Annotation
+annotationCodec =
+    Serialize.customType
+        (\forallEncoder (Forall freeVars tipe) ->
+            forallEncoder freeVars tipe
+        )
+        |> Serialize.variant2 Forall freeVarsCodec typeCodec
+        |> Serialize.finishCustomType
+
+
 freeVarsEncoder : FreeVars -> Encode.Value
 freeVarsEncoder =
     E.assocListDict Encode.string (\_ -> Encode.object [])
@@ -342,6 +359,11 @@ freeVarsEncoder =
 freeVarsDecoder : Decode.Decoder FreeVars
 freeVarsDecoder =
     D.assocListDict compare Decode.string (Decode.succeed ())
+
+
+freeVarsCodec : Codec e FreeVars
+freeVarsCodec =
+    S.assocListDict compare Serialize.string Serialize.unit
 
 
 aliasEncoder : Alias -> Encode.Value
@@ -357,6 +379,16 @@ aliasDecoder =
     Decode.map2 Alias
         (Decode.field "vars" (Decode.list Decode.string))
         (Decode.field "tipe" typeDecoder)
+
+
+aliasCodec : Codec e Alias
+aliasCodec =
+    Serialize.customType
+        (\aliasCodecEncoder (Alias vars tipe) ->
+            aliasCodecEncoder vars tipe
+        )
+        |> Serialize.variant2 Alias (Serialize.list Serialize.string) typeCodec
+        |> Serialize.finishCustomType
 
 
 typeEncoder : Type -> Encode.Value
@@ -460,6 +492,42 @@ typeDecoder =
             )
 
 
+typeCodec : Codec e Type
+typeCodec =
+    Serialize.customType
+        (\tLambdaEncoder tVarEncoder tTypeEncoder tRecordEncoder tUnitEncoder tTupleEncoder tAliasEncoder value ->
+            case value of
+                TLambda a b ->
+                    tLambdaEncoder a b
+
+                TVar name ->
+                    tVarEncoder name
+
+                TType home name args ->
+                    tTypeEncoder home name args
+
+                TRecord fields ext ->
+                    tRecordEncoder fields ext
+
+                TUnit ->
+                    tUnitEncoder
+
+                TTuple a b maybeC ->
+                    tTupleEncoder a b maybeC
+
+                TAlias home name args tipe ->
+                    tAliasEncoder home name args tipe
+        )
+        |> Serialize.variant2 TLambda (Serialize.lazy (\() -> typeCodec)) (Serialize.lazy (\() -> typeCodec))
+        |> Serialize.variant1 TVar Serialize.string
+        |> Serialize.variant3 TType ModuleName.canonicalCodec Serialize.string (Serialize.list (Serialize.lazy (\() -> typeCodec)))
+        |> Serialize.variant2 TRecord (S.assocListDict compare Serialize.string fieldTypeCodec) (Serialize.maybe Serialize.string)
+        |> Serialize.variant0 TUnit
+        |> Serialize.variant3 TTuple (Serialize.lazy (\() -> typeCodec)) (Serialize.lazy (\() -> typeCodec)) (Serialize.maybe (Serialize.lazy (\() -> typeCodec)))
+        |> Serialize.variant4 TAlias ModuleName.canonicalCodec Serialize.string (Serialize.list (Serialize.tuple Serialize.string (Serialize.lazy (\() -> typeCodec)))) aliasTypeCodec
+        |> Serialize.finishCustomType
+
+
 fieldTypeEncoder : FieldType -> Encode.Value
 fieldTypeEncoder (FieldType index tipe) =
     Encode.object
@@ -467,6 +535,23 @@ fieldTypeEncoder (FieldType index tipe) =
         , ( "index", Encode.int index )
         , ( "tipe", typeEncoder tipe )
         ]
+
+
+fieldTypeDecoder : Decode.Decoder FieldType
+fieldTypeDecoder =
+    Decode.map2 FieldType
+        (Decode.field "index" Decode.int)
+        (Decode.field "tipe" typeDecoder)
+
+
+fieldTypeCodec : Codec e FieldType
+fieldTypeCodec =
+    Serialize.customType
+        (\fieldTypeCodecEncoder (FieldType index tipe) ->
+            fieldTypeCodecEncoder index tipe
+        )
+        |> Serialize.variant2 FieldType Serialize.int (Serialize.lazy (\() -> typeCodec))
+        |> Serialize.finishCustomType
 
 
 aliasTypeEncoder : AliasType -> Encode.Value
@@ -483,13 +568,6 @@ aliasTypeEncoder aliasType =
                 [ ( "type", Encode.string "Filled" )
                 , ( "tipe", typeEncoder tipe )
                 ]
-
-
-fieldTypeDecoder : Decode.Decoder FieldType
-fieldTypeDecoder =
-    Decode.map2 FieldType
-        (Decode.field "index" Decode.int)
-        (Decode.field "tipe" typeDecoder)
 
 
 aliasTypeDecoder : Decode.Decoder AliasType
@@ -509,6 +587,22 @@ aliasTypeDecoder =
                     _ ->
                         Decode.fail ("Unknown AliasType's type: " ++ type_)
             )
+
+
+aliasTypeCodec : Codec e AliasType
+aliasTypeCodec =
+    Serialize.customType
+        (\holeyEncoder filledEncoder value ->
+            case value of
+                Holey tipe ->
+                    holeyEncoder tipe
+
+                Filled tipe ->
+                    filledEncoder tipe
+        )
+        |> Serialize.variant1 Holey (Serialize.lazy (\() -> typeCodec))
+        |> Serialize.variant1 Filled (Serialize.lazy (\() -> typeCodec))
+        |> Serialize.finishCustomType
 
 
 unionEncoder : Union -> Encode.Value
@@ -531,6 +625,20 @@ unionDecoder =
         (Decode.field "opts" ctorOptsDecoder)
 
 
+unionCodec : Codec e Union
+unionCodec =
+    Serialize.customType
+        (\unionCodecEncoder (Union vars ctors numAlts opts) ->
+            unionCodecEncoder vars ctors numAlts opts
+        )
+        |> Serialize.variant4 Union
+            (Serialize.list Serialize.string)
+            (Serialize.list ctorCodec)
+            Serialize.int
+            ctorOptsCodec
+        |> Serialize.finishCustomType
+
+
 ctorEncoder : Ctor -> Encode.Value
 ctorEncoder (Ctor ctor index numArgs args) =
     Encode.object
@@ -549,6 +657,20 @@ ctorDecoder =
         (Decode.field "index" Index.zeroBasedDecoder)
         (Decode.field "numArgs" Decode.int)
         (Decode.field "args" (Decode.list typeDecoder))
+
+
+ctorCodec : Codec e Ctor
+ctorCodec =
+    Serialize.customType
+        (\ctorCodecEncoder (Ctor ctor index numArgs args) ->
+            ctorCodecEncoder ctor index numArgs args
+        )
+        |> Serialize.variant4 Ctor
+            Serialize.string
+            Index.zeroBasedCodec
+            Serialize.int
+            (Serialize.list typeCodec)
+        |> Serialize.finishCustomType
 
 
 ctorOptsEncoder : CtorOpts -> Encode.Value
@@ -582,6 +704,26 @@ ctorOptsDecoder =
                     _ ->
                         Decode.fail ("Unknown CtorOpts: " ++ str)
             )
+
+
+ctorOptsCodec : Codec e CtorOpts
+ctorOptsCodec =
+    Serialize.customType
+        (\normalEncoder enumEncoder unboxEncoder value ->
+            case value of
+                Normal ->
+                    normalEncoder
+
+                Enum ->
+                    enumEncoder
+
+                Unbox ->
+                    unboxEncoder
+        )
+        |> Serialize.variant0 Normal
+        |> Serialize.variant0 Enum
+        |> Serialize.variant0 Unbox
+        |> Serialize.finishCustomType
 
 
 fieldUpdateEncoder : FieldUpdate -> Encode.Value

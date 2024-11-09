@@ -389,13 +389,13 @@ const io = {
     this.send({ index, value: which.sync(name, { nothrow: true }) });
   },
   replGetInputLine: function (index, prompt) {
-    rl.question(prompt, (answer) => {
-      this.send({ index, value: answer });
+    rl.question(prompt, (value) => {
+      this.send({ index, value });
     });
   },
   replGetInputLineWithInitial: function (index, prompt, left, right) {
-    rl.question(prompt + left + right, (answer) => {
-      this.send({ index, value: answer });
+    rl.question(prompt + left + right, (value) => {
+      this.send({ index, value });
     });
   },
   procWithCreateProcess: function (index, createProcess) {

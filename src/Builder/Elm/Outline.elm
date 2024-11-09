@@ -9,6 +9,7 @@ module Builder.Elm.Outline exposing
     , defaultSummary
     , flattenExposed
     , read
+    , srcDirCodec
     , srcDirDecoder
     , srcDirEncoder
     , write
@@ -31,6 +32,7 @@ import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -452,3 +454,19 @@ srcDirDecoder =
                     _ ->
                         Decode.fail ("Failed to decode SrcDir's type: " ++ type_)
             )
+
+
+srcDirCodec : Codec e SrcDir
+srcDirCodec =
+    Serialize.customType
+        (\absoluteSrcDirEncoder relativeSrcDirEncoder srcDir ->
+            case srcDir of
+                AbsoluteSrcDir dir ->
+                    absoluteSrcDirEncoder dir
+
+                RelativeSrcDir dir ->
+                    relativeSrcDirEncoder dir
+        )
+        |> Serialize.variant1 AbsoluteSrcDir Serialize.string
+        |> Serialize.variant1 RelativeSrcDir Serialize.string
+        |> Serialize.finishCustomType

@@ -457,7 +457,7 @@ initEnv =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar Http.managerEncoder mvar) Http.getManager)
+                Utils.forkIO (IO.bind (Utils.putMVar Http.managerCodec mvar) Http.getManager)
                     |> IO.bind
                         (\_ ->
                             Stuff.getPackageCache
@@ -467,7 +467,7 @@ initEnv =
                                             (Registry.read cache
                                                 |> IO.bind
                                                     (\maybeRegistry ->
-                                                        Utils.readMVar Http.managerDecoder mvar
+                                                        Utils.readMVar Http.managerCodec mvar
                                                             |> IO.bind
                                                                 (\manager ->
                                                                     case maybeRegistry of

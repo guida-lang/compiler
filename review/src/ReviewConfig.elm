@@ -54,8 +54,9 @@ config =
     , NoUnused.Dependencies.rule
 
     -- , NoUnused.Exports.rule
-    -- , NoUnused.Parameters.rule
-    -- , NoUnused.Patterns.rule
-    -- , NoUnused.Variables.rule
+    , NoUnused.Parameters.rule
+        |> Rule.ignoreErrorsForFiles [ "src/Utils/Crash.elm" ]
+    , NoUnused.Patterns.rule
+    , NoUnused.Variables.rule
     , Simplify.rule Simplify.defaults
     ]

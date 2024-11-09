@@ -17,11 +17,14 @@ module Builder.Reporting.Exit exposing
     , RegistryProblem(..)
     , Repl(..)
     , Solver(..)
+    , buildProblemCodec
     , buildProblemDecoder
     , buildProblemEncoder
+    , buildProjectProblemCodec
     , buildProjectProblemDecoder
     , buildProjectProblemEncoder
     , bumpToReport
+    , detailsBadDepCodec
     , detailsBadDepDecoder
     , detailsBadDepEncoder
     , diffToReport
@@ -60,6 +63,7 @@ import Data.IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
+import Serialize exposing (Codec)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -2867,6 +2871,11 @@ detailsBadDepDecoder =
             )
 
 
+detailsBadDepCodec : Codec e DetailsBadDep
+detailsBadDepCodec =
+    Debug.todo "detailsBadDepCodec"
+
+
 buildProblemEncoder : BuildProblem -> CoreEncode.Value
 buildProblemEncoder buildProblem =
     case buildProblem of
@@ -2903,6 +2912,22 @@ buildProblemDecoder =
                     _ ->
                         CoreDecode.fail ("Failed to decode BuildProblem's type: " ++ type_)
             )
+
+
+buildProblemCodec : Codec e BuildProblem
+buildProblemCodec =
+    Serialize.customType
+        (\buildBadModulesEncoder buildProjectProblemCodecEncoder buildProblem ->
+            case buildProblem of
+                BuildBadModules root e es ->
+                    buildBadModulesEncoder root e es
+
+                BuildProjectProblem problem ->
+                    buildProjectProblemCodecEncoder problem
+        )
+        |> Serialize.variant3 BuildBadModules Serialize.string Error.moduleCodec (Serialize.list Error.moduleCodec)
+        |> Serialize.variant1 BuildProjectProblem buildProjectProblemCodec
+        |> Serialize.finishCustomType
 
 
 buildProjectProblemEncoder : BuildProjectProblem -> CoreEncode.Value
@@ -3024,6 +3049,11 @@ buildProjectProblemDecoder =
                     _ ->
                         CoreDecode.fail ("Failed to decode BuildProjectProblem's type: " ++ type_)
             )
+
+
+buildProjectProblemCodec : Codec e BuildProjectProblem
+buildProjectProblemCodec =
+    Debug.todo "buildProjectProblemCodec"
 
 
 registryProblemEncoder : RegistryProblem -> CoreEncode.Value

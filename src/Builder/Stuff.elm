@@ -39,17 +39,17 @@ stuff root =
 
 details : String -> String
 details root =
-    stuff root ++ "/d.json"
+    stuff root ++ "/d.dat"
 
 
 interfaces : String -> String
 interfaces root =
-    stuff root ++ "/i.json"
+    stuff root ++ "/i.dat"
 
 
 objects : String -> String
 objects root =
-    stuff root ++ "/o.json"
+    stuff root ++ "/o.dat"
 
 
 prepublishDir : String -> String
@@ -150,7 +150,7 @@ getPackageCache =
 
 registry : PackageCache -> String
 registry (PackageCache dir) =
-    Utils.fpForwardSlash dir "registry.json"
+    Utils.fpForwardSlash dir "registry.dat"
 
 
 package : PackageCache -> Pkg.Name -> V.Version -> String

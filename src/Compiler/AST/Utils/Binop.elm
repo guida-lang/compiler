@@ -1,14 +1,17 @@
 module Compiler.AST.Utils.Binop exposing
     ( Associativity(..)
     , Precedence
+    , associativityCodec
     , associativityDecoder
     , associativityEncoder
+    , precedenceCodec
     , precedenceDecoder
     , precedenceEncoder
     )
 
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -33,6 +36,11 @@ precedenceEncoder =
 precedenceDecoder : Decode.Decoder Precedence
 precedenceDecoder =
     Decode.int
+
+
+precedenceCodec : Codec e Precedence
+precedenceCodec =
+    Serialize.int
 
 
 associativityEncoder : Associativity -> Encode.Value
@@ -66,3 +74,23 @@ associativityDecoder =
                     _ ->
                         Decode.fail ("Unknown Associativity: " ++ str)
             )
+
+
+associativityCodec : Codec e Associativity
+associativityCodec =
+    Serialize.customType
+        (\leftEncoder nonEncoder rightEncoder value ->
+            case value of
+                Left ->
+                    leftEncoder
+
+                Non ->
+                    nonEncoder
+
+                Right ->
+                    rightEncoder
+        )
+        |> Serialize.variant0 Left
+        |> Serialize.variant0 Non
+        |> Serialize.variant0 Right
+        |> Serialize.finishCustomType

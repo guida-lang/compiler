@@ -14,6 +14,7 @@ module Compiler.Elm.Package exposing
     , kernel
     , keyDecoder
     , linearAlgebra
+    , nameCodec
     , nameDecoder
     , nameEncoder
     , nearbyNames
@@ -34,6 +35,7 @@ import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -379,3 +381,13 @@ nameDecoder =
     Decode.map2 Name
         (Decode.field "author" Decode.string)
         (Decode.field "project" Decode.string)
+
+
+nameCodec : Codec e Name
+nameCodec =
+    Serialize.customType
+        (\nameCodecEncoder (Name author project) ->
+            nameCodecEncoder author project
+        )
+        |> Serialize.variant2 Name Serialize.string Serialize.string
+        |> Serialize.finishCustomType

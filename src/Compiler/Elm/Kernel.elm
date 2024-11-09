@@ -2,6 +2,7 @@ module Compiler.Elm.Kernel exposing
     ( Chunk(..)
     , Content(..)
     , Foreigns
+    , chunkCodec
     , chunkDecoder
     , chunkEncoder
     , countFields
@@ -20,6 +21,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 
 
@@ -505,3 +507,43 @@ chunkDecoder =
                     _ ->
                         Decode.fail ("Unknown Chunk's type: " ++ type_)
             )
+
+
+chunkCodec : Codec e Chunk
+chunkCodec =
+    Serialize.customType
+        (\jsEncoder elmVarEncoder jsVarEncoder elmFieldEncoder jsFieldEncoder jsEnumEncoder debugEncoder prodEncoder chunk ->
+            case chunk of
+                JS javascript ->
+                    jsEncoder javascript
+
+                ElmVar home name ->
+                    elmVarEncoder home name
+
+                JsVar home name ->
+                    jsVarEncoder home name
+
+                ElmField name ->
+                    elmFieldEncoder name
+
+                JsField int ->
+                    jsFieldEncoder int
+
+                JsEnum int ->
+                    jsEnumEncoder int
+
+                Debug ->
+                    debugEncoder
+
+                Prod ->
+                    prodEncoder
+        )
+        |> Serialize.variant1 JS Serialize.string
+        |> Serialize.variant2 ElmVar ModuleName.canonicalCodec Serialize.string
+        |> Serialize.variant2 JsVar Serialize.string Serialize.string
+        |> Serialize.variant1 ElmField Serialize.string
+        |> Serialize.variant1 JsField Serialize.int
+        |> Serialize.variant1 JsEnum Serialize.int
+        |> Serialize.variant0 Debug
+        |> Serialize.variant0 Prod
+        |> Serialize.finishCustomType

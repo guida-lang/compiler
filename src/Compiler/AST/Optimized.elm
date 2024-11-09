@@ -16,8 +16,10 @@ module Compiler.AST.Optimized exposing
     , addLocalGraph
     , compareGlobal
     , empty
+    , globalGraphCodec
     , globalGraphDecoder
     , globalGraphEncoder
+    , localGraphCodec
     , localGraphDecoder
     , localGraphEncoder
     , toKernelGlobal
@@ -34,10 +36,12 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -259,6 +263,16 @@ globalGraphDecoder =
         (Decode.field "fields" (D.assocListDict compare Decode.string Decode.int))
 
 
+globalGraphCodec : Codec e GlobalGraph
+globalGraphCodec =
+    Serialize.customType
+        (\globalGraphCodecEncoder (GlobalGraph nodes fields) ->
+            globalGraphCodecEncoder nodes fields
+        )
+        |> Serialize.variant2 GlobalGraph (S.assocListDict compareGlobal globalCodec nodeCodec) (S.assocListDict compare Serialize.string Serialize.int)
+        |> Serialize.finishCustomType
+
+
 localGraphEncoder : LocalGraph -> Encode.Value
 localGraphEncoder (LocalGraph main nodes fields) =
     Encode.object
@@ -275,6 +289,19 @@ localGraphDecoder =
         (Decode.field "main" (Decode.maybe mainDecoder))
         (Decode.field "nodes" (D.assocListDict compareGlobal globalDecoder nodeDecoder))
         (Decode.field "fields" (D.assocListDict compare Decode.string Decode.int))
+
+
+localGraphCodec : Codec e LocalGraph
+localGraphCodec =
+    Serialize.customType
+        (\localGraphCodecEncoder (LocalGraph main nodes fields) ->
+            localGraphCodecEncoder main nodes fields
+        )
+        |> Serialize.variant3 LocalGraph
+            (Serialize.maybe mainCodec)
+            (S.assocListDict compareGlobal globalCodec nodeCodec)
+            (S.assocListDict compare Serialize.string Serialize.int)
+        |> Serialize.finishCustomType
 
 
 mainEncoder : Main -> Encode.Value
@@ -312,6 +339,22 @@ mainDecoder =
             )
 
 
+mainCodec : Codec c Main
+mainCodec =
+    Serialize.customType
+        (\staticEncoder dynamicEncoder value ->
+            case value of
+                Static ->
+                    staticEncoder
+
+                Dynamic msgType decoder ->
+                    dynamicEncoder msgType decoder
+        )
+        |> Serialize.variant0 Static
+        |> Serialize.variant2 Dynamic Can.typeCodec exprCodec
+        |> Serialize.finishCustomType
+
+
 globalEncoder : Global -> Encode.Value
 globalEncoder (Global home name) =
     Encode.object
@@ -326,6 +369,16 @@ globalDecoder =
     Decode.map2 Global
         (Decode.field "home" ModuleName.canonicalDecoder)
         (Decode.field "name" Decode.string)
+
+
+globalCodec : Codec e Global
+globalCodec =
+    Serialize.customType
+        (\globalCodecEncoder (Global home name) ->
+            globalCodecEncoder home name
+        )
+        |> Serialize.variant2 Global ModuleName.canonicalCodec Serialize.string
+        |> Serialize.finishCustomType
 
 
 nodeEncoder : Node -> Encode.Value
@@ -467,6 +520,58 @@ nodeDecoder =
                     _ ->
                         Decode.fail ("Unknown Node's type: " ++ type_)
             )
+
+
+nodeCodec : Codec e Node
+nodeCodec =
+    Serialize.customType
+        (\defineEncoder defineTailFuncEncoder ctorEncoder enumEncoder boxEncoder linkEncoder cycleEncoder managerEncoder kernelEncoder portIncomingEncoder portOutgoingEncoder node ->
+            case node of
+                Define expr deps ->
+                    defineEncoder expr deps
+
+                DefineTailFunc argNames body deps ->
+                    defineTailFuncEncoder argNames body deps
+
+                Ctor index arity ->
+                    ctorEncoder index arity
+
+                Enum index ->
+                    enumEncoder index
+
+                Box ->
+                    boxEncoder
+
+                Link linkedGlobal ->
+                    linkEncoder linkedGlobal
+
+                Cycle names values functions deps ->
+                    cycleEncoder names values functions deps
+
+                Manager effectsType ->
+                    managerEncoder effectsType
+
+                Kernel chunks deps ->
+                    kernelEncoder chunks deps
+
+                PortIncoming decoder deps ->
+                    portIncomingEncoder decoder deps
+
+                PortOutgoing encoder deps ->
+                    portOutgoingEncoder encoder deps
+        )
+        |> Serialize.variant2 Define exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant3 DefineTailFunc (Serialize.list Serialize.string) exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant2 Ctor Index.zeroBasedCodec Serialize.int
+        |> Serialize.variant1 Enum Index.zeroBasedCodec
+        |> Serialize.variant0 Box
+        |> Serialize.variant1 Link globalCodec
+        |> Serialize.variant4 Cycle (Serialize.list Serialize.string) (Serialize.list (Serialize.tuple Serialize.string exprCodec)) (Serialize.list defCodec) (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant1 Manager effectsTypeCodec
+        |> Serialize.variant2 Kernel (Serialize.list K.chunkCodec) (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant2 PortIncoming exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant2 PortOutgoing exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.finishCustomType
 
 
 exprEncoder : Expr -> Encode.Value
@@ -783,6 +888,122 @@ exprDecoder =
             )
 
 
+exprCodec : Codec e Expr
+exprCodec =
+    Serialize.customType
+        (\boolEncoder chrEncoder strEncoder intEncoder floatEncoder varLocalEncoder varGlobalEncoder varEnumEncoder varBoxEncoder varCycleEncoder varDebugEncoder varKernelEncoder listEncoder functionEncoder callEncoder tailCallEncoder ifEncoder letEncoder destructEncoder caseEncoder accessorEncoder accessEncoder updateEncoder recordEncoder unitEncoder tupleEncoder shaderEncoder expr ->
+            case expr of
+                Bool value ->
+                    boolEncoder value
+
+                Chr value ->
+                    chrEncoder value
+
+                Str value ->
+                    strEncoder value
+
+                Int value ->
+                    intEncoder value
+
+                Float value ->
+                    floatEncoder value
+
+                VarLocal value ->
+                    varLocalEncoder value
+
+                VarGlobal value ->
+                    varGlobalEncoder value
+
+                VarEnum global index ->
+                    varEnumEncoder global index
+
+                VarBox value ->
+                    varBoxEncoder value
+
+                VarCycle home name ->
+                    varCycleEncoder home name
+
+                VarDebug name home region unhandledValueName ->
+                    varDebugEncoder name home region unhandledValueName
+
+                VarKernel home name ->
+                    varKernelEncoder home name
+
+                List value ->
+                    listEncoder value
+
+                Function args body ->
+                    functionEncoder args body
+
+                Call func args ->
+                    callEncoder func args
+
+                TailCall name args ->
+                    tailCallEncoder name args
+
+                If branches final ->
+                    ifEncoder branches final
+
+                Let def body ->
+                    letEncoder def body
+
+                Destruct destructor body ->
+                    destructEncoder destructor body
+
+                Case label root decider jumps ->
+                    caseEncoder label root decider jumps
+
+                Accessor field ->
+                    accessorEncoder field
+
+                Access record field ->
+                    accessEncoder record field
+
+                Update record fields ->
+                    updateEncoder record fields
+
+                Record value ->
+                    recordEncoder value
+
+                Unit ->
+                    unitEncoder
+
+                Tuple a b maybeC ->
+                    tupleEncoder a b maybeC
+
+                Shader src attributes uniforms ->
+                    shaderEncoder src attributes uniforms
+        )
+        |> Serialize.variant1 Bool Serialize.bool
+        |> Serialize.variant1 Chr Serialize.string
+        |> Serialize.variant1 Str Serialize.string
+        |> Serialize.variant1 Int Serialize.int
+        |> Serialize.variant1 Float Serialize.float
+        |> Serialize.variant1 VarLocal Serialize.string
+        |> Serialize.variant1 VarGlobal globalCodec
+        |> Serialize.variant2 VarEnum globalCodec Index.zeroBasedCodec
+        |> Serialize.variant1 VarBox globalCodec
+        |> Serialize.variant2 VarCycle ModuleName.canonicalCodec Serialize.string
+        |> Serialize.variant4 VarDebug Serialize.string ModuleName.canonicalCodec A.regionCodec (Serialize.maybe Serialize.string)
+        |> Serialize.variant2 VarKernel Serialize.string Serialize.string
+        |> Serialize.variant1 List (Serialize.list (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant2 Function (Serialize.list Serialize.string) (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant2 Call (Serialize.lazy (\() -> exprCodec)) (Serialize.list (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant2 TailCall Serialize.string (Serialize.list (Serialize.tuple Serialize.string (Serialize.lazy (\() -> exprCodec))))
+        |> Serialize.variant2 If (Serialize.list (Serialize.tuple (Serialize.lazy (\() -> exprCodec)) (Serialize.lazy (\() -> exprCodec)))) (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant2 Let defCodec (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant2 Destruct destructorCodec (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant4 Case Serialize.string Serialize.string (deciderCodec choiceCodec) (Serialize.list (Serialize.tuple Serialize.int (Serialize.lazy (\() -> exprCodec))))
+        |> Serialize.variant1 Accessor Serialize.string
+        |> Serialize.variant2 Access (Serialize.lazy (\() -> exprCodec)) Serialize.string
+        |> Serialize.variant2 Update (Serialize.lazy (\() -> exprCodec)) (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant1 Record (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant0 Unit
+        |> Serialize.variant3 Tuple (Serialize.lazy (\() -> exprCodec)) (Serialize.lazy (\() -> exprCodec)) (Serialize.maybe (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant3 Shader Shader.sourceCodec (S.everySet compare Serialize.string) (S.everySet compare Serialize.string)
+        |> Serialize.finishCustomType
+
+
 defEncoder : Def -> Encode.Value
 defEncoder def =
     case def of
@@ -824,6 +1045,22 @@ defDecoder =
             )
 
 
+defCodec : Codec e Def
+defCodec =
+    Serialize.customType
+        (\defCodecEncoder tailDefEncoder value ->
+            case value of
+                Def name expr ->
+                    defCodecEncoder name expr
+
+                TailDef name args expr ->
+                    tailDefEncoder name args expr
+        )
+        |> Serialize.variant2 Def Serialize.string (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant3 TailDef Serialize.string (Serialize.list Serialize.string) (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.finishCustomType
+
+
 destructorEncoder : Destructor -> Encode.Value
 destructorEncoder (Destructor name path) =
     Encode.object
@@ -838,6 +1075,16 @@ destructorDecoder =
     Decode.map2 Destructor
         (Decode.field "name" Decode.string)
         (Decode.field "path" pathDecoder)
+
+
+destructorCodec : Codec e Destructor
+destructorCodec =
+    Serialize.customType
+        (\destructorCodecEncoder (Destructor name path) ->
+            destructorCodecEncoder name path
+        )
+        |> Serialize.variant2 Destructor Serialize.string pathCodec
+        |> Serialize.finishCustomType
 
 
 deciderEncoder : (a -> Encode.Value) -> Decider a -> Encode.Value
@@ -892,6 +1139,26 @@ deciderDecoder decoder =
             )
 
 
+deciderCodec : Codec e a -> Codec e (Decider a)
+deciderCodec codec =
+    Serialize.customType
+        (\leafEncoder chainEncoder fanOutEncoder decider ->
+            case decider of
+                Leaf value ->
+                    leafEncoder value
+
+                Chain testChain success failure ->
+                    chainEncoder testChain success failure
+
+                FanOut path edges fallback ->
+                    fanOutEncoder path edges fallback
+        )
+        |> Serialize.variant1 Leaf codec
+        |> Serialize.variant3 Chain (Serialize.list (Serialize.tuple DT.pathCodec DT.testCodec)) (Serialize.lazy (\() -> deciderCodec codec)) (Serialize.lazy (\() -> deciderCodec codec))
+        |> Serialize.variant3 FanOut DT.pathCodec (Serialize.list (Serialize.tuple DT.testCodec (Serialize.lazy (\() -> deciderCodec codec)))) (Serialize.lazy (\() -> deciderCodec codec))
+        |> Serialize.finishCustomType
+
+
 choiceEncoder : Choice -> Encode.Value
 choiceEncoder choice =
     case choice of
@@ -923,6 +1190,22 @@ choiceDecoder =
                     _ ->
                         Decode.fail ("Unknown Choice's type: " ++ type_)
             )
+
+
+choiceCodec : Codec e Choice
+choiceCodec =
+    Serialize.customType
+        (\inlineEncoder jumpEncoder choice ->
+            case choice of
+                Inline value ->
+                    inlineEncoder value
+
+                Jump value ->
+                    jumpEncoder value
+        )
+        |> Serialize.variant1 Inline (Serialize.lazy (\() -> exprCodec))
+        |> Serialize.variant1 Jump Serialize.int
+        |> Serialize.finishCustomType
 
 
 pathEncoder : Path -> Encode.Value
@@ -982,6 +1265,30 @@ pathDecoder =
             )
 
 
+pathCodec : Codec e Path
+pathCodec =
+    Serialize.customType
+        (\indexEncoder fieldEncoder unboxEncoder rootEncoder path ->
+            case path of
+                Index index subPath ->
+                    indexEncoder index subPath
+
+                Field field subPath ->
+                    fieldEncoder field subPath
+
+                Unbox subPath ->
+                    unboxEncoder subPath
+
+                Root name ->
+                    rootEncoder name
+        )
+        |> Serialize.variant2 Index Index.zeroBasedCodec (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant2 Field Serialize.string (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant1 Unbox (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant1 Root Serialize.string
+        |> Serialize.finishCustomType
+
+
 effectsTypeEncoder : EffectsType -> Encode.Value
 effectsTypeEncoder effectsType =
     case effectsType of
@@ -1013,3 +1320,23 @@ effectsTypeDecoder =
                     _ ->
                         Decode.fail ("Unknown EffectsType: " ++ str)
             )
+
+
+effectsTypeCodec : Codec e EffectsType
+effectsTypeCodec =
+    Serialize.customType
+        (\cmdEncoder subEncoder fxEncoder effectsType ->
+            case effectsType of
+                Cmd ->
+                    cmdEncoder
+
+                Sub ->
+                    subEncoder
+
+                Fx ->
+                    fxEncoder
+        )
+        |> Serialize.variant0 Cmd
+        |> Serialize.variant0 Sub
+        |> Serialize.variant0 Fx
+        |> Serialize.finishCustomType

@@ -7,6 +7,7 @@ module Builder.Elm.Details exposing
     , Local(..)
     , Status
     , ValidOutline(..)
+    , detailsCodec
     , detailsEncoder
     , load
     , loadInterfaces
@@ -45,11 +46,13 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
+import Compiler.Serialize as S
 import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
 
@@ -112,20 +115,20 @@ loadObjects : FilePath -> Details -> IO (MVar (Maybe Opt.GlobalGraph))
 loadObjects root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh _ o ->
-            Utils.newMVar (Utils.maybeEncoder Opt.globalGraphEncoder) (Just o)
+            Utils.newMVar (Serialize.maybe Opt.globalGraphCodec) (Just o)
 
         ArtifactsCached ->
-            fork (Utils.maybeEncoder Opt.globalGraphEncoder) (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
+            fork (Serialize.maybe Opt.globalGraphCodec) (File.readBinary Opt.globalGraphCodec (Stuff.objects root))
 
 
 loadInterfaces : FilePath -> Details -> IO (MVar (Maybe Interfaces))
 loadInterfaces root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh i _ ->
-            Utils.newMVar (Utils.maybeEncoder interfacesEncoder) (Just i)
+            Utils.newMVar (Serialize.maybe interfacesCodec) (Just i)
 
         ArtifactsCached ->
-            fork (Utils.maybeEncoder interfacesEncoder) (File.readBinary interfacesDecoder (Stuff.interfaces root))
+            fork (Serialize.maybe interfacesCodec) (File.readBinary interfacesCodec (Stuff.interfaces root))
 
 
 
@@ -164,7 +167,7 @@ load style scope root =
     File.getTime (root ++ "/elm.json")
         |> IO.bind
             (\newTime ->
-                File.readBinary detailsDecoder (Stuff.details root)
+                File.readBinary detailsCodec (Stuff.details root)
                     |> IO.bind
                         (\maybeDetails ->
                             case maybeDetails of
@@ -217,7 +220,7 @@ type Env
 
 initEnv : Reporting.DKey -> BW.Scope -> FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
-    fork resultRegistryProblemEnvEncoder Solver.initEnv
+    fork resultRegistryProblemEnvCodec Solver.initEnv
         |> IO.bind
             (\mvar ->
                 Outline.read root
@@ -228,7 +231,7 @@ initEnv key scope root =
                                     IO.pure (Err (Exit.DetailsBadOutline problem))
 
                                 Ok outline ->
-                                    Utils.readMVar resultRegistryProblemEnvDecoder mvar
+                                    Utils.readMVar resultRegistryProblemEnvCodec mvar
                                         |> IO.fmap
                                             (\maybeEnv ->
                                                 case maybeEnv of
@@ -366,12 +369,12 @@ allowEqualDups _ v1 v2 =
 -- FORK
 
 
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
-fork encoder work =
+fork : Codec e a -> IO a -> IO (MVar a)
+fork codec work =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
+                Utils.forkIO (IO.bind (Utils.putMVar codec mvar) work)
                     |> IO.fmap (\_ -> mvar)
             )
 
@@ -388,13 +391,13 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
             |> IO.bind
                 (\mvar ->
                     Stuff.withRegistryLock cache
-                        (Utils.mapTraverseWithKey Pkg.compareName (\k v -> fork depEncoder (verifyDep env mvar solution k v)) solution)
+                        (Utils.mapTraverseWithKey Pkg.compareName (\k v -> fork depCodec (verifyDep env mvar solution k v)) solution)
                         |> IO.bind
                             (\mvars ->
-                                Utils.putMVar dictNameMVarDepEncoder mvar mvars
+                                Utils.putMVar dictNameMVarDepCodec mvar mvars
                                     |> IO.bind
                                         (\_ ->
-                                            Utils.mapTraverse Pkg.compareName (Utils.readMVar depDecoder) mvars
+                                            Utils.mapTraverse Pkg.compareName (Utils.readMVar depCodec) mvars
                                                 |> IO.bind
                                                     (\deps ->
                                                         case Utils.sequenceDictResult Pkg.compareName deps of
@@ -426,9 +429,9 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                     details =
                                                                         Details time outline 0 Dict.empty foreigns (ArtifactsFresh ifaces objs)
                                                                 in
-                                                                BW.writeBinary Opt.globalGraphEncoder scope (Stuff.objects root) objs
-                                                                    |> IO.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
-                                                                    |> IO.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
+                                                                BW.writeBinary Opt.globalGraphCodec scope (Stuff.objects root) objs
+                                                                    |> IO.bind (\_ -> BW.writeBinary interfacesCodec scope (Stuff.interfaces root) ifaces)
+                                                                    |> IO.bind (\_ -> BW.writeBinary detailsCodec scope (Stuff.details root) details)
                                                                     |> IO.fmap (\_ -> Ok details)
                                                     )
                                         )
@@ -501,7 +504,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                     Reporting.report key Reporting.DCached
                         |> IO.bind
                             (\_ ->
-                                File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.json")
+                                File.readBinary artifactCacheCodec (Stuff.package cache pkg vsn ++ "/artifacts.json")
                                     |> IO.bind
                                         (\maybeCache ->
                                             case maybeCache of
@@ -568,10 +571,10 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                             |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
-                        Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
+                        Utils.readMVar dictPkgNameMVarDepCodec depsMVar
                             |> IO.bind
                                 (\allDeps ->
-                                    Utils.mapTraverse Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection allDeps deps)
+                                    Utils.mapTraverse Pkg.compareName (Utils.readMVar depCodec) (Dict.intersection allDeps deps)
                                         |> IO.bind
                                             (\directDeps ->
                                                 case Utils.sequenceDictResult Pkg.compareName directDeps of
@@ -599,12 +602,12 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                     Utils.newEmptyMVar
                                                                         |> IO.bind
                                                                             (\mvar ->
-                                                                                Utils.mapTraverseWithKey compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                Utils.mapTraverseWithKey compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                     |> IO.bind
                                                                                         (\mvars ->
-                                                                                            Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse compare (Utils.readMVar (Decode.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                            Utils.putMVar statusDictCodec mvar mvars
+                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
+                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe statusCodec))) (Utils.readMVar statusDictCodec mvar))
                                                                                                 |> IO.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe compare maybeStatuses of
@@ -616,11 +619,11 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                 Utils.newEmptyMVar
                                                                                                                     |> IO.bind
                                                                                                                         (\rmvar ->
-                                                                                                                            Utils.mapTraverse compare (fork (E.maybe dResultEncoder) << compile pkg rmvar) statuses
+                                                                                                                            Utils.mapTraverse compare (fork (Serialize.maybe dResultCodec) << compile pkg rmvar) statuses
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvars ->
-                                                                                                                                        Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
-                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse compare (Utils.readMVar (Decode.maybe dResultDecoder)) rmvars)
+                                                                                                                                        Utils.putMVar dictRawMVarMaybeDResultCodec rmvar rmvars
+                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe dResultCodec)) rmvars)
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\maybeResults ->
                                                                                                                                                     case Utils.sequenceDictMaybe compare maybeResults of
@@ -651,7 +654,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                     EverySet.insert (\_ _ -> EQ) f fs
                                                                                                                                                             in
                                                                                                                                                             writeDocs cache pkg vsn docsStatus results
-                                                                                                                                                                |> IO.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
+                                                                                                                                                                |> IO.bind (\_ -> File.writeBinary artifactCacheCodec path (ArtifactCache fingerprints artifacts))
                                                                                                                                                                 |> IO.bind (\_ -> Reporting.report key Reporting.DBuilt)
                                                                                                                                                                 |> IO.fmap (\_ -> Ok artifacts)
                                                                                                                                                 )
@@ -836,7 +839,7 @@ crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
 
 crawlImports : Dict ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> IO (Dict ModuleName.Raw ())
 crawlImports foreignDeps mvar pkg src imports =
-    Utils.takeMVar statusDictDecoder mvar
+    Utils.takeMVar statusDictCodec mvar
         |> IO.bind
             (\statusDict ->
                 let
@@ -848,11 +851,11 @@ crawlImports foreignDeps mvar pkg src imports =
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
+                Utils.mapTraverseWithKey compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
-                            Utils.putMVar statusDictEncoder mvar (Dict.union compare mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
+                            Utils.putMVar statusDictCodec mvar (Dict.union compare mvars statusDict)
+                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
                                 |> IO.fmap (\_ -> deps)
                         )
             )
@@ -911,10 +914,10 @@ compile : Pkg.Name -> MVar (Dict ModuleName.Raw (MVar (Maybe DResult))) -> Statu
 compile pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
-            Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
+            Utils.readMVar moduleNameRawMVarMaybeDResultCodec mvar
                 |> IO.bind
                     (\resultsDict ->
-                        Utils.mapTraverse compare (Utils.readMVar (Decode.maybe dResultDecoder)) (Dict.intersection resultsDict deps)
+                        Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe dResultCodec)) (Dict.intersection resultsDict deps)
                             |> IO.bind
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe compare maybeResults of
@@ -1095,15 +1098,20 @@ detailsEncoder (Details oldTime outline buildID locals foreigns extras) =
         ]
 
 
-detailsDecoder : Decode.Decoder Details
-detailsDecoder =
-    Decode.map6 Details
-        (Decode.field "oldTime" File.timeDecoder)
-        (Decode.field "outline" validOutlineDecoder)
-        (Decode.field "buildID" Decode.int)
-        (Decode.field "locals" (D.assocListDict compare ModuleName.rawDecoder localDecoder))
-        (Decode.field "foreigns" (D.assocListDict compare ModuleName.rawDecoder foreignDecoder))
-        (Decode.field "extras" extrasDecoder)
+detailsCodec : Codec (Serialize.Error e) Details
+detailsCodec =
+    Serialize.customType
+        (\detailsCodecEncoder (Details oldTime outline buildID locals foreigns extras) ->
+            detailsCodecEncoder oldTime outline buildID locals foreigns extras
+        )
+        |> Serialize.variant6 Details
+            File.timeCodec
+            validOutlineCodec
+            Serialize.int
+            (S.assocListDict compare ModuleName.rawCodec localCodec)
+            (S.assocListDict compare ModuleName.rawCodec foreignCodec)
+            extrasCodec
+        |> Serialize.finishCustomType
 
 
 interfacesEncoder : Interfaces -> Encode.Value
@@ -1111,9 +1119,9 @@ interfacesEncoder =
     E.assocListDict ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
 
 
-interfacesDecoder : Decode.Decoder Interfaces
-interfacesDecoder =
-    D.assocListDict ModuleName.compareCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
+interfacesCodec : Codec e Interfaces
+interfacesCodec =
+    S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
 
 
 resultRegistryProblemEnvEncoder : Result Exit.RegistryProblem Solver.Env -> Encode.Value
@@ -1126,9 +1134,9 @@ resultRegistryProblemEnvDecoder =
     D.result Exit.registryProblemDecoder Solver.envDecoder
 
 
-depEncoder : Dep -> Encode.Value
-depEncoder dep =
-    E.result (E.maybe Exit.detailsBadDepEncoder) artifactsEncoder dep
+resultRegistryProblemEnvCodec : Codec e (Result Exit.RegistryProblem Solver.Env)
+resultRegistryProblemEnvCodec =
+    Debug.todo "resultRegistryProblemEnvCodec"
 
 
 depDecoder : Decode.Decoder Dep
@@ -1136,13 +1144,9 @@ depDecoder =
     D.result (Decode.maybe Exit.detailsBadDepDecoder) artifactsDecoder
 
 
-artifactsEncoder : Artifacts -> Encode.Value
-artifactsEncoder (Artifacts ifaces objects) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "ifaces", E.assocListDict ModuleName.rawEncoder I.dependencyInterfaceEncoder ifaces )
-        , ( "objects", Opt.globalGraphEncoder objects )
-        ]
+depCodec : Codec e Dep
+depCodec =
+    Serialize.result (Serialize.maybe Exit.detailsBadDepCodec) artifactsCodec
 
 
 artifactsDecoder : Decode.Decoder Artifacts
@@ -1152,30 +1156,44 @@ artifactsDecoder =
         (Decode.field "objects" Opt.globalGraphDecoder)
 
 
+artifactsCodec : Codec e Artifacts
+artifactsCodec =
+    Serialize.customType
+        (\artifactsCodecEncoder (Artifacts ifaces objects) ->
+            artifactsCodecEncoder ifaces objects
+        )
+        |> Serialize.variant2 Artifacts (S.assocListDict compare ModuleName.rawCodec I.dependencyInterfaceCodec) Opt.globalGraphCodec
+        |> Serialize.finishCustomType
+
+
 dictNameMVarDepEncoder : Dict Pkg.Name (MVar Dep) -> Encode.Value
 dictNameMVarDepEncoder =
     E.assocListDict Pkg.nameEncoder Utils.mVarEncoder
 
 
-artifactCacheEncoder : ArtifactCache -> Encode.Value
-artifactCacheEncoder (ArtifactCache fingerprints artifacts) =
-    Encode.object
-        [ ( "type", Encode.string "ArtifactCache" )
-        , ( "fingerprints", E.everySet fingerprintEncoder fingerprints )
-        , ( "artifacts", artifactsEncoder artifacts )
-        ]
+dictNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
+dictNameMVarDepCodec =
+    Debug.todo "dictNameMVarDepCodec"
 
 
-artifactCacheDecoder : Decode.Decoder ArtifactCache
-artifactCacheDecoder =
-    Decode.map2 ArtifactCache
-        (Decode.field "fingerprints" (D.everySet (\_ _ -> EQ) fingerprintDecoder))
-        (Decode.field "artifacts" artifactsDecoder)
+artifactCacheCodec : Codec e ArtifactCache
+artifactCacheCodec =
+    Serialize.customType
+        (\artifactCacheCodecEncoder (ArtifactCache fingerprints artifacts) ->
+            artifactCacheCodecEncoder fingerprints artifacts
+        )
+        |> Serialize.variant2 ArtifactCache (S.everySet (\_ _ -> EQ) fingerprintCodec) artifactsCodec
+        |> Serialize.finishCustomType
 
 
 dictPkgNameMVarDepDecoder : Decode.Decoder (Dict Pkg.Name (MVar Dep))
 dictPkgNameMVarDepDecoder =
     D.assocListDict Pkg.compareName Pkg.nameDecoder Utils.mVarDecoder
+
+
+dictPkgNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
+dictPkgNameMVarDepCodec =
+    Debug.todo "dictPkgNameMVarDepCodec"
 
 
 statusEncoder : Status -> Encode.Value
@@ -1233,14 +1251,29 @@ statusDecoder =
             )
 
 
+statusCodec : Codec e Status
+statusCodec =
+    Debug.todo "statusCodec"
+
+
 dictRawMVarMaybeDResultEncoder : Dict ModuleName.Raw (MVar (Maybe DResult)) -> Encode.Value
 dictRawMVarMaybeDResultEncoder =
     E.assocListDict ModuleName.rawEncoder Utils.mVarEncoder
 
 
+dictRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
+dictRawMVarMaybeDResultCodec =
+    Debug.todo "dictRawMVarMaybeDResultCodec"
+
+
 moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict ModuleName.Raw (MVar (Maybe DResult)))
 moduleNameRawMVarMaybeDResultDecoder =
     D.assocListDict compare ModuleName.rawDecoder Utils.mVarDecoder
+
+
+moduleNameRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
+moduleNameRawMVarMaybeDResultCodec =
+    Debug.todo "moduleNameRawMVarMaybeDResultCodec"
 
 
 dResultEncoder : DResult -> Encode.Value
@@ -1298,6 +1331,11 @@ dResultDecoder =
             )
 
 
+dResultCodec : Codec e DResult
+dResultCodec =
+    Debug.todo "dResultCodec"
+
+
 statusDictEncoder : StatusDict -> Encode.Value
 statusDictEncoder statusDict =
     E.assocListDict ModuleName.rawEncoder Utils.mVarEncoder statusDict
@@ -1306,6 +1344,11 @@ statusDictEncoder statusDict =
 statusDictDecoder : Decode.Decoder StatusDict
 statusDictDecoder =
     D.assocListDict compare ModuleName.rawDecoder Utils.mVarDecoder
+
+
+statusDictCodec : Codec e StatusDict
+statusDictCodec =
+    Debug.todo "statusDictCodec"
 
 
 localEncoder : Local -> Encode.Value
@@ -1332,6 +1375,16 @@ localDecoder =
         (Decode.field "lastCompile" Decode.int)
 
 
+localCodec : Codec e Local
+localCodec =
+    Serialize.customType
+        (\localCodecEncoder (Local path time deps hasMain lastChange lastCompile) ->
+            localCodecEncoder path time deps hasMain lastChange lastCompile
+        )
+        |> Serialize.variant6 Local Serialize.string File.timeCodec (Serialize.list ModuleName.rawCodec) Serialize.bool Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 validOutlineEncoder : ValidOutline -> Encode.Value
 validOutlineEncoder validOutline =
     case validOutline of
@@ -1350,24 +1403,20 @@ validOutlineEncoder validOutline =
                 ]
 
 
-validOutlineDecoder : Decode.Decoder ValidOutline
-validOutlineDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ValidApp" ->
-                        Decode.map ValidApp (Decode.field "srcDirs" (D.nonempty Outline.srcDirDecoder))
+validOutlineCodec : Codec (Serialize.Error e) ValidOutline
+validOutlineCodec =
+    Serialize.customType
+        (\validAppEncoder validPkgEncoder validOutline ->
+            case validOutline of
+                ValidApp srcDirs ->
+                    validAppEncoder srcDirs
 
-                    "ValidPkg" ->
-                        Decode.map3 ValidPkg
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "exposedList" (Decode.list ModuleName.rawDecoder))
-                            (Decode.field "exactDeps" (D.assocListDict Pkg.compareName Pkg.nameDecoder V.versionDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode ValidOutline's type: " ++ type_)
-            )
+                ValidPkg pkg exposedList exactDeps ->
+                    validPkgEncoder pkg exposedList exactDeps
+        )
+        |> Serialize.variant1 ValidApp (S.nonempty Outline.srcDirCodec)
+        |> Serialize.variant3 ValidPkg Pkg.nameCodec (Serialize.list ModuleName.rawCodec) (S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec)
+        |> Serialize.finishCustomType
 
 
 foreignEncoder : Foreign -> Encode.Value
@@ -1379,11 +1428,14 @@ foreignEncoder (Foreign dep deps) =
         ]
 
 
-foreignDecoder : Decode.Decoder Foreign
-foreignDecoder =
-    Decode.map2 Foreign
-        (Decode.field "dep" Pkg.nameDecoder)
-        (Decode.field "deps" (Decode.list Pkg.nameDecoder))
+foreignCodec : Codec e Foreign
+foreignCodec =
+    Serialize.customType
+        (\foreignCodecEncoder (Foreign dep deps) ->
+            foreignCodecEncoder dep deps
+        )
+        |> Serialize.variant2 Foreign Pkg.nameCodec (Serialize.list Pkg.nameCodec)
+        |> Serialize.finishCustomType
 
 
 extrasEncoder : Extras -> Encode.Value
@@ -1402,33 +1454,25 @@ extrasEncoder extras =
                 ]
 
 
-extrasDecoder : Decode.Decoder Extras
-extrasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ArtifactsCached" ->
-                        Decode.succeed ArtifactsCached
+extrasCodec : Codec e Extras
+extrasCodec =
+    Serialize.customType
+        (\artifactsCachedEncoder artifactsFreshEncoder extras ->
+            case extras of
+                ArtifactsCached ->
+                    artifactsCachedEncoder
 
-                    "ArtifactsFresh" ->
-                        Decode.map2 ArtifactsFresh
-                            (Decode.field "ifaces" interfacesDecoder)
-                            (Decode.field "objs" Opt.globalGraphDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Extras' type: " ++ type_)
-            )
+                ArtifactsFresh ifaces objs ->
+                    artifactsFreshEncoder ifaces objs
+        )
+        |> Serialize.variant0 ArtifactsCached
+        |> Serialize.variant2 ArtifactsFresh interfacesCodec Opt.globalGraphCodec
+        |> Serialize.finishCustomType
 
 
-fingerprintEncoder : Fingerprint -> Encode.Value
-fingerprintEncoder =
-    E.assocListDict Pkg.nameEncoder V.versionEncoder
-
-
-fingerprintDecoder : Decode.Decoder Fingerprint
-fingerprintDecoder =
-    D.assocListDict Pkg.compareName Pkg.nameDecoder V.versionDecoder
+fingerprintCodec : Codec e Fingerprint
+fingerprintCodec =
+    S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec
 
 
 docsStatusEncoder : DocsStatus -> Encode.Value

@@ -7,6 +7,7 @@ module Compiler.Elm.Version exposing
     , compiler
     , decoder
     , encode
+    , jsonCodec
     , jsonDecoder
     , jsonEncoder
     , major
@@ -16,6 +17,7 @@ module Compiler.Elm.Version exposing
     , one
     , parser
     , toChars
+    , versionCodec
     , versionDecoder
     , versionEncoder
     )
@@ -25,6 +27,7 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -227,6 +230,11 @@ isDigit word =
 -- ENCODERS and DECODERS
 
 
+jsonEncoder : Version -> Encode.Value
+jsonEncoder version =
+    Encode.string (toChars version)
+
+
 jsonDecoder : Decode.Decoder Version
 jsonDecoder =
     Decode.string
@@ -241,13 +249,23 @@ jsonDecoder =
             )
 
 
+jsonCodec : Codec e Version
+jsonCodec =
+    Serialize.customType
+        (\versionCodecEncoder (Version major_ minor patch) ->
+            versionCodecEncoder major_ minor patch
+        )
+        |> Serialize.variant3 Version Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 versionEncoder : Version -> Encode.Value
-versionEncoder (Version major_ minor_ patch_) =
+versionEncoder (Version major_ minor patch) =
     Encode.object
         [ ( "type", Encode.string "Version" )
         , ( "major", Encode.int major_ )
-        , ( "minor", Encode.int minor_ )
-        , ( "patch", Encode.int patch_ )
+        , ( "minor", Encode.int minor )
+        , ( "patch", Encode.int patch )
         ]
 
 
@@ -259,6 +277,11 @@ versionDecoder =
         (Decode.field "patch" Decode.int)
 
 
-jsonEncoder : Version -> Encode.Value
-jsonEncoder version =
-    Encode.string (toChars version)
+versionCodec : Codec e Version
+versionCodec =
+    Serialize.customType
+        (\versionCodecEncoder (Version major_ minor patch) ->
+            versionCodecEncoder major_ minor patch
+        )
+        |> Serialize.variant3 Version Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType

@@ -238,7 +238,7 @@ verifyBuild root =
                                     |> Task.bind
                                         (\exposed ->
                                             Task.eio Exit.PublishBuildProblem <|
-                                                Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed
+                                                Build.fromExposed Docs.jsonCodec Reporting.silent root details Build.keepDocs exposed
                                         )
                             )
                     )
@@ -423,7 +423,7 @@ verifyZipBuild root =
                                 |> Task.bind
                                     (\exposed ->
                                         Task.eio Exit.PublishZipBuildProblem
-                                            (Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed)
+                                            (Build.fromExposed Docs.jsonCodec Reporting.silent root details Build.keepDocs exposed)
                                             |> Task.fmap (\_ -> ())
                                     )
                         )

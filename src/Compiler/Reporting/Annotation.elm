@@ -8,6 +8,7 @@ module Compiler.Reporting.Annotation exposing
     , merge
     , mergeRegions
     , one
+    , regionCodec
     , regionDecoder
     , regionEncoder
     , toRegion
@@ -19,6 +20,7 @@ module Compiler.Reporting.Annotation exposing
 import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -105,6 +107,16 @@ regionDecoder =
         (Decode.field "end" positionDecoder)
 
 
+regionCodec : Codec e Region
+regionCodec =
+    Serialize.customType
+        (\regionCodecEncoder (Region start end) ->
+            regionCodecEncoder start end
+        )
+        |> Serialize.variant2 Region positionCodec positionCodec
+        |> Serialize.finishCustomType
+
+
 positionEncoder : Position -> Encode.Value
 positionEncoder (Position start end) =
     Encode.object
@@ -119,6 +131,16 @@ positionDecoder =
     Decode.map2 Position
         (Decode.field "start" Decode.int)
         (Decode.field "end" Decode.int)
+
+
+positionCodec : Codec e Position
+positionCodec =
+    Serialize.customType
+        (\positionCodecEncoder (Position start end) ->
+            positionCodecEncoder start end
+        )
+        |> Serialize.variant2 Position Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 locatedEncoder : (a -> Encode.Value) -> Located a -> Encode.Value

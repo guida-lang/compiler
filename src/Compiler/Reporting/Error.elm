@@ -2,6 +2,7 @@ module Compiler.Reporting.Error exposing
     ( Error(..)
     , Module
     , jsonToJson
+    , moduleCodec
     , moduleDecoder
     , moduleEncoder
     , toDoc
@@ -29,6 +30,7 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Time
 import Utils.Main as Utils
 
@@ -265,6 +267,17 @@ moduleDecoder =
         (Decode.field "error" errorDecoder)
 
 
+moduleCodec : Codec e Module
+moduleCodec =
+    Serialize.record Module
+        |> Serialize.field .name ModuleName.rawCodec
+        |> Serialize.field .absolutePath Serialize.string
+        |> Serialize.field .modificationTime File.timeCodec
+        |> Serialize.field .source Serialize.string
+        |> Serialize.field .error errorCodec
+        |> Serialize.finishRecord
+
+
 errorEncoder : Error -> Encode.Value
 errorEncoder error =
     case error of
@@ -347,3 +360,8 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Unknown Path's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"

@@ -16,8 +16,7 @@ import Compiler.Type.Unify as Unify
 import Compiler.Type.UnionFind as UF exposing (Content, Descriptor(..), Mark, Variable)
 import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -28,7 +27,7 @@ import Utils.Main as Utils
 
 run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict Name.Name Can.Annotation))
 run constraint =
-    IO.mVectorReplicate (Encode.list UF.variableEncoder) 8 []
+    IO.mVectorReplicate (Serialize.list UF.variableCodec) 8 []
         |> IO.bind
             (\pools ->
                 solve Dict.empty Type.outermostRank pools emptyState constraint
@@ -219,15 +218,14 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                 nextRank =
                     rank + 1
             in
-            IO.mVectorLength pools
+            IO.mVectorLength (Serialize.list UF.variableCodec) pools
                 |> IO.bind
                     (\poolsLength ->
                         (if nextRank < poolsLength then
                             IO.pure pools
 
                          else
-                            IO.mVectorGrow (Decode.list UF.variableDecoder)
-                                (Encode.list UF.variableEncoder)
+                            IO.mVectorGrow (Serialize.list UF.variableCodec)
                                 pools
                                 poolsLength
                         )
@@ -247,7 +245,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                         )
                                         |> IO.bind
                                             (\_ ->
-                                                IO.mVectorWrite (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) nextPools nextRank vars
+                                                IO.mVectorWrite (Serialize.list UF.variableCodec) nextPools nextRank vars
                                                     |> IO.bind
                                                         (\_ ->
                                                             -- run solver in next pool
@@ -274,7 +272,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                     generalize youngMark visitMark nextRank nextPools
                                                                                         |> IO.bind
                                                                                             (\_ ->
-                                                                                                IO.mVectorWrite (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) nextPools nextRank []
+                                                                                                IO.mVectorWrite (Serialize.list UF.variableCodec) nextPools nextRank []
                                                                                                     |> IO.bind
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
@@ -407,7 +405,7 @@ This sorts variables into the young and old pools accordingly.
 -}
 generalize : Mark -> Mark -> Int -> Pools -> IO ()
 generalize youngMark visitMark youngRank pools =
-    IO.mVectorRead (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools youngRank
+    IO.mVectorRead (Serialize.list UF.variableCodec) pools youngRank
         |> IO.bind
             (\youngVars ->
                 poolToRankTable youngMark youngRank youngVars
@@ -416,7 +414,7 @@ generalize youngMark visitMark youngRank pools =
                             -- get the ranks right for each entry.
                             -- start at low ranks so that we only have to pass
                             -- over the information once.
-                            IO.vectorImapM_ (Decode.list UF.variableDecoder)
+                            IO.vectorImapM_ (Serialize.list UF.variableCodec)
                                 (\rank table ->
                                     Utils.mapM_ (adjustRank youngMark visitMark rank) table
                                 )
@@ -425,7 +423,7 @@ generalize youngMark visitMark youngRank pools =
                                     (\_ ->
                                         -- For variables that have rank lowerer than youngRank, register them in
                                         -- the appropriate old pool if they are not redundant.
-                                        IO.vectorForM_ (Decode.list UF.variableDecoder)
+                                        IO.vectorForM_ (Serialize.list UF.variableCodec)
                                             (IO.vectorUnsafeInit rankTable)
                                             (\vars ->
                                                 Utils.forM_ vars
@@ -440,7 +438,7 @@ generalize youngMark visitMark youngRank pools =
                                                                         UF.get var
                                                                             |> IO.bind
                                                                                 (\(Descriptor _ rank _ _) ->
-                                                                                    IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((::) var) rank
+                                                                                    IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
                                                                                 )
                                                                 )
                                                     )
@@ -450,7 +448,7 @@ generalize youngMark visitMark youngRank pools =
                                                     -- For variables with rank youngRank
                                                     --   If rank < youngRank: register in oldPool
                                                     --   otherwise generalize
-                                                    IO.vectorUnsafeLast (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) rankTable
+                                                    IO.vectorUnsafeLast (Serialize.list UF.variableCodec) rankTable
                                                         |> IO.bind
                                                             (\lastRankTable ->
                                                                 Utils.forM_ lastRankTable <|
@@ -466,7 +464,7 @@ generalize youngMark visitMark youngRank pools =
                                                                                             |> IO.bind
                                                                                                 (\(Descriptor content rank mark copy) ->
                                                                                                     if rank < youngRank then
-                                                                                                        IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((::) var) rank
+                                                                                                        IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
 
                                                                                                     else
                                                                                                         UF.set var <| Descriptor content Type.noRank mark copy
@@ -481,7 +479,7 @@ generalize youngMark visitMark youngRank pools =
 
 poolToRankTable : Mark -> Int -> List Variable -> IO (IO.IORef (Array (Maybe (List Variable))))
 poolToRankTable youngMark youngRank youngInhabitants =
-    IO.mVectorReplicate (Encode.list UF.variableEncoder) (youngRank + 1) []
+    IO.mVectorReplicate (Serialize.list UF.variableCodec) (youngRank + 1) []
         |> IO.bind
             (\mutableTable ->
                 -- Sort the youngPool variables into buckets by rank.
@@ -493,7 +491,7 @@ poolToRankTable youngMark youngRank youngInhabitants =
                                     UF.set var (Descriptor content rank youngMark copy)
                                         |> IO.bind
                                             (\_ ->
-                                                IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) mutableTable ((::) var) rank
+                                                IO.mVectorModify (Serialize.list UF.variableCodec) mutableTable ((::) var) rank
                                             )
                                 )
                     )
@@ -618,9 +616,7 @@ adjustRankContent youngMark visitMark groupRank content =
 
 introduce : Int -> Pools -> List Variable -> IO ()
 introduce rank pools variables =
-    IO.mVectorModify
-        (Decode.list UF.variableDecoder)
-        (Encode.list UF.variableEncoder)
+    IO.mVectorModify (Serialize.list UF.variableCodec)
         pools
         (\a -> variables ++ a)
         rank
@@ -735,7 +731,7 @@ register rank pools content =
     UF.fresh (Descriptor content rank Type.noMark Nothing)
         |> IO.bind
             (\var ->
-                IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((::) var) rank
+                IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
                     |> IO.fmap (\_ -> var)
             )
 
@@ -781,7 +777,7 @@ srcTypeToVariable rank pools freeVars srcType =
     Utils.mapTraverseWithKey compare makeVar freeVars
         |> IO.bind
             (\flexVars ->
-                IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools (\a -> Dict.values flexVars ++ a) rank
+                IO.mVectorModify (Serialize.list UF.variableCodec) pools (\a -> Dict.values flexVars ++ a) rank
                     |> IO.bind (\_ -> srcTypeToVar rank pools flexVars srcType)
             )
 
@@ -909,7 +905,7 @@ makeCopyHelp maxRank pools variable =
                             UF.fresh (makeDescriptor content)
                                 |> IO.bind
                                     (\copy ->
-                                        IO.mVectorModify (Decode.list UF.variableDecoder) (Encode.list UF.variableEncoder) pools ((::) copy) maxRank
+                                        IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) copy) maxRank
                                             |> IO.bind
                                                 (\_ ->
                                                     -- Link the original variable to the new variable. This lets us

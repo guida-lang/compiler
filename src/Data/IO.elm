@@ -29,6 +29,7 @@ module Data.IO exposing
     , hIsTerminalDevice
     , hPutStr
     , hPutStrLn
+    , ioRefCodec
     , ioRefDecoder
     , ioRefEncoder
     , liftIO
@@ -65,6 +66,7 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 make : Decode.Decoder a -> Effect -> IO a
@@ -223,25 +225,30 @@ ioRefDecoder =
     Decode.map IORef Decode.int
 
 
-newIORef : (a -> Encode.Value) -> a -> IO (IORef a)
-newIORef encoder value =
-    make (Decode.map IORef Decode.int) (NewIORef (encoder value))
+ioRefCodec : Codec e (IORef a)
+ioRefCodec =
+    Serialize.int |> Serialize.map IORef (\(IORef value) -> value)
 
 
-readIORef : Decode.Decoder a -> IORef a -> IO a
-readIORef decoder (IORef ref) =
-    make decoder (ReadIORef ref)
+newIORef : Codec e a -> a -> IO (IORef a)
+newIORef codec value =
+    make (Decode.map IORef Decode.int) (NewIORef (Serialize.encodeToJson codec value))
 
 
-writeIORef : (b -> Encode.Value) -> IORef a -> b -> IO ()
-writeIORef encoder (IORef ref) value =
-    make (Decode.succeed ()) (WriteIORef ref (encoder value))
+readIORef : Codec e a -> IORef a -> IO a
+readIORef codec (IORef ref) =
+    make (Serialize.getJsonDecoder (\_ -> "failure on readIORef...") codec) (ReadIORef ref)
 
 
-modifyIORef : Decode.Decoder a -> (a -> Encode.Value) -> IORef a -> (a -> a) -> IO ()
-modifyIORef decoder encoder ioRef func =
-    readIORef decoder ioRef
-        |> bind (\value -> writeIORef encoder ioRef (func value))
+writeIORef : Codec e b -> IORef a -> b -> IO ()
+writeIORef codec (IORef ref) value =
+    make (Decode.succeed ()) (WriteIORef ref (Serialize.encodeToJson codec value))
+
+
+modifyIORef : Codec e a -> IORef a -> (a -> a) -> IO ()
+modifyIORef codec ioRef func =
+    readIORef codec ioRef
+        |> bind (\value -> writeIORef codec ioRef (func value))
 
 
 pure : a -> IO a
@@ -293,77 +300,53 @@ foldrM f z0 xs =
     List.foldl c pure xs z0
 
 
-mVectorReplicate : (a -> Encode.Value) -> Int -> a -> IO (IORef (Array (Maybe a)))
-mVectorReplicate encoder n e =
-    newIORef
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
-        (Array.repeat n (Just e))
+mVectorReplicate : Codec e a -> Int -> a -> IO (IORef (Array (Maybe a)))
+mVectorReplicate codec n e =
+    newIORef (Serialize.array (Serialize.maybe codec)) (Array.repeat n (Just e))
 
 
-mVectorLength : IORef (Array (Maybe a)) -> IO Int
-mVectorLength =
-    readIORef (Decode.array (Decode.succeed Nothing))
+mVectorLength : Codec e a -> IORef (Array (Maybe a)) -> IO Int
+mVectorLength codec =
+    readIORef (Serialize.array (Serialize.maybe codec))
         >> fmap Array.length
 
 
-mVectorGrow : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> Int -> IO (IORef (Array (Maybe a)))
-mVectorGrow decoder encoder ioRef length =
-    readIORef (Decode.array (Decode.maybe decoder)) ioRef
+mVectorGrow : Codec e a -> IORef (Array (Maybe a)) -> Int -> IO (IORef (Array (Maybe a)))
+mVectorGrow codec ioRef length =
+    readIORef (Serialize.array (Serialize.maybe codec)) ioRef
         |> bind
             (\value ->
-                writeIORef
-                    (Encode.array
-                        (Maybe.map encoder
-                            >> Maybe.withDefault Encode.null
-                        )
-                    )
+                writeIORef (Serialize.array (Serialize.maybe codec))
                     ioRef
                     (Array.append value (Array.repeat length Nothing))
             )
         |> fmap (\_ -> ioRef)
 
 
-mVectorWrite : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> Int -> a -> IO ()
-mVectorWrite decoder encoder ioRef i x =
-    modifyIORef (Decode.array (Decode.maybe decoder))
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
+mVectorWrite : Codec e a -> IORef (Array (Maybe a)) -> Int -> a -> IO ()
+mVectorWrite codec ioRef i x =
+    modifyIORef (Serialize.array (Serialize.maybe codec))
         ioRef
         (Array.set i (Just x))
 
 
-mVectorRead : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> Int -> IO a
-mVectorRead decoder encoder ioRef i =
-    readIORef (Decode.array (Decode.maybe decoder)) ioRef
+mVectorRead : Codec e a -> IORef (Array (Maybe a)) -> Int -> IO a
+mVectorRead codec ioRef i =
+    let
+        arrayCodec =
+            Serialize.array (Serialize.maybe codec)
+    in
+    readIORef arrayCodec ioRef
         |> bind
             (\vector ->
-                make decoder
-                    (MVectorRead i
-                        (Encode.array
-                            (\maybeValue ->
-                                case maybeValue of
-                                    Just value ->
-                                        encoder value
-
-                                    Nothing ->
-                                        Encode.null
-                            )
-                            vector
-                        )
-                    )
+                make (Serialize.getJsonDecoder (\_ -> "failure on mVectorRead") codec)
+                    (MVectorRead i (Serialize.encodeToJson arrayCodec vector))
             )
 
 
-vectorImapM_ : Decode.Decoder a -> (Int -> a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
-vectorImapM_ decoder action ioRef =
-    readIORef (Decode.array (Decode.maybe decoder)) ioRef
+vectorImapM_ : Codec e a -> (Int -> a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
+vectorImapM_ codec action ioRef =
+    readIORef (Serialize.array (Serialize.maybe codec)) ioRef
         |> bind
             (\value ->
                 Array.foldl
@@ -386,14 +369,14 @@ vectorImapM_ decoder action ioRef =
             )
 
 
-vectorMapM_ : Decode.Decoder a -> (a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
-vectorMapM_ decoder action ioRef =
-    vectorImapM_ decoder (\_ -> action) ioRef
+vectorMapM_ : Codec e a -> (a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
+vectorMapM_ codec action ioRef =
+    vectorImapM_ codec (\_ -> action) ioRef
 
 
-vectorForM_ : Decode.Decoder a -> IORef (Array (Maybe a)) -> (a -> IO b) -> IO ()
-vectorForM_ decoder ioRef action =
-    vectorMapM_ decoder action ioRef
+vectorForM_ : Codec e a -> IORef (Array (Maybe a)) -> (a -> IO b) -> IO ()
+vectorForM_ codec ioRef action =
+    vectorMapM_ codec action ioRef
 
 
 vectorUnsafeInit : IORef (Array (Maybe a)) -> IORef (Array (Maybe a))
@@ -401,32 +384,22 @@ vectorUnsafeInit =
     identity
 
 
-mVectorModify : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> (a -> a) -> Int -> IO ()
-mVectorModify decoder encoder ioRef func index =
-    modifyIORef (Decode.array (Decode.maybe decoder))
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
-        ioRef
-        (Array.update index (Maybe.map func))
+mVectorModify : Codec e a -> IORef (Array (Maybe a)) -> (a -> a) -> Int -> IO ()
+mVectorModify codec ioRef func index =
+    modifyIORef (Serialize.array (Serialize.maybe codec)) ioRef (Array.update index (Maybe.map func))
 
 
-vectorUnsafeLast : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> IO a
-vectorUnsafeLast decoder encoder ioRef =
-    readIORef (Decode.array (Decode.maybe decoder)) ioRef
+vectorUnsafeLast : Codec e a -> IORef (Array (Maybe a)) -> IO a
+vectorUnsafeLast codec ioRef =
+    let
+        arrayCodec =
+            Serialize.array (Serialize.maybe codec)
+    in
+    readIORef arrayCodec ioRef
         |> bind
             (\value ->
-                make decoder
-                    (VectorUnsafeLast
-                        (Encode.array
-                            (Maybe.map encoder
-                                >> Maybe.withDefault Encode.null
-                            )
-                            value
-                        )
-                    )
+                make (Serialize.getJsonDecoder (\_ -> "failure on vectorUnsafeLast") codec)
+                    (VectorUnsafeLast (Serialize.encodeToJson arrayCodec value))
             )
 
 
