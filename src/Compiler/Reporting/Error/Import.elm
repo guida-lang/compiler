@@ -3,6 +3,7 @@ module Compiler.Reporting.Error.Import exposing
     , Problem(..)
     , errorDecoder
     , errorEncoder
+    , problemCodec
     , problemDecoder
     , problemEncoder
     , toReport
@@ -21,6 +22,7 @@ import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -251,6 +253,11 @@ problemDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Problem's type: " ++ type_)
             )
+
+
+problemCodec : Codec e Problem
+problemCodec =
+    Debug.todo "problemCodec"
 
 
 errorEncoder : Error -> Encode.Value

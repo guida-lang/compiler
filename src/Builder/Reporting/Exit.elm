@@ -33,6 +33,7 @@ module Builder.Reporting.Exit exposing
     , makeToReport
     , newPackageOverview
     , publishToReport
+    , registryProblemCodec
     , registryProblemDecoder
     , registryProblemEncoder
     , replToReport
@@ -59,6 +60,7 @@ import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
+import Compiler.Serialize as S
 import Data.IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as CoreDecode
@@ -2873,7 +2875,18 @@ detailsBadDepDecoder =
 
 detailsBadDepCodec : Codec e DetailsBadDep
 detailsBadDepCodec =
-    Debug.todo "detailsBadDepCodec"
+    Serialize.customType
+        (\bdBadDownloadEncoder bdBadBuildEncoder detailsBadDep ->
+            case detailsBadDep of
+                BD_BadDownload pkg vsn packageProblem ->
+                    bdBadDownloadEncoder pkg vsn packageProblem
+
+                BD_BadBuild pkg vsn fingerprint ->
+                    bdBadBuildEncoder pkg vsn fingerprint
+        )
+        |> Serialize.variant3 BD_BadDownload Pkg.nameCodec V.versionCodec packageProblemCodec
+        |> Serialize.variant3 BD_BadBuild Pkg.nameCodec V.versionCodec (S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec)
+        |> Serialize.finishCustomType
 
 
 buildProblemEncoder : BuildProblem -> CoreEncode.Value
@@ -3092,6 +3105,11 @@ registryProblemDecoder =
             )
 
 
+registryProblemCodec : Codec e RegistryProblem
+registryProblemCodec =
+    Debug.todo "registryProblemCodec"
+
+
 packageProblemEncoder : PackageProblem -> CoreEncode.Value
 packageProblemEncoder packageProblem =
     case packageProblem of
@@ -3155,3 +3173,8 @@ packageProblemDecoder =
                     _ ->
                         CoreDecode.fail ("Failed to decode PackageProblem's type: " ++ type_)
             )
+
+
+packageProblemCodec : Codec e PackageProblem
+packageProblemCodec =
+    Debug.todo "packageProblemCodec"

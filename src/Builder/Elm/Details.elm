@@ -12,6 +12,7 @@ module Builder.Elm.Details exposing
     , load
     , loadInterfaces
     , loadObjects
+    , localCodec
     , localDecoder
     , localEncoder
     , verifyInstall
@@ -1124,36 +1125,14 @@ interfacesCodec =
     S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
 
 
-resultRegistryProblemEnvEncoder : Result Exit.RegistryProblem Solver.Env -> Encode.Value
-resultRegistryProblemEnvEncoder =
-    E.result Exit.registryProblemEncoder Solver.envEncoder
-
-
-resultRegistryProblemEnvDecoder : Decode.Decoder (Result Exit.RegistryProblem Solver.Env)
-resultRegistryProblemEnvDecoder =
-    D.result Exit.registryProblemDecoder Solver.envDecoder
-
-
 resultRegistryProblemEnvCodec : Codec e (Result Exit.RegistryProblem Solver.Env)
 resultRegistryProblemEnvCodec =
-    Debug.todo "resultRegistryProblemEnvCodec"
-
-
-depDecoder : Decode.Decoder Dep
-depDecoder =
-    D.result (Decode.maybe Exit.detailsBadDepDecoder) artifactsDecoder
+    Serialize.result Exit.registryProblemCodec Solver.envCodec
 
 
 depCodec : Codec e Dep
 depCodec =
     Serialize.result (Serialize.maybe Exit.detailsBadDepCodec) artifactsCodec
-
-
-artifactsDecoder : Decode.Decoder Artifacts
-artifactsDecoder =
-    Decode.map2 Artifacts
-        (Decode.field "ifaces" (D.assocListDict compare ModuleName.rawDecoder I.dependencyInterfaceDecoder))
-        (Decode.field "objects" Opt.globalGraphDecoder)
 
 
 artifactsCodec : Codec e Artifacts
@@ -1166,14 +1145,9 @@ artifactsCodec =
         |> Serialize.finishCustomType
 
 
-dictNameMVarDepEncoder : Dict Pkg.Name (MVar Dep) -> Encode.Value
-dictNameMVarDepEncoder =
-    E.assocListDict Pkg.nameEncoder Utils.mVarEncoder
-
-
 dictNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
 dictNameMVarDepCodec =
-    Debug.todo "dictNameMVarDepCodec"
+    S.assocListDict Pkg.compareName Pkg.nameCodec Utils.mVarCodec
 
 
 artifactCacheCodec : Codec e ArtifactCache
@@ -1186,169 +1160,72 @@ artifactCacheCodec =
         |> Serialize.finishCustomType
 
 
-dictPkgNameMVarDepDecoder : Decode.Decoder (Dict Pkg.Name (MVar Dep))
-dictPkgNameMVarDepDecoder =
-    D.assocListDict Pkg.compareName Pkg.nameDecoder Utils.mVarDecoder
-
-
 dictPkgNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
 dictPkgNameMVarDepCodec =
-    Debug.todo "dictPkgNameMVarDepCodec"
-
-
-statusEncoder : Status -> Encode.Value
-statusEncoder status =
-    case status of
-        SLocal docsStatus deps modul ->
-            Encode.object
-                [ ( "type", Encode.string "SLocal" )
-                , ( "docsStatus", docsStatusEncoder docsStatus )
-                , ( "deps", E.assocListDict ModuleName.rawEncoder (\_ -> Encode.object []) deps )
-                , ( "modul", Src.moduleEncoder modul )
-                ]
-
-        SForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        SKernelLocal chunks ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelLocal" )
-                , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
-                ]
-
-        SKernelForeign ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelForeign" )
-                ]
-
-
-statusDecoder : Decode.Decoder Status
-statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SLocal" ->
-                        Decode.map3 SLocal
-                            (Decode.field "docsStatus" docsStatusDecoder)
-                            (Decode.field "deps" (D.assocListDict compare ModuleName.rawDecoder (Decode.succeed ())))
-                            (Decode.field "modul" Src.moduleDecoder)
-
-                    "SForeign" ->
-                        Decode.map SForeign (Decode.field "iface" I.interfaceDecoder)
-
-                    "SKernelLocal" ->
-                        Decode.map SKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
-
-                    "SKernelForeign" ->
-                        Decode.succeed SKernelForeign
-
-                    _ ->
-                        Decode.fail ("Failed to decode Status' type: " ++ type_)
-            )
+    S.assocListDict Pkg.compareName Pkg.nameCodec Utils.mVarCodec
 
 
 statusCodec : Codec e Status
 statusCodec =
-    Debug.todo "statusCodec"
+    Serialize.customType
+        (\sLocalEncoder sForeignEncoder sKernelLocalEncoder sKernelForeignEncoder status ->
+            case status of
+                SLocal docsStatus deps modul ->
+                    sLocalEncoder docsStatus deps modul
 
+                SForeign iface ->
+                    sForeignEncoder iface
 
-dictRawMVarMaybeDResultEncoder : Dict ModuleName.Raw (MVar (Maybe DResult)) -> Encode.Value
-dictRawMVarMaybeDResultEncoder =
-    E.assocListDict ModuleName.rawEncoder Utils.mVarEncoder
+                SKernelLocal chunks ->
+                    sKernelLocalEncoder chunks
+
+                SKernelForeign ->
+                    sKernelForeignEncoder
+        )
+        |> Serialize.variant3 SLocal docsStatusCodec (S.assocListDict compare ModuleName.rawCodec Serialize.unit) Src.moduleCodec
+        |> Serialize.variant1 SForeign I.interfaceCodec
+        |> Serialize.variant1 SKernelLocal (Serialize.list Kernel.chunkCodec)
+        |> Serialize.variant0 SKernelForeign
+        |> Serialize.finishCustomType
 
 
 dictRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
 dictRawMVarMaybeDResultCodec =
-    Debug.todo "dictRawMVarMaybeDResultCodec"
-
-
-moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict ModuleName.Raw (MVar (Maybe DResult)))
-moduleNameRawMVarMaybeDResultDecoder =
-    D.assocListDict compare ModuleName.rawDecoder Utils.mVarDecoder
+    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
 moduleNameRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
 moduleNameRawMVarMaybeDResultCodec =
-    Debug.todo "moduleNameRawMVarMaybeDResultCodec"
-
-
-dResultEncoder : DResult -> Encode.Value
-dResultEncoder dResult =
-    case dResult of
-        RLocal ifaces objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RLocal" )
-                , ( "ifaces", I.interfaceEncoder ifaces )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
-                ]
-
-        RForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "RForeign" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        RKernelLocal chunks ->
-            Encode.object
-                [ ( "type", Encode.string "RKernelLocal" )
-                , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
-                ]
-
-        RKernelForeign ->
-            Encode.object
-                [ ( "type", Encode.string "RKernelForeign" )
-                ]
-
-
-dResultDecoder : Decode.Decoder DResult
-dResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RLocal" ->
-                        Decode.map3 RLocal
-                            (Decode.field "ifaces" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
-
-                    "RForeign" ->
-                        Decode.map RForeign (Decode.field "iface" I.interfaceDecoder)
-
-                    "RKernelLocal" ->
-                        Decode.map RKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
-
-                    "RKernelForeign" ->
-                        Decode.succeed RKernelForeign
-
-                    _ ->
-                        Decode.fail ("Failed to decode DResult's type: " ++ type_)
-            )
+    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
 dResultCodec : Codec e DResult
 dResultCodec =
-    Debug.todo "dResultCodec"
+    Serialize.customType
+        (\rLocalEncoder rForeignEncoder rKernelLocalEncoder rKernelForeignEncoder dResult ->
+            case dResult of
+                RLocal ifaces objects docs ->
+                    rLocalEncoder ifaces objects docs
 
+                RForeign iface ->
+                    rForeignEncoder iface
 
-statusDictEncoder : StatusDict -> Encode.Value
-statusDictEncoder statusDict =
-    E.assocListDict ModuleName.rawEncoder Utils.mVarEncoder statusDict
+                RKernelLocal chunks ->
+                    rKernelLocalEncoder chunks
 
-
-statusDictDecoder : Decode.Decoder StatusDict
-statusDictDecoder =
-    D.assocListDict compare ModuleName.rawDecoder Utils.mVarDecoder
+                RKernelForeign ->
+                    rKernelForeignEncoder
+        )
+        |> Serialize.variant3 RLocal I.interfaceCodec Opt.localGraphCodec (Serialize.maybe Docs.jsonModuleCodec)
+        |> Serialize.variant1 RForeign I.interfaceCodec
+        |> Serialize.variant1 RKernelLocal (Serialize.list Kernel.chunkCodec)
+        |> Serialize.variant0 RKernelForeign
+        |> Serialize.finishCustomType
 
 
 statusDictCodec : Codec e StatusDict
 statusDictCodec =
-    Debug.todo "statusDictCodec"
+    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
 localEncoder : Local -> Encode.Value
@@ -1475,28 +1352,17 @@ fingerprintCodec =
     S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec
 
 
-docsStatusEncoder : DocsStatus -> Encode.Value
-docsStatusEncoder docsStatus =
-    case docsStatus of
-        DocsNeeded ->
-            Encode.string "DocsNeeded"
+docsStatusCodec : Codec e DocsStatus
+docsStatusCodec =
+    Serialize.customType
+        (\docsNeededEncoder docsNotNeededEncoder docsStatus ->
+            case docsStatus of
+                DocsNeeded ->
+                    docsNeededEncoder
 
-        DocsNotNeeded ->
-            Encode.string "DocsNotNeeded"
-
-
-docsStatusDecoder : Decode.Decoder DocsStatus
-docsStatusDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "DocsNeeded" ->
-                        Decode.succeed DocsNeeded
-
-                    "DocsNotNeeded" ->
-                        Decode.succeed DocsNotNeeded
-
-                    _ ->
-                        Decode.fail ("Unknown DocsStatus: " ++ str)
-            )
+                DocsNotNeeded ->
+                    docsNotNeededEncoder
+        )
+        |> Serialize.variant0 DocsNeeded
+        |> Serialize.variant0 DocsNotNeeded
+        |> Serialize.finishCustomType

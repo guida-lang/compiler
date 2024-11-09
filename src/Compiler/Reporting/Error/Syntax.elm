@@ -30,6 +30,7 @@ module Compiler.Reporting.Error.Syntax exposing
     , Tuple(..)
     , Type(..)
     , TypeAlias(..)
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , spaceDecoder
@@ -49,6 +50,7 @@ import Compiler.Reporting.Report as Report
 import Hex
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -7950,6 +7952,11 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"
 
 
 spaceEncoder : Space -> Encode.Value

@@ -8,6 +8,7 @@ module Builder.Deps.Solver exposing
     , SolverResult(..)
     , State
     , addToApp
+    , envCodec
     , envDecoder
     , envEncoder
     , initEnv
@@ -29,6 +30,7 @@ import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -612,6 +614,11 @@ envDecoder =
         (Decode.field "manager" Http.managerDecoder)
         (Decode.field "connection" connectionDecoder)
         (Decode.field "registry" Registry.registryDecoder)
+
+
+envCodec : Codec e Env
+envCodec =
+    Debug.todo "envCodec"
 
 
 connectionEncoder : Connection -> Encode.Value

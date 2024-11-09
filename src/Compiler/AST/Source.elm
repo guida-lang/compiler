@@ -23,6 +23,7 @@ module Compiler.AST.Source exposing
     , VarType(..)
     , getImportName
     , getName
+    , moduleCodec
     , moduleDecoder
     , moduleEncoder
     , typeDecoder
@@ -37,6 +38,7 @@ import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Annotation as A
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -367,6 +369,11 @@ moduleDecoder =
         (Decode.field "aliases" (Decode.list (A.locatedDecoder aliasDecoder)))
         (Decode.field "binops" (Decode.list (A.locatedDecoder infixDecoder)))
         (Decode.field "effects" effectsDecoder)
+
+
+moduleCodec : Codec e Module
+moduleCodec =
+    Debug.todo "moduleCodec"
 
 
 exposingEncoder : Exposing -> Encode.Value

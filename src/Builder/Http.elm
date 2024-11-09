@@ -61,7 +61,12 @@ managerDecoder =
 
 managerCodec : Codec e Manager
 managerCodec =
-    Debug.todo "managerCodec"
+    Serialize.customType
+        (\managerCodecEncoder Manager ->
+            managerCodecEncoder
+        )
+        |> Serialize.variant0 Manager
+        |> Serialize.finishCustomType
 
 
 getManager : IO Manager

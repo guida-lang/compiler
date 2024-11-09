@@ -13,6 +13,7 @@ module Compiler.Elm.Docs exposing
     , jsonCodec
     , jsonDecoder
     , jsonEncoder
+    , jsonModuleCodec
     , jsonModuleDecoder
     , jsonModuleEncoder
     )
@@ -808,6 +809,11 @@ jsonModuleDecoder =
         (Decode.field "aliases" (D.assocListDict compare Decode.string jsonAliasDecoder))
         (Decode.field "values" (D.assocListDict compare Decode.string jsonValueDecoder))
         (Decode.field "binops" (D.assocListDict compare Decode.string jsonBinopDecoder))
+
+
+jsonModuleCodec : Codec e Module
+jsonModuleCodec =
+    Debug.todo "jsonModuleCodec"
 
 
 jsonUnionEncoder : Union -> Encode.Value

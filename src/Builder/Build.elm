@@ -37,7 +37,6 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
@@ -52,7 +51,6 @@ import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar(..))
@@ -1841,116 +1839,55 @@ dictRawMVarBResultCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-bResultEncoder : BResult -> Encode.Value
-bResultEncoder bResult =
-    case bResult of
-        RNew local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RNew" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs"
-                  , docs
-                        |> Maybe.map Docs.jsonModuleEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        RSame local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RSame" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
-                ]
-
-        RCached main lastChange (MVar ref) ->
-            Encode.object
-                [ ( "type", Encode.string "RCached" )
-                , ( "main", Encode.bool main )
-                , ( "lastChange", Encode.int lastChange )
-                , ( "mvar", Encode.int ref )
-                ]
-
-        RNotFound importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "RNotFound" )
-                , ( "importProblem", Import.problemEncoder importProblem )
-                ]
-
-        RProblem e ->
-            Encode.object
-                [ ( "type", Encode.string "RProblem" )
-                , ( "e", Error.moduleEncoder e )
-                ]
-
-        RBlocked ->
-            Encode.object [ ( "type", Encode.string "RBlocked" ) ]
-
-        RForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "RForeign" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        RKernel ->
-            Encode.object [ ( "type", Encode.string "RKernel" ) ]
-
-
-bResultDecoder : Decode.Decoder BResult
-bResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RNew" ->
-                        Decode.map4 RNew
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
-
-                    "RSame" ->
-                        Decode.map4 RSame
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
-
-                    "RCached" ->
-                        Decode.map3 RCached
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "lastChange" Decode.int)
-                            (Decode.field "mvar" (Decode.map MVar Decode.int))
-
-                    "RNotFound" ->
-                        Decode.map RNotFound
-                            (Decode.field "importProblem" Import.problemDecoder)
-
-                    "RProblem" ->
-                        Decode.map RProblem
-                            (Decode.field "e" Error.moduleDecoder)
-
-                    "RBlocked" ->
-                        Decode.succeed RBlocked
-
-                    "RForeign" ->
-                        Decode.map RForeign
-                            (Decode.field "iface" I.interfaceDecoder)
-
-                    "RKernel" ->
-                        Decode.succeed RKernel
-
-                    _ ->
-                        Decode.fail ("Failed to decode BResult's type: " ++ type_)
-            )
-
-
 bResultCodec : Codec e BResult
 bResultCodec =
-    Debug.todo "bResultCodec"
+    Serialize.customType
+        (\rNewEncoder rSameEncoder rCachedEncoder rNotFoundEncoder rProblemEncoder rBlockedEncoder rForeignEncoder rKernelEncoder bResult ->
+            case bResult of
+                RNew local iface objects docs ->
+                    rNewEncoder local iface objects docs
+
+                RSame local iface objects docs ->
+                    rSameEncoder local iface objects docs
+
+                RCached main lastChange mVar ->
+                    rCachedEncoder main lastChange mVar
+
+                RNotFound importProblem ->
+                    rNotFoundEncoder importProblem
+
+                RProblem e ->
+                    rProblemEncoder e
+
+                RBlocked ->
+                    rBlockedEncoder
+
+                RForeign iface ->
+                    rForeignEncoder iface
+
+                RKernel ->
+                    rKernelEncoder
+        )
+        |> Serialize.variant4 RNew
+            Details.localCodec
+            I.interfaceCodec
+            Opt.localGraphCodec
+            (Serialize.maybe Docs.jsonModuleCodec)
+        |> Serialize.variant4 RSame
+            Details.localCodec
+            I.interfaceCodec
+            Opt.localGraphCodec
+            (Serialize.maybe Docs.jsonModuleCodec)
+        |> Serialize.variant3 RCached
+            Serialize.bool
+            Serialize.int
+            (Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref))
+        |> Serialize.variant1 RNotFound Import.problemCodec
+        |> Serialize.variant1 RProblem Error.moduleCodec
+        |> Serialize.variant0 RBlocked
+        |> Serialize.variant1 RForeign I.interfaceCodec
+        |> Serialize.variant0 RKernel
+        |> Serialize.finishCustomType
 
 
 statusDictCodec : Codec e StatusDict
@@ -1958,143 +1895,56 @@ statusDictCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-statusEncoder : Status -> Encode.Value
-statusEncoder status =
-    case status of
-        SCached local ->
-            Encode.object
-                [ ( "type", Encode.string "SCached" )
-                , ( "local", Details.localEncoder local )
-                ]
-
-        SChanged local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "SChanged" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", Encode.string iface )
-                , ( "objects", Src.moduleEncoder objects )
-                , ( "docs", docsNeedEncoder docs )
-                ]
-
-        SBadImport importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "SBadImport" )
-                , ( "importProblem", Import.problemEncoder importProblem )
-                ]
-
-        SBadSyntax path time source err ->
-            Encode.object
-                [ ( "type", Encode.string "SBadSyntax" )
-                , ( "path", Encode.string path )
-                , ( "time", File.timeEncoder time )
-                , ( "source", Encode.string source )
-                , ( "err", Syntax.errorEncoder err )
-                ]
-
-        SForeign home ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "home", Pkg.nameEncoder home )
-                ]
-
-        SKernel ->
-            Encode.object
-                [ ( "type", Encode.string "SKernel" )
-                ]
-
-
-statusDecoder : Decode.Decoder Status
-statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SCached" ->
-                        Decode.map SCached (Decode.field "local" Details.localDecoder)
-
-                    "SChanged" ->
-                        Decode.map4 SChanged
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" Decode.string)
-                            (Decode.field "objects" Src.moduleDecoder)
-                            (Decode.field "docs" docsNeedDecoder)
-
-                    "SBadImport" ->
-                        Decode.map SBadImport (Decode.field "importProblem" Import.problemDecoder)
-
-                    "SBadSyntax" ->
-                        Decode.map4 SBadSyntax
-                            (Decode.field "path" Decode.string)
-                            (Decode.field "time" File.timeDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "err" Syntax.errorDecoder)
-
-                    "SForeign" ->
-                        Decode.map SForeign (Decode.field "home" Pkg.nameDecoder)
-
-                    "SKernel" ->
-                        Decode.succeed SKernel
-
-                    _ ->
-                        Decode.fail ("Failed to decode Status's type: " ++ type_)
-            )
-
-
 statusCodec : Codec e Status
 statusCodec =
-    Debug.todo "statusCodec"
+    Serialize.customType
+        (\sCachedEncoder sChangedEncoder sBadImportEncoder sBadSyntaxEncoder sForeignEncoder sKernelEncoder status ->
+            case status of
+                SCached local ->
+                    sCachedEncoder local
 
+                SChanged local iface objects docs ->
+                    sChangedEncoder local iface objects docs
 
-rootStatusEncoder : RootStatus -> Encode.Value
-rootStatusEncoder rootStatus =
-    case rootStatus of
-        SInside name ->
-            Encode.object
-                [ ( "type", Encode.string "SInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
+                SBadImport importProblem ->
+                    sBadImportEncoder importProblem
 
-        SOutsideOk local source modul ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideOk" )
-                , ( "local", Details.localEncoder local )
-                , ( "source", Encode.string source )
-                , ( "modul", Src.moduleEncoder modul )
-                ]
+                SBadSyntax path time source err ->
+                    sBadSyntaxEncoder path time source err
 
-        SOutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideErr" )
-                , ( "err", Error.moduleEncoder err )
-                ]
+                SForeign home ->
+                    sForeignEncoder home
 
-
-rootStatusDecoder : Decode.Decoder RootStatus
-rootStatusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SInside" ->
-                        Decode.map SInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "SOutsideOk" ->
-                        Decode.map3 SOutsideOk
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "modul" Src.moduleDecoder)
-
-                    "SOutsideErr" ->
-                        Decode.map SOutsideErr (Decode.field "err" Error.moduleDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootStatus' type: " ++ type_)
-            )
+                SKernel ->
+                    sKernelEncoder
+        )
+        |> Serialize.variant1 SCached Details.localCodec
+        |> Serialize.variant4 SChanged Details.localCodec Serialize.string Src.moduleCodec docsNeedCodec
+        |> Serialize.variant1 SBadImport Import.problemCodec
+        |> Serialize.variant4 SBadSyntax Serialize.string File.timeCodec Serialize.string Syntax.errorCodec
+        |> Serialize.variant1 SForeign Pkg.nameCodec
+        |> Serialize.variant0 SKernel
+        |> Serialize.finishCustomType
 
 
 rootStatusCodec : Codec e RootStatus
 rootStatusCodec =
-    Debug.todo "rootStatusCodec"
+    Serialize.customType
+        (\sInsideEncoder sOutsideOkEncoder sOutsideErrEncoder rootStatus ->
+            case rootStatus of
+                SInside name ->
+                    sInsideEncoder name
+
+                SOutsideOk local source modul ->
+                    sOutsideOkEncoder local source modul
+
+                SOutsideErr err ->
+                    sOutsideErrEncoder err
+        )
+        |> Serialize.variant1 SInside ModuleName.rawCodec
+        |> Serialize.variant3 SOutsideOk Details.localCodec Serialize.string Src.moduleCodec
+        |> Serialize.variant1 SOutsideErr Error.moduleCodec
+        |> Serialize.finishCustomType
 
 
 resultDictCodec : Codec e ResultDict
@@ -2102,74 +1952,28 @@ resultDictCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-rootResultEncoder : RootResult -> Encode.Value
-rootResultEncoder rootResult =
-    case rootResult of
-        RInside name ->
-            Encode.object
-                [ ( "type", Encode.string "RInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        ROutsideOk name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideOk" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
-                ]
-
-        ROutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideErr" )
-                , ( "err", Error.moduleEncoder err )
-                ]
-
-        ROutsideBlocked ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideBlocked" )
-                ]
-
-
-rootResultDecoder : Decode.Decoder RootResult
-rootResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RInside" ->
-                        Decode.map RInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "ROutsideOk" ->
-                        Decode.map3 ROutsideOk
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
-
-                    "ROutsideErr" ->
-                        Decode.map ROutsideErr (Decode.field "err" Error.moduleDecoder)
-
-                    "ROutsideBlocked" ->
-                        Decode.succeed ROutsideBlocked
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootResult's type: " ++ type_)
-            )
-
-
 rootResultCodec : Codec e RootResult
 rootResultCodec =
-    Debug.todo "rootResultCodec"
+    Serialize.customType
+        (\rInsideEncoder rOutsideOkEncoder rOutsideErrEncoder rOutsideBlockedEncoder rootResult ->
+            case rootResult of
+                RInside name ->
+                    rInsideEncoder name
 
+                ROutsideOk name iface objs ->
+                    rOutsideOkEncoder name iface objs
 
-maybeDepEncoder : Maybe Dep -> Encode.Value
-maybeDepEncoder =
-    E.maybe depEncoder
+                ROutsideErr err ->
+                    rOutsideErrEncoder err
 
-
-maybeDepDecoder : Decode.Decoder (Maybe Dep)
-maybeDepDecoder =
-    Decode.maybe depDecoder
+                ROutsideBlocked ->
+                    rOutsideBlockedEncoder
+        )
+        |> Serialize.variant1 RInside ModuleName.rawCodec
+        |> Serialize.variant3 ROutsideOk ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.variant1 ROutsideErr Error.moduleCodec
+        |> Serialize.variant0 ROutsideBlocked
+        |> Serialize.finishCustomType
 
 
 maybeDepCodec : Codec e (Maybe Dep)
@@ -2177,19 +1981,9 @@ maybeDepCodec =
     Serialize.maybe depCodec
 
 
-depEncoder : Dep -> Encode.Value
-depEncoder =
-    E.jsonPair ModuleName.rawEncoder I.interfaceEncoder
-
-
-depDecoder : Decode.Decoder Dep
-depDecoder =
-    D.jsonPair ModuleName.rawDecoder I.interfaceDecoder
-
-
 depCodec : Codec e Dep
 depCodec =
-    Debug.todo "depCodec"
+    Serialize.tuple ModuleName.rawCodec I.interfaceCodec
 
 
 maybeDependenciesCodec : Codec e (Maybe Dependencies)
@@ -2197,39 +1991,9 @@ maybeDependenciesCodec =
     Serialize.maybe (S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec)
 
 
-resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> Encode.Value
-resultBuildProjectProblemRootInfoEncoder =
-    E.result Exit.buildProjectProblemEncoder rootInfoEncoder
-
-
-resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result Exit.BuildProjectProblem RootInfo)
-resultBuildProjectProblemRootInfoDecoder =
-    D.result Exit.buildProjectProblemDecoder rootInfoDecoder
-
-
 resultBuildProjectProblemRootInfoCodec : Codec e (Result Exit.BuildProjectProblem RootInfo)
 resultBuildProjectProblemRootInfoCodec =
     Serialize.result Exit.buildProjectProblemCodec rootInfoCodec
-
-
-cachedInterfaceEncoder : CachedInterface -> Encode.Value
-cachedInterfaceEncoder cachedInterface =
-    case cachedInterface of
-        Unneeded ->
-            Encode.object
-                [ ( "type", Encode.string "Unneeded" )
-                ]
-
-        Loaded iface ->
-            Encode.object
-                [ ( "type", Encode.string "Loaded" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        Corrupted ->
-            Encode.object
-                [ ( "type", Encode.string "Corrupted" )
-                ]
 
 
 cachedInterfaceDecoder : Decode.Decoder CachedInterface
@@ -2254,186 +2018,97 @@ cachedInterfaceDecoder =
 
 cachedInterfaceCodec : Codec e CachedInterface
 cachedInterfaceCodec =
-    Debug.todo "cachedInterfaceCodec"
+    Serialize.customType
+        (\unneededEncoder loadedEncoder corruptedEncoder cachedInterface ->
+            case cachedInterface of
+                Unneeded ->
+                    unneededEncoder
+
+                Loaded iface ->
+                    loadedEncoder iface
+
+                Corrupted ->
+                    corruptedEncoder
+        )
+        |> Serialize.variant0 Unneeded
+        |> Serialize.variant1 Loaded I.interfaceCodec
+        |> Serialize.variant0 Corrupted
+        |> Serialize.finishCustomType
 
 
-docsNeedEncoder : DocsNeed -> Encode.Value
-docsNeedEncoder (DocsNeed isNeeded) =
-    Encode.bool isNeeded
+docsNeedCodec : Codec e DocsNeed
+docsNeedCodec =
+    Serialize.bool |> Serialize.map DocsNeed (\(DocsNeed isNeeded) -> isNeeded)
 
 
-docsNeedDecoder : Decode.Decoder DocsNeed
-docsNeedDecoder =
-    Decode.map DocsNeed Decode.bool
-
-
-artifactsEncoder : Artifacts -> Encode.Value
-artifactsEncoder (Artifacts pkg ifaces roots modules) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "pkg", Pkg.nameEncoder pkg )
-        , ( "ifaces", dependenciesEncoder ifaces )
-        , ( "roots", E.nonempty rootEncoder roots )
-        , ( "modules", Encode.list moduleEncoder modules )
-        ]
-
-
-artifactsDecoder : Decode.Decoder Artifacts
-artifactsDecoder =
-    Decode.map4 Artifacts
-        (Decode.field "pkg" Pkg.nameDecoder)
-        (Decode.field "ifaces" dependenciesDecoder)
-        (Decode.field "roots" (D.nonempty rootDecoder))
-        (Decode.field "modules" (Decode.list moduleDecoder))
-
-
-artifactsCodec : Codec e Artifacts
+artifactsCodec : Codec (Serialize.Error e) Artifacts
 artifactsCodec =
-    Debug.todo "artifactsCodec"
+    Serialize.customType
+        (\artifactsCodecEncoder (Artifacts pkg ifaces roots modules) ->
+            artifactsCodecEncoder pkg ifaces roots modules
+        )
+        |> Serialize.variant4 Artifacts Pkg.nameCodec dependenciesCodec (S.nonempty rootCodec) (Serialize.list moduleCodec)
+        |> Serialize.finishCustomType
 
 
-dependenciesEncoder : Dependencies -> Encode.Value
-dependenciesEncoder =
-    E.assocListDict ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
+dependenciesCodec : Codec e Dependencies
+dependenciesCodec =
+    S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
 
 
-dependenciesDecoder : Decode.Decoder Dependencies
-dependenciesDecoder =
-    D.assocListDict ModuleName.compareCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
+rootCodec : Codec e Root
+rootCodec =
+    Serialize.customType
+        (\insideEncoder outsideEncoder root ->
+            case root of
+                Inside name ->
+                    insideEncoder name
+
+                Outside name main mvar ->
+                    outsideEncoder name main mvar
+        )
+        |> Serialize.variant1 Inside ModuleName.rawCodec
+        |> Serialize.variant3 Outside ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.finishCustomType
 
 
-rootEncoder : Root -> Encode.Value
-rootEncoder root =
-    case root of
-        Inside name ->
-            Encode.object
-                [ ( "type", Encode.string "Inside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
+moduleCodec : Codec e Module
+moduleCodec =
+    Serialize.customType
+        (\freshEncoder cachedEncoder modul ->
+            case modul of
+                Fresh name iface objs ->
+                    freshEncoder name iface objs
 
-        Outside name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Outside" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", I.interfaceEncoder main )
-                , ( "mvar", Opt.localGraphEncoder mvar )
-                ]
-
-
-rootDecoder : Decode.Decoder Root
-rootDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Inside" ->
-                        Decode.map Inside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "Outside" ->
-                        Decode.map3 Outside
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" I.interfaceDecoder)
-                            (Decode.field "mvar" Opt.localGraphDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Root's type: " ++ type_)
-            )
-
-
-moduleEncoder : Module -> Encode.Value
-moduleEncoder modul =
-    case modul of
-        Fresh name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "Fresh" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
-                ]
-
-        Cached name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Cached" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", Encode.bool main )
-                , ( "mvar", Utils.mVarEncoder mvar )
-                ]
-
-
-moduleDecoder : Decode.Decoder Module
-moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Fresh" ->
-                        Decode.map3 Fresh
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
-
-                    "Cached" ->
-                        Decode.map3 Cached
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "mvar" Utils.mVarDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
-            )
-
-
-rootInfoEncoder : RootInfo -> Encode.Value
-rootInfoEncoder (RootInfo absolute relative location) =
-    Encode.object
-        [ ( "type", Encode.string "RootInfo" )
-        , ( "absolute", Encode.string absolute )
-        , ( "relative", Encode.string relative )
-        , ( "location", rootLocationEncoder location )
-        ]
-
-
-rootInfoDecoder : Decode.Decoder RootInfo
-rootInfoDecoder =
-    Decode.map3 RootInfo
-        (Decode.field "absolute" Decode.string)
-        (Decode.field "relative" Decode.string)
-        (Decode.field "location" rootLocationDecoder)
+                Cached name main mvar ->
+                    cachedEncoder name main mvar
+        )
+        |> Serialize.variant3 Fresh ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.variant3 Cached ModuleName.rawCodec Serialize.bool Utils.mVarCodec
+        |> Serialize.finishCustomType
 
 
 rootInfoCodec : Codec e RootInfo
 rootInfoCodec =
-    Debug.todo "rootInfoCodec"
+    Serialize.customType
+        (\rootInfoCodecEncoder (RootInfo absolute relative location) ->
+            rootInfoCodecEncoder absolute relative location
+        )
+        |> Serialize.variant3 RootInfo Serialize.string Serialize.string rootLocationCodec
+        |> Serialize.finishCustomType
 
 
-rootLocationEncoder : RootLocation -> Encode.Value
-rootLocationEncoder rootLocation =
-    case rootLocation of
-        LInside name ->
-            Encode.object
-                [ ( "type", Encode.string "LInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
+rootLocationCodec : Codec e RootLocation
+rootLocationCodec =
+    Serialize.customType
+        (\lInsideEncoder lOutsideEncoder rootLocation ->
+            case rootLocation of
+                LInside name ->
+                    lInsideEncoder name
 
-        LOutside path ->
-            Encode.object
-                [ ( "type", Encode.string "LOutside" )
-                , ( "path", Encode.string path )
-                ]
-
-
-rootLocationDecoder : Decode.Decoder RootLocation
-rootLocationDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LInside" ->
-                        Decode.map LInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "LOutside" ->
-                        Decode.map LOutside (Decode.field "path" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootLocation's type: " ++ type_)
-            )
+                LOutside path ->
+                    lOutsideEncoder path
+        )
+        |> Serialize.variant1 LInside ModuleName.rawCodec
+        |> Serialize.variant1 LOutside Serialize.string
+        |> Serialize.finishCustomType

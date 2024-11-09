@@ -6,8 +6,6 @@ module Builder.BackgroundWriter exposing
 
 import Builder.File as File
 import Data.IO as IO exposing (IO)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import Utils.Main as Utils
 
