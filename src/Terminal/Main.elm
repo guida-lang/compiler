@@ -24,10 +24,6 @@ import Terminal.Terminal.Internal as Terminal
 -- PROGRAM
 
 
-type alias PortOut =
-    { index : Int, value : Encode.Value } -> Cmd Msg
-
-
 type alias Model =
     Array ProcessStatus
 
@@ -41,8 +37,8 @@ type Msg
     = Msg Int Encode.Value
 
 
-addFork : PortOut -> Maybe (IO ()) -> ( Model, Cmd Msg ) -> Decode.Decoder ( Model, Cmd Msg )
-addFork portOut maybeFork ( model, cmd ) =
+addFork : Maybe (IO ()) -> ( Model, Cmd Msg ) -> Decode.Decoder ( Model, Cmd Msg )
+addFork maybeFork ( model, cmd ) =
     case Maybe.map startFork maybeFork of
         Just decoder ->
             Decode.map
@@ -53,7 +49,7 @@ addFork portOut maybeFork ( model, cmd ) =
                             Array.length model
                     in
                     ( Array.insertAt nextIndex (Running process) model
-                    , Cmd.batch [ effectToCmd nextIndex portOut effect, cmd ]
+                    , Cmd.batch [ effectToCmd nextIndex effect, cmd ]
                     )
                 )
                 decoder
@@ -92,11 +88,11 @@ startFork (IO io) =
         )
 
 
-effectToCmd : Int -> PortOut -> IO.Effect -> Cmd Msg
-effectToCmd index portOut effect =
+effectToCmd : Int -> IO.Effect -> Cmd Msg
+effectToCmd index effect =
     case effect of
         IO.Exit errorMessage status ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -106,7 +102,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.NewIORef value ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -116,7 +112,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ReadIORef id ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -126,7 +122,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.VectorUnsafeLast array ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -136,7 +132,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.MVectorRead i array ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -146,7 +142,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.WriteIORef id value ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -161,7 +157,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.GetLine ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -171,7 +167,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HPutStr (IO.Handle fd) content ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -186,7 +182,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.Write path value ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -196,7 +192,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.WriteString path str ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -206,10 +202,10 @@ effectToCmd index portOut effect =
                 }
 
         IO.PutStrLn str ->
-            effectToCmd index portOut (IO.HPutStr IO.stdout (str ++ "\n"))
+            effectToCmd index (IO.HPutStr IO.stdout (str ++ "\n"))
 
         IO.DirDoesFileExist filename ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -219,7 +215,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirDoesDirectoryExist path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -229,7 +225,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.EnvLookupEnv varname ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -239,7 +235,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.EnvGetProgName ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -249,7 +245,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.EnvGetArgs ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -259,7 +255,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.BinaryDecodeFileOrFail filename ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -269,7 +265,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirCreateDirectoryIfMissing createParents filename ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -284,7 +280,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirRemoveFile path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -294,7 +290,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirRemoveDirectoryRecursive path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -304,7 +300,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.Read path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -314,7 +310,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HttpFetch method url headers ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -330,7 +326,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HttpUpload url headers parts ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -346,7 +342,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirGetAppUserDataDirectory app ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -356,7 +352,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirGetCurrentDirectory ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -366,7 +362,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirGetModificationTime filename ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -376,7 +372,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirCanonicalizePath path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -386,7 +382,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirWithCurrentDirectory path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -396,7 +392,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.GetArchive method url ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -406,7 +402,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.LockFile path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -416,7 +412,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.UnlockFile path ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -426,7 +422,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.NewEmptyMVar ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -436,7 +432,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ReadMVar id ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -446,7 +442,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.TakeMVar id ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -456,7 +452,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.PutMVar id value ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -471,7 +467,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ReplGetInputLine prompt ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -481,7 +477,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ReplGetInputLineWithInitial prompt ( left, right ) ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -491,7 +487,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HClose (IO.Handle fd) ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -501,7 +497,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HFileSize (IO.Handle fd) ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -511,7 +507,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.HFlush (IO.Handle fd) ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -521,7 +517,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.WithFile filename mode ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -547,7 +543,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.DirFindExecutable name ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -557,7 +553,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ProcWithCreateProcess createProcess ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -623,7 +619,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.ProcWaitForProcess ph ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -633,7 +629,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.StatePut value ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -643,7 +639,7 @@ effectToCmd index portOut effect =
                 }
 
         IO.StateGet ->
-            portOut
+            send
                 { index = index
                 , value =
                     Encode.object
@@ -679,11 +675,11 @@ main =
                 case Decode.decodeValue decoder Encode.null of
                     Ok ( process, effect, _ ) ->
                         ( Array.fromList [ Running process ]
-                        , effectToCmd 0 send effect
+                        , effectToCmd 0 effect
                         )
 
                     Err err ->
-                        ( Array.empty, effectToCmd 0 send (IO.Exit (Decode.errorToString err) 1) )
+                        ( Array.empty, effectToCmd 0 (IO.Exit (Decode.errorToString err) 1) )
         , update =
             \msg model ->
                 case msg of
@@ -693,10 +689,9 @@ main =
                                 case step value process of
                                     Ok ( nextProcess, effect, maybeFork ) ->
                                         Decode.decodeValue
-                                            (addFork send
-                                                maybeFork
+                                            (addFork maybeFork
                                                 ( Array.set index (Running nextProcess) model
-                                                , effectToCmd index send effect
+                                                , effectToCmd index effect
                                                 )
                                             )
                                             Encode.null
@@ -707,17 +702,17 @@ main =
 
                                     Err err ->
                                         ( model
-                                        , effectToCmd index send (IO.Exit (Decode.errorToString err) 255)
+                                        , effectToCmd index (IO.Exit (Decode.errorToString err) 255)
                                         )
 
                             Just Finished ->
                                 ( model
-                                , effectToCmd index send (IO.Exit ("Process has already finished! Index: " ++ String.fromInt index) 255)
+                                , effectToCmd index (IO.Exit ("Process has already finished! Index: " ++ String.fromInt index) 255)
                                 )
 
                             Nothing ->
                                 ( model
-                                , effectToCmd index send (IO.Exit ("Could not find process! Index: " ++ String.fromInt index) 255)
+                                , effectToCmd index (IO.Exit ("Could not find process! Index: " ++ String.fromInt index) 255)
                                 )
         , subscriptions = \_ -> recv (\{ index, value } -> Msg index value)
         }
