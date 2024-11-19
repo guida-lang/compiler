@@ -14,7 +14,6 @@ import Compiler.Reporting.Error.Type as E exposing (Category(..), Context(..), E
 import Compiler.Type.Constrain.Pattern as Pattern
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..))
-import Compiler.Type.UnionFind as UF
 import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Utils.Main as Utils
@@ -279,7 +278,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
             )
 
 
-constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( UF.Variable, Type, Constraint )
+constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
     Type.mkFlexVar
         |> IO.bind
@@ -577,7 +576,7 @@ constrainRecord rtv region fields expected =
                     recordCon =
                         CEqual region Record recordType expected
 
-                    vars : List UF.Variable
+                    vars : List Type.Variable
                     vars =
                         Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
@@ -589,7 +588,7 @@ constrainRecord rtv region fields expected =
             )
 
 
-constrainField : RTV -> Can.Expr -> IO ( UF.Variable, Type, Constraint )
+constrainField : RTV -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
 constrainField rtv expr =
     Type.mkFlexVar
         |> IO.bind
@@ -640,7 +639,7 @@ constrainUpdate rtv region name expr fields expected =
                                             recordCon =
                                                 CEqual region Record recordType expected
 
-                                            vars : List UF.Variable
+                                            vars : List Type.Variable
                                             vars =
                                                 Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [ recordVar, extVar ] fieldDict
 
@@ -655,7 +654,7 @@ constrainUpdate rtv region name expr fields expected =
             )
 
 
-constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( UF.Variable, Type, Constraint )
+constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( Type.Variable, Type, Constraint )
 constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
     Type.mkFlexVar
         |> IO.bind
@@ -907,7 +906,7 @@ constrainDef rtv def bodyCon =
 
 
 type Info
-    = Info (List UF.Variable) (List Constraint) (Dict Name (A.Located Type))
+    = Info (List Type.Variable) (List Constraint) (Dict Name (A.Located Type))
 
 
 emptyInfo : Info
@@ -1016,7 +1015,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
 
 
 type Args
-    = Args (List UF.Variable) Type Type Pattern.State
+    = Args (List Type.Variable) Type Type Pattern.State
 
 
 constrainArgs : List Can.Pattern -> IO Args

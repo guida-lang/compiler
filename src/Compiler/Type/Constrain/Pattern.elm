@@ -13,7 +13,6 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Type)
-import Compiler.Type.UnionFind as UF
 import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Utils.Main as Utils
@@ -27,7 +26,7 @@ import Utils.Main as Utils
 
 
 type State
-    = State Header (List UF.Variable) (List Type.Constraint)
+    = State Header (List Type.Variable) (List Type.Constraint)
 
 
 type alias Header =
