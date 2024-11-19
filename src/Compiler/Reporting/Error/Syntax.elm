@@ -50,6 +50,7 @@ import Compiler.Reporting.Report as Report
 import Hex
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Pretty exposing (space)
 import Serialize exposing (Codec)
 
 
@@ -7956,7 +7957,42 @@ errorDecoder =
 
 errorCodec : Codec e Error
 errorCodec =
-    Debug.todo "errorCodec"
+    Serialize.customType
+        (\moduleNameUnspecifiedEncoder moduleNameMismatchEncoder unexpectedPortEncoder noPortsEncoder noPortsInPackageEncoder noPortModulesInPackageEncoder noEffectsOutsideKernelEncoder parseErrorEncoder value ->
+            case value of
+                ModuleNameUnspecified name ->
+                    moduleNameUnspecifiedEncoder name
+
+                ModuleNameMismatch expectedName actualName ->
+                    moduleNameMismatchEncoder expectedName actualName
+
+                UnexpectedPort region ->
+                    unexpectedPortEncoder region
+
+                NoPorts region ->
+                    noPortsEncoder region
+
+                NoPortsInPackage name ->
+                    noPortsInPackageEncoder name
+
+                NoPortModulesInPackage region ->
+                    noPortModulesInPackageEncoder region
+
+                NoEffectsOutsideKernel region ->
+                    noEffectsOutsideKernelEncoder region
+
+                ParseError modul ->
+                    parseErrorEncoder modul
+        )
+        |> Serialize.variant1 ModuleNameUnspecified ModuleName.rawCodec
+        |> Serialize.variant2 ModuleNameMismatch ModuleName.rawCodec (A.locatedCodec ModuleName.rawCodec)
+        |> Serialize.variant1 UnexpectedPort A.regionCodec
+        |> Serialize.variant1 NoPorts A.regionCodec
+        |> Serialize.variant1 NoPortsInPackage (A.locatedCodec Serialize.string)
+        |> Serialize.variant1 NoPortModulesInPackage A.regionCodec
+        |> Serialize.variant1 NoEffectsOutsideKernel A.regionCodec
+        |> Serialize.variant1 ParseError moduleCodec
+        |> Serialize.finishCustomType
 
 
 spaceEncoder : Space -> Encode.Value
@@ -7984,6 +8020,22 @@ spaceDecoder =
                     _ ->
                         Decode.fail ("Unknown Space: " ++ str)
             )
+
+
+spaceCodec : Codec e Space
+spaceCodec =
+    Serialize.customType
+        (\hasTabEncoder endlessMultiCommentEncoder value ->
+            case value of
+                HasTab ->
+                    hasTabEncoder
+
+                EndlessMultiComment ->
+                    endlessMultiCommentEncoder
+        )
+        |> Serialize.variant0 HasTab
+        |> Serialize.variant0 EndlessMultiComment
+        |> Serialize.finishCustomType
 
 
 moduleEncoder : Module -> Encode.Value
@@ -8275,6 +8327,102 @@ moduleDecoder =
             )
 
 
+moduleCodec : Codec e Module
+moduleCodec =
+    Serialize.customType
+        (\moduleSpaceEncoder moduleBadEndEncoder moduleProblemEncoder moduleNameEncoder moduleExposingEncoder portModuleProblemEncoder portModuleNameEncoder portModuleExposingEncoder effectEncoder freshLineEncoder importStartEncoder importNameEncoder importAsEncoder importAliasEncoder importExposingEncoder importExposingListEncoder importEndEncoder importIndentNameEncoder importIndentAliasEncoder importIndentExposingListEncoder infixEncoder declarationsEncoder value ->
+            case value of
+                ModuleSpace space row col ->
+                    moduleSpaceEncoder space row col
+
+                ModuleBadEnd row col ->
+                    moduleBadEndEncoder row col
+
+                ModuleProblem row col ->
+                    moduleProblemEncoder row col
+
+                ModuleName row col ->
+                    moduleNameEncoder row col
+
+                ModuleExposing exposing_ row col ->
+                    moduleExposingEncoder exposing_ row col
+
+                PortModuleProblem row col ->
+                    portModuleProblemEncoder row col
+
+                PortModuleName row col ->
+                    portModuleNameEncoder row col
+
+                PortModuleExposing exposing_ row col ->
+                    portModuleExposingEncoder exposing_ row col
+
+                Effect row col ->
+                    effectEncoder row col
+
+                FreshLine row col ->
+                    freshLineEncoder row col
+
+                ImportStart row col ->
+                    importStartEncoder row col
+
+                ImportName row col ->
+                    importNameEncoder row col
+
+                ImportAs row col ->
+                    importAsEncoder row col
+
+                ImportAlias row col ->
+                    importAliasEncoder row col
+
+                ImportExposing row col ->
+                    importExposingEncoder row col
+
+                ImportExposingList exposing_ row col ->
+                    importExposingListEncoder exposing_ row col
+
+                ImportEnd row col ->
+                    importEndEncoder row col
+
+                ImportIndentName row col ->
+                    importIndentNameEncoder row col
+
+                ImportIndentAlias row col ->
+                    importIndentAliasEncoder row col
+
+                ImportIndentExposingList row col ->
+                    importIndentExposingListEncoder row col
+
+                Infix row col ->
+                    infixEncoder row col
+
+                Declarations decl row col ->
+                    declarationsEncoder decl row col
+        )
+        |> Serialize.variant3 ModuleSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ModuleBadEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ModuleProblem Serialize.int Serialize.int
+        |> Serialize.variant2 ModuleName Serialize.int Serialize.int
+        |> Serialize.variant3 ModuleExposing exposingCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PortModuleProblem Serialize.int Serialize.int
+        |> Serialize.variant2 PortModuleName Serialize.int Serialize.int
+        |> Serialize.variant3 PortModuleExposing exposingCodec Serialize.int Serialize.int
+        |> Serialize.variant2 Effect Serialize.int Serialize.int
+        |> Serialize.variant2 FreshLine Serialize.int Serialize.int
+        |> Serialize.variant2 ImportStart Serialize.int Serialize.int
+        |> Serialize.variant2 ImportName Serialize.int Serialize.int
+        |> Serialize.variant2 ImportAs Serialize.int Serialize.int
+        |> Serialize.variant2 ImportAlias Serialize.int Serialize.int
+        |> Serialize.variant2 ImportExposing Serialize.int Serialize.int
+        |> Serialize.variant3 ImportExposingList exposingCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ImportEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ImportIndentName Serialize.int Serialize.int
+        |> Serialize.variant2 ImportIndentAlias Serialize.int Serialize.int
+        |> Serialize.variant2 ImportIndentExposingList Serialize.int Serialize.int
+        |> Serialize.variant2 Infix Serialize.int Serialize.int
+        |> Serialize.variant3 Declarations declCodec Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 exposingEncoder : Exposing -> Encode.Value
 exposingEncoder exposing_ =
     case exposing_ of
@@ -8414,6 +8562,54 @@ exposingDecoder =
             )
 
 
+exposingCodec : Codec e Exposing
+exposingCodec =
+    Serialize.customType
+        (\exposingSpaceEncoder exposingStartEncoder exposingValueEncoder exposingOperatorEncoder exposingOperatorReservedEncoder exposingOperatorRightParenEncoder exposingTypePrivacyEncoder exposingEndEncoder exposingIndentEndEncoder exposingIndentValueEncoder value ->
+            case value of
+                ExposingSpace space row col ->
+                    exposingSpaceEncoder space row col
+
+                ExposingStart row col ->
+                    exposingStartEncoder row col
+
+                ExposingValue row col ->
+                    exposingValueEncoder row col
+
+                ExposingOperator row col ->
+                    exposingOperatorEncoder row col
+
+                ExposingOperatorReserved op row col ->
+                    exposingOperatorReservedEncoder op row col
+
+                ExposingOperatorRightParen row col ->
+                    exposingOperatorRightParenEncoder row col
+
+                ExposingTypePrivacy row col ->
+                    exposingTypePrivacyEncoder row col
+
+                ExposingEnd row col ->
+                    exposingEndEncoder row col
+
+                ExposingIndentEnd row col ->
+                    exposingIndentEndEncoder row col
+
+                ExposingIndentValue row col ->
+                    exposingIndentValueEncoder row col
+        )
+        |> Serialize.variant3 ExposingSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingStart Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingValue Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingOperator Serialize.int Serialize.int
+        |> Serialize.variant3 ExposingOperatorReserved Compiler.Parse.Symbol.badOperatorCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingOperatorRightParen Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingTypePrivacy Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ExposingIndentValue Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 declEncoder : Decl -> Encode.Value
 declEncoder decl =
     case decl of
@@ -8509,6 +8705,38 @@ declDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Decl's type: " ++ type_)
             )
+
+
+declCodec : Codec e Decl
+declCodec =
+    Serialize.customType
+        (\declStartEncoder declSpaceEncoder portCodecEncoder declTypeCodecEncoder declDefCodecEncoder declFreshLineAfterDocCommentEncoder value ->
+            case value of
+                DeclStart row col ->
+                    declStartEncoder row col
+
+                DeclSpace space row col ->
+                    declSpaceEncoder space row col
+
+                Port port_ row col ->
+                    portCodecEncoder port_ row col
+
+                DeclType declType row col ->
+                    declTypeCodecEncoder declType row col
+
+                DeclDef name declDef row col ->
+                    declDefCodecEncoder name declDef row col
+
+                DeclFreshLineAfterDocComment row col ->
+                    declFreshLineAfterDocCommentEncoder row col
+        )
+        |> Serialize.variant2 DeclStart Serialize.int Serialize.int
+        |> Serialize.variant3 DeclSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Port portCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DeclType declTypeCodec Serialize.int Serialize.int
+        |> Serialize.variant4 DeclDef Serialize.string declDefCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DeclFreshLineAfterDocComment Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 portEncoder : Port -> Encode.Value
@@ -8614,6 +8842,11 @@ portDecoder =
             )
 
 
+portCodec : Codec e Port
+portCodec =
+    Debug.todo "portCodec"
+
+
 declTypeEncoder : DeclType -> Encode.Value
 declTypeEncoder declType =
     case declType of
@@ -8693,6 +8926,11 @@ declTypeDecoder =
                     _ ->
                         Decode.fail ("Failed to decode DeclType's type: " ++ type_)
             )
+
+
+declTypeCodec : Codec e DeclType
+declTypeCodec =
+    Debug.todo "declTypeCodec"
 
 
 declDefEncoder : DeclDef -> Encode.Value
@@ -8840,6 +9078,54 @@ declDefDecoder =
             )
 
 
+declDefCodec : Codec e DeclDef
+declDefCodec =
+    Serialize.customType
+        (\declDefSpaceEncoder declDefEqualsEncoder declDefTypeEncoder declDefArgEncoder declDefBodyEncoder declDefNameRepeatEncoder declDefNameMatchEncoder declDefIndentTypeEncoder declDefIndentEqualsEncoder declDefIndentBodyEncoder value ->
+            case value of
+                DeclDefSpace space row col ->
+                    declDefSpaceEncoder space row col
+
+                DeclDefEquals row col ->
+                    declDefEqualsEncoder row col
+
+                DeclDefType tipe row col ->
+                    declDefTypeEncoder tipe row col
+
+                DeclDefArg pattern row col ->
+                    declDefArgEncoder pattern row col
+
+                DeclDefBody expr row col ->
+                    declDefBodyEncoder expr row col
+
+                DeclDefNameRepeat row col ->
+                    declDefNameRepeatEncoder row col
+
+                DeclDefNameMatch name row col ->
+                    declDefNameMatchEncoder name row col
+
+                DeclDefIndentType row col ->
+                    declDefIndentTypeEncoder row col
+
+                DeclDefIndentEquals row col ->
+                    declDefIndentEqualsEncoder row col
+
+                DeclDefIndentBody row col ->
+                    declDefIndentBodyEncoder row col
+        )
+        |> Serialize.variant3 DeclDefSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DeclDefEquals Serialize.int Serialize.int
+        |> Serialize.variant3 DeclDefType typeCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DeclDefArg patternCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DeclDefBody exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DeclDefNameRepeat Serialize.int Serialize.int
+        |> Serialize.variant3 DeclDefNameMatch Serialize.string Serialize.int Serialize.int
+        |> Serialize.variant2 DeclDefIndentType Serialize.int Serialize.int
+        |> Serialize.variant2 DeclDefIndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 DeclDefIndentBody Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 typeEncoder : Type -> Encode.Value
 typeEncoder type_ =
     case type_ of
@@ -8919,6 +9205,11 @@ typeDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Type's type: " ++ type_)
             )
+
+
+typeCodec : Codec e Type
+typeCodec =
+    Debug.todo "typeCodec"
 
 
 patternEncoder : Pattern -> Encode.Value
@@ -9110,6 +9401,11 @@ patternDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Pattern's type: " ++ type_)
             )
+
+
+patternCodec : Codec e Pattern
+patternCodec =
+    Debug.todo "patternCodec"
 
 
 exprEncoder : Expr -> Encode.Value
@@ -9385,6 +9681,90 @@ exprDecoder =
             )
 
 
+exprCodec : Codec e Expr
+exprCodec =
+    Serialize.customType
+        (\letCodecEncoder caseCodecEncoder ifCodecEncoder listCodecEncoder recordCodecEncoder tupleCodecEncoder funcCodecEncoder dotEncoder accessEncoder operatorRightEncoder operatorReservedEncoder startEncoder charCodecEncoder string_Encoder numberCodecEncoder spaceCodecEncoder endlessShaderEncoder shaderProblemEncoder indentOperatorRightEncoder value ->
+            case value of
+                Let let_ row col ->
+                    letCodecEncoder let_ row col
+
+                Case case_ row col ->
+                    caseCodecEncoder case_ row col
+
+                If if_ row col ->
+                    ifCodecEncoder if_ row col
+
+                List list row col ->
+                    listCodecEncoder list row col
+
+                Record record row col ->
+                    recordCodecEncoder record row col
+
+                Tuple tuple row col ->
+                    tupleCodecEncoder tuple row col
+
+                Func func row col ->
+                    funcCodecEncoder func row col
+
+                Dot row col ->
+                    dotEncoder row col
+
+                Access row col ->
+                    accessEncoder row col
+
+                OperatorRight op row col ->
+                    operatorRightEncoder op row col
+
+                OperatorReserved operator row col ->
+                    operatorReservedEncoder operator row col
+
+                Start row col ->
+                    startEncoder row col
+
+                Char char row col ->
+                    charCodecEncoder char row col
+
+                String_ string row col ->
+                    string_Encoder string row col
+
+                Number number row col ->
+                    numberCodecEncoder number row col
+
+                Space space row col ->
+                    spaceCodecEncoder space row col
+
+                EndlessShader row col ->
+                    endlessShaderEncoder row col
+
+                ShaderProblem problem row col ->
+                    shaderProblemEncoder problem row col
+
+                IndentOperatorRight op row col ->
+                    indentOperatorRightEncoder op row col
+        )
+        |> Serialize.variant3 Let letCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Case caseCodec Serialize.int Serialize.int
+        |> Serialize.variant3 If ifCodec Serialize.int Serialize.int
+        |> Serialize.variant3 List listCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Record recordCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Tuple tupleCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Func funcCodec Serialize.int Serialize.int
+        |> Serialize.variant2 Dot Serialize.int Serialize.int
+        |> Serialize.variant2 Access Serialize.int Serialize.int
+        |> Serialize.variant3 OperatorRight Serialize.string Serialize.int Serialize.int
+        |> Serialize.variant3 OperatorReserved Compiler.Parse.Symbol.badOperatorCodec Serialize.int Serialize.int
+        |> Serialize.variant2 Start Serialize.int Serialize.int
+        |> Serialize.variant3 Char charCodec Serialize.int Serialize.int
+        |> Serialize.variant3 String_ stringCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Number numberCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Space spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 EndlessShader Serialize.int Serialize.int
+        |> Serialize.variant3 ShaderProblem Serialize.string Serialize.int Serialize.int
+        |> Serialize.variant3 IndentOperatorRight Serialize.string Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
 letEncoder : Let -> Encode.Value
 letEncoder let_ =
     case let_ of
@@ -9530,6 +9910,11 @@ letDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Let's type: " ++ type_)
             )
+
+
+letCodec : Codec e Let
+letCodec =
+    Debug.todo "letCodec"
 
 
 caseEncoder : Case -> Encode.Value
@@ -9701,6 +10086,11 @@ caseDecoder =
             )
 
 
+caseCodec : Codec e Case
+caseCodec =
+    Debug.todo "caseCodec"
+
+
 ifEncoder : If -> Encode.Value
 ifEncoder if_ =
     case if_ of
@@ -9868,6 +10258,11 @@ ifDecoder =
             )
 
 
+ifCodec : Codec e If
+ifCodec =
+    Debug.todo "ifCodec"
+
+
 listEncoder : List_ -> Encode.Value
 listEncoder list_ =
     case list_ of
@@ -9969,6 +10364,11 @@ listDecoder =
                     _ ->
                         Decode.fail ("Failed to decode List's type: " ++ type_)
             )
+
+
+listCodec : Codec e List_
+listCodec =
+    Debug.todo "listCodec"
 
 
 recordEncoder : Record -> Encode.Value
@@ -10122,6 +10522,11 @@ recordDecoder =
             )
 
 
+recordCodec : Codec e Record
+recordCodec =
+    Debug.todo "recordCodec"
+
+
 tupleEncoder : Tuple -> Encode.Value
 tupleEncoder tuple =
     case tuple of
@@ -10239,6 +10644,11 @@ tupleDecoder =
             )
 
 
+tupleCodec : Codec e Tuple
+tupleCodec =
+    Debug.todo "tupleCodec"
+
+
 funcEncoder : Func -> Encode.Value
 funcEncoder func =
     case func of
@@ -10344,6 +10754,11 @@ funcDecoder =
             )
 
 
+funcCodec : Codec e Func
+funcCodec =
+    Debug.todo "funcCodec"
+
+
 charEncoder : Char -> Encode.Value
 charEncoder char =
     case char of
@@ -10385,6 +10800,11 @@ charDecoder =
             )
 
 
+charCodec : Codec e Char
+charCodec =
+    Debug.todo "charCodec"
+
+
 stringEncoder : String_ -> Encode.Value
 stringEncoder string_ =
     case string_ of
@@ -10421,6 +10841,11 @@ stringDecoder =
                     _ ->
                         Decode.fail ("Failed to decode String's type: " ++ type_)
             )
+
+
+stringCodec : Codec e String_
+stringCodec =
+    Debug.todo "stringCodec"
 
 
 numberEncoder : Number -> Encode.Value
@@ -10469,6 +10894,11 @@ numberDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Number's type: " ++ type_)
             )
+
+
+numberCodec : Codec e Number
+numberCodec =
+    Debug.todo "numberCodec"
 
 
 escapeEncoder : Escape -> Encode.Value

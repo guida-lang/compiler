@@ -28,6 +28,7 @@ import Compiler.Reporting.Error.Type as Type
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
+import Compiler.Serialize as S
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Serialize exposing (Codec)
@@ -267,7 +268,7 @@ moduleDecoder =
         (Decode.field "error" errorDecoder)
 
 
-moduleCodec : Codec e Module
+moduleCodec : Codec (Serialize.Error e) Module
 moduleCodec =
     Serialize.record Module
         |> Serialize.field .name ModuleName.rawCodec
@@ -362,6 +363,37 @@ errorDecoder =
             )
 
 
-errorCodec : Codec e Error
+errorCodec : Codec (Serialize.Error e) Error
 errorCodec =
-    Debug.todo "errorCodec"
+    Serialize.customType
+        (\badSyntaxEncoder badImportsEncoder badNamesEncoder badTypesEncoder badMainsEncoder badPatternsEncoder badDocsEncoder value ->
+            case value of
+                BadSyntax syntaxError ->
+                    badSyntaxEncoder syntaxError
+
+                BadImports errs ->
+                    badImportsEncoder errs
+
+                BadNames errs ->
+                    badNamesEncoder errs
+
+                BadTypes localizer errs ->
+                    badTypesEncoder localizer errs
+
+                BadMains localizer errs ->
+                    badMainsEncoder localizer errs
+
+                BadPatterns errs ->
+                    badPatternsEncoder errs
+
+                BadDocs docsErr ->
+                    badDocsEncoder docsErr
+        )
+        |> Serialize.variant1 BadSyntax Syntax.errorCodec
+        |> Serialize.variant1 BadImports (S.nonempty Import.errorCodec)
+        |> Serialize.variant1 BadNames (S.oneOrMore Canonicalize.errorCodec)
+        |> Serialize.variant2 BadTypes L.localizerCodec (S.nonempty Type.errorCodec)
+        |> Serialize.variant2 BadMains L.localizerCodec (S.oneOrMore Main.errorCodec)
+        |> Serialize.variant1 BadPatterns (S.nonempty P.errorCodec)
+        |> Serialize.variant1 BadDocs Docs.errorCodec
+        |> Serialize.finishCustomType

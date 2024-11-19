@@ -3,6 +3,7 @@ module Compiler.Reporting.Render.Type.Localizer exposing
     , empty
     , fromModule
     , fromNames
+    , localizerCodec
     , localizerDecoder
     , localizerEncoder
     , toChars
@@ -20,6 +21,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -139,6 +141,11 @@ localizerEncoder (Localizer localizer) =
 localizerDecoder : Decode.Decoder Localizer
 localizerDecoder =
     Decode.map Localizer (DecodeX.assocListDict compare Decode.string importDecoder)
+
+
+localizerCodec : Codec e Localizer
+localizerCodec =
+    Debug.todo "localizerCodec"
 
 
 importEncoder : Import -> Encode.Value

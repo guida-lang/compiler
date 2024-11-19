@@ -130,7 +130,7 @@ forkWithKey keyComparison codec func dict =
 -- FROM EXPOSED
 
 
-fromExposed : Codec e docs -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
+fromExposed : Codec (Serialize.Error e) docs -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
 fromExposed docsCodec style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsCodec style <|
         \key ->
@@ -1839,7 +1839,7 @@ dictRawMVarBResultCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-bResultCodec : Codec e BResult
+bResultCodec : Codec (Serialize.Error e) BResult
 bResultCodec =
     Serialize.customType
         (\rNewEncoder rSameEncoder rCachedEncoder rNotFoundEncoder rProblemEncoder rBlockedEncoder rForeignEncoder rKernelEncoder bResult ->
@@ -1927,7 +1927,7 @@ statusCodec =
         |> Serialize.finishCustomType
 
 
-rootStatusCodec : Codec e RootStatus
+rootStatusCodec : Codec (Serialize.Error e) RootStatus
 rootStatusCodec =
     Serialize.customType
         (\sInsideEncoder sOutsideOkEncoder sOutsideErrEncoder rootStatus ->
@@ -1952,7 +1952,7 @@ resultDictCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-rootResultCodec : Codec e RootResult
+rootResultCodec : Codec (Serialize.Error e) RootResult
 rootResultCodec =
     Serialize.customType
         (\rInsideEncoder rOutsideOkEncoder rOutsideErrEncoder rOutsideBlockedEncoder rootResult ->
@@ -1991,7 +1991,7 @@ maybeDependenciesCodec =
     Serialize.maybe (S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec)
 
 
-resultBuildProjectProblemRootInfoCodec : Codec e (Result Exit.BuildProjectProblem RootInfo)
+resultBuildProjectProblemRootInfoCodec : Codec (Serialize.Error e) (Result Exit.BuildProjectProblem RootInfo)
 resultBuildProjectProblemRootInfoCodec =
     Serialize.result Exit.buildProjectProblemCodec rootInfoCodec
 

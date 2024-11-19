@@ -1,6 +1,12 @@
-module Compiler.Serialize exposing (assocListDict, everySet, nonempty)
+module Compiler.Serialize exposing
+    ( assocListDict
+    , everySet
+    , nonempty
+    , oneOrMore
+    )
 
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Data.OneOrMore exposing (OneOrMore)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Serialize as S exposing (Codec)
@@ -32,3 +38,8 @@ nonempty codec =
                         Err S.DataCorrupted
             )
             (\(NE.Nonempty x xs) -> x :: xs)
+
+
+oneOrMore : Codec e a -> Codec e (OneOrMore a)
+oneOrMore _ =
+    Debug.todo "oneOrMore"

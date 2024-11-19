@@ -367,7 +367,7 @@ type alias BResult a =
     Result Exit.BuildProblem a
 
 
-trackBuild : Codec e a -> Style -> (BKey -> IO (BResult a)) -> IO (BResult a)
+trackBuild : Codec (Serialize.Error e) a -> Style -> (BKey -> IO (BResult a)) -> IO (BResult a)
 trackBuild codec style callback =
     case style of
         Silent ->
@@ -381,7 +381,7 @@ trackBuild codec style callback =
                 |> IO.bind
                     (\chan ->
                         let
-                            chanCodec : Codec e (Result BMsg (BResult a))
+                            chanCodec : Codec (Serialize.Error e) (Result BMsg (BResult a))
                             chanCodec =
                                 Serialize.result bMsgCodec (bResultCodec codec)
                         in
@@ -404,7 +404,7 @@ type BMsg
     = BDone
 
 
-buildLoop : Codec e a -> Chan (Result BMsg (BResult a)) -> Int -> IO ()
+buildLoop : Codec (Serialize.Error e) a -> Chan (Result BMsg (BResult a)) -> Int -> IO ()
 buildLoop codec chan done =
     Utils.readChan (Serialize.result bMsgCodec (bResultCodec codec)) chan
         |> IO.bind
@@ -614,6 +614,6 @@ bMsgCodec =
         |> Serialize.finishCustomType
 
 
-bResultCodec : Codec e a -> Codec e (BResult a)
+bResultCodec : Codec (Serialize.Error e) a -> Codec (Serialize.Error e) (BResult a)
 bResultCodec codec =
     Serialize.result Exit.buildProblemCodec codec

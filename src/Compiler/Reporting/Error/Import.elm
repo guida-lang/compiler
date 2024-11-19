@@ -1,6 +1,7 @@
 module Compiler.Reporting.Error.Import exposing
     ( Error(..)
     , Problem(..)
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , problemCodec
@@ -257,7 +258,26 @@ problemDecoder =
 
 problemCodec : Codec e Problem
 problemCodec =
-    Debug.todo "problemCodec"
+    Serialize.customType
+        (\notFoundEncoder ambiguousEncoder ambiguousLocalEncoder ambiguousForeignEncoder value ->
+            case value of
+                NotFound ->
+                    notFoundEncoder
+
+                Ambiguous path paths pkg pkgs ->
+                    ambiguousEncoder path paths pkg pkgs
+
+                AmbiguousLocal path1 path2 paths ->
+                    ambiguousLocalEncoder path1 path2 paths
+
+                AmbiguousForeign pkg1 pkg2 pkgs ->
+                    ambiguousForeignEncoder pkg1 pkg2 pkgs
+        )
+        |> Serialize.variant0 NotFound
+        |> Serialize.variant4 Ambiguous Serialize.string (Serialize.list Serialize.string) Pkg.nameCodec (Serialize.list Pkg.nameCodec)
+        |> Serialize.variant3 AmbiguousLocal Serialize.string Serialize.string (Serialize.list Serialize.string)
+        |> Serialize.variant3 AmbiguousForeign Pkg.nameCodec Pkg.nameCodec (Serialize.list Pkg.nameCodec)
+        |> Serialize.finishCustomType
 
 
 errorEncoder : Error -> Encode.Value
@@ -278,3 +298,8 @@ errorDecoder =
         (Decode.field "name" ModuleName.rawDecoder)
         (Decode.field "unimportedModules" (DecodeX.everySet compare ModuleName.rawDecoder))
         (Decode.field "problem" problemDecoder)
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"

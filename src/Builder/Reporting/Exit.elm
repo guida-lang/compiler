@@ -2927,7 +2927,7 @@ buildProblemDecoder =
             )
 
 
-buildProblemCodec : Codec e BuildProblem
+buildProblemCodec : Codec (Serialize.Error e) BuildProblem
 buildProblemCodec =
     Serialize.customType
         (\buildBadModulesEncoder buildProjectProblemCodecEncoder buildProblem ->
@@ -3064,9 +3064,48 @@ buildProjectProblemDecoder =
             )
 
 
-buildProjectProblemCodec : Codec e BuildProjectProblem
+buildProjectProblemCodec : Codec (Serialize.Error e) BuildProjectProblem
 buildProjectProblemCodec =
-    Debug.todo "buildProjectProblemCodec"
+    Serialize.customType
+        (\pathUnknownEncoder withBadExtensionEncoder withAmbiguousSrcDirEncoder mainPathDuplicateEncoder rootNameDuplicateEncoder rootNameInvalidEncoder cannotLoadDependenciesEncoder cycleEncoder missingExposedEncoder value ->
+            case value of
+                BP_PathUnknown path ->
+                    pathUnknownEncoder path
+
+                BP_WithBadExtension path ->
+                    withBadExtensionEncoder path
+
+                BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
+                    withAmbiguousSrcDirEncoder path srcDir1 srcDir2
+
+                BP_MainPathDuplicate path1 path2 ->
+                    mainPathDuplicateEncoder path1 path2
+
+                BP_RootNameDuplicate name outsidePath otherPath ->
+                    rootNameDuplicateEncoder name outsidePath otherPath
+
+                BP_RootNameInvalid givenPath srcDir names ->
+                    rootNameInvalidEncoder givenPath srcDir names
+
+                BP_CannotLoadDependencies ->
+                    cannotLoadDependenciesEncoder
+
+                BP_Cycle name names ->
+                    cycleEncoder name names
+
+                BP_MissingExposed problems ->
+                    missingExposedEncoder problems
+        )
+        |> Serialize.variant1 BP_PathUnknown Serialize.string
+        |> Serialize.variant1 BP_WithBadExtension Serialize.string
+        |> Serialize.variant3 BP_WithAmbiguousSrcDir Serialize.string Serialize.string Serialize.string
+        |> Serialize.variant2 BP_MainPathDuplicate Serialize.string Serialize.string
+        |> Serialize.variant3 BP_RootNameDuplicate ModuleName.rawCodec Serialize.string Serialize.string
+        |> Serialize.variant3 BP_RootNameInvalid Serialize.string Serialize.string (Serialize.list Serialize.string)
+        |> Serialize.variant0 BP_CannotLoadDependencies
+        |> Serialize.variant2 BP_Cycle ModuleName.rawCodec (Serialize.list Serialize.string)
+        |> Serialize.variant1 BP_MissingExposed (S.nonempty (Serialize.tuple ModuleName.rawCodec Import.problemCodec))
+        |> Serialize.finishCustomType
 
 
 registryProblemEncoder : RegistryProblem -> CoreEncode.Value
@@ -3107,7 +3146,18 @@ registryProblemDecoder =
 
 registryProblemCodec : Codec e RegistryProblem
 registryProblemCodec =
-    Debug.todo "registryProblemCodec"
+    Serialize.customType
+        (\httpEncoder dataEncoder value ->
+            case value of
+                RP_Http err ->
+                    httpEncoder err
+
+                RP_Data url body ->
+                    dataEncoder url body
+        )
+        |> Serialize.variant1 RP_Http Http.errorCodec
+        |> Serialize.variant2 RP_Data Serialize.string Serialize.string
+        |> Serialize.finishCustomType
 
 
 packageProblemEncoder : PackageProblem -> CoreEncode.Value
@@ -3177,4 +3227,27 @@ packageProblemDecoder =
 
 packageProblemCodec : Codec e PackageProblem
 packageProblemCodec =
-    Debug.todo "packageProblemCodec"
+    Serialize.customType
+        (\badEndpointRequestEncoder badEndpointContentEncoder badArchiveRequestEncoder badArchiveContentEncoder badArchiveHashEncoder value ->
+            case value of
+                PP_BadEndpointRequest httpError ->
+                    badEndpointRequestEncoder httpError
+
+                PP_BadEndpointContent url ->
+                    badEndpointContentEncoder url
+
+                PP_BadArchiveRequest httpError ->
+                    badArchiveRequestEncoder httpError
+
+                PP_BadArchiveContent url ->
+                    badArchiveContentEncoder url
+
+                PP_BadArchiveHash url expectedHash actualHash ->
+                    badArchiveHashEncoder url expectedHash actualHash
+        )
+        |> Serialize.variant1 PP_BadEndpointRequest Http.errorCodec
+        |> Serialize.variant1 PP_BadEndpointContent Serialize.string
+        |> Serialize.variant1 PP_BadArchiveRequest Http.errorCodec
+        |> Serialize.variant1 PP_BadArchiveContent Serialize.string
+        |> Serialize.variant3 PP_BadArchiveHash Serialize.string Serialize.string Serialize.string
+        |> Serialize.finishCustomType

@@ -5,6 +5,7 @@ module Builder.Http exposing
     , MultiPart
     , Sha
     , accept
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , filePart
@@ -296,3 +297,23 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\badUrlEncoder badHttpEncoder badMysteryEncoder value ->
+            case value of
+                BadUrl url reason ->
+                    badUrlEncoder url reason
+
+                BadHttp url httpExceptionContent ->
+                    badHttpEncoder url httpExceptionContent
+
+                BadMystery url someException ->
+                    badMysteryEncoder url someException
+        )
+        |> Serialize.variant2 BadUrl Serialize.string Serialize.string
+        |> Serialize.variant2 BadHttp Serialize.string Utils.httpExceptionContentCodec
+        |> Serialize.variant2 BadMystery Serialize.string Utils.someExceptionCodec
+        |> Serialize.finishCustomType

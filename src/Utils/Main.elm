@@ -59,6 +59,7 @@ module Utils.Main exposing
     , fpTakeDirectory
     , fpTakeExtension
     , fpTakeFileName
+    , httpExceptionContentCodec
     , httpExceptionContentDecoder
     , httpExceptionContentEncoder
     , httpHLocation
@@ -128,6 +129,7 @@ module Utils.Main exposing
     , sequenceListMaybe
     , sequenceNonemptyListResult
     , shaAndArchiveDecoder
+    , someExceptionCodec
     , someExceptionDecoder
     , someExceptionEncoder
     , stateGet
@@ -1327,6 +1329,11 @@ someExceptionDecoder =
     Decode.succeed SomeException
 
 
+someExceptionCodec : Codec e SomeException
+someExceptionCodec =
+    Debug.todo "someExceptionCodec"
+
+
 httpResponseEncoder : HttpResponse body -> Encode.Value
 httpResponseEncoder (HttpResponse httpResponse) =
     Encode.object
@@ -1418,3 +1425,8 @@ httpExceptionContentDecoder =
                     _ ->
                         Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
             )
+
+
+httpExceptionContentCodec : Codec e HttpExceptionContent
+httpExceptionContentCodec =
+    Debug.todo "httpExceptionContentCodec"

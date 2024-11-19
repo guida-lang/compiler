@@ -10,6 +10,7 @@ module Builder.Stuff exposing
     , interfaces
     , objects
     , package
+    , packageCacheCodec
     , packageCacheDecoder
     , packageCacheEncoder
     , prepublishDir
@@ -25,6 +26,7 @@ import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
+import Serialize exposing (Codec)
 import Utils.Main as Utils
 
 
@@ -211,3 +213,13 @@ packageCacheEncoder (PackageCache dir) =
 packageCacheDecoder : Decode.Decoder PackageCache
 packageCacheDecoder =
     Decode.map PackageCache (Decode.field "dir" Decode.string)
+
+
+packageCacheCodec : Codec e PackageCache
+packageCacheCodec =
+    Serialize.customType
+        (\packageCacheCodecEncoder (PackageCache dir) ->
+            packageCacheCodecEncoder dir
+        )
+        |> Serialize.variant1 PackageCache Serialize.string
+        |> Serialize.finishCustomType

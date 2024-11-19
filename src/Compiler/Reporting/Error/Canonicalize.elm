@@ -6,6 +6,7 @@ module Compiler.Reporting.Error.Canonicalize exposing
     , PortProblem(..)
     , PossibleNames
     , VarKind(..)
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , invalidPayloadDecoder
@@ -31,6 +32,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -1875,6 +1877,11 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"
 
 
 badArityContextEncoder : BadArityContext -> Encode.Value

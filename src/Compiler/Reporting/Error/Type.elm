@@ -8,6 +8,7 @@ module Compiler.Reporting.Error.Type exposing
     , PContext(..)
     , PExpected(..)
     , SubContext(..)
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , ptypeReplace
@@ -31,6 +32,7 @@ import Compiler.Type.Error as T
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -2583,6 +2585,11 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"
 
 
 categoryEncoder : Category -> Encode.Value

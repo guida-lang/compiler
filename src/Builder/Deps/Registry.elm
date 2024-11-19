@@ -7,6 +7,7 @@ module Builder.Deps.Registry exposing
     , knownVersionsDecoder
     , latest
     , read
+    , registryCodec
     , registryDecoder
     , registryEncoder
     , update
@@ -262,19 +263,19 @@ post manager path decoder callback =
 -- ENCODERS and DECODERS
 
 
-registryDecoder : Decode.Decoder Registry
-registryDecoder =
-    Decode.map2 Registry
-        (Decode.field "size" Decode.int)
-        (Decode.field "packages" (D.assocListDict Pkg.compareName Pkg.nameDecoder knownVersionsDecoder))
-
-
 registryEncoder : Registry -> Encode.Value
 registryEncoder (Registry size versions) =
     Encode.object
         [ ( "size", Encode.int size )
         , ( "packages", E.assocListDict Pkg.nameEncoder knownVersionsEncoder versions )
         ]
+
+
+registryDecoder : Decode.Decoder Registry
+registryDecoder =
+    Decode.map2 Registry
+        (Decode.field "size" Decode.int)
+        (Decode.field "packages" (D.assocListDict Pkg.compareName Pkg.nameDecoder knownVersionsDecoder))
 
 
 registryCodec : Codec e Registry

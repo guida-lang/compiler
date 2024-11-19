@@ -1,5 +1,6 @@
 module Compiler.Parse.Symbol exposing
     ( BadOperator(..)
+    , badOperatorCodec
     , badOperatorDecoder
     , badOperatorEncoder
     , binopCharSet
@@ -11,6 +12,7 @@ import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -148,3 +150,8 @@ badOperatorDecoder =
                     _ ->
                         Decode.fail ("Unknown BadOperator: " ++ str)
             )
+
+
+badOperatorCodec : Codec e BadOperator
+badOperatorCodec =
+    Debug.todo "badOperatorCodec"

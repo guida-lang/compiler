@@ -618,7 +618,12 @@ envDecoder =
 
 envCodec : Codec e Env
 envCodec =
-    Debug.todo "envCodec"
+    Serialize.customType
+        (\envCodecEncoder (Env cache manager connection registry) ->
+            envCodecEncoder cache manager connection registry
+        )
+        |> Serialize.variant4 Env Stuff.packageCacheCodec Http.managerCodec connectionCodec Registry.registryCodec
+        |> Serialize.finishCustomType
 
 
 connectionEncoder : Connection -> Encode.Value
@@ -651,3 +656,19 @@ connectionDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Connection's type: " ++ type_)
             )
+
+
+connectionCodec : Codec e Connection
+connectionCodec =
+    Serialize.customType
+        (\onlineEncoder offlineEncoder value ->
+            case value of
+                Online manager ->
+                    onlineEncoder manager
+
+                Offline ->
+                    offlineEncoder
+        )
+        |> Serialize.variant1 Online Http.managerCodec
+        |> Serialize.variant0 Offline
+        |> Serialize.finishCustomType

@@ -4,6 +4,7 @@ module Compiler.Nitpick.PatternMatches exposing
     , Literal(..)
     , Pattern(..)
     , check
+    , errorCodec
     , errorDecoder
     , errorEncoder
     )
@@ -26,6 +27,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import Prelude
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -753,6 +755,11 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Unknown Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"
 
 
 contextEncoder : Context -> Encode.Value

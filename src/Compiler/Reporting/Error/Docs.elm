@@ -3,6 +3,7 @@ module Compiler.Reporting.Error.Docs exposing
     , Error(..)
     , NameProblem(..)
     , SyntaxProblem(..)
+    , errorCodec
     , errorDecoder
     , errorEncoder
     , toReports
@@ -21,6 +22,7 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 type Error
@@ -264,6 +266,11 @@ errorDecoder =
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
+
+
+errorCodec : Codec e Error
+errorCodec =
+    Debug.todo "errorCodec"
 
 
 syntaxProblemEncoder : SyntaxProblem -> Encode.Value

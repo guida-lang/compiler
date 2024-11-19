@@ -3,6 +3,7 @@ module Compiler.Reporting.Annotation exposing
     , Position(..)
     , Region(..)
     , at
+    , locatedCodec
     , locatedDecoder
     , locatedEncoder
     , merge
@@ -157,3 +158,8 @@ locatedDecoder decoder =
     Decode.map2 At
         (Decode.field "region" regionDecoder)
         (Decode.field "value" (Decode.lazy (\_ -> decoder)))
+
+
+locatedCodec : Codec e a -> Codec e (Located a)
+locatedCodec =
+    Debug.todo "locatedCodec"
