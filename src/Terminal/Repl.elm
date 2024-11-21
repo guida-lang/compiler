@@ -39,13 +39,13 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as ES
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 

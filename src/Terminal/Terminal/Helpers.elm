@@ -13,8 +13,8 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Suggest as Suggest
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict
+import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
 

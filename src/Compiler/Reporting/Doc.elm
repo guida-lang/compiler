@@ -39,10 +39,10 @@ import Compiler.Data.Name exposing (Name)
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Encode as E
-import Data.IO exposing (Handle, IO)
 import Maybe.Extra as Maybe
 import Prelude
 import System.Console.Ansi as Ansi
+import System.IO exposing (Handle, IO)
 import Text.PrettyPrint.ANSI.Leijen as P
 
 

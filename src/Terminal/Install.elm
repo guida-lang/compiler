@@ -16,9 +16,9 @@ import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 

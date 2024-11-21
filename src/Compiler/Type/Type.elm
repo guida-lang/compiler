@@ -47,11 +47,11 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Error as ET
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 

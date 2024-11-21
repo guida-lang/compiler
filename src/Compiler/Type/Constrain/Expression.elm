@@ -14,8 +14,8 @@ import Compiler.Reporting.Error.Type as E exposing (Category(..), Context(..), E
 import Compiler.Type.Constrain.Pattern as Pattern
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..))
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

@@ -6,9 +6,9 @@ module Terminal.Terminal.Error exposing
     )
 
 import Compiler.Reporting.Suggest as Suggest
-import Data.IO as IO exposing (IO)
 import List.Extra as List
 import Prelude
+import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal
     exposing
         ( ArgError(..)

@@ -8,8 +8,8 @@ import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Constrain.Expression as Expr
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..), mkFlexVar, nameToRigid)
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

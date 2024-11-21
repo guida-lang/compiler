@@ -23,9 +23,9 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import List.Extra as List
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 

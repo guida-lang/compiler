@@ -6,8 +6,8 @@ module Compiler.Type.Instantiate exposing
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Name exposing (Name)
 import Compiler.Type.Type exposing (Type(..))
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

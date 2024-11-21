@@ -18,8 +18,8 @@ import Compiler.Reporting.Render.Type.Localizer as Localizer
 import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
-import Data.IO as IO exposing (IO)
 import Data.Map exposing (Dict)
+import System.IO as IO exposing (IO)
 
 
 

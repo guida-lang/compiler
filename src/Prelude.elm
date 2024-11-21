@@ -5,9 +5,9 @@ module Prelude exposing
     , putStrLn
     )
 
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import List.Extra as List
+import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 
 

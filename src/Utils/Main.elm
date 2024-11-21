@@ -151,13 +151,13 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
-import Data.IO as IO exposing (IO(..))
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import System.IO as IO exposing (IO(..))
 import Time
 import Utils.Crash exposing (crash)
 

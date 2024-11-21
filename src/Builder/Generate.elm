@@ -22,9 +22,9 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath, MVar)
 
 

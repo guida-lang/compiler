@@ -18,8 +18,8 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 

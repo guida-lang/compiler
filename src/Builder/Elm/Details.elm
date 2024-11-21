@@ -45,11 +45,11 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
 

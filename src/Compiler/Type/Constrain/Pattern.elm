@@ -13,8 +13,8 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Type)
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

@@ -27,10 +27,10 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as CoreEncode
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (AsyncException(..), Chan, MVar)
 
 

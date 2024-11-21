@@ -2,8 +2,8 @@ module Compiler.Type.Occurs exposing (occurs)
 
 import Compiler.Type.Type as Type
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict
+import System.IO as IO exposing (IO)
 
 
 

@@ -25,10 +25,10 @@ import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 

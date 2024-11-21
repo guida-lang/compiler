@@ -9,8 +9,8 @@ import Compiler.Type.Error as Error
 import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

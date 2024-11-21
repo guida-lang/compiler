@@ -22,10 +22,11 @@ module Builder.Http exposing
     )
 
 import Basics.Extra exposing (uncurry)
+import Codec.Archive.Zip as Zip
 import Compiler.Elm.Version as V
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.IO as IO exposing (IO(..))
 import Url.Builder
 import Utils.Main as Utils exposing (SomeException)
 
@@ -108,17 +109,20 @@ type Method
 
 fetch : Method -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 fetch methodVerb _ url headers _ onSuccess =
-    IO.make Decode.string
-        (IO.HttpFetch
-            (case methodVerb of
-                MethodGet ->
-                    "GET"
+    IO
+        (\s ->
+            ( s
+            , IO.HttpFetch IO.pure
+                (case methodVerb of
+                    MethodGet ->
+                        "GET"
 
-                MethodPost ->
-                    "POST"
+                    MethodPost ->
+                        "POST"
+                )
+                url
+                (addDefaultHeaders headers)
             )
-            url
-            (addDefaultHeaders headers)
         )
         |> IO.bind onSuccess
 
@@ -165,9 +169,9 @@ shaToChars =
 -- FETCH ARCHIVE
 
 
-getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Utils.ZipArchive ) -> IO (Result e a)) -> IO (Result e a)
+getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO.make Utils.shaAndArchiveDecoder (IO.GetArchive "GET" url)
+    IO (\s -> ( s, IO.GetArchive IO.pure "GET" url ))
         |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
 
 
@@ -183,37 +187,42 @@ type MultiPart
 
 upload : Manager -> String -> List MultiPart -> IO (Result Error ())
 upload _ url parts =
-    IO.make (Decode.succeed (Ok ()))
-        (IO.HttpUpload url
-            (addDefaultHeaders [])
-            (Encode.list
-                (\part ->
-                    case part of
-                        FilePart name filePath ->
-                            Encode.object
-                                [ ( "type", Encode.string "FilePart" )
-                                , ( "name", Encode.string name )
-                                , ( "filePath", Encode.string filePath )
-                                ]
+    IO
+        (\s ->
+            ( s
+            , IO.HttpUpload IO.pure
+                url
+                (addDefaultHeaders [])
+                (List.map
+                    (\part ->
+                        case part of
+                            FilePart name filePath ->
+                                Encode.object
+                                    [ ( "type", Encode.string "FilePart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "filePath", Encode.string filePath )
+                                    ]
 
-                        JsonPart name filePath value ->
-                            Encode.object
-                                [ ( "type", Encode.string "JsonPart" )
-                                , ( "name", Encode.string name )
-                                , ( "filePath", Encode.string filePath )
-                                , ( "value", value )
-                                ]
+                            JsonPart name filePath value ->
+                                Encode.object
+                                    [ ( "type", Encode.string "JsonPart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "filePath", Encode.string filePath )
+                                    , ( "value", value )
+                                    ]
 
-                        StringPart name string ->
-                            Encode.object
-                                [ ( "type", Encode.string "StringPart" )
-                                , ( "name", Encode.string name )
-                                , ( "string", Encode.string string )
-                                ]
+                            StringPart name string ->
+                                Encode.object
+                                    [ ( "type", Encode.string "StringPart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "string", Encode.string string )
+                                    ]
+                    )
+                    parts
                 )
-                parts
             )
         )
+        |> IO.fmap Ok
 
 
 filePart : String -> String -> MultiPart

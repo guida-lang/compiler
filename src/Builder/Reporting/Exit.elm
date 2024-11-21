@@ -56,10 +56,10 @@ import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
-import Data.IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
+import System.IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 

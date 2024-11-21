@@ -448,7 +448,7 @@ m - The inner monad. (== IO)
 
 The return function leaves the state unchanged, while >>= uses the final state of the first computation as the initial state of the second.
 
-Ref: <https://hackage.haskell.org/package/transformers-0.6.1.2/docs/Control-Monad-Trans-State-Lazy.html#t:StateT>
+Ref.: <https://hackage.haskell.org/package/transformers-0.6.1.2/docs/Control-Monad-Trans-State-Lazy.html#t:StateT>
 
 -}
 type StateT s a
