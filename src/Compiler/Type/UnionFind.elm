@@ -25,7 +25,7 @@ module Compiler.Type.UnionFind exposing
 
 -}
 
-import Data.IORef exposing (IORef)
+import Data.IORef as IORef exposing (IORef)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
@@ -42,12 +42,12 @@ type Point a
 
 pointEncoder : Point a -> Encode.Value
 pointEncoder (Pt ioRef) =
-    IO.ioRefEncoder ioRef
+    IORef.ioRefEncoder ioRef
 
 
 pointDecoder : Decode.Decoder (Point a)
 pointDecoder =
-    Decode.map Pt IO.ioRefDecoder
+    Decode.map Pt IORef.ioRefDecoder
 
 
 type PointInfo a
@@ -61,8 +61,8 @@ pointInfoEncoder pointInfo =
         Info weight desc ->
             Encode.object
                 [ ( "type", Encode.string "Info" )
-                , ( "weight", IO.ioRefEncoder weight )
-                , ( "desc", IO.ioRefEncoder desc )
+                , ( "weight", IORef.ioRefEncoder weight )
+                , ( "desc", IORef.ioRefEncoder desc )
                 ]
 
         Link point ->
@@ -80,8 +80,8 @@ pointInfoDecoder =
                 case type_ of
                     "Info" ->
                         Decode.map2 Info
-                            (Decode.field "weight" IO.ioRefDecoder)
-                            (Decode.field "desc" IO.ioRefDecoder)
+                            (Decode.field "weight" IORef.ioRefDecoder)
+                            (Decode.field "desc" IORef.ioRefDecoder)
 
                     "Link" ->
                         Decode.map Link
@@ -98,18 +98,18 @@ pointInfoDecoder =
 
 fresh : (a -> Encode.Value) -> a -> IO (Point a)
 fresh encoder value =
-    IO.newIORef Encode.int 1
+    IORef.newIORef Encode.int 1
         |> IO.bind
             (\weight ->
-                IO.newIORef encoder value
-                    |> IO.bind (\desc -> IO.newIORef pointInfoEncoder (Info weight desc))
+                IORef.newIORef encoder value
+                    |> IO.bind (\desc -> IORef.newIORef pointInfoEncoder (Info weight desc))
                     |> IO.fmap (\link -> Pt link)
             )
 
 
 repr : Point a -> IO (Point a)
 repr ((Pt ref) as point) =
-    IO.readIORef pointInfoDecoder ref
+    IORef.readIORef pointInfoDecoder ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
@@ -121,10 +121,10 @@ repr ((Pt ref) as point) =
                             |> IO.bind
                                 (\point2 ->
                                     if point2 /= point1 then
-                                        IO.readIORef pointInfoDecoder ref1
+                                        IORef.readIORef pointInfoDecoder ref1
                                             |> IO.bind
                                                 (\pInfo1 ->
-                                                    IO.writeIORef pointInfoEncoder ref pInfo1
+                                                    IORef.writeIORef pointInfoEncoder ref pInfo1
                                                         |> IO.fmap (\_ -> point2)
                                                 )
 
@@ -136,20 +136,20 @@ repr ((Pt ref) as point) =
 
 get : Decode.Decoder a -> Point a -> IO a
 get decoder ((Pt ref) as point) =
-    IO.readIORef pointInfoDecoder ref
+    IORef.readIORef pointInfoDecoder ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.readIORef decoder descRef
+                        IORef.readIORef decoder descRef
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IORef.readIORef pointInfoDecoder ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.readIORef decoder descRef
+                                            IORef.readIORef decoder descRef
 
                                         Link _ ->
                                             IO.bind (get decoder) (repr point)
@@ -159,20 +159,20 @@ get decoder ((Pt ref) as point) =
 
 set : (a -> Encode.Value) -> Point a -> a -> IO ()
 set encoder ((Pt ref) as point) newDesc =
-    IO.readIORef pointInfoDecoder ref
+    IORef.readIORef pointInfoDecoder ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.writeIORef encoder descRef newDesc
+                        IORef.writeIORef encoder descRef newDesc
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IORef.readIORef pointInfoDecoder ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.writeIORef encoder descRef newDesc
+                                            IORef.writeIORef encoder descRef newDesc
 
                                         Link _ ->
                                             repr point
@@ -186,20 +186,20 @@ set encoder ((Pt ref) as point) newDesc =
 
 modify : Decode.Decoder a -> (a -> Encode.Value) -> Point a -> (a -> a) -> IO ()
 modify decoder encoder ((Pt ref) as point) func =
-    IO.readIORef pointInfoDecoder ref
+    IORef.readIORef pointInfoDecoder ref
         |> IO.bind
             (\pInfo ->
                 case pInfo of
                     Info _ descRef ->
-                        IO.modifyIORef decoder encoder descRef func
+                        IORef.modifyIORef decoder encoder descRef func
 
                     Link (Pt ref1) ->
-                        IO.readIORef pointInfoDecoder ref1
+                        IORef.readIORef pointInfoDecoder ref1
                             |> IO.bind
                                 (\link_ ->
                                     case link_ of
                                         Info _ descRef ->
-                                            IO.modifyIORef decoder encoder descRef func
+                                            IORef.modifyIORef decoder encoder descRef func
 
                                         Link _ ->
                                             repr point
@@ -216,22 +216,22 @@ union encoder p1 p2 newDesc =
                 repr p2
                     |> IO.bind
                         (\((Pt ref2) as point2) ->
-                            IO.readIORef pointInfoDecoder ref1
+                            IORef.readIORef pointInfoDecoder ref1
                                 |> IO.bind
                                     (\pointInfo1 ->
-                                        IO.readIORef pointInfoDecoder ref2
+                                        IORef.readIORef pointInfoDecoder ref2
                                             |> IO.bind
                                                 (\pointInfo2 ->
                                                     case ( pointInfo1, pointInfo2 ) of
                                                         ( Info w1 d1, Info w2 d2 ) ->
                                                             if point1 == point2 then
-                                                                IO.writeIORef encoder d1 newDesc
+                                                                IORef.writeIORef encoder d1 newDesc
 
                                                             else
-                                                                IO.readIORef Decode.int w1
+                                                                IORef.readIORef Decode.int w1
                                                                     |> IO.bind
                                                                         (\weight1 ->
-                                                                            IO.readIORef Decode.int w2
+                                                                            IORef.readIORef Decode.int w2
                                                                                 |> IO.bind
                                                                                     (\weight2 ->
                                                                                         let
@@ -240,14 +240,14 @@ union encoder p1 p2 newDesc =
                                                                                                 weight1 + weight2
                                                                                         in
                                                                                         if weight1 >= weight2 then
-                                                                                            IO.writeIORef pointInfoEncoder ref2 (Link point1)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef Encode.int w1 newWeight)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef encoder d1 newDesc)
+                                                                                            IORef.writeIORef pointInfoEncoder ref2 (Link point1)
+                                                                                                |> IO.bind (\_ -> IORef.writeIORef Encode.int w1 newWeight)
+                                                                                                |> IO.bind (\_ -> IORef.writeIORef encoder d1 newDesc)
 
                                                                                         else
-                                                                                            IO.writeIORef pointInfoEncoder ref1 (Link point2)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef Encode.int w2 newWeight)
-                                                                                                |> IO.bind (\_ -> IO.writeIORef encoder d2 newDesc)
+                                                                                            IORef.writeIORef pointInfoEncoder ref1 (Link point2)
+                                                                                                |> IO.bind (\_ -> IORef.writeIORef Encode.int w2 newWeight)
+                                                                                                |> IO.bind (\_ -> IORef.writeIORef encoder d2 newDesc)
                                                                                     )
                                                                         )
 
@@ -271,7 +271,7 @@ equivalent p1 p2 =
 
 redundant : Point a -> IO Bool
 redundant (Pt ref) =
-    IO.readIORef pointInfoDecoder ref
+    IORef.readIORef pointInfoDecoder ref
         |> IO.fmap
             (\pInfo ->
                 case pInfo of

@@ -37,8 +37,6 @@ module Utils.Main exposing
     , envGetArgs
     , envGetProgName
     , envLookupEnv
-    , exitFailure
-    , exitSuccess
     , filterM
     , find
     , foldM
@@ -151,12 +149,14 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
+import Control.Monad.State.Strict as State
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import System.Exit as Exit
 import System.IO as IO exposing (IO(..))
 import Time
 import Utils.Crash exposing (crash)
@@ -488,15 +488,15 @@ mapTraverseWithKeyResult keyComparison f =
         (Ok Dict.empty)
 
 
-mapTraverseStateT : (k -> k -> Order) -> (a -> IO.StateT s b) -> Dict k a -> IO.StateT s (Dict k b)
+mapTraverseStateT : (k -> k -> Order) -> (a -> State.StateT s b) -> Dict k a -> State.StateT s (Dict k b)
 mapTraverseStateT keyComparison f =
     mapTraverseWithKeyStateT keyComparison (\_ -> f)
 
 
-mapTraverseWithKeyStateT : (k -> k -> Order) -> (k -> a -> IO.StateT s b) -> Dict k a -> IO.StateT s (Dict k b)
+mapTraverseWithKeyStateT : (k -> k -> Order) -> (k -> a -> State.StateT s b) -> Dict k a -> State.StateT s (Dict k b)
 mapTraverseWithKeyStateT keyComparison f =
-    Dict.foldl (\k a -> IO.bindStateT (\c -> IO.fmapStateT (\va -> Dict.insert keyComparison k va c) (f k a)))
-        (IO.pureStateT Dict.empty)
+    Dict.foldl (\k a -> State.bind (\c -> State.fmap (\va -> Dict.insert keyComparison k va c) (f k a)))
+        (State.pure Dict.empty)
 
 
 listTraverse : (a -> IO b) -> List a -> IO (List b)
@@ -524,10 +524,10 @@ listTraverse_ f =
         >> IO.fmap (\_ -> ())
 
 
-listTraverseStateT : (a -> IO.StateT s b) -> List a -> IO.StateT s (List b)
+listTraverseStateT : (a -> State.StateT s b) -> List a -> State.StateT s (List b)
 listTraverseStateT f =
-    List.foldr (\a -> IO.bindStateT (\c -> IO.fmapStateT (\va -> va :: c) (f a)))
-        (IO.pureStateT [])
+    List.foldr (\a -> State.bind (\c -> State.fmap (\va -> va :: c) (f a)))
+        (State.pure [])
 
 
 tupleTraverse : (b -> IO c) -> ( a, b ) -> IO ( a, c )
@@ -535,9 +535,9 @@ tupleTraverse f ( a, b ) =
     IO.fmap (Tuple.pair a) (f b)
 
 
-tupleTraverseStateT : (b -> IO.StateT s c) -> ( a, b ) -> IO.StateT s ( a, c )
+tupleTraverseStateT : (b -> State.StateT s c) -> ( a, b ) -> State.StateT s ( a, c )
 tupleTraverseStateT f ( a, b ) =
-    IO.fmapStateT (Tuple.pair a) (f b)
+    State.fmap (Tuple.pair a) (f b)
 
 
 maybeTraverse : (a -> IO b) -> Maybe a -> IO (Maybe b)
@@ -550,14 +550,14 @@ maybeTraverse f a =
             IO.pure Nothing
 
 
-maybeTraverseStateT : (a -> IO.StateT s b) -> Maybe a -> IO.StateT s (Maybe b)
+maybeTraverseStateT : (a -> State.StateT s b) -> Maybe a -> State.StateT s (Maybe b)
 maybeTraverseStateT f a =
     case Maybe.map f a of
         Just b ->
-            IO.fmapStateT Just b
+            State.fmap Just b
 
         Nothing ->
-            IO.pureStateT Nothing
+            State.pure Nothing
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
@@ -824,14 +824,14 @@ lockWithFileLock path mode ioFunc =
                     )
 
 
-lockFile : String -> IO ()
+lockFile : FilePath -> IO ()
 lockFile path =
-    IO.make (Decode.succeed ()) (IO.LockFile path)
+    IO (\s -> ( s, IO.LockFile IO.pure path ))
 
 
-unlockFile : String -> IO ()
+unlockFile : FilePath -> IO ()
 unlockFile path =
-    IO.make (Decode.succeed ()) (IO.UnlockFile path)
+    IO (\s -> ( s, IO.UnlockFile IO.pure path ))
 
 
 
@@ -840,52 +840,56 @@ unlockFile path =
 
 dirDoesFileExist : FilePath -> IO Bool
 dirDoesFileExist filename =
-    IO.make Decode.bool (IO.DirDoesFileExist filename)
+    IO (\s -> ( s, IO.DirDoesFileExist IO.pure filename ))
 
 
 dirFindExecutable : FilePath -> IO (Maybe FilePath)
 dirFindExecutable filename =
-    IO.make (Decode.maybe Decode.string) (IO.DirFindExecutable filename)
+    IO (\s -> ( s, IO.DirFindExecutable IO.pure filename ))
 
 
 dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
 dirCreateDirectoryIfMissing createParents filename =
-    IO.make (Decode.succeed ()) (IO.DirCreateDirectoryIfMissing createParents filename)
+    IO (\s -> ( s, IO.DirCreateDirectoryIfMissing IO.pure createParents filename ))
 
 
 dirGetCurrentDirectory : IO String
 dirGetCurrentDirectory =
-    IO.make Decode.string IO.DirGetCurrentDirectory
+    IO (\s -> ( s, IO.Pure s.currentDirectory ))
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
 dirGetAppUserDataDirectory filename =
-    IO.make Decode.string (IO.DirGetAppUserDataDirectory filename)
+    -- IO.make Decode.string (IO.DirGetAppUserDataDirectory filename)
+    Debug.todo "dirGetAppUserDataDirectory"
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
 dirGetModificationTime filename =
-    IO.make (Decode.map Time.millisToPosix Decode.int) (IO.DirGetModificationTime filename)
+    IO (\s -> ( s, IO.DirGetModificationTime IO.pure filename ))
+        |> IO.fmap Time.millisToPosix
 
 
 dirRemoveFile : FilePath -> IO ()
 dirRemoveFile path =
-    IO.make (Decode.succeed ()) (IO.DirRemoveFile path)
+    -- IO.make (Decode.succeed ()) (IO.DirRemoveFile path)
+    Debug.todo "dirRemoveFile"
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
 dirRemoveDirectoryRecursive path =
-    IO.make (Decode.succeed ()) (IO.DirRemoveDirectoryRecursive path)
+    -- IO.make (Decode.succeed ()) (IO.DirRemoveDirectoryRecursive path)
+    Debug.todo "dirRemoveDirectoryRecursive"
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
 dirDoesDirectoryExist path =
-    IO.make Decode.bool (IO.DirDoesDirectoryExist path)
+    IO (\s -> ( s, IO.DirDoesDirectoryExist IO.pure path ))
 
 
 dirCanonicalizePath : FilePath -> IO FilePath
 dirCanonicalizePath path =
-    IO.make Decode.string (IO.DirCanonicalizePath path)
+    IO (\s -> ( s, IO.DirCanonicalizePath IO.pure path ))
 
 
 dirWithCurrentDirectory : FilePath -> IO a -> IO a
@@ -894,8 +898,10 @@ dirWithCurrentDirectory dir action =
         |> IO.bind
             (\currentDir ->
                 bracket_
-                    (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory dir))
-                    (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory currentDir))
+                    -- (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory dir))
+                    (Debug.todo "dirWithCurrentDirectory")
+                    -- (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory currentDir))
+                    (Debug.todo "dirWithCurrentDirectory")
                     action
             )
 
@@ -906,17 +912,17 @@ dirWithCurrentDirectory dir action =
 
 envLookupEnv : String -> IO (Maybe String)
 envLookupEnv name =
-    IO.make (Decode.maybe Decode.string) (IO.EnvLookupEnv name)
+    IO (\s -> ( s, IO.Pure (Dict.get name s.envVars) ))
 
 
 envGetProgName : IO String
 envGetProgName =
-    IO.make Decode.string IO.EnvGetProgName
+    IO (\s -> ( s, IO.Pure s.progName ))
 
 
 envGetArgs : IO (List String)
 envGetArgs =
-    IO.make (Decode.list Decode.string) IO.EnvGetArgs
+    IO (\s -> ( s, IO.Pure s.args ))
 
 
 
@@ -1060,14 +1066,16 @@ type ThreadId
 
 forkIO : IO () -> IO ThreadId
 forkIO ioArg =
-    IO
-        (\next ->
-            Decode.succeed
-                ( IO.Process (next ThreadId)
-                , IO.NoOp
-                , Just ioArg
-                )
-        )
+    -- IO
+    --     (\next ->
+    --         Decode.succeed
+    --             ( IO.Process (next ThreadId)
+    --             , IO.NoOp
+    --             , Just ioArg
+    --             )
+    --     )
+    -- FIXME !!! forkIO
+    IO (\s -> ( s, IO.Pure ThreadId ))
 
 
 
@@ -1090,7 +1098,16 @@ newMVar encoder value =
 
 readMVar : Decode.Decoder a -> MVar a -> IO a
 readMVar decoder (MVar ref) =
-    IO.make decoder (IO.ReadMVar ref)
+    IO (\s -> ( s, IO.ReadMVar IO.pure ref ))
+        |> IO.fmap
+            (\encodedValue ->
+                case Decode.decodeValue decoder encodedValue of
+                    Ok value ->
+                        value
+
+                    Err _ ->
+                        crash "Utils.Main.readMVar: invalid value"
+            )
 
 
 modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
@@ -1106,17 +1123,27 @@ modifyMVar decoder encoder m io =
 
 takeMVar : Decode.Decoder a -> MVar a -> IO a
 takeMVar decoder (MVar ref) =
-    IO.make decoder (IO.TakeMVar ref)
+    IO (\s -> ( s, IO.TakeMVar IO.pure ref ))
+        |> IO.fmap
+            (\encodedValue ->
+                case Decode.decodeValue decoder encodedValue of
+                    Ok value ->
+                        value
+
+                    Err _ ->
+                        crash "Utils.Main.takeMVar: invalid value"
+            )
 
 
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
 putMVar encoder (MVar ref) value =
-    IO.make (Decode.succeed ()) (IO.PutMVar ref (encoder value))
+    IO (\s -> ( s, IO.PutMVar IO.pure ref (encoder value) ))
 
 
 newEmptyMVar : IO (MVar a)
 newEmptyMVar =
-    IO.make (Decode.map MVar Decode.int) IO.NewEmptyMVar
+    IO (\s -> ( s, IO.NewEmptyMVar IO.pure ))
+        |> IO.fmap MVar
 
 
 
@@ -1180,26 +1207,13 @@ writeChan encoder (Chan _ writeVar) val =
 
 
 
--- System.Exit
-
-
-exitFailure : IO a
-exitFailure =
-    IO.make (Decode.fail "exitFailure") (IO.Exit "exitFailure" 1)
-
-
-exitSuccess : IO a
-exitSuccess =
-    IO.make (Decode.fail "exitSuccess") (IO.Exit "exitSuccess" 0)
-
-
-
 -- Data.ByteString.Builder
 
 
 builderHPutBuilder : IO.Handle -> String -> IO ()
 builderHPutBuilder handle str =
-    IO.make (Decode.succeed ()) (IO.HPutStr handle str)
+    -- IO.make (Decode.succeed ()) (IO.HPutStr handle str)
+    Debug.todo "builderHPutBuilder"
 
 
 
@@ -1208,18 +1222,20 @@ builderHPutBuilder handle str =
 
 binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
-    IO.make
-        (Decode.oneOf
-            [ Decode.map Ok decoder
-            , Decode.succeed (Err ( 0, "Could not find file " ++ filename ))
-            ]
-        )
-        (IO.BinaryDecodeFileOrFail filename)
+    -- IO.make
+    --     (Decode.oneOf
+    --         [ Decode.map Ok decoder
+    --         , Decode.succeed (Err ( 0, "Could not find file " ++ filename ))
+    --         ]
+    --     )
+    --     (IO.BinaryDecodeFileOrFail filename)
+    Debug.todo "binaryDecodeFileOrFail"
 
 
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
 binaryEncodeFile encoder path value =
-    IO.make (Decode.succeed ()) (IO.Write path (encoder value))
+    -- IO.make (Decode.succeed ()) (IO.Write path (encoder value))
+    Debug.todo "binaryEncodeFile"
 
 
 
@@ -1246,9 +1262,9 @@ type ReplCompletionFunc
     = ReplCompletionFunc
 
 
-replRunInputT : ReplSettings -> ReplInputT IO.ExitCode -> IO.StateT s IO.ExitCode
+replRunInputT : ReplSettings -> ReplInputT Exit.ExitCode -> State.StateT s Exit.ExitCode
 replRunInputT _ io =
-    IO.liftIO io
+    State.liftIO io
 
 
 replWithInterrupt : ReplInputT a -> ReplInputT a
@@ -1256,7 +1272,7 @@ replWithInterrupt =
     identity
 
 
-replCompleteWord : Maybe Char -> String -> (String -> IO.StateT a (List ReplCompletion)) -> ReplCompletionFunc
+replCompleteWord : Maybe Char -> String -> (String -> State.StateT a (List ReplCompletion)) -> ReplCompletionFunc
 replCompleteWord _ _ _ =
     -- FIXME
     ReplCompletionFunc
@@ -1264,31 +1280,34 @@ replCompleteWord _ _ _ =
 
 replGetInputLine : String -> ReplInputT (Maybe String)
 replGetInputLine prompt =
-    IO.make (Decode.maybe Decode.string) (IO.ReplGetInputLine prompt)
+    IO (\s -> ( s, IO.ReplGetInputLine IO.pure prompt ))
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
-    IO.make (Decode.maybe Decode.string) (IO.ReplGetInputLineWithInitial prompt ( left, right ))
+    -- IO.make (Decode.maybe Decode.string) (IO.ReplGetInputLineWithInitial prompt ( left, right ))
+    Debug.todo "replGetInputLineWithInitial"
 
 
 
 -- Control.Monad.State.Class
 
 
-stateGet : Decode.Decoder s -> IO.StateT s s
+stateGet : Decode.Decoder s -> State.StateT s s
 stateGet decoder =
     let
         io : IO s
         io =
-            IO.make decoder IO.StateGet
+            -- IO.make decoder IO.StateGet
+            Debug.todo "stateGet"
     in
-    IO.StateT (\_ -> IO.fmap (\s -> ( s, s )) io)
+    State.StateT (\_ -> IO.fmap (\s -> ( s, s )) io)
 
 
 statePut : (s -> Encode.Value) -> s -> IO ()
 statePut encoder s =
-    IO.make (Decode.succeed ()) (IO.StatePut (encoder s))
+    -- IO.make (Decode.succeed ()) (IO.StatePut (encoder s))
+    Debug.todo "statePut"
 
 
 

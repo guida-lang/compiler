@@ -2,12 +2,9 @@ module Prelude exposing
     ( head
     , init
     , last
-    , putStrLn
     )
 
-import Json.Decode as Decode
 import List.Extra as List
-import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 
 
@@ -39,8 +36,3 @@ last items =
 
         Nothing ->
             crash "*** Exception: Prelude.last: empty list"
-
-
-putStrLn : String -> IO ()
-putStrLn s =
-    IO.make (Decode.succeed ()) (IO.PutStrLn s)

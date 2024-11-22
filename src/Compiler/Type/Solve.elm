@@ -410,7 +410,7 @@ This sorts variables into the young and old pools accordingly.
 -}
 generalize : Mark -> Mark -> Int -> Pools -> IO ()
 generalize youngMark visitMark youngRank pools =
-    MVector.read (Decode.list Type.variableDecoder) (Encode.list Type.variableEncoder) pools youngRank
+    MVector.read (Decode.list Type.variableDecoder) pools youngRank
         |> IO.bind
             (\youngVars ->
                 poolToRankTable youngMark youngRank youngVars
@@ -429,7 +429,7 @@ generalize youngMark visitMark youngRank pools =
                                         -- For variables that have rank lowerer than youngRank, register them in
                                         -- the appropriate old pool if they are not redundant.
                                         Vector.forM_ (Decode.list Type.variableDecoder)
-                                            (IO.vectorUnsafeInit rankTable)
+                                            (Vector.unsafeInit rankTable)
                                             (\vars ->
                                                 Utils.forM_ vars
                                                     (\var ->
@@ -453,7 +453,7 @@ generalize youngMark visitMark youngRank pools =
                                                     -- For variables with rank youngRank
                                                     --   If rank < youngRank: register in oldPool
                                                     --   otherwise generalize
-                                                    IO.vectorUnsafeLast (Decode.list Type.variableDecoder) (Encode.list Type.variableEncoder) rankTable
+                                                    Vector.unsafeLast (Decode.list Type.variableDecoder) rankTable
                                                         |> IO.bind
                                                             (\lastRankTable ->
                                                                 Utils.forM_ lastRankTable <|
@@ -500,7 +500,7 @@ poolToRankTable youngMark youngRank youngInhabitants =
                                             )
                                 )
                     )
-                    |> IO.bind (\_ -> IO.vectorUnsafeFreeze mutableTable)
+                    |> IO.bind (\_ -> Vector.unsafeFreeze mutableTable)
             )
 
 

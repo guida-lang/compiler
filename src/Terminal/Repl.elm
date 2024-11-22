@@ -39,13 +39,16 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as ES
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
+import Control.Monad.State.Strict as State
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Prelude
+import System.Exit as Exit
 import System.IO as IO exposing (IO)
+import System.Process as Process
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -68,12 +71,12 @@ run () flags =
                     |> IO.bind
                         (\env ->
                             let
-                                looper : M IO.ExitCode
+                                looper : M Exit.ExitCode
                                 looper =
                                     Utils.replRunInputT settings (Utils.replWithInterrupt (loop env initialState))
                             in
-                            IO.evalStateT looper initialState
-                                |> IO.bind (\exitCode -> IO.exitWith exitCode)
+                            State.evalStateT looper initialState
+                                |> IO.bind (\exitCode -> Exit.exitWith exitCode)
                         )
             )
 
@@ -137,16 +140,15 @@ initEnv (Flags maybeAlternateInterpreter noColors) =
 
 type Outcome
     = Loop State
-    | End IO.ExitCode
+    | End Exit.ExitCode
 
 
 type alias M a =
-    IO.StateT State a
+    State.StateT State a
 
 
-loop : Env -> State -> Utils.ReplInputT IO.ExitCode
+loop : Env -> State -> Utils.ReplInputT Exit.ExitCode
 loop env state =
-    -- Utils.replHandleInterrupt (IO.pure Skip)
     read
         |> IO.bind
             (\input ->
@@ -541,20 +543,19 @@ initialState =
 
 eval : Env -> State -> Input -> IO Outcome
 eval env ((State imports types decls) as state) input =
-    -- Utils.replHandleInterrupt (Prelude.putStrLn "<cancelled>" |> IO.fmap (\_ -> Loop state)) <|
     case input of
         Skip ->
             IO.pure (Loop state)
 
         Exit ->
-            IO.pure (End IO.ExitSuccess)
+            IO.pure (End Exit.ExitSuccess)
 
         Reset ->
-            Prelude.putStrLn "<reset>"
+            IO.putStrLn "<reset>"
                 |> IO.fmap (\_ -> Loop initialState)
 
         Help maybeUnknownCommand ->
-            Prelude.putStrLn (toHelpMessage maybeUnknownCommand)
+            IO.putStrLn (toHelpMessage maybeUnknownCommand)
                 |> IO.fmap (\_ -> Loop state)
 
         Import name src ->
@@ -574,7 +575,7 @@ eval env ((State imports types decls) as state) input =
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
         Port ->
-            Prelude.putStrLn "I cannot handle port declarations."
+            IO.putStrLn "I cannot handle port declarations."
                 |> IO.fmap (\_ -> Loop state)
 
         Decl name src ->
@@ -634,30 +635,30 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                             |> IO.fmap
                                 (\exitCode ->
                                     case exitCode of
-                                        IO.ExitSuccess ->
+                                        Exit.ExitSuccess ->
                                             newState
 
-                                        IO.ExitFailure _ ->
+                                        Exit.ExitFailure _ ->
                                             oldState
                                 )
             )
 
 
-interpret : FilePath -> String -> IO IO.ExitCode
+interpret : FilePath -> String -> IO Exit.ExitCode
 interpret interpreter javascript =
     let
-        createProcess : { cmdspec : IO.CmdSpec, std_out : IO.StdStream, std_err : IO.StdStream, std_in : IO.StdStream }
+        createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
         createProcess =
-            IO.procProc interpreter []
-                |> (\cp -> { cp | std_in = IO.CreatePipe })
+            Process.proc interpreter []
+                |> (\cp -> { cp | std_in = Process.CreatePipe })
     in
-    IO.procWithCreateProcess createProcess <|
+    Process.withCreateProcess createProcess <|
         \stdinHandle _ _ handle ->
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
                         |> IO.bind (\_ -> IO.hClose stdin)
-                        |> IO.bind (\_ -> IO.procWaitForProcess handle)
+                        |> IO.bind (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -815,7 +816,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> IO.bind (\_ -> IO.exitFailure)
+                            |> IO.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -849,7 +850,7 @@ initSettings =
 lookupCompletions : String -> M (List Utils.ReplCompletion)
 lookupCompletions string =
     Utils.stateGet stateDecoder
-        |> IO.fmapStateT
+        |> State.fmap
             (\(State imports types decls) ->
                 addMatches string False decls <|
                     addMatches string False types <|
