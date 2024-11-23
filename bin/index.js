@@ -464,6 +464,7 @@ const app = Elm.Terminal.Main.init({
     args: process.argv.slice(2),
     currentDirectory: process.cwd(),
     envVars: Object.keys(process.env).reduce((acc, key) => { acc.push([key, process.env[key]]); return acc }, []),
+    homedir: os.homedir(),
     progName: "guida"
   }
 });
@@ -481,14 +482,50 @@ app.ports.sendWriteString.subscribe(function (...args) {
 });
 
 app.ports.sendRead.subscribe(function ({ index, fd }) {
+  console.log("sendRead", index, fd);
+
   fs.readFile(fd, (err, data) => {
     if (err) throw err;
     app.ports.recvRead.send({ index, value: data.toString() });
   });
 });
 
-app.ports.sendHttpFetch.subscribe(function (...args) {
-  console.log("sendHttpFetch", args);
+app.ports.sendHttpFetch.subscribe(function ({ index, method, urlStr, headers }) {
+  const url = new URL(urlStr);
+  const client = url.protocol == "https:" ? https : http;
+
+  const req = client.request(url, { method, headers }, (res) => {
+    let chunks = [];
+
+    res.on("data", (chunk) => {
+      chunks.push(chunk);
+    });
+
+    res.on("end", () => {
+      const buffer = Buffer.concat(chunks);
+      const encoding = res.headers["content-encoding"];
+
+      if (encoding == "gzip") {
+        zlib.gunzip(buffer, (err, decoded) => {
+          if (err) throw err;
+          app.ports.recvHttpFetch.send({ index, value: decoded && decoded.toString() });
+        });
+      } else if (encoding == "deflate") {
+        zlib.inflate(buffer, (err, decoded) => {
+          if (err) throw err;
+          app.ports.recvHttpFetch.send({ index, value: decoded && decoded.toString() });
+        });
+      } else {
+        app.ports.recvHttpFetch.send({ index, value: buffer.toString() });
+      }
+    });
+  });
+
+  req.on("error", (err) => {
+    throw err;
+  });
+
+  req.end();
 });
 
 app.ports.sendGetArchive.subscribe(function (...args) {
@@ -528,6 +565,8 @@ app.ports.sendExitWith.subscribe(function (...args) {
 });
 
 app.ports.sendNewEmptyMVar.subscribe(function (index) {
+  console.log("sendNewEmptyMVar", index);
+
     nextCounter += 1;
     mVars[nextCounter] = { subscribers: [], value: undefined };
   app.ports.recvNewEmptyMVar.send({ index, value: nextCounter });
@@ -549,7 +588,7 @@ app.ports.sendPutMVar.subscribe(function ({ index, id, value }) {
 
       mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
         if (subscriber.action === "read") {
-        // FIXME app.ports.???.send({ index: subscriber.index, value });
+        app.ports.recvReadMVar.send({ index: subscriber.index, value });
         }
 
         return subscriber.action !== "read";
@@ -558,6 +597,7 @@ app.ports.sendPutMVar.subscribe(function ({ index, id, value }) {
       const subscriber = mVars[id].subscribers.shift();
 
       if (subscriber) {
+      console.log("sendPutMVar!subscriber", subscriber);
       // FIXME app.ports.???.send({ index: subscriber.index, value });
 
         if (subscriber.action === "take") {
@@ -572,16 +612,22 @@ app.ports.sendPutMVar.subscribe(function ({ index, id, value }) {
 });
 
 app.ports.sendDirDoesFileExist.subscribe(function ({ index, filename }) {
+  console.log("sendDirDoesFileExist", index, filename);
+
   app.ports.recvDirDoesFileExist.send({ index, value: fs.existsSync(filename) });
 });
 
 app.ports.sendDirCreateDirectoryIfMissing.subscribe(function ({ index, createParents, filename }) {
+  console.log("sendDirCreateDirectoryIfMissing", index, createParents, filename);
+
   fs.mkdir(filename, { recursive: createParents }, (err) => {
     app.ports.recvDirCreateDirectoryIfMissing.send(index);
   });
 });
 
 app.ports.sendLockFile.subscribe(function ({ index, path }) {
+  console.log("sendLockFile", index, path);
+
   if (lockedFiles[path]) {
     lockedFiles[path].subscribers.push(index);
   } else {
@@ -591,6 +637,8 @@ app.ports.sendLockFile.subscribe(function ({ index, path }) {
 });
 
 app.ports.sendDirGetModificationTime.subscribe(function ({ index, filename }) {
+  console.log("sendDirGetModificationTime", index, filename);
+
   fs.stat(filename, (err, stats) => {
     if (err) throw err;
     app.ports.recvDirGetModificationTime.send({ index, value: parseInt(stats.mtimeMs, 10) });
@@ -598,14 +646,20 @@ app.ports.sendDirGetModificationTime.subscribe(function ({ index, filename }) {
 });
 
 app.ports.sendDirDoesDirectoryExist.subscribe(function ({ index, path }) {
+  console.log("sendDirDoesDirectoryExist", index, path);
+
   app.ports.recvDirDoesDirectoryExist.send({ index, value: fs.existsSync(path) });
 });
 
 app.ports.sendDirCanonicalizePath.subscribe(function ({ index, path }) {
+  console.log("sendDirCanonicalizePath", index, path);
+
   app.ports.recvDirCanonicalizePath.send({ index, value: resolve(path) });
 });
 
 app.ports.sendReadMVar.subscribe(function ({ index, id }) {
+  console.log("sendReadMVar", mVars, index, id, typeof mVars[id].value);
+
   if (typeof mVars[id].value === "undefined") {
     mVars[id].subscribers.push({ index, action: "read" });
   } else {

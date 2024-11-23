@@ -79,6 +79,7 @@ type alias Flags =
     { args : List String
     , currentDirectory : String
     , envVars : List ( String, String )
+    , homedir : FilePath
     , progName : String
     }
 
@@ -97,6 +98,7 @@ run app =
                         { args = flags.args
                         , currentDirectory = flags.currentDirectory
                         , envVars = Dict.fromList compare flags.envVars
+                        , homedir = flags.homedir
                         , progName = flags.progName
                         , ioRefs = Array.empty
                         }
@@ -204,11 +206,19 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case Debug.log "update" msg of
+    case msg of
         PureMsg index (IO fn) ->
-            case Debug.log "update2" (fn model.realWorld) of
+            case fn model.realWorld of
                 ( newRealWorld, Pure () ) ->
                     ( { model | realWorld = newRealWorld }, Cmd.none )
+
+                ( newRealWorld, ForkIO next forkIO ) ->
+                    let
+                        ( updatedModel, updatedCmd ) =
+                            update (PureMsg (index + 1) forkIO) { model | realWorld = newRealWorld }
+                    in
+                    update (PureMsg index (next ())) updatedModel
+                        |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetLineNext next) model.next }, sendGetLine () )
@@ -222,17 +232,17 @@ update msg model =
                 ( newRealWorld, Read next fd ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
 
-                ( newRealWorld, HttpFetch next method url headers ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpFetchNext next) model.next }, sendHttpFetch { method = method, url = url, headers = headers } )
+                ( newRealWorld, HttpFetch next method urlStr headers ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
 
                 ( newRealWorld, GetArchive next method url ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetArchiveNext next) model.next }, sendGetArchive { method = method, url = url } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
 
                 ( newRealWorld, HttpUpload next url headers parts ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpUploadNext next) model.next }, sendHttpUpload { url = url, headers = headers, parts = parts } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, url = url, headers = headers, parts = parts } )
 
                 ( newRealWorld, HFlush next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFlushNext next) model.next }, sendHFlush fd )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
 
                 ( newRealWorld, WithFile next path mode ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WithFileNext next) model.next }
@@ -543,25 +553,25 @@ port sendRead : { index : Int, fd : String } -> Cmd msg
 port recvRead : ({ index : Int, value : String } -> msg) -> Sub msg
 
 
-port sendHttpFetch : { method : String, url : String, headers : List ( String, String ) } -> Cmd msg
+port sendHttpFetch : { index : Int, method : String, urlStr : String, headers : List ( String, String ) } -> Cmd msg
 
 
 port recvHttpFetch : ({ index : Int, value : String } -> msg) -> Sub msg
 
 
-port sendGetArchive : { method : String, url : String } -> Cmd msg
+port sendGetArchive : { index : Int, method : String, url : String } -> Cmd msg
 
 
 port recvGetArchive : ({ index : Int, value : ( String, Zip.Archive ) } -> msg) -> Sub msg
 
 
-port sendHttpUpload : { url : String, headers : List ( String, String ), parts : List Encode.Value } -> Cmd msg
+port sendHttpUpload : { index : Int, url : String, headers : List ( String, String ), parts : List Encode.Value } -> Cmd msg
 
 
 port recvHttpUpload : (Int -> msg) -> Sub msg
 
 
-port sendHFlush : Int -> Cmd msg
+port sendHFlush : { index : Int, fd : Int } -> Cmd msg
 
 
 port recvHFlush : (Int -> msg) -> Sub msg
@@ -688,6 +698,7 @@ type IO a
 
 type ION a
     = Pure a
+    | ForkIO (() -> IO a) (IO ())
     | HPutStr (() -> IO a) Handle String
     | GetLine (String -> IO a)
     | WriteString (() -> IO a) FilePath String
@@ -721,6 +732,7 @@ type alias RealWorld =
     { args : List String
     , currentDirectory : String
     , envVars : Dict String String
+    , homedir : FilePath
     , progName : String
     , ioRefs : Array Encode.Value
     }
@@ -749,6 +761,9 @@ bind f (IO ma) =
                 ( s1, Pure a ) ->
                     unIO (f a) s1
 
+                ( s1, ForkIO next forkIO ) ->
+                    ( s1, ForkIO (\() -> bind f (next ())) forkIO )
+
                 ( s1, GetLine next ) ->
                     ( s1, GetLine (\input -> bind f (next input)) )
 
@@ -761,8 +776,8 @@ bind f (IO ma) =
                 ( s1, Read next fd ) ->
                     ( s1, Read (\input -> bind f (next input)) fd )
 
-                ( s1, HttpFetch next method url headers ) ->
-                    ( s1, HttpFetch (\body -> bind f (next body)) method url headers )
+                ( s1, HttpFetch next method urlStr headers ) ->
+                    ( s1, HttpFetch (\body -> bind f (next body)) method urlStr headers )
 
                 ( s1, GetArchive next method url ) ->
                     ( s1, GetArchive (\body -> bind f (next body)) method url )

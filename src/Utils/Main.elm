@@ -860,8 +860,7 @@ dirGetCurrentDirectory =
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
 dirGetAppUserDataDirectory filename =
-    -- IO.make Decode.string (IO.DirGetAppUserDataDirectory filename)
-    Debug.todo "dirGetAppUserDataDirectory"
+    IO (\s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) ))
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
@@ -1066,16 +1065,7 @@ type ThreadId
 
 forkIO : IO () -> IO ThreadId
 forkIO ioArg =
-    -- IO
-    --     (\next ->
-    --         Decode.succeed
-    --             ( IO.Process (next ThreadId)
-    --             , IO.NoOp
-    --             , Just ioArg
-    --             )
-    --     )
-    -- FIXME !!! forkIO
-    IO (\s -> ( s, IO.Pure ThreadId ))
+    IO (\s -> ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg ))
 
 
 
