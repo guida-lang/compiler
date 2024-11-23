@@ -1,0 +1,22 @@
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Main</title>
+	<script src="index.js"></script>
+</head>
+
+<body>
+	<script>
+		const app = Elm.Main.init({});
+		app.ports.sendHPutStr.subscribe(function (args) {
+			console.log(args);
+			app.ports.recvHPutStr.send(null);
+		})
+		app.ports.sendGetLine.subscribe(function () {
+			app.ports.recvGetLine.send("some string...");
+		})
+	</script>
+</body>
+
+</html>
