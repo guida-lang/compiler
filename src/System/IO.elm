@@ -121,19 +121,20 @@ run app =
                     , recvProcWithCreateProcess (\{ index, value } -> ProcWithCreateProcessMsg index value)
                     , recvHClose HCloseMsg
                     , recvProcWaitForProcess (\{ index, value } -> ProcWaitForProcessMsg index value)
-                    , recvNewEmptyMVar (\{ index, value } -> NewEmptyMVarMsg index value)
                     , recvDirFindExecutable (\{ index, value } -> DirFindExecutableMsg index value)
                     , recvReplGetInputLine (\{ index, value } -> ReplGetInputLineMsg index value)
-                    , recvPutMVar PutMVarMsg
                     , recvDirDoesFileExist (\{ index, value } -> DirDoesFileExistMsg index value)
                     , recvDirCreateDirectoryIfMissing DirCreateDirectoryIfMissingMsg
                     , recvLockFile LockFileMsg
                     , recvUnlockFile UnlockFileMsg
                     , recvDirGetModificationTime (\{ index, value } -> DirGetModificationTimeMsg index value)
-                    , recvTakeMVar (\{ index, value } -> TakeMVarMsg index value)
                     , recvDirDoesDirectoryExist (\{ index, value } -> DirDoesDirectoryExistMsg index value)
                     , recvDirCanonicalizePath (\{ index, value } -> DirCanonicalizePathMsg index value)
+                    , recvBinaryDecodeFileOrFail (\{ index, value } -> BinaryDecodeFileOrFailMsg index value)
+                    , recvWrite WriteMsg
+                    , recvNewEmptyMVar (\{ index, value } -> NewEmptyMVarMsg index value)
                     , recvReadMVar (\{ index, value } -> ReadMVarMsg index value)
+                    , recvPutMVar PutMVarMsg
                     ]
         }
 
@@ -159,19 +160,24 @@ type Next
     | HCloseNext (() -> IO ())
     | ProcWaitForProcessNext (Int -> IO ())
     | ExitWithNext (() -> IO ())
-    | NewEmptyMVarNext (Int -> IO ())
     | DirFindExecutableNext (Maybe FilePath -> IO ())
     | ReplGetInputLineNext (Maybe String -> IO ())
-    | PutMVarNext (() -> IO ())
     | DirDoesFileExistNext (Bool -> IO ())
     | DirCreateDirectoryIfMissingNext (() -> IO ())
     | LockFileNext (() -> IO ())
     | UnlockFileNext (() -> IO ())
     | DirGetModificationTimeNext (Int -> IO ())
-    | TakeMVarNext (Encode.Value -> IO ())
     | DirDoesDirectoryExistNext (Bool -> IO ())
     | DirCanonicalizePathNext (String -> IO ())
+    | BinaryDecodeFileOrFailNext (Encode.Value -> IO ())
+    | WriteNext (() -> IO ())
+    | DirRemoveFileNext (() -> IO ())
+    | DirRemoveDirectoryRecursiveNext (() -> IO ())
+    | DirWithCurrentDirectoryNext (() -> IO ())
+    | NewEmptyMVarNext (Int -> IO ())
     | ReadMVarNext (Encode.Value -> IO ())
+    | TakeMVarNext (Encode.Value -> IO ())
+    | PutMVarNext (() -> IO ())
 
 
 type Msg
@@ -189,19 +195,20 @@ type Msg
     | ProcWithCreateProcessMsg Int { stdinHandle : Maybe Int, ph : Int }
     | HCloseMsg Int
     | ProcWaitForProcessMsg Int Int
-    | NewEmptyMVarMsg Int Int
     | DirFindExecutableMsg Int (Maybe FilePath)
     | ReplGetInputLineMsg Int (Maybe String)
-    | PutMVarMsg Int
     | DirDoesFileExistMsg Int Bool
     | DirCreateDirectoryIfMissingMsg Int
     | LockFileMsg Int
     | UnlockFileMsg Int
     | DirGetModificationTimeMsg Int Int
-    | TakeMVarMsg Int Encode.Value
     | DirDoesDirectoryExistMsg Int Bool
     | DirCanonicalizePathMsg Int FilePath
+    | BinaryDecodeFileOrFailMsg Int Encode.Value
+    | WriteMsg Int
+    | NewEmptyMVarMsg Int Int
     | ReadMVarMsg Int Encode.Value
+    | PutMVarMsg Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -215,19 +222,19 @@ update msg model =
                 ( newRealWorld, ForkIO next forkIO ) ->
                     let
                         ( updatedModel, updatedCmd ) =
-                            update (PureMsg (index + 1) forkIO) { model | realWorld = newRealWorld }
+                            update (PureMsg index (next ())) { model | realWorld = newRealWorld }
                     in
-                    update (PureMsg index (next ())) updatedModel
+                    update (PureMsg (Dict.size model.next) forkIO) updatedModel
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetLineNext next) model.next }, sendGetLine () )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetLineNext next) model.next }, sendGetLine index )
 
                 ( newRealWorld, HPutStr next (Handle fd) content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HPutLineNext next) model.next }, sendHPutStr { fd = fd, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, WriteString next path content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WriteStringNext next) model.next }, sendWriteString { path = path, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
 
                 ( newRealWorld, Read next fd ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
@@ -238,8 +245,8 @@ update msg model =
                 ( newRealWorld, GetArchive next method url ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
 
-                ( newRealWorld, HttpUpload next url headers parts ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, url = url, headers = headers, parts = parts } )
+                ( newRealWorld, HttpUpload next urlStr headers parts ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
 
                 ( newRealWorld, HFlush next (Handle fd) ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
@@ -247,7 +254,8 @@ update msg model =
                 ( newRealWorld, WithFile next path mode ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WithFileNext next) model.next }
                     , sendWithFile
-                        { path = path
+                        { index = index
+                        , path = path
                         , mode =
                             case mode of
                                 ReadMode ->
@@ -265,33 +273,25 @@ update msg model =
                     )
 
                 ( newRealWorld, HFileSize next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFileSizeNext next) model.next }, sendHFileSize fd )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWithCreateProcess next createProcess ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess createProcess )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
 
                 ( newRealWorld, HClose next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HCloseNext next) model.next }, sendHClose fd )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWaitForProcess next ph ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess ph )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
 
                 ( newRealWorld, ExitWith next code ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ExitWithNext next) model.next }, sendExitWith code )
 
-                ( newRealWorld, NewEmptyMVar next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (NewEmptyMVarNext next) model.next }
-                    , sendNewEmptyMVar index
-                    )
-
-                ( newRealWorld, DirFindExecutable next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirFindExecutableNext next) model.next }, sendDirFindExecutable filename )
+                ( newRealWorld, DirFindExecutable next name ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
 
                 ( newRealWorld, ReplGetInputLine next prompt ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine prompt )
-
-                ( newRealWorld, PutMVar next id value ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
 
                 ( newRealWorld, DirDoesFileExist next filename ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
@@ -308,17 +308,38 @@ update msg model =
                 ( newRealWorld, DirGetModificationTime next filename ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
 
-                ( newRealWorld, TakeMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
-
                 ( newRealWorld, DirDoesDirectoryExist next path ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
 
                 ( newRealWorld, DirCanonicalizePath next path ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
 
+                ( newRealWorld, BinaryDecodeFileOrFail next filename ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
+
+                ( newRealWorld, Write next fd content ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
+
+                ( newRealWorld, DirRemoveFile next path ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
+
+                ( newRealWorld, DirRemoveDirectoryRecursive next path ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
+
+                ( newRealWorld, DirWithCurrentDirectory next path ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
+
+                ( newRealWorld, NewEmptyMVar next ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
+
                 ( newRealWorld, ReadMVar next id ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
+
+                ( newRealWorld, TakeMVar next id ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
+
+                ( newRealWorld, PutMVar next id value ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -326,7 +347,7 @@ update msg model =
                     update (PureMsg index (fn input)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "GetLineMsg"
 
         HPutLineMsg index ->
             case Dict.get index model.next of
@@ -334,7 +355,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HPutLineMsg"
 
         WriteStringMsg index ->
             case Dict.get index model.next of
@@ -342,7 +363,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "WriteStringMsg"
 
         ReadMsg index value ->
             case Dict.get index model.next of
@@ -350,7 +371,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "ReadMsg"
 
         HttpFetchMsg index value ->
             case Dict.get index model.next of
@@ -358,7 +379,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HttpFetchMsg"
 
         GetArchiveMsg index value ->
             case Dict.get index model.next of
@@ -366,7 +387,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "GetArchiveMsg"
 
         HttpUploadMsg index ->
             case Dict.get index model.next of
@@ -374,7 +395,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HttpUploadMsg"
 
         HFlushMsg index ->
             case Dict.get index model.next of
@@ -382,7 +403,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HFlushMsg"
 
         WithFileMsg index fd ->
             case Dict.get index model.next of
@@ -390,7 +411,7 @@ update msg model =
                     update (PureMsg index (fn fd)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "WithFileMsg"
 
         HFileSizeMsg index size ->
             case Dict.get index model.next of
@@ -398,7 +419,7 @@ update msg model =
                     update (PureMsg index (fn size)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HFileSizeMsg"
 
         ProcWithCreateProcessMsg index value ->
             case Dict.get index model.next of
@@ -406,7 +427,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "ProcWithCreateProcessMsg"
 
         HCloseMsg index ->
             case Dict.get index model.next of
@@ -414,7 +435,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "HCloseMsg"
 
         ProcWaitForProcessMsg index code ->
             case Dict.get index model.next of
@@ -422,7 +443,7 @@ update msg model =
                     update (PureMsg index (fn code)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "ProcWaitForProcessMsg"
 
         NewEmptyMVarMsg index value ->
             case Dict.get index model.next of
@@ -430,7 +451,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString ( msg, model.next ))
+                    crash "NewEmptyMVarMsg"
 
         DirFindExecutableMsg index value ->
             case Dict.get index model.next of
@@ -438,7 +459,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirFindExecutableMsg"
 
         ReplGetInputLineMsg index value ->
             case Dict.get index model.next of
@@ -446,7 +467,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "ReplGetInputLineMsg"
 
         PutMVarMsg index ->
             case Dict.get index model.next of
@@ -454,7 +475,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "PutMVarMsg"
 
         DirDoesFileExistMsg index value ->
             case Dict.get index model.next of
@@ -462,7 +483,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirDoesFileExistMsg"
 
         DirCreateDirectoryIfMissingMsg index ->
             case Dict.get index model.next of
@@ -470,7 +491,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirCreateDirectoryIfMissingMsg"
 
         LockFileMsg index ->
             case Dict.get index model.next of
@@ -478,7 +499,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "LockFileMsg"
 
         UnlockFileMsg index ->
             case Dict.get index model.next of
@@ -486,7 +507,7 @@ update msg model =
                     update (PureMsg index (fn ())) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "UnlockFileMsg"
 
         DirGetModificationTimeMsg index value ->
             case Dict.get index model.next of
@@ -494,15 +515,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
-
-        TakeMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (TakeMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirGetModificationTimeMsg"
 
         DirDoesDirectoryExistMsg index value ->
             case Dict.get index model.next of
@@ -510,7 +523,7 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirDoesDirectoryExistMsg"
 
         DirCanonicalizePathMsg index value ->
             case Dict.get index model.next of
@@ -518,30 +531,49 @@ update msg model =
                     update (PureMsg index (fn value)) model
 
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "DirCanonicalizePathMsg"
 
         ReadMVarMsg index value ->
             case Dict.get index model.next of
                 Just (ReadMVarNext fn) ->
                     update (PureMsg index (fn value)) model
 
+                Just (TakeMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
                 _ ->
-                    Debug.todo (Debug.toString msg)
+                    crash "ReadMVarMsg"
+
+        BinaryDecodeFileOrFailMsg index value ->
+            case Dict.get index model.next of
+                Just (BinaryDecodeFileOrFailNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "BinaryDecodeFileOrFailMsg"
+
+        WriteMsg index ->
+            case Dict.get index model.next of
+                Just (WriteNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "WriteMsg"
 
 
-port sendGetLine : () -> Cmd msg
+port sendGetLine : Int -> Cmd msg
 
 
 port recvGetLine : ({ index : Int, value : String } -> msg) -> Sub msg
 
 
-port sendHPutStr : { fd : Int, content : String } -> Cmd msg
+port sendHPutStr : { index : Int, fd : Int, content : String } -> Cmd msg
 
 
 port recvHPutStr : (Int -> msg) -> Sub msg
 
 
-port sendWriteString : { path : FilePath, content : String } -> Cmd msg
+port sendWriteString : { index : Int, path : FilePath, content : String } -> Cmd msg
 
 
 port recvWriteString : (Int -> msg) -> Sub msg
@@ -565,7 +597,7 @@ port sendGetArchive : { index : Int, method : String, url : String } -> Cmd msg
 port recvGetArchive : ({ index : Int, value : ( String, Zip.Archive ) } -> msg) -> Sub msg
 
 
-port sendHttpUpload : { index : Int, url : String, headers : List ( String, String ), parts : List Encode.Value } -> Cmd msg
+port sendHttpUpload : { index : Int, urlStr : String, headers : List ( String, String ), parts : List Encode.Value } -> Cmd msg
 
 
 port recvHttpUpload : (Int -> msg) -> Sub msg
@@ -577,31 +609,31 @@ port sendHFlush : { index : Int, fd : Int } -> Cmd msg
 port recvHFlush : (Int -> msg) -> Sub msg
 
 
-port sendWithFile : { path : String, mode : String } -> Cmd msg
+port sendWithFile : { index : Int, path : String, mode : String } -> Cmd msg
 
 
 port recvWithFile : ({ index : Int, value : Int } -> msg) -> Sub msg
 
 
-port sendHFileSize : Int -> Cmd msg
+port sendHFileSize : { index : Int, fd : Int } -> Cmd msg
 
 
 port recvHFileSize : ({ index : Int, value : Int } -> msg) -> Sub msg
 
 
-port sendProcWithCreateProcess : Encode.Value -> Cmd msg
+port sendProcWithCreateProcess : { index : Int, createProcess : Encode.Value } -> Cmd msg
 
 
 port recvProcWithCreateProcess : ({ index : Int, value : { stdinHandle : Maybe Int, ph : Int } } -> msg) -> Sub msg
 
 
-port sendHClose : Int -> Cmd msg
+port sendHClose : { index : Int, fd : Int } -> Cmd msg
 
 
 port recvHClose : (Int -> msg) -> Sub msg
 
 
-port sendProcWaitForProcess : Int -> Cmd msg
+port sendProcWaitForProcess : { index : Int, ph : Int } -> Cmd msg
 
 
 port recvProcWaitForProcess : ({ index : Int, value : Int } -> msg) -> Sub msg
@@ -610,28 +642,16 @@ port recvProcWaitForProcess : ({ index : Int, value : Int } -> msg) -> Sub msg
 port sendExitWith : Int -> Cmd msg
 
 
-port sendNewEmptyMVar : Int -> Cmd msg
-
-
-port recvNewEmptyMVar : ({ index : Int, value : Int } -> msg) -> Sub msg
-
-
-port sendDirFindExecutable : FilePath -> Cmd msg
+port sendDirFindExecutable : { index : Int, name : FilePath } -> Cmd msg
 
 
 port recvDirFindExecutable : ({ index : Int, value : Maybe FilePath } -> msg) -> Sub msg
 
 
-port sendReplGetInputLine : String -> Cmd msg
+port sendReplGetInputLine : { index : Int, prompt : String } -> Cmd msg
 
 
 port recvReplGetInputLine : ({ index : Int, value : Maybe String } -> msg) -> Sub msg
-
-
-port sendPutMVar : { index : Int, id : Int, value : Encode.Value } -> Cmd msg
-
-
-port recvPutMVar : (Int -> msg) -> Sub msg
 
 
 port sendDirDoesFileExist : { index : Int, filename : String } -> Cmd msg
@@ -664,12 +684,6 @@ port sendDirGetModificationTime : { index : Int, filename : String } -> Cmd msg
 port recvDirGetModificationTime : ({ index : Int, value : Int } -> msg) -> Sub msg
 
 
-port sendTakeMVar : { index : Int, id : Int } -> Cmd msg
-
-
-port recvTakeMVar : ({ index : Int, value : Encode.Value } -> msg) -> Sub msg
-
-
 port sendDirDoesDirectoryExist : { index : Int, path : FilePath } -> Cmd msg
 
 
@@ -682,10 +696,59 @@ port sendDirCanonicalizePath : { index : Int, path : FilePath } -> Cmd msg
 port recvDirCanonicalizePath : ({ index : Int, value : FilePath } -> msg) -> Sub msg
 
 
+port sendBinaryDecodeFileOrFail : { index : Int, filename : FilePath } -> Cmd msg
+
+
+port recvBinaryDecodeFileOrFail : ({ index : Int, value : Encode.Value } -> msg) -> Sub msg
+
+
+port sendWrite : { index : Int, fd : FilePath, content : Encode.Value } -> Cmd msg
+
+
+port recvWrite : (Int -> msg) -> Sub msg
+
+
+port sendDirRemoveFile : { index : Int, path : FilePath } -> Cmd msg
+
+
+port recvDirRemoveFile : (Int -> msg) -> Sub msg
+
+
+port sendDirRemoveDirectoryRecursive : { index : Int, path : FilePath } -> Cmd msg
+
+
+port recvDirRemoveDirectoryRecursive : (Int -> msg) -> Sub msg
+
+
+port sendDirWithCurrentDirectory : { index : Int, path : FilePath } -> Cmd msg
+
+
+port recvDirWithCurrentDirectory : (Int -> msg) -> Sub msg
+
+
+
+-- MVARS
+
+
+port sendNewEmptyMVar : Int -> Cmd msg
+
+
+port recvNewEmptyMVar : ({ index : Int, value : Int } -> msg) -> Sub msg
+
+
 port sendReadMVar : { index : Int, id : Int } -> Cmd msg
 
 
 port recvReadMVar : ({ index : Int, value : Encode.Value } -> msg) -> Sub msg
+
+
+port sendTakeMVar : { index : Int, id : Int } -> Cmd msg
+
+
+port sendPutMVar : { index : Int, id : Int, value : Encode.Value } -> Cmd msg
+
+
+port recvPutMVar : (Int -> msg) -> Sub msg
 
 
 
@@ -726,6 +789,11 @@ type ION a
     | DirDoesDirectoryExist (Bool -> IO a) FilePath
     | DirCanonicalizePath (String -> IO a) FilePath
     | ReadMVar (Encode.Value -> IO a) Int
+    | BinaryDecodeFileOrFail (Encode.Value -> IO a) FilePath
+    | Write (() -> IO a) FilePath Encode.Value
+    | DirRemoveFile (() -> IO a) FilePath
+    | DirRemoveDirectoryRecursive (() -> IO a) FilePath
+    | DirWithCurrentDirectory (() -> IO a) FilePath
 
 
 type alias RealWorld =
@@ -782,8 +850,8 @@ bind f (IO ma) =
                 ( s1, GetArchive next method url ) ->
                     ( s1, GetArchive (\body -> bind f (next body)) method url )
 
-                ( s1, HttpUpload next url headers parts ) ->
-                    ( s1, HttpUpload (\() -> bind f (next ())) url headers parts )
+                ( s1, HttpUpload next urlStr headers parts ) ->
+                    ( s1, HttpUpload (\() -> bind f (next ())) urlStr headers parts )
 
                 ( s1, HFlush next handle ) ->
                     ( s1, HFlush (\() -> bind f (next ())) handle )
@@ -806,17 +874,11 @@ bind f (IO ma) =
                 ( s1, ExitWith _ code ) ->
                     ( s1, ExitWith (\_ -> crash "exitWith") code )
 
-                ( s1, NewEmptyMVar next ) ->
-                    ( s1, NewEmptyMVar (\value -> bind f (next value)) )
-
-                ( s1, DirFindExecutable next filename ) ->
-                    ( s1, DirFindExecutable (\value -> bind f (next value)) filename )
+                ( s1, DirFindExecutable next name ) ->
+                    ( s1, DirFindExecutable (\value -> bind f (next value)) name )
 
                 ( s1, ReplGetInputLine next prompt ) ->
                     ( s1, ReplGetInputLine (\value -> bind f (next value)) prompt )
-
-                ( s1, PutMVar next id value ) ->
-                    ( s1, PutMVar (\() -> bind f (next ())) id value )
 
                 ( s1, DirDoesFileExist next filename ) ->
                     ( s1, DirDoesFileExist (\exists -> bind f (next exists)) filename )
@@ -833,17 +895,38 @@ bind f (IO ma) =
                 ( s1, DirGetModificationTime next path ) ->
                     ( s1, DirGetModificationTime (\value -> bind f (next value)) path )
 
-                ( s1, TakeMVar next path ) ->
-                    ( s1, TakeMVar (\value -> bind f (next value)) path )
-
                 ( s1, DirDoesDirectoryExist next path ) ->
                     ( s1, DirDoesDirectoryExist (\value -> bind f (next value)) path )
 
                 ( s1, DirCanonicalizePath next path ) ->
                     ( s1, DirCanonicalizePath (\value -> bind f (next value)) path )
 
+                ( s1, BinaryDecodeFileOrFail next filename ) ->
+                    ( s1, BinaryDecodeFileOrFail (\value -> bind f (next value)) filename )
+
+                ( s1, Write next fd content ) ->
+                    ( s1, Write (\() -> bind f (next ())) fd content )
+
+                ( s1, DirRemoveFile next path ) ->
+                    ( s1, DirRemoveFile (\() -> bind f (next ())) path )
+
+                ( s1, DirRemoveDirectoryRecursive next path ) ->
+                    ( s1, DirRemoveDirectoryRecursive (\() -> bind f (next ())) path )
+
+                ( s1, DirWithCurrentDirectory next path ) ->
+                    ( s1, DirWithCurrentDirectory (\() -> bind f (next ())) path )
+
+                ( s1, NewEmptyMVar next ) ->
+                    ( s1, NewEmptyMVar (\value -> bind f (next value)) )
+
                 ( s1, ReadMVar next path ) ->
                     ( s1, ReadMVar (\value -> bind f (next value)) path )
+
+                ( s1, TakeMVar next path ) ->
+                    ( s1, TakeMVar (\value -> bind f (next value)) path )
+
+                ( s1, PutMVar next id value ) ->
+                    ( s1, PutMVar (\() -> bind f (next ())) id value )
         )
 
 

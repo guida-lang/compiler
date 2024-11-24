@@ -871,14 +871,12 @@ dirGetModificationTime filename =
 
 dirRemoveFile : FilePath -> IO ()
 dirRemoveFile path =
-    -- IO.make (Decode.succeed ()) (IO.DirRemoveFile path)
-    Debug.todo "dirRemoveFile"
+    IO (\s -> ( s, IO.DirRemoveFile IO.pure path ))
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
 dirRemoveDirectoryRecursive path =
-    -- IO.make (Decode.succeed ()) (IO.DirRemoveDirectoryRecursive path)
-    Debug.todo "dirRemoveDirectoryRecursive"
+    IO (\s -> ( s, IO.DirRemoveDirectoryRecursive IO.pure path ))
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
@@ -897,10 +895,8 @@ dirWithCurrentDirectory dir action =
         |> IO.bind
             (\currentDir ->
                 bracket_
-                    -- (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory dir))
-                    (Debug.todo "dirWithCurrentDirectory")
-                    -- (IO.make (Decode.succeed ()) (IO.DirWithCurrentDirectory currentDir))
-                    (Debug.todo "dirWithCurrentDirectory")
+                    (IO (\s -> ( s, IO.DirWithCurrentDirectory IO.pure dir )))
+                    (IO (\s -> ( s, IO.DirWithCurrentDirectory IO.pure currentDir )))
                     action
             )
 
@@ -1212,20 +1208,16 @@ builderHPutBuilder handle str =
 
 binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
-    -- IO.make
-    --     (Decode.oneOf
-    --         [ Decode.map Ok decoder
-    --         , Decode.succeed (Err ( 0, "Could not find file " ++ filename ))
-    --         ]
-    --     )
-    --     (IO.BinaryDecodeFileOrFail filename)
-    Debug.todo "binaryDecodeFileOrFail"
+    IO (\s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
+        |> IO.fmap
+            (Decode.decodeValue decoder
+                >> Result.mapError (\_ -> ( 0, "Could not find file " ++ filename ))
+            )
 
 
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
 binaryEncodeFile encoder path value =
-    -- IO.make (Decode.succeed ()) (IO.Write path (encoder value))
-    Debug.todo "binaryEncodeFile"
+    IO (\s -> ( s, IO.Write IO.pure path (encoder value) ))
 
 
 
