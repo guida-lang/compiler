@@ -157,7 +157,7 @@ loop env state =
                         (\outcome ->
                             case outcome of
                                 Loop loopState ->
-                                    Utils.liftInputT (Utils.statePut stateEncoder loopState)
+                                    Utils.liftInputT (State.put stateEncoder loopState)
                                         |> IO.bind (\_ -> loop env loopState)
 
                                 End exitCode ->
@@ -849,7 +849,7 @@ initSettings =
 
 lookupCompletions : String -> M (List Utils.ReplCompletion)
 lookupCompletions string =
-    Utils.stateGet stateDecoder
+    State.get stateDecoder
         |> State.fmap
             (\(State imports types decls) ->
                 addMatches string False decls <|

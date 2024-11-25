@@ -1,7 +1,7 @@
 port module System.IO exposing
-    ( Program, run
-    , IO(..), ION(..), pure, apply, fmap, bind, foldrM
-    , Handle(..)
+    ( Program, Flags, Model, Msg, Next, run
+    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind, foldrM
+    , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
     , hClose
@@ -14,17 +14,17 @@ port module System.IO exposing
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
 
-@docs Program, run
+@docs Program, Flags, Model, Msg, Next, run
 
 
 # The IO monad
 
-@docs IO, ION, pure, apply, fmap, bind, foldrM
+@docs IO, ION, RealWorld, pure, apply, fmap, bind, foldrM
 
 
 # Files and handles
 
-@docs Handle
+@docs FilePath, Handle
 
 
 # Standard handles
@@ -101,6 +101,7 @@ run app =
                         , homedir = flags.homedir
                         , progName = flags.progName
                         , ioRefs = Array.empty
+                        , state = Encode.null
                         }
                     , next = Dict.empty
                     }
@@ -174,6 +175,7 @@ type Next
     | DirRemoveFileNext (() -> IO ())
     | DirRemoveDirectoryRecursiveNext (() -> IO ())
     | DirWithCurrentDirectoryNext (() -> IO ())
+    | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
     | NewEmptyMVarNext (Int -> IO ())
     | ReadMVarNext (Encode.Value -> IO ())
     | TakeMVarNext (Encode.Value -> IO ())
@@ -328,6 +330,9 @@ update msg model =
 
                 ( newRealWorld, DirWithCurrentDirectory next path ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
+
+                ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
                 ( newRealWorld, NewEmptyMVar next ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert compare index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
@@ -726,6 +731,12 @@ port sendDirWithCurrentDirectory : { index : Int, path : FilePath } -> Cmd msg
 port recvDirWithCurrentDirectory : (Int -> msg) -> Sub msg
 
 
+port sendReplGetInputLineWithInitial : { index : Int, prompt : String, left : String, right : String } -> Cmd msg
+
+
+port recvReplGetInputLineWithInitial : (Maybe String -> msg) -> Sub msg
+
+
 
 -- MVARS
 
@@ -794,6 +805,7 @@ type ION a
     | DirRemoveFile (() -> IO a) FilePath
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
+    | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
 
 
 type alias RealWorld =
@@ -803,6 +815,7 @@ type alias RealWorld =
     , homedir : FilePath
     , progName : String
     , ioRefs : Array Encode.Value
+    , state : Encode.Value
     }
 
 
@@ -915,6 +928,9 @@ bind f (IO ma) =
 
                 ( s1, DirWithCurrentDirectory next path ) ->
                     ( s1, DirWithCurrentDirectory (\() -> bind f (next ())) path )
+
+                ( s1, ReplGetInputLineWithInitial next prompt left right ) ->
+                    ( s1, ReplGetInputLineWithInitial (\value -> bind f (next value)) prompt left right )
 
                 ( s1, NewEmptyMVar next ) ->
                     ( s1, NewEmptyMVar (\value -> bind f (next value)) )

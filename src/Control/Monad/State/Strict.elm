@@ -4,17 +4,22 @@ module Control.Monad.State.Strict exposing
     , bind
     , evalStateT
     , fmap
+    , get
     , gets
     , liftIO
     , modify
     , pure
+    , put
     , runStateT
     )
 
 {-| Lazy state monads, passing an updatable state through a computation.
 -}
 
-import System.IO as IO exposing (IO)
+import Json.Decode as Decode
+import Json.Encode as Encode
+import System.IO as IO exposing (IO(..))
+import Utils.Crash exposing (crash)
 
 
 {-| newtype StateT s m a
@@ -93,3 +98,22 @@ gets f =
 modify : (s -> s) -> StateT s ()
 modify f =
     StateT (\s -> IO.pure ( (), f s ))
+
+
+get : Decode.Decoder s -> StateT s s
+get decoder =
+    IO
+        (\s ->
+            case Decode.decodeValue decoder s.state of
+                Ok value ->
+                    ( s, IO.Pure value )
+
+                Err err ->
+                    crash (Decode.errorToString err)
+        )
+        |> liftIO
+
+
+put : (s -> Encode.Value) -> s -> IO ()
+put encoder state =
+    IO (\s -> ( { s | state = encoder state }, IO.Pure () ))

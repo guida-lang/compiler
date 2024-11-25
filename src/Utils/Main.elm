@@ -128,8 +128,6 @@ module Utils.Main exposing
     , shaAndArchiveDecoder
     , someExceptionDecoder
     , someExceptionEncoder
-    , stateGet
-    , statePut
     , takeMVar
     , tupleTraverse
     , tupleTraverseStateT
@@ -1198,8 +1196,7 @@ writeChan encoder (Chan _ writeVar) val =
 
 builderHPutBuilder : IO.Handle -> String -> IO ()
 builderHPutBuilder handle str =
-    -- IO.make (Decode.succeed ()) (IO.HPutStr handle str)
-    Debug.todo "builderHPutBuilder"
+    IO (\s -> ( s, IO.HPutStr IO.pure handle str ))
 
 
 
@@ -1267,29 +1264,7 @@ replGetInputLine prompt =
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
-    -- IO.make (Decode.maybe Decode.string) (IO.ReplGetInputLineWithInitial prompt ( left, right ))
-    Debug.todo "replGetInputLineWithInitial"
-
-
-
--- Control.Monad.State.Class
-
-
-stateGet : Decode.Decoder s -> State.StateT s s
-stateGet decoder =
-    let
-        io : IO s
-        io =
-            -- IO.make decoder IO.StateGet
-            Debug.todo "stateGet"
-    in
-    State.StateT (\_ -> IO.fmap (\s -> ( s, s )) io)
-
-
-statePut : (s -> Encode.Value) -> s -> IO ()
-statePut encoder s =
-    -- IO.make (Decode.succeed ()) (IO.StatePut (encoder s))
-    Debug.todo "statePut"
+    IO (\s -> ( s, IO.ReplGetInputLineWithInitial IO.pure prompt left right ))
 
 
 

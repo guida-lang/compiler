@@ -24,7 +24,6 @@ let nextCounter = 0;
 const mVars = {};
 const lockedFiles = {};
 const processes = {};
-let state = null;
 
 const download = function (index, method, url) {
   const req = https.request(url, { method }, (res) => {
@@ -347,6 +346,12 @@ app.ports.sendDirWithCurrentDirectory.subscribe(function ({ index, path }) {
   } catch (err) {
     console.error(`chdir: ${err}`);
   }
+});
+
+app.ports.sendReplGetInputLineWithInitial.subscribe(function ({ index, prompt, left, right }) {
+  rl.question(prompt + left + right, (value) => {
+    app.ports.recvReplGetInputLineWithInitial.send({ index, value });
+  });
 });
 
 // MVARS

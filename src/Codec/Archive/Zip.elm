@@ -1,6 +1,7 @@
 module Codec.Archive.Zip exposing
     ( Archive
     , Entry
+    , FilePath
     , eRelativePath
     , fromEntry
     , zEntries
