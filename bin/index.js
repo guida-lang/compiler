@@ -177,7 +177,7 @@ app.ports.sendHttpUpload.subscribe(function ({ index, urlStr, headers, parts }) 
 
   req.on("response", (res) => {
     res.on("end", () => {
-      this.send(index);
+      app.ports.recvHttpUpload.send(index);
     });
   });
 
@@ -224,7 +224,7 @@ app.ports.sendProcWithCreateProcess.subscribe(function ({ index, createProcess }
         }
       );
 
-      app.ports.recvProcWithCreateProcess.send({ index, value: { stdin: fd, ph: nextCounter } });
+      app.ports.recvProcWithCreateProcess.send({ index, value: { stdinHandle: fd, ph: nextCounter } });
     });
 
     reader.on("data", (chunk) => {
@@ -240,7 +240,7 @@ app.ports.sendHClose.subscribe(function ({ index, fd }) {
 
 app.ports.sendProcWaitForProcess.subscribe(function ({ index, ph }) {
   processes[ph].on("exit", (code) => {
-    this.send({ index, value: code });
+    app.ports.recvProcWaitForProcess.send({ index, value: code });
   });
 });
 
@@ -250,12 +250,12 @@ app.ports.sendExitWith.subscribe(function (code) {
 });
 
 app.ports.sendDirFindExecutable.subscribe(function ({ index, name }) {
-  this.send({ index, value: which.sync(name, { nothrow: true }) });
+  app.ports.recvDirFindExecutable.send({ index, value: which.sync(name, { nothrow: true }) });
 });
 
 app.ports.sendReplGetInputLine.subscribe(function ({ index, prompt }) {
   rl.question(prompt, (value) => {
-    this.send({ index, value });
+    app.ports.recvReplGetInputLine.send({ index, value });
   });
 });
 

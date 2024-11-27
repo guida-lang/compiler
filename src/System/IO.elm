@@ -219,7 +219,13 @@ update msg model =
         PureMsg index (IO fn) ->
             case fn model.realWorld of
                 ( newRealWorld, Pure () ) ->
-                    ( { model | realWorld = newRealWorld }, Cmd.none )
+                    ( { model | realWorld = newRealWorld }
+                    , if index == 0 then
+                        sendExitWith 0
+
+                      else
+                        Cmd.none
+                    )
 
                 ( newRealWorld, ForkIO next forkIO ) ->
                     let
