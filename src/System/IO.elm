@@ -12,7 +12,8 @@ port module System.IO exposing
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
     , Point(..), PointInfo(..)
-    , Canonical(..), Content(..), Descriptor(..), FlatType(..), Mark(..), SuperType(..), Variable
+    , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
+    , Canonical(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -78,6 +79,16 @@ port module System.IO exposing
 # Point
 
 @docs Point, PointInfo
+
+
+# Compiler.Type.Type
+
+@docs Descriptor, Content, SuperType, Mark, Variable, FlatType
+
+
+# Compiler.Elm.ModuleName
+
+@docs Canonical
 
 -}
 
@@ -1177,7 +1188,7 @@ type FlatType
 
 
 
--- CANONICAL
+-- CANONICAL (Compiler.Elm.ModuleName)
 
 
 type Canonical
