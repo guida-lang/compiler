@@ -26,7 +26,7 @@ import Utils.Main as Utils
 
 
 type State
-    = State Header (List Type.Variable) (List Type.Constraint)
+    = State Header (List IO.Variable) (List Type.Constraint)
 
 
 type alias Header =
@@ -322,7 +322,7 @@ simpleAdd pattern patternType state =
 -- CONSTRAIN CONSTRUCTORS
 
 
-addCtor : A.Region -> ModuleName.Canonical -> Name.Name -> List Name.Name -> Name.Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
+addCtor : A.Region -> IO.Canonical -> Name.Name -> List Name.Name -> Name.Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
 addCtor region home typeName typeVarNames ctorName args expectation state =
     Utils.listTraverse (\var -> IO.fmap (Tuple.pair var) (Type.nameToFlex var)) typeVarNames
         |> IO.bind

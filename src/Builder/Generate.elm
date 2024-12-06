@@ -59,7 +59,7 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                                             graph =
                                                 objectsToGlobalGraph objects
 
-                                            mains : Dict ModuleName.Canonical Opt.Main
+                                            mains : Dict IO.Canonical Opt.Main
                                             mains =
                                                 gatherMains pkg objects roots
                                         in
@@ -83,7 +83,7 @@ dev root details (Build.Artifacts pkg _ roots modules) =
                     graph =
                         objectsToGlobalGraph objects
 
-                    mains : Dict ModuleName.Canonical Opt.Main
+                    mains : Dict IO.Canonical Opt.Main
                     mains =
                         gatherMains pkg objects roots
                 in
@@ -108,7 +108,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                                 mode =
                                     Mode.Prod (Mode.shortenFieldNames graph)
 
-                                mains : Dict ModuleName.Canonical Opt.Main
+                                mains : Dict IO.Canonical Opt.Main
                                 mains =
                                     gatherMains pkg objects roots
                             in
@@ -149,17 +149,17 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
-gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict ModuleName.Canonical Opt.Main
+gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict IO.Canonical Opt.Main
 gatherMains pkg (Objects _ locals) roots =
     Dict.fromList ModuleName.compareCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
-lookupMain : Pkg.Name -> Dict ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( ModuleName.Canonical, Opt.Main )
+lookupMain : Pkg.Name -> Dict ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( IO.Canonical, Opt.Main )
 lookupMain pkg locals root =
     let
-        toPair : N.Name -> Opt.LocalGraph -> Maybe ( ModuleName.Canonical, Opt.Main )
+        toPair : N.Name -> Opt.LocalGraph -> Maybe ( IO.Canonical, Opt.Main )
         toPair name (Opt.LocalGraph maybeMain _ _) =
-            Maybe.map (Tuple.pair (ModuleName.Canonical pkg name)) maybeMain
+            Maybe.map (Tuple.pair (IO.Canonical pkg name)) maybeMain
     in
     case root of
         Build.Inside name ->
@@ -245,7 +245,7 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
-loadTypes : FilePath -> Dict ModuleName.Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
+loadTypes : FilePath -> Dict IO.Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules

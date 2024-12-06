@@ -10,49 +10,35 @@ module Data.Vector.Mutable exposing
 import Array exposing (Array)
 import Array.Extra as Array
 import Data.IORef as IORef exposing (IORef)
-import Json.Decode as Decode
-import Json.Encode as Encode
-import System.IO as IO exposing (IO)
+import System.IO as IO exposing (IO, Variable)
 import Utils.Crash exposing (crash)
 
 
-length : IORef (Array (Maybe a)) -> IO Int
+length : IORef (Array (Maybe (List Variable))) -> IO Int
 length =
-    IORef.readIORef (Decode.array (Decode.succeed Nothing))
+    IORef.readIORefMVector
         >> IO.fmap Array.length
 
 
-replicate : (a -> Encode.Value) -> Int -> a -> IO (IORef (Array (Maybe a)))
-replicate encoder n e =
-    IORef.newIORef
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
-        (Array.repeat n (Just e))
+replicate : Int -> List Variable -> IO (IORef (Array (Maybe (List Variable))))
+replicate n e =
+    IORef.newIORefMVector (Array.repeat n (Just e))
 
 
-grow : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> Int -> IO (IORef (Array (Maybe a)))
-grow decoder encoder ioRef length_ =
-    IORef.readIORef (Decode.array (Decode.maybe decoder)) ioRef
+grow : IORef (Array (Maybe (List Variable))) -> Int -> IO (IORef (Array (Maybe (List Variable))))
+grow ioRef length_ =
+    IORef.readIORefMVector ioRef
         |> IO.bind
             (\value ->
-                IORef.writeIORef
-                    (Encode.array
-                        (Maybe.map encoder
-                            >> Maybe.withDefault Encode.null
-                        )
-                    )
-                    ioRef
+                IORef.writeIORefMVector ioRef
                     (Array.append value (Array.repeat length_ Nothing))
             )
         |> IO.fmap (\_ -> ioRef)
 
 
-read : Decode.Decoder a -> IORef (Array (Maybe a)) -> Int -> IO a
-read decoder ioRef i =
-    IORef.readIORef (Decode.array (Decode.maybe decoder)) ioRef
+read : IORef (Array (Maybe (List Variable))) -> Int -> IO (List Variable)
+read ioRef i =
+    IORef.readIORefMVector ioRef
         |> IO.fmap
             (\array ->
                 case Array.get i array of
@@ -67,25 +53,13 @@ read decoder ioRef i =
             )
 
 
-write : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> Int -> a -> IO ()
-write decoder encoder ioRef i x =
-    IORef.modifyIORef (Decode.array (Decode.maybe decoder))
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
-        ioRef
+write : IORef (Array (Maybe (List Variable))) -> Int -> List Variable -> IO ()
+write ioRef i x =
+    IORef.modifyIORefMVector ioRef
         (Array.set i (Just x))
 
 
-modify : Decode.Decoder a -> (a -> Encode.Value) -> IORef (Array (Maybe a)) -> (a -> a) -> Int -> IO ()
-modify decoder encoder ioRef func index =
-    IORef.modifyIORef (Decode.array (Decode.maybe decoder))
-        (Encode.array
-            (Maybe.map encoder
-                >> Maybe.withDefault Encode.null
-            )
-        )
-        ioRef
+modify : IORef (Array (Maybe (List Variable))) -> (List Variable -> List Variable) -> Int -> IO ()
+modify ioRef func index =
+    IORef.modifyIORefMVector ioRef
         (Array.update index (Maybe.map func))

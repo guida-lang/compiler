@@ -101,7 +101,7 @@ type Extras
 
 
 type alias Interfaces =
-    Dict ModuleName.Canonical I.DependencyInterface
+    Dict IO.Canonical I.DependencyInterface
 
 
 
@@ -447,7 +447,7 @@ addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
     Dict.union ModuleName.compareCanonical
         dependencyInterfaces
         (Dict.fromList ModuleName.compareCanonical
-            (List.map (Tuple.mapFirst (ModuleName.Canonical pkg))
+            (List.map (Tuple.mapFirst (IO.Canonical pkg))
                 (Dict.toList
                     (if Dict.member pkg directDeps then
                         ifaces

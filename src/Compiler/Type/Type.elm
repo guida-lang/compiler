@@ -1,16 +1,8 @@
 module Compiler.Type.Type exposing
     ( Constraint(..)
-    , Content(..)
-    , Descriptor(..)
-    , FlatType(..)
-    , Mark
-    , SuperType(..)
     , Type(..)
-    , Variable
     , bool
     , char
-    , descriptorDecoder
-    , descriptorEncoder
     , exists
     , float
     , funType
@@ -31,8 +23,6 @@ module Compiler.Type.Type exposing
     , toErrorType
     , unnamedFlexSuper
     , unnamedFlexVar
-    , variableDecoder
-    , variableEncoder
     , vec2
     , vec3
     , vec4
@@ -42,17 +32,15 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Error as ET
 import Compiler.Type.UnionFind as UF
 import Control.Monad.State.Strict as State exposing (StateT, liftIO)
+import Data.IORef exposing (IORef(..))
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import System.IO as IO exposing (Content(..), Descriptor(..), FlatType(..), IO, Mark(..), SuperType(..), Variable)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -81,130 +69,11 @@ exists flexVars constraint =
 -- TYPE PRIMITIVES
 
 
-type alias Variable =
-    UF.Point Descriptor
-
-
-variableEncoder : Variable -> Encode.Value
-variableEncoder =
-    UF.pointEncoder
-
-
-variableDecoder : Decode.Decoder Variable
-variableDecoder =
-    UF.pointDecoder
-
-
-type FlatType
-    = App1 ModuleName.Canonical Name (List Variable)
-    | Fun1 Variable Variable
-    | EmptyRecord1
-    | Record1 (Dict Name Variable) Variable
-    | Unit1
-    | Tuple1 Variable Variable (Maybe Variable)
-
-
-flatTypeEncoder : FlatType -> Encode.Value
-flatTypeEncoder flatType =
-    case flatType of
-        App1 canonical name variableList ->
-            Encode.object
-                [ ( "type", Encode.string "App1" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.list variableEncoder variableList )
-                ]
-
-        Fun1 var1 var2 ->
-            Encode.object
-                [ ( "type", Encode.string "Fun1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                ]
-
-        EmptyRecord1 ->
-            Encode.object
-                [ ( "type", Encode.string "EmptyRecord1" )
-                ]
-
-        Record1 variableDict variable ->
-            Encode.object
-                [ ( "type", Encode.string "Record1" )
-                , ( "variableDict"
-                  , Dict.toList variableDict
-                        |> Encode.list
-                            (\( name, var ) ->
-                                Encode.object
-                                    [ ( "a", Encode.string name )
-                                    , ( "b", variableEncoder var )
-                                    ]
-                            )
-                  )
-                , ( "variable", variableEncoder variable )
-                ]
-
-        Unit1 ->
-            Encode.object
-                [ ( "type", Encode.string "Unit1" )
-                ]
-
-        Tuple1 var1 var2 maybeVariable ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                , ( "maybeVariable"
-                  , maybeVariable
-                        |> Maybe.map variableEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-
-flatTypeDecoder : Decode.Decoder FlatType
-flatTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "App1" ->
-                        Decode.map3 App1
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.list variableDecoder))
-
-                    "Fun1" ->
-                        Decode.map2 Fun1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-
-                    "EmptyRecord1" ->
-                        Decode.succeed EmptyRecord1
-
-                    "Record1" ->
-                        Decode.map2 Record1
-                            (Decode.field "variableDict" (D.assocListDict compare Decode.string variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Unit1" ->
-                        Decode.succeed Unit1
-
-                    "Tuple1" ->
-                        Decode.map3 Tuple1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-                            (Decode.field "maybeVariable" (Decode.maybe variableDecoder))
-
-                    _ ->
-                        Decode.fail ("Unknown FlatType's type: " ++ type_)
-            )
-
-
 type Type
     = PlaceHolder Name
-    | AliasN ModuleName.Canonical Name (List ( Name, Type )) Type
+    | AliasN IO.Canonical Name (List ( Name, Type )) Type
     | VarN Variable
-    | AppN ModuleName.Canonical Name (List Type)
+    | AppN IO.Canonical Name (List Type)
     | FunN Type Type
     | EmptyRecordN
     | RecordN (Dict Name Type) Type
@@ -214,191 +83,6 @@ type Type
 
 
 -- DESCRIPTORS
-
-
-type Descriptor
-    = Descriptor Content Int Mark (Maybe Variable)
-
-
-descriptorEncoder : Descriptor -> Encode.Value
-descriptorEncoder (Descriptor content rank mark copy) =
-    Encode.object
-        [ ( "type", Encode.string "Descriptor" )
-        , ( "content", contentEncoder content )
-        , ( "rank", Encode.int rank )
-        , ( "mark", markEncoder mark )
-        , ( "copy"
-          , copy
-                |> Maybe.map variableEncoder
-                |> Maybe.withDefault Encode.null
-          )
-        ]
-
-
-descriptorDecoder : Decode.Decoder Descriptor
-descriptorDecoder =
-    Decode.map4 Descriptor
-        (Decode.field "content" contentDecoder)
-        (Decode.field "rank" Decode.int)
-        (Decode.field "mark" markDecoder)
-        (Decode.field "copy" (Decode.maybe variableDecoder))
-
-
-type Content
-    = FlexVar (Maybe Name)
-    | FlexSuper SuperType (Maybe Name)
-    | RigidVar Name
-    | RigidSuper SuperType Name
-    | Structure FlatType
-    | Alias ModuleName.Canonical Name (List ( Name, Variable )) Variable
-    | Error
-
-
-contentEncoder : Content -> Encode.Value
-contentEncoder content =
-    case content of
-        FlexVar maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexVar" )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        FlexSuper superType maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        RigidVar name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidVar" )
-                , ( "name", Encode.string name )
-                ]
-
-        RigidSuper superType name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name", Encode.string name )
-                ]
-
-        Structure flatType ->
-            Encode.object
-                [ ( "type", Encode.string "Structure" )
-                , ( "flatType", flatTypeEncoder flatType )
-                ]
-
-        Alias canonical name variableList variable ->
-            Encode.object
-                [ ( "type", Encode.string "Alias" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.object (List.map (Tuple.mapSecond variableEncoder) variableList) )
-                , ( "variable", variableEncoder variable )
-                ]
-
-        Error ->
-            Encode.object
-                [ ( "type", Encode.string "Error" )
-                ]
-
-
-contentDecoder : Decode.Decoder Content
-contentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FlexVar" ->
-                        Decode.map FlexVar
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "FlexSuper" ->
-                        Decode.map2 FlexSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "RigidVar" ->
-                        Decode.map RigidVar
-                            (Decode.field "name" Decode.string)
-
-                    "RigidSuper" ->
-                        Decode.map2 RigidSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" Decode.string)
-
-                    "Structure" ->
-                        Decode.map Structure
-                            (Decode.field "flatType" flatTypeDecoder)
-
-                    "Alias" ->
-                        Decode.map4 Alias
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.keyValuePairs variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Error" ->
-                        Decode.succeed Error
-
-                    _ ->
-                        Decode.fail ("Unknown Content's type: " ++ type_)
-            )
-
-
-type SuperType
-    = Number
-    | Comparable
-    | Appendable
-    | CompAppend
-
-
-superTypeEncoder : SuperType -> Encode.Value
-superTypeEncoder superType =
-    case superType of
-        Number ->
-            Encode.string "Number"
-
-        Comparable ->
-            Encode.string "Comparable"
-
-        Appendable ->
-            Encode.string "Appendable"
-
-        CompAppend ->
-            Encode.string "CompAppend"
-
-
-superTypeDecoder : Decode.Decoder SuperType
-superTypeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Number" ->
-                        Decode.succeed Number
-
-                    "Comparable" ->
-                        Decode.succeed Comparable
-
-                    "Appendable" ->
-                        Decode.succeed Appendable
-
-                    "CompAppend" ->
-                        Decode.succeed CompAppend
-
-                    _ ->
-                        Decode.fail ("Failed to decode SuperType: " ++ str)
-            )
 
 
 makeDescriptor : Content -> Descriptor
@@ -422,20 +106,6 @@ outermostRank =
 
 
 -- MARKS
-
-
-type Mark
-    = Mark Int
-
-
-markEncoder : Mark -> Encode.Value
-markEncoder (Mark value) =
-    Encode.int value
-
-
-markDecoder : Decode.Decoder Mark
-markDecoder =
-    Decode.map Mark Decode.int
 
 
 noMark : Mark
@@ -536,7 +206,7 @@ texture =
 
 mkFlexVar : IO Variable
 mkFlexVar =
-    UF.fresh descriptorEncoder flexVarDescriptor
+    UF.fresh flexVarDescriptor
 
 
 flexVarDescriptor : Descriptor
@@ -555,7 +225,7 @@ unnamedFlexVar =
 
 mkFlexNumber : IO Variable
 mkFlexNumber =
-    UF.fresh descriptorEncoder flexNumberDescriptor
+    UF.fresh flexNumberDescriptor
 
 
 flexNumberDescriptor : Descriptor
@@ -574,14 +244,14 @@ unnamedFlexSuper super =
 
 nameToFlex : Name -> IO Variable
 nameToFlex name =
-    UF.fresh descriptorEncoder <|
+    UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap FlexVar FlexSuper (toSuper name) (Just name)
 
 
 nameToRigid : Name -> IO Variable
 nameToRigid name =
-    UF.fresh descriptorEncoder <|
+    UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap RigidVar RigidSuper (toSuper name) name
 
@@ -623,7 +293,7 @@ toAnnotation variable =
 
 variableToCanType : Variable -> State.StateT NameState Can.Type
 variableToCanType variable =
-    liftIO (UF.get descriptorDecoder variable)
+    liftIO (UF.get variable)
         |> State.bind
             (\(Descriptor content _ _ _) ->
                 case content of
@@ -640,9 +310,7 @@ variableToCanType variable =
                                     |> State.bind
                                         (\name ->
                                             liftIO
-                                                (UF.modify descriptorDecoder
-                                                    descriptorEncoder
-                                                    variable
+                                                (UF.modify variable
                                                     (\(Descriptor _ rank mark copy) ->
                                                         Descriptor (FlexVar (Just name)) rank mark copy
                                                     )
@@ -660,9 +328,7 @@ variableToCanType variable =
                                     |> State.bind
                                         (\name ->
                                             liftIO
-                                                (UF.modify descriptorDecoder
-                                                    descriptorEncoder
-                                                    variable
+                                                (UF.modify variable
                                                     (\(Descriptor _ rank mark copy) ->
                                                         Descriptor (FlexSuper super (Just name)) rank mark copy
                                                     )
@@ -758,20 +424,20 @@ toErrorType variable =
 
 variableToErrorType : Variable -> StateT NameState ET.Type
 variableToErrorType variable =
-    liftIO (UF.get descriptorDecoder variable)
+    liftIO (UF.get variable)
         |> State.bind
             (\(Descriptor content _ mark _) ->
                 if mark == occursMark then
                     State.pure ET.Infinite
 
                 else
-                    liftIO (UF.modify descriptorDecoder descriptorEncoder variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ occursMark copy_))
+                    liftIO (UF.modify variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ occursMark copy_))
                         |> State.bind
                             (\_ ->
                                 contentToErrorType variable content
                                     |> State.bind
                                         (\errType ->
-                                            liftIO (UF.modify descriptorDecoder descriptorEncoder variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ mark copy_))
+                                            liftIO (UF.modify variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ mark copy_))
                                                 |> State.fmap (\_ -> errType)
                                         )
                             )
@@ -794,9 +460,7 @@ contentToErrorType variable content =
                         |> State.bind
                             (\name ->
                                 liftIO
-                                    (UF.modify descriptorDecoder
-                                        descriptorEncoder
-                                        variable
+                                    (UF.modify variable
                                         (\(Descriptor _ rank mark copy) ->
                                             Descriptor (FlexVar (Just name)) rank mark copy
                                         )
@@ -814,9 +478,7 @@ contentToErrorType variable content =
                         |> State.bind
                             (\name ->
                                 liftIO
-                                    (UF.modify descriptorDecoder
-                                        descriptorEncoder
-                                        variable
+                                    (UF.modify variable
                                         (\(Descriptor _ rank mark copy) ->
                                             Descriptor (FlexSuper super (Just name)) rank mark copy
                                         )
@@ -1049,14 +711,14 @@ getFreshSuperHelp prefix index taken =
 
 getVarNames : Variable -> Dict Name Variable -> IO (Dict Name Variable)
 getVarNames var takenNames =
-    UF.get descriptorDecoder var
+    UF.get var
         |> IO.bind
             (\(Descriptor content rank mark copy) ->
                 if mark == getVarNamesMark then
                     IO.pure takenNames
 
                 else
-                    UF.set descriptorEncoder var (Descriptor content rank getVarNamesMark copy)
+                    UF.set var (Descriptor content rank getVarNamesMark copy)
                         |> IO.bind
                             (\_ ->
                                 case content of
@@ -1134,9 +796,7 @@ addName index givenName var makeContent takenNames =
                 IO.pure ()
 
              else
-                UF.modify descriptorDecoder
-                    descriptorEncoder
-                    var
+                UF.modify var
                     (\(Descriptor _ rank mark copy) ->
                         Descriptor (makeContent indexedName) rank mark copy
                     )

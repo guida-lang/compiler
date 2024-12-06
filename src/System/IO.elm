@@ -10,6 +10,9 @@ port module System.IO exposing
     , hIsTerminalDevice
     , hPutStr, hPutStrLn
     , putStr, putStrLn, getLine
+    , ReplState(..), initialReplState
+    , Point(..), PointInfo(..)
+    , Canonical(..), Content(..), Descriptor(..), FlatType(..), Mark(..), SuperType(..), Variable
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -66,6 +69,16 @@ port module System.IO exposing
 
 @docs putStr, putStrLn, getLine
 
+
+# Repl State
+
+@docs ReplState, initialReplState
+
+
+# Point
+
+@docs Point, PointInfo
+
 -}
 
 import Array exposing (Array)
@@ -101,7 +114,11 @@ run app =
                         , homedir = flags.homedir
                         , progName = flags.progName
                         , ioRefs = Array.empty
-                        , state = Encode.null
+                        , ioRefsWeight = Array.empty
+                        , ioRefsPointInfo = Array.empty
+                        , ioRefsDescriptor = Array.empty
+                        , ioRefsMVector = Array.empty
+                        , state = initialReplState
                         }
                     , next = Dict.empty
                     }
@@ -821,7 +838,11 @@ type alias RealWorld =
     , homedir : FilePath
     , progName : String
     , ioRefs : Array Encode.Value
-    , state : Encode.Value
+    , ioRefsWeight : Array Int
+    , ioRefsPointInfo : Array PointInfo
+    , ioRefsDescriptor : Array Descriptor
+    , ioRefsMVector : Array (Array (Maybe (List Variable)))
+    , state : ReplState
     }
 
 
@@ -1077,3 +1098,87 @@ putStrLn s =
 getLine : IO String
 getLine =
     IO (\s -> ( s, GetLine pure ))
+
+
+
+-- Repl State (Terminal.Repl)
+
+
+type ReplState
+    = ReplState (Dict String String) (Dict String String) (Dict String String)
+
+
+initialReplState : ReplState
+initialReplState =
+    ReplState Dict.empty Dict.empty Dict.empty
+
+
+
+-- Point (Compiler.Type.UnionFind)
+
+
+type Point
+    = Pt Int
+
+
+type PointInfo
+    = Info Int Int
+    | Link Point
+
+
+
+-- DESCRIPTORS (Compiler.Type.Type)
+
+
+type Descriptor
+    = Descriptor Content Int Mark (Maybe Variable)
+
+
+type Content
+    = FlexVar (Maybe String)
+    | FlexSuper SuperType (Maybe String)
+    | RigidVar String
+    | RigidSuper SuperType String
+    | Structure FlatType
+    | Alias Canonical String (List ( String, Variable )) Variable
+    | Error
+
+
+type SuperType
+    = Number
+    | Comparable
+    | Appendable
+    | CompAppend
+
+
+
+-- MARKS
+
+
+type Mark
+    = Mark Int
+
+
+
+-- TYPE PRIMITIVES
+
+
+type alias Variable =
+    Point
+
+
+type FlatType
+    = App1 Canonical String (List Variable)
+    | Fun1 Variable Variable
+    | EmptyRecord1
+    | Record1 (Dict String Variable) Variable
+    | Unit1
+    | Tuple1 Variable Variable (Maybe Variable)
+
+
+
+-- CANONICAL
+
+
+type Canonical
+    = Canonical ( String, String ) String

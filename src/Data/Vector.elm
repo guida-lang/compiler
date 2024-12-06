@@ -8,14 +8,13 @@ module Data.Vector exposing
 
 import Array exposing (Array)
 import Data.IORef as IORef exposing (IORef)
-import Json.Decode as Decode
-import System.IO as IO exposing (IO)
+import System.IO as IO exposing (IO, Variable)
 import Utils.Crash exposing (crash)
 
 
-unsafeLast : Decode.Decoder a -> IORef (Array (Maybe a)) -> IO a
-unsafeLast decoder ioRef =
-    IORef.readIORef (Decode.array (Decode.maybe decoder)) ioRef
+unsafeLast : IORef (Array (Maybe (List Variable))) -> IO (List Variable)
+unsafeLast ioRef =
+    IORef.readIORefMVector ioRef
         |> IO.fmap
             (\array ->
                 case Array.get (Array.length array - 1) array of
@@ -35,9 +34,9 @@ unsafeInit =
     identity
 
 
-imapM_ : Decode.Decoder a -> (Int -> a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
-imapM_ decoder action ioRef =
-    IORef.readIORef (Decode.array (Decode.maybe decoder)) ioRef
+imapM_ : (Int -> List Variable -> IO b) -> IORef (Array (Maybe (List IO.Variable))) -> IO ()
+imapM_ action ioRef =
+    IORef.readIORefMVector ioRef
         |> IO.bind
             (\value ->
                 Array.foldl
@@ -60,14 +59,14 @@ imapM_ decoder action ioRef =
             )
 
 
-mapM_ : Decode.Decoder a -> (a -> IO b) -> IORef (Array (Maybe a)) -> IO ()
-mapM_ decoder action ioRef =
-    imapM_ decoder (\_ -> action) ioRef
+mapM_ : (List IO.Variable -> IO b) -> IORef (Array (Maybe (List IO.Variable))) -> IO ()
+mapM_ action ioRef =
+    imapM_ (\_ -> action) ioRef
 
 
-forM_ : Decode.Decoder a -> IORef (Array (Maybe a)) -> (a -> IO b) -> IO ()
-forM_ decoder ioRef action =
-    mapM_ decoder action ioRef
+forM_ : IORef (Array (Maybe (List IO.Variable))) -> (List IO.Variable -> IO b) -> IO ()
+forM_ ioRef action =
+    mapM_ action ioRef
 
 
 unsafeFreeze : IORef (Array (Maybe a)) -> IO (IORef (Array (Maybe a)))

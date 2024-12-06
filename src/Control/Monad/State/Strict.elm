@@ -16,10 +16,7 @@ module Control.Monad.State.Strict exposing
 {-| Lazy state monads, passing an updatable state through a computation.
 -}
 
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO(..))
-import Utils.Crash exposing (crash)
 
 
 {-| newtype StateT s m a
@@ -100,20 +97,12 @@ modify f =
     StateT (\s -> IO.pure ( (), f s ))
 
 
-get : Decode.Decoder s -> StateT s s
-get decoder =
-    IO
-        (\s ->
-            case Decode.decodeValue decoder s.state of
-                Ok value ->
-                    ( s, IO.Pure value )
-
-                Err err ->
-                    crash (Decode.errorToString err)
-        )
+get : StateT s IO.ReplState
+get =
+    IO (\s -> ( s, IO.Pure s.state ))
         |> liftIO
 
 
-put : (s -> Encode.Value) -> s -> IO ()
-put encoder state =
-    IO (\s -> ( { s | state = encoder state }, IO.Pure () ))
+put : IO.ReplState -> IO ()
+put state =
+    IO (\s -> ( { s | state = state }, IO.Pure () ))

@@ -278,7 +278,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
             )
 
 
-constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
+constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
     Type.mkFlexVar
         |> IO.bind
@@ -576,7 +576,7 @@ constrainRecord rtv region fields expected =
                     recordCon =
                         CEqual region Record recordType expected
 
-                    vars : List Type.Variable
+                    vars : List IO.Variable
                     vars =
                         Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
@@ -588,7 +588,7 @@ constrainRecord rtv region fields expected =
             )
 
 
-constrainField : RTV -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
+constrainField : RTV -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
 constrainField rtv expr =
     Type.mkFlexVar
         |> IO.bind
@@ -639,7 +639,7 @@ constrainUpdate rtv region name expr fields expected =
                                             recordCon =
                                                 CEqual region Record recordType expected
 
-                                            vars : List Type.Variable
+                                            vars : List IO.Variable
                                             vars =
                                                 Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [ recordVar, extVar ] fieldDict
 
@@ -654,7 +654,7 @@ constrainUpdate rtv region name expr fields expected =
             )
 
 
-constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( Type.Variable, Type, Constraint )
+constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( IO.Variable, Type, Constraint )
 constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
     Type.mkFlexVar
         |> IO.bind
@@ -906,7 +906,7 @@ constrainDef rtv def bodyCon =
 
 
 type Info
-    = Info (List Type.Variable) (List Constraint) (Dict Name (A.Located Type))
+    = Info (List IO.Variable) (List Constraint) (Dict Name (A.Located Type))
 
 
 emptyInfo : Info
@@ -1015,7 +1015,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
 
 
 type Args
-    = Args (List Type.Variable) Type Type Pattern.State
+    = Args (List IO.Variable) Type Type Pattern.State
 
 
 constrainArgs : List Can.Pattern -> IO Args

@@ -5,7 +5,6 @@ module Terminal.Repl exposing
     , Lines(..)
     , Output(..)
     , Prefill(..)
-    , State(..)
     , run
     )
 
@@ -26,7 +25,6 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Parse.Declaration as PD
 import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM
@@ -41,8 +39,6 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Control.Monad.State.Strict as State
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Prelude
@@ -73,9 +69,9 @@ run () flags =
                             let
                                 looper : M Exit.ExitCode
                                 looper =
-                                    Utils.replRunInputT settings (Utils.replWithInterrupt (loop env initialState))
+                                    Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
-                            State.evalStateT looper initialState
+                            State.evalStateT looper IO.initialReplState
                                 |> IO.bind (\exitCode -> Exit.exitWith exitCode)
                         )
             )
@@ -139,15 +135,15 @@ initEnv (Flags maybeAlternateInterpreter noColors) =
 
 
 type Outcome
-    = Loop State
+    = Loop IO.ReplState
     | End Exit.ExitCode
 
 
 type alias M a =
-    State.StateT State a
+    State.StateT IO.ReplState a
 
 
-loop : Env -> State -> Utils.ReplInputT Exit.ExitCode
+loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
 loop env state =
     read
         |> IO.bind
@@ -157,7 +153,7 @@ loop env state =
                         (\outcome ->
                             case outcome of
                                 Loop loopState ->
-                                    Utils.liftInputT (State.put stateEncoder loopState)
+                                    Utils.liftInputT (State.put loopState)
                                         |> IO.bind (\_ -> loop env loopState)
 
                                 End exitCode ->
@@ -525,24 +521,11 @@ annotation =
 
 
 
--- STATE
-
-
-type State
-    = State (Dict N.Name String) (Dict N.Name String) (Dict N.Name String)
-
-
-initialState : State
-initialState =
-    State Dict.empty Dict.empty Dict.empty
-
-
-
 -- EVAL
 
 
-eval : Env -> State -> Input -> IO Outcome
-eval env ((State imports types decls) as state) input =
+eval : Env -> IO.ReplState -> Input -> IO Outcome
+eval env ((IO.ReplState imports types decls) as state) input =
     case input of
         Skip ->
             IO.pure (Loop state)
@@ -552,7 +535,7 @@ eval env ((State imports types decls) as state) input =
 
         Reset ->
             IO.putStrLn "<reset>"
-                |> IO.fmap (\_ -> Loop initialState)
+                |> IO.fmap (\_ -> Loop IO.initialReplState)
 
         Help maybeUnknownCommand ->
             IO.putStrLn (toHelpMessage maybeUnknownCommand)
@@ -560,17 +543,17 @@ eval env ((State imports types decls) as state) input =
 
         Import name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State (Dict.insert compare name src imports) types decls
+                    IO.ReplState (Dict.insert compare name src imports) types decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
         Type name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State imports (Dict.insert compare name src types) decls
+                    IO.ReplState imports (Dict.insert compare name src types) decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
@@ -580,9 +563,9 @@ eval env ((State imports types decls) as state) input =
 
         Decl name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State imports types (Dict.insert compare name src decls)
+                    IO.ReplState imports types (Dict.insert compare name src decls)
             in
             IO.fmap Loop (attemptEval env state newState (OutputDecl name))
 
@@ -600,7 +583,7 @@ type Output
     | OutputExpr String
 
 
-attemptEval : Env -> State -> State -> Output -> IO State
+attemptEval : Env -> IO.ReplState -> IO.ReplState -> Output -> IO IO.ReplState
 attemptEval (Env root interpreter ansi) oldState newState output =
     BW.withScope
         (\scope ->
@@ -668,8 +651,8 @@ interpret interpreter javascript =
 -- TO BYTESTRING
 
 
-toByteString : State -> Output -> String
-toByteString (State imports types decls) output =
+toByteString : IO.ReplState -> Output -> String
+toByteString (IO.ReplState imports types decls) output =
     String.concat
         [ "module "
         , N.replModule
@@ -849,9 +832,9 @@ initSettings =
 
 lookupCompletions : String -> M (List Utils.ReplCompletion)
 lookupCompletions string =
-    State.get stateDecoder
+    State.get
         |> State.fmap
-            (\(State imports types decls) ->
+            (\(IO.ReplState imports types decls) ->
                 addMatches string False decls <|
                     addMatches string False types <|
                         addMatches string True imports <|
@@ -886,25 +869,3 @@ addMatch string isFinished name _ completions =
 
     else
         completions
-
-
-
--- ENCODERS and DECODERS
-
-
-stateDecoder : Decode.Decoder State
-stateDecoder =
-    Decode.map3 State
-        (Decode.field "imports" (D.assocListDict compare Decode.string Decode.string))
-        (Decode.field "types" (D.assocListDict compare Decode.string Decode.string))
-        (Decode.field "decls" (D.assocListDict compare Decode.string Decode.string))
-
-
-stateEncoder : State -> Encode.Value
-stateEncoder (State imports types decls) =
-    Encode.object
-        [ ( "type", Encode.string "State" )
-        , ( "imports", E.assocListDict Encode.string Encode.string imports )
-        , ( "types", E.assocListDict Encode.string Encode.string types )
-        , ( "decls", E.assocListDict Encode.string Encode.string decls )
-        ]
