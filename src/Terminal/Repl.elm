@@ -24,7 +24,6 @@ import Compiler.Elm.Licenses as Licenses
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Compiler.Json.Decode as D
 import Compiler.Parse.Declaration as PD
 import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM

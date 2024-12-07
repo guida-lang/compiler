@@ -51,6 +51,7 @@ import Data.Set as EverySet
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import System.TypeCheck.IO as TypeCheck
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar(..))
 
@@ -214,7 +215,7 @@ type Module
 
 
 type alias Dependencies =
-    Dict IO.Canonical I.DependencyInterface
+    Dict TypeCheck.Canonical I.DependencyInterface
 
 
 fromPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> IO (Result Exit.BuildProblem Artifacts)
@@ -580,7 +581,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                         Error.BadSyntax err
 
         SForeign home ->
-            case Utils.find (IO.Canonical home name) foreigns of
+            case Utils.find (TypeCheck.Canonical home name) foreigns of
                 I.Public iface ->
                     IO.pure (RForeign iface)
 
@@ -1270,7 +1271,7 @@ toDocs result =
 
 
 type ReplArtifacts
-    = ReplArtifacts IO.Canonical (List Module) L.Localizer (Dict Name.Name Can.Annotation)
+    = ReplArtifacts TypeCheck.Canonical (List Module) L.Localizer (Dict Name.Name Can.Annotation)
 
 
 fromRepl : FilePath -> Details.Details -> String -> IO (Result Exit.Repl ReplArtifacts)
@@ -1356,7 +1357,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
                         case result of
                             Ok (Compile.Artifacts ((Can.Module name _ _ _ _ _ _ _) as canonical) annotations objects) ->
                                 let
-                                    h : IO.Canonical
+                                    h : TypeCheck.Canonical
                                     h =
                                         name
 

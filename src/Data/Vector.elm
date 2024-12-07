@@ -8,7 +8,7 @@ module Data.Vector exposing
 
 import Array exposing (Array)
 import Data.IORef as IORef exposing (IORef)
-import System.IO as IO exposing (IO, Variable)
+import System.TypeCheck.IO as IO exposing (IO, Variable)
 import Utils.Crash exposing (crash)
 
 

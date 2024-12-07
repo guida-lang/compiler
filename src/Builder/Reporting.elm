@@ -31,7 +31,7 @@ import Json.Decode as Decode
 import Json.Encode as CoreEncode
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
-import Utils.Main as Utils exposing (AsyncException(..), Chan, MVar)
+import Utils.Main as Utils exposing (Chan, MVar)
 
 
 

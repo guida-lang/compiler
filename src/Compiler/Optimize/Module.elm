@@ -15,7 +15,7 @@ import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 

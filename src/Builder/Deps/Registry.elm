@@ -4,7 +4,6 @@ module Builder.Deps.Registry exposing
     , fetch
     , getVersions
     , getVersions_
-    , knownVersionsDecoder
     , latest
     , read
     , registryDecoder

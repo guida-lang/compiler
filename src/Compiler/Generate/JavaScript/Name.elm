@@ -17,7 +17,7 @@ import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.IO as IO
+import System.TypeCheck.IO as IO
 
 
 

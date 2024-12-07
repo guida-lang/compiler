@@ -1,16 +1,10 @@
 module Control.Monad.State.Strict exposing
     ( StateT(..)
-    , apply
-    , bind
     , evalStateT
     , fmap
     , get
-    , gets
     , liftIO
-    , modify
-    , pure
     , put
-    , runStateT
     )
 
 {-| Lazy state monads, passing an updatable state through a computation.
@@ -33,11 +27,6 @@ Ref.: <https://hackage.haskell.org/package/transformers-0.6.1.2/docs/Control-Mon
 -}
 type StateT s a
     = StateT (s -> IO ( a, s ))
-
-
-runStateT : StateT s a -> s -> IO ( a, s )
-runStateT (StateT f) =
-    f
 
 
 evalStateT : StateT s a -> s -> IO a
@@ -68,33 +57,9 @@ fmap func argStateT =
     apply argStateT (pure func)
 
 
-bind : (a -> StateT s b) -> StateT s a -> StateT s b
-bind func (StateT arg) =
-    StateT
-        (\s ->
-            arg s
-                |> IO.bind
-                    (\( a, sa ) ->
-                        case func a of
-                            StateT fb ->
-                                fb sa
-                    )
-        )
-
-
 pure : a -> StateT s a
 pure value =
     StateT (\s -> IO.pure ( value, s ))
-
-
-gets : (s -> a) -> StateT s a
-gets f =
-    StateT (\s -> IO.pure ( f s, s ))
-
-
-modify : (s -> s) -> StateT s ()
-modify f =
-    StateT (\s -> IO.pure ( (), f s ))
 
 
 get : StateT s IO.ReplState

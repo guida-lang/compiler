@@ -3,7 +3,6 @@ module Builder.Deps.Solver exposing
     , Connection(..)
     , Details(..)
     , Env(..)
-    , InnerSolver(..)
     , Solver
     , SolverResult(..)
     , State

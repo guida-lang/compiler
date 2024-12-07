@@ -4,7 +4,7 @@ import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
-import System.IO as IO
+import System.TypeCheck.IO as IO
 
 
 

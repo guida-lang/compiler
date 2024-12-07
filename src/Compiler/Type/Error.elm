@@ -29,7 +29,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
-import System.IO as IO
+import System.TypeCheck.IO as IO
 
 
 

@@ -42,7 +42,7 @@ import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO exposing (Canonical(..))
+import System.TypeCheck.IO exposing (Canonical(..))
 
 
 

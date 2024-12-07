@@ -28,7 +28,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Prelude
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 

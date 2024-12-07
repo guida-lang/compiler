@@ -11,7 +11,7 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 

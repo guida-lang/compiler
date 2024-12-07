@@ -42,7 +42,6 @@ module Utils.Main exposing
     , foldM
     , foldl1_
     , foldr1
-    , forM_
     , forkIO
     , fpAddExtension
     , fpAddTrailingPathSeparator
@@ -64,12 +63,7 @@ module Utils.Main exposing
     , httpResponseHeaders
     , httpResponseStatus
     , httpStatusCode
-    , indexedForA
-    , indexedTraverse
     , indexedZipWithA
-    , ioDictFoldM
-    , ioFoldM
-    , ioFoldrM
     , keysSet
     , liftIOInputT
     , liftInputT
@@ -78,7 +72,6 @@ module Utils.Main exposing
     , listLookup
     , listMaximum
     , listTraverse
-    , listTraverseStateT
     , listTraverse_
     , lockWithFileLock
     , mVarDecoder
@@ -90,13 +83,11 @@ module Utils.Main exposing
     , mapIntersectionWith
     , mapIntersectionWithKey
     , mapLookupMin
-    , mapM
     , mapM_
     , mapMapMaybe
     , mapMinViewWithKey
     , mapTraverse
     , mapTraverseResult
-    , mapTraverseStateT
     , mapTraverseWithKey
     , mapTraverseWithKeyResult
     , mapUnionWith
@@ -104,8 +95,6 @@ module Utils.Main exposing
     , mapUnionsWith
     , maybeEncoder
     , maybeMapM
-    , maybeTraverse
-    , maybeTraverseStateT
     , maybeTraverseTask
     , newChan
     , newEmptyMVar
@@ -125,19 +114,13 @@ module Utils.Main exposing
     , sequenceDictResult_
     , sequenceListMaybe
     , sequenceNonemptyListResult
-    , shaAndArchiveDecoder
     , someExceptionDecoder
     , someExceptionEncoder
     , takeMVar
-    , tupleTraverse
-    , tupleTraverseStateT
     , unlines
     , unzip3
     , writeChan
-    , zipERelativePath
-    , zipFromEntry
     , zipWithM
-    , zipZEntries
     )
 
 import Basics.Extra exposing (flip)
@@ -321,26 +304,6 @@ foldM f b =
     List.foldl (\a -> R.bind (\acc -> f acc a)) (R.ok b)
 
 
-ioFoldM : (b -> a -> IO b) -> b -> List a -> IO b
-ioFoldM f b =
-    List.foldl (\a -> IO.bind (\acc -> f acc a)) (IO.pure b)
-
-
-ioFoldrM : (a -> b -> IO b) -> b -> List a -> IO b
-ioFoldrM f b =
-    List.foldr (IO.bind << f) (IO.pure b)
-
-
-ioDictFoldM : (b -> a -> IO b) -> b -> Dict k a -> IO b
-ioDictFoldM f b =
-    Dict.foldl (\_ a -> IO.bind (\acc -> f acc a)) (IO.pure b)
-
-
-indexedTraverse : (Index.ZeroBased -> a -> IO b) -> List a -> IO (List b)
-indexedTraverse func xs =
-    sequenceAListIO (Index.indexedMap func xs)
-
-
 indexedZipWithA : (Index.ZeroBased -> a -> b -> R.RResult info warnings error c) -> List a -> List b -> R.RResult info warnings error (Index.VerifiedList c)
 indexedZipWithA func listX listY =
     case Index.indexedZipWith func listX listY of
@@ -352,11 +315,6 @@ indexedZipWithA func listX listY =
             R.pure (Index.LengthMismatch x y)
 
 
-indexedForA : List a -> (Index.ZeroBased -> a -> IO b) -> IO (List b)
-indexedForA xs func =
-    sequenceAListIO (Index.indexedMap func xs)
-
-
 sequenceADict : (k -> k -> Order) -> Dict k (R.RResult i w e v) -> R.RResult i w e (Dict k v)
 sequenceADict keyComparison =
     Dict.foldr (\k x acc -> R.apply acc (R.fmap (Dict.insert keyComparison k) x)) (R.pure Dict.empty)
@@ -365,11 +323,6 @@ sequenceADict keyComparison =
 sequenceAList : List (R.RResult i w e v) -> R.RResult i w e (List v)
 sequenceAList =
     List.foldr (\x acc -> R.apply acc (R.fmap (::) x)) (R.pure [])
-
-
-sequenceAListIO : List (IO a) -> IO (List a)
-sequenceAListIO =
-    List.foldr (\x acc -> IO.apply acc (IO.fmap (::) x)) (IO.pure [])
 
 
 sequenceDictMaybe : (k -> k -> Order) -> Dict k (Maybe a) -> Maybe (Dict k a)
@@ -432,11 +385,6 @@ dictMapM_ f =
     Dict.foldl c (IO.pure ())
 
 
-mapM : (a -> IO b) -> List a -> IO (List b)
-mapM =
-    listTraverse
-
-
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
 maybeMapM =
     listMaybeTraverse
@@ -459,11 +407,6 @@ mapMapMaybe keyComparison func =
         >> Dict.fromList keyComparison
 
 
-forM_ : List a -> (a -> IO b) -> IO ()
-forM_ list f =
-    mapM_ f list
-
-
 mapTraverse : (k -> k -> Order) -> (a -> IO b) -> Dict k a -> IO (Dict k b)
 mapTraverse keyComparison f =
     mapTraverseWithKey keyComparison (\_ -> f)
@@ -484,17 +427,6 @@ mapTraverseWithKeyResult : (k -> k -> Order) -> (k -> a -> Result e b) -> Dict k
 mapTraverseWithKeyResult keyComparison f =
     Dict.foldl (\k a -> Result.map2 (Dict.insert keyComparison k) (f k a))
         (Ok Dict.empty)
-
-
-mapTraverseStateT : (k -> k -> Order) -> (a -> State.StateT s b) -> Dict k a -> State.StateT s (Dict k b)
-mapTraverseStateT keyComparison f =
-    mapTraverseWithKeyStateT keyComparison (\_ -> f)
-
-
-mapTraverseWithKeyStateT : (k -> k -> Order) -> (k -> a -> State.StateT s b) -> Dict k a -> State.StateT s (Dict k b)
-mapTraverseWithKeyStateT keyComparison f =
-    Dict.foldl (\k a -> State.bind (\c -> State.fmap (\va -> Dict.insert keyComparison k va c) (f k a)))
-        (State.pure Dict.empty)
 
 
 listTraverse : (a -> IO b) -> List a -> IO (List b)
@@ -520,42 +452,6 @@ listTraverse_ : (a -> IO b) -> List a -> IO ()
 listTraverse_ f =
     listTraverse f
         >> IO.fmap (\_ -> ())
-
-
-listTraverseStateT : (a -> State.StateT s b) -> List a -> State.StateT s (List b)
-listTraverseStateT f =
-    List.foldr (\a -> State.bind (\c -> State.fmap (\va -> va :: c) (f a)))
-        (State.pure [])
-
-
-tupleTraverse : (b -> IO c) -> ( a, b ) -> IO ( a, c )
-tupleTraverse f ( a, b ) =
-    IO.fmap (Tuple.pair a) (f b)
-
-
-tupleTraverseStateT : (b -> State.StateT s c) -> ( a, b ) -> State.StateT s ( a, c )
-tupleTraverseStateT f ( a, b ) =
-    State.fmap (Tuple.pair a) (f b)
-
-
-maybeTraverse : (a -> IO b) -> Maybe a -> IO (Maybe b)
-maybeTraverse f a =
-    case Maybe.map f a of
-        Just b ->
-            IO.fmap Just b
-
-        Nothing ->
-            IO.pure Nothing
-
-
-maybeTraverseStateT : (a -> State.StateT s b) -> Maybe a -> State.StateT s (Maybe b)
-maybeTraverseStateT f a =
-    case Maybe.map f a of
-        Just b ->
-            State.fmap Just b
-
-        Nothing ->
-            State.pure Nothing
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
@@ -931,46 +827,6 @@ type ZipEntry
         { eRelativePath : FilePath
         , eData : String
         }
-
-
-zipZEntries : ZipArchive -> List ZipEntry
-zipZEntries (ZipArchive entries) =
-    entries
-
-
-zipERelativePath : ZipEntry -> FilePath
-zipERelativePath (ZipEntry { eRelativePath }) =
-    eRelativePath
-
-
-zipFromEntry : ZipEntry -> String
-zipFromEntry (ZipEntry { eData }) =
-    eData
-
-
-zipArchiveDecoder : Decode.Decoder ZipArchive
-zipArchiveDecoder =
-    Decode.map ZipArchive (Decode.list zipEntryDecoder)
-
-
-shaAndArchiveDecoder : Decode.Decoder ( String, ZipArchive )
-shaAndArchiveDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "sha" Decode.string)
-        (Decode.field "archive" zipArchiveDecoder)
-
-
-zipEntryDecoder : Decode.Decoder ZipEntry
-zipEntryDecoder =
-    Decode.map2
-        (\eRelativePath eData ->
-            ZipEntry
-                { eRelativePath = eRelativePath
-                , eData = eData
-                }
-        )
-        (Decode.field "eRelativePath" Decode.string)
-        (Decode.field "eData" Decode.string)
 
 
 

@@ -9,8 +9,7 @@ import Compiler.Type.Constrain.Expression as Expr
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..), mkFlexVar, nameToRigid)
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
-import Utils.Main as Utils
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 
@@ -70,7 +69,7 @@ letPort : Name -> Can.Port -> IO Constraint -> IO Constraint
 letPort name port_ makeConstraint =
     case port_ of
         Can.Incoming { freeVars, func } ->
-            Utils.mapTraverseWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func
@@ -86,7 +85,7 @@ letPort name port_ makeConstraint =
                     )
 
         Can.Outgoing { freeVars, func } ->
-            Utils.mapTraverseWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func

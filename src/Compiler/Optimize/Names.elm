@@ -24,7 +24,7 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 

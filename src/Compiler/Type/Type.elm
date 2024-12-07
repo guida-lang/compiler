@@ -36,13 +36,11 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Error as ET
 import Compiler.Type.UnionFind as UF
-import Control.Monad.State.Strict as State exposing (StateT, liftIO)
-import Data.IORef exposing (IORef(..))
+import Control.Monad.State.TypeCheck.Strict as State exposing (StateT, liftIO)
 import Data.Map as Dict exposing (Dict)
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (Content(..), Descriptor(..), FlatType(..), IO, Mark(..), SuperType(..), Variable)
+import System.TypeCheck.IO as IO exposing (Content(..), Descriptor(..), FlatType(..), IO, Mark(..), SuperType(..), Variable)
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils
 
 
 
@@ -343,7 +341,7 @@ variableToCanType variable =
                         State.pure (Can.TVar name)
 
                     Alias home name args realVariable ->
-                        Utils.listTraverseStateT (Utils.tupleTraverseStateT variableToCanType) args
+                        State.traverseList (State.traverseTuple variableToCanType) args
                             |> State.bind
                                 (\canArgs ->
                                     variableToCanType realVariable
@@ -362,7 +360,7 @@ termToCanType : FlatType -> StateT NameState Can.Type
 termToCanType term =
     case term of
         App1 home name args ->
-            Utils.listTraverseStateT variableToCanType args
+            State.traverseList variableToCanType args
                 |> State.fmap (Can.TType home name)
 
         Fun1 a b ->
@@ -374,7 +372,7 @@ termToCanType term =
             State.pure (Can.TRecord Dict.empty Nothing)
 
         Record1 fields extension ->
-            Utils.mapTraverseStateT compare fieldToCanType fields
+            State.traverseMap compare fieldToCanType fields
                 |> State.bind
                     (\canFields ->
                         variableToCanType extension
@@ -400,7 +398,7 @@ termToCanType term =
             State.pure Can.TTuple
                 |> State.apply (variableToCanType a)
                 |> State.apply (variableToCanType b)
-                |> State.apply (Utils.maybeTraverseStateT variableToCanType maybeC)
+                |> State.apply (State.traverseMaybe variableToCanType maybeC)
 
 
 fieldToCanType : Variable -> StateT NameState Can.FieldType
@@ -493,7 +491,7 @@ contentToErrorType variable content =
             State.pure (ET.RigidSuper (superToSuper super) name)
 
         Alias home name args realVariable ->
-            Utils.listTraverseStateT (Utils.tupleTraverseStateT variableToErrorType) args
+            State.traverseList (State.traverseTuple variableToErrorType) args
                 |> State.bind
                     (\errArgs ->
                         variableToErrorType realVariable
@@ -527,7 +525,7 @@ termToErrorType : FlatType -> StateT NameState ET.Type
 termToErrorType term =
     case term of
         App1 home name args ->
-            Utils.listTraverseStateT variableToErrorType args
+            State.traverseList variableToErrorType args
                 |> State.fmap (ET.Type home name)
 
         Fun1 a b ->
@@ -550,7 +548,7 @@ termToErrorType term =
             State.pure (ET.Record Dict.empty ET.Closed)
 
         Record1 fields extension ->
-            Utils.mapTraverseStateT compare variableToErrorType fields
+            State.traverseMap compare variableToErrorType fields
                 |> State.bind
                     (\errFields ->
                         variableToErrorType extension
@@ -579,7 +577,7 @@ termToErrorType term =
             State.pure ET.Tuple
                 |> State.apply (variableToErrorType a)
                 |> State.apply (variableToErrorType b)
-                |> State.apply (Utils.maybeTraverseStateT variableToErrorType maybeC)
+                |> State.apply (State.traverseMaybe variableToErrorType maybeC)
 
 
 
@@ -748,12 +746,12 @@ getVarNames var takenNames =
                                         addName 0 name var (RigidSuper super) takenNames
 
                                     Alias _ _ args _ ->
-                                        Utils.ioFoldrM getVarNames takenNames (List.map Tuple.second args)
+                                        IO.foldrM getVarNames takenNames (List.map Tuple.second args)
 
                                     Structure flatType ->
                                         case flatType of
                                             App1 _ _ args ->
-                                                Utils.ioFoldrM getVarNames takenNames args
+                                                IO.foldrM getVarNames takenNames args
 
                                             Fun1 arg body ->
                                                 IO.bind (getVarNames arg) (getVarNames body takenNames)
@@ -763,7 +761,7 @@ getVarNames var takenNames =
 
                                             Record1 fields extension ->
                                                 IO.bind (getVarNames extension)
-                                                    (Utils.ioFoldrM getVarNames takenNames (Dict.values fields))
+                                                    (IO.foldrM getVarNames takenNames (Dict.values fields))
 
                                             Unit1 ->
                                                 IO.pure takenNames

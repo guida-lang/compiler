@@ -28,7 +28,7 @@ import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Maybe exposing (Maybe(..))
-import System.IO exposing (Canonical)
+import System.TypeCheck.IO exposing (Canonical)
 
 
 

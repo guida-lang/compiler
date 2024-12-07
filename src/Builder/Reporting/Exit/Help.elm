@@ -8,7 +8,6 @@ module Builder.Reporting.Exit.Help exposing
     , reportToJson
     , toStderr
     , toStdout
-    , toString
     )
 
 import Compiler.Json.Encode as E

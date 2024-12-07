@@ -10,7 +10,7 @@ import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type
 import Compiler.Type.UnionFind as UF
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.TypeCheck.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

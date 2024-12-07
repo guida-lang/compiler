@@ -1,6 +1,6 @@
 port module System.IO exposing
     ( Program, Flags, Model, Msg, Next, run
-    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind, foldrM
+    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -11,9 +11,6 @@ port module System.IO exposing
     , hPutStr, hPutStrLn
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
-    , Point(..), PointInfo(..)
-    , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
-    , Canonical(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -23,7 +20,7 @@ port module System.IO exposing
 
 # The IO monad
 
-@docs IO, ION, RealWorld, pure, apply, fmap, bind, foldrM
+@docs IO, ION, RealWorld, pure, apply, fmap, bind
 
 
 # Files and handles
@@ -75,24 +72,8 @@ port module System.IO exposing
 
 @docs ReplState, initialReplState
 
-
-# Point
-
-@docs Point, PointInfo
-
-
-# Compiler.Type.Type
-
-@docs Descriptor, Content, SuperType, Mark, Variable, FlatType
-
-
-# Compiler.Elm.ModuleName
-
-@docs Canonical
-
 -}
 
-import Array exposing (Array)
 import Codec.Archive.Zip as Zip
 import Data.Map as Dict exposing (Dict)
 import Json.Encode as Encode
@@ -124,11 +105,6 @@ run app =
                         , envVars = Dict.fromList compare flags.envVars
                         , homedir = flags.homedir
                         , progName = flags.progName
-                        , ioRefs = Array.empty
-                        , ioRefsWeight = Array.empty
-                        , ioRefsPointInfo = Array.empty
-                        , ioRefsDescriptor = Array.empty
-                        , ioRefsMVector = Array.empty
                         , state = initialReplState
                         }
                     , next = Dict.empty
@@ -848,11 +824,6 @@ type alias RealWorld =
     , envVars : Dict String String
     , homedir : FilePath
     , progName : String
-    , ioRefs : Array Encode.Value
-    , ioRefsWeight : Array Int
-    , ioRefsPointInfo : Array PointInfo
-    , ioRefsDescriptor : Array Descriptor
-    , ioRefsMVector : Array (Array (Maybe (List Variable)))
     , state : ReplState
     }
 
@@ -984,16 +955,6 @@ bind f (IO ma) =
         )
 
 
-foldrM : (a -> b -> IO b) -> b -> List a -> IO b
-foldrM f z0 xs =
-    let
-        c : a -> (b -> IO c) -> b -> IO c
-        c x k z =
-            bind k (f x z)
-    in
-    List.foldl c pure xs z0
-
-
 unIO : IO a -> (RealWorld -> ( RealWorld, ION a ))
 unIO (IO a) =
     a
@@ -1122,74 +1083,3 @@ type ReplState
 initialReplState : ReplState
 initialReplState =
     ReplState Dict.empty Dict.empty Dict.empty
-
-
-
--- Point (Compiler.Type.UnionFind)
-
-
-type Point
-    = Pt Int
-
-
-type PointInfo
-    = Info Int Int
-    | Link Point
-
-
-
--- DESCRIPTORS (Compiler.Type.Type)
-
-
-type Descriptor
-    = Descriptor Content Int Mark (Maybe Variable)
-
-
-type Content
-    = FlexVar (Maybe String)
-    | FlexSuper SuperType (Maybe String)
-    | RigidVar String
-    | RigidSuper SuperType String
-    | Structure FlatType
-    | Alias Canonical String (List ( String, Variable )) Variable
-    | Error
-
-
-type SuperType
-    = Number
-    | Comparable
-    | Appendable
-    | CompAppend
-
-
-
--- MARKS
-
-
-type Mark
-    = Mark Int
-
-
-
--- TYPE PRIMITIVES
-
-
-type alias Variable =
-    Point
-
-
-type FlatType
-    = App1 Canonical String (List Variable)
-    | Fun1 Variable Variable
-    | EmptyRecord1
-    | Record1 (Dict String Variable) Variable
-    | Unit1
-    | Tuple1 Variable Variable (Maybe Variable)
-
-
-
--- CANONICAL (Compiler.Elm.ModuleName)
-
-
-type Canonical
-    = Canonical ( String, String ) String

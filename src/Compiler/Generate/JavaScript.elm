@@ -24,7 +24,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 

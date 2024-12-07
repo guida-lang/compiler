@@ -10,7 +10,7 @@ module Data.Vector.Mutable exposing
 import Array exposing (Array)
 import Array.Extra as Array
 import Data.IORef as IORef exposing (IORef)
-import System.IO as IO exposing (IO, Variable)
+import System.TypeCheck.IO as IO exposing (IO, Variable)
 import Utils.Crash exposing (crash)
 
 

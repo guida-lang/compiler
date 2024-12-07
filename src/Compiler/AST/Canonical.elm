@@ -70,7 +70,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO
+import System.TypeCheck.IO as IO
 
 
 

@@ -12,7 +12,7 @@ import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 

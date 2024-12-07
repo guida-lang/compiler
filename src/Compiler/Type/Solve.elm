@@ -14,11 +14,11 @@ import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type exposing (Constraint(..), Type, nextMark)
 import Compiler.Type.Unify as Unify
 import Compiler.Type.UnionFind as UF
-import Data.IORef exposing (IORef(..))
+import Data.IORef exposing (IORef)
 import Data.Map as Dict exposing (Dict)
 import Data.Vector as Vector
 import Data.Vector.Mutable as MVector
-import System.IO as IO exposing (Content, Descriptor(..), IO, Mark, Variable)
+import System.TypeCheck.IO as IO exposing (Content, Descriptor(..), IO, Mark, Variable)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -37,7 +37,7 @@ run constraint =
                         (\(State env _ errors) ->
                             case errors of
                                 [] ->
-                                    Utils.mapTraverse compare Type.toAnnotation env
+                                    IO.traverseMap compare Type.toAnnotation env
                                         |> IO.fmap Ok
 
                                 e :: es ->
@@ -187,7 +187,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                     )
 
         CAnd constraints ->
-            Utils.ioFoldM (solve env rank pools) state constraints
+            IO.foldM (solve env rank pools) state constraints
 
         CLet [] flexs _ headerCon CTrue ->
             introduce rank pools flexs
@@ -197,7 +197,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
             solve env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
-                        Utils.mapTraverse compare (A.traverse (typeToVariable rank pools)) header
+                        IO.traverseMap compare (A.traverse (typeToVariable rank pools)) header
                             |> IO.bind
                                 (\locals ->
                                     let
@@ -208,7 +208,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                     solve newEnv rank pools state1 subCon
                                         |> IO.bind
                                             (\state2 ->
-                                                Utils.ioFoldM occurs state2 (Dict.toList locals)
+                                                IO.foldM occurs state2 (Dict.toList locals)
                                             )
                                 )
                     )
@@ -237,7 +237,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                         vars =
                                             rigids ++ flexs
                                     in
-                                    Utils.forM_ vars
+                                    IO.forM_ vars
                                         (\var ->
                                             UF.modify var <|
                                                 \(Descriptor content _ mark copy) ->
@@ -249,7 +249,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                     |> IO.bind
                                                         (\_ ->
                                                             -- run solver in next pool
-                                                            Utils.mapTraverse compare (A.traverse (typeToVariable nextRank nextPools)) header
+                                                            IO.traverseMap compare (A.traverse (typeToVariable nextRank nextPools)) header
                                                                 |> IO.bind
                                                                     (\locals ->
                                                                         solve env nextRank nextPools state headerCon
@@ -276,7 +276,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                     |> IO.bind
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
-                                                                                                            Utils.mapM_ isGeneric rigids
+                                                                                                            IO.mapM_ isGeneric rigids
                                                                                                                 |> IO.bind
                                                                                                                     (\_ ->
                                                                                                                         let
@@ -291,7 +291,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                                         solve newEnv rank nextPools tempState subCon
                                                                                                                             |> IO.bind
                                                                                                                                 (\newState ->
-                                                                                                                                    Utils.ioFoldM occurs newState (Dict.toList locals)
+                                                                                                                                    IO.foldM occurs newState (Dict.toList locals)
                                                                                                                                 )
                                                                                                                     )
                                                                                                         )
@@ -416,7 +416,7 @@ generalize youngMark visitMark youngRank pools =
                             -- over the information once.
                             Vector.imapM_
                                 (\rank table ->
-                                    Utils.mapM_ (adjustRank youngMark visitMark rank) table
+                                    IO.mapM_ (adjustRank youngMark visitMark rank) table
                                 )
                                 rankTable
                                 |> IO.bind
@@ -425,7 +425,7 @@ generalize youngMark visitMark youngRank pools =
                                         -- the appropriate old pool if they are not redundant.
                                         Vector.forM_ (Vector.unsafeInit rankTable)
                                             (\vars ->
-                                                Utils.forM_ vars
+                                                IO.forM_ vars
                                                     (\var ->
                                                         UF.redundant var
                                                             |> IO.bind
@@ -450,7 +450,7 @@ generalize youngMark visitMark youngRank pools =
                                                     Vector.unsafeLast rankTable
                                                         |> IO.bind
                                                             (\lastRankTable ->
-                                                                Utils.forM_ lastRankTable <|
+                                                                IO.forM_ lastRankTable <|
                                                                     \var ->
                                                                         UF.redundant var
                                                                             |> IO.bind
@@ -482,7 +482,7 @@ poolToRankTable youngMark youngRank youngInhabitants =
         |> IO.bind
             (\mutableTable ->
                 -- Sort the youngPool variables into buckets by rank.
-                Utils.forM_ youngInhabitants
+                IO.forM_ youngInhabitants
                     (\var ->
                         UF.get var
                             |> IO.bind
@@ -562,7 +562,7 @@ adjustRankContent youngMark visitMark groupRank content =
         IO.Structure flatType ->
             case flatType of
                 IO.App1 _ _ args ->
-                    Utils.ioFoldM (\rank arg -> IO.fmap (max rank) (go arg)) Type.outermostRank args
+                    IO.foldM (\rank arg -> IO.fmap (max rank) (go arg)) Type.outermostRank args
 
                 IO.Fun1 arg result ->
                     IO.pure max
@@ -577,7 +577,7 @@ adjustRankContent youngMark visitMark groupRank content =
                     go extension
                         |> IO.bind
                             (\extRank ->
-                                Utils.ioDictFoldM (\rank field -> IO.fmap (max rank) (go field)) extRank fields
+                                IO.foldMDict (\rank field -> IO.fmap (max rank) (go field)) extRank fields
                             )
 
                 IO.Unit1 ->
@@ -603,7 +603,7 @@ adjustRankContent youngMark visitMark groupRank content =
 
         IO.Alias _ _ args _ ->
             -- THEORY: anything in the realVar would be outermostRank
-            Utils.ioFoldM (\rank ( _, argVar ) -> IO.fmap (max rank) (go argVar)) Type.outermostRank args
+            IO.foldM (\rank ( _, argVar ) -> IO.fmap (max rank) (go argVar)) Type.outermostRank args
 
         IO.Error ->
             IO.pure groupRank
@@ -620,7 +620,7 @@ introduce rank pools variables =
         rank
         |> IO.bind
             (\_ ->
-                Utils.forM_ variables
+                IO.forM_ variables
                     (\var ->
                         UF.modify var <|
                             \(Descriptor content _ mark copy) ->
@@ -660,7 +660,7 @@ typeToVar rank pools aliasDict tipe =
             IO.pure v
 
         Type.AppN home name args ->
-            Utils.listTraverse go args
+            IO.traverseList go args
                 |> IO.bind
                     (\argVars ->
                         register rank pools (IO.Structure (IO.App1 home name argVars))
@@ -678,7 +678,7 @@ typeToVar rank pools aliasDict tipe =
                     )
 
         Type.AliasN home name args aliasType ->
-            Utils.listTraverse (Utils.tupleTraverse go) args
+            IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
                         typeToVar rank pools (Dict.fromList compare argVars) aliasType
@@ -692,7 +692,7 @@ typeToVar rank pools aliasDict tipe =
             IO.pure (Utils.find name aliasDict)
 
         Type.RecordN fields ext ->
-            Utils.mapTraverse compare go fields
+            IO.traverseMap compare go fields
                 |> IO.bind
                     (\fieldVars ->
                         go ext
@@ -715,7 +715,7 @@ typeToVar rank pools aliasDict tipe =
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    Utils.maybeTraverse go c
+                                    IO.traverseMaybe go c
                                         |> IO.bind
                                             (\cVar ->
                                                 register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
@@ -772,7 +772,7 @@ srcTypeToVariable rank pools freeVars srcType =
         makeVar name _ =
             UF.fresh (Descriptor (nameToContent name) rank Type.noMark Nothing)
     in
-    Utils.mapTraverseWithKey compare makeVar freeVars
+    IO.traverseMapWithKey compare makeVar freeVars
         |> IO.bind
             (\flexVars ->
                 MVector.modify pools (\a -> Dict.values flexVars ++ a) rank
@@ -803,14 +803,14 @@ srcTypeToVar rank pools flexVars srcType =
             IO.pure (Utils.find name flexVars)
 
         Can.TType home name args ->
-            Utils.listTraverse go args
+            IO.traverseList go args
                 |> IO.bind
                     (\argVars ->
                         register rank pools (IO.Structure (IO.App1 home name argVars))
                     )
 
         Can.TRecord fields maybeExt ->
-            Utils.mapTraverse compare (srcFieldTypeToVar rank pools flexVars) fields
+            IO.traverseMap compare (srcFieldTypeToVar rank pools flexVars) fields
                 |> IO.bind
                     (\fieldVars ->
                         (case maybeExt of
@@ -836,7 +836,7 @@ srcTypeToVar rank pools flexVars srcType =
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    Utils.maybeTraverse go c
+                                    IO.traverseMaybe go c
                                         |> IO.bind
                                             (\cVar ->
                                                 register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
@@ -845,7 +845,7 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
         Can.TAlias home name args aliasType ->
-            Utils.listTraverse (Utils.tupleTraverse go) args
+            IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
                         (case aliasType of
@@ -940,7 +940,7 @@ makeCopyHelp maxRank pools variable =
                                                                             |> IO.fmap (\_ -> copy)
 
                                                                     IO.Alias home name args realType ->
-                                                                        Utils.mapM (Utils.tupleTraverse (makeCopyHelp maxRank pools)) args
+                                                                        IO.mapM (IO.traverseTuple (makeCopyHelp maxRank pools)) args
                                                                             |> IO.bind
                                                                                 (\newArgs ->
                                                                                     makeCopyHelp maxRank pools realType
@@ -996,7 +996,7 @@ restoreContent content =
         IO.Structure term ->
             case term of
                 IO.App1 _ _ args ->
-                    Utils.mapM_ restore args
+                    IO.mapM_ restore args
 
                 IO.Fun1 arg result ->
                     restore arg
@@ -1006,7 +1006,7 @@ restoreContent content =
                     IO.pure ()
 
                 IO.Record1 fields ext ->
-                    Utils.mapM_ restore (Dict.values fields)
+                    IO.mapM_ restore (Dict.values fields)
                         |> IO.bind (\_ -> restore ext)
 
                 IO.Unit1 ->
@@ -1026,7 +1026,7 @@ restoreContent content =
                             )
 
         IO.Alias _ _ args var ->
-            Utils.mapM_ restore (List.map Tuple.second args)
+            IO.mapM_ restore (List.map Tuple.second args)
                 |> IO.bind (\_ -> restore var)
 
         IO.Error ->
@@ -1041,7 +1041,7 @@ traverseFlatType : (Variable -> IO Variable) -> IO.FlatType -> IO IO.FlatType
 traverseFlatType f flatType =
     case flatType of
         IO.App1 home name args ->
-            IO.fmap (IO.App1 home name) (Utils.listTraverse f args)
+            IO.fmap (IO.App1 home name) (IO.traverseList f args)
 
         IO.Fun1 a b ->
             IO.pure IO.Fun1
@@ -1053,7 +1053,7 @@ traverseFlatType f flatType =
 
         IO.Record1 fields ext ->
             IO.pure IO.Record1
-                |> IO.apply (Utils.mapTraverse compare f fields)
+                |> IO.apply (IO.traverseMap compare f fields)
                 |> IO.apply (f ext)
 
         IO.Unit1 ->
@@ -1063,4 +1063,4 @@ traverseFlatType f flatType =
             IO.pure IO.Tuple1
                 |> IO.apply (f a)
                 |> IO.apply (f b)
-                |> IO.apply (Utils.maybeTraverse f cs)
+                |> IO.apply (IO.traverseMaybe f cs)
