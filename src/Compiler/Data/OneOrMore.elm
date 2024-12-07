@@ -2,6 +2,7 @@ module Compiler.Data.OneOrMore exposing
     ( OneOrMore(..)
     , destruct
     , getFirstTwo
+    , map
     , more
     , one
     )
