@@ -61,11 +61,11 @@ import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Serialize as S
-import Data.IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
 import Serialize exposing (Codec)
+import System.IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 

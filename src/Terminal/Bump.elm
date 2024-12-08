@@ -18,8 +18,8 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -107,11 +107,11 @@ bump ((Env root _ _ registry ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outlin
 
 checkNewPackage : FilePath -> Outline.PkgOutline -> IO ()
 checkNewPackage root ((Outline.PkgOutline _ _ _ version _ _ _ _) as outline) =
-    Prelude.putStrLn Exit.newPackageOverview
+    IO.putStrLn Exit.newPackageOverview
         |> IO.bind
             (\_ ->
                 if version == V.one then
-                    Prelude.putStrLn "The version number in elm.json is correct so you are all set!"
+                    IO.putStrLn "The version number in elm.json is correct so you are all set!"
 
                 else
                     changeVersion root outline V.one <|
@@ -202,7 +202,7 @@ changeVersion root (Outline.PkgOutline name summary license _ exposed deps testD
         |> IO.bind
             (\approved ->
                 if not approved then
-                    Prelude.putStrLn "Okay, I did not change anything!"
+                    IO.putStrLn "Okay, I did not change anything!"
 
                 else
                     Outline.write root

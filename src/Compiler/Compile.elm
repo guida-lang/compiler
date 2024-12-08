@@ -18,8 +18,9 @@ import Compiler.Reporting.Render.Type.Localizer as Localizer
 import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
-import Data.IO as IO exposing (IO)
 import Data.Map exposing (Dict)
+import System.IO as IO exposing (IO)
+import System.TypeCheck.IO as TypeCheck
 
 
 
@@ -33,22 +34,21 @@ type Artifacts
 compile : Pkg.Name -> Dict ModuleName.Raw I.Interface -> Src.Module -> IO (Result E.Error Artifacts)
 compile pkg ifaces modul =
     IO.pure (canonicalize pkg ifaces modul)
-        |> IO.bind
+        |> IO.fmap
             (\canonicalResult ->
                 case canonicalResult of
                     Ok canonical ->
-                        typeCheck modul canonical
-                            |> IO.fmap
-                                (Result.map2 (\() annotations -> annotations) (nitpick canonical)
-                                    >> Result.andThen
-                                        (\annotations ->
-                                            optimize modul annotations canonical
-                                                |> Result.map (\objects -> Artifacts canonical annotations objects)
-                                        )
+                        Result.map2 (\annotations () -> annotations)
+                            (typeCheck modul canonical)
+                            (nitpick canonical)
+                            |> Result.andThen
+                                (\annotations ->
+                                    optimize modul annotations canonical
+                                        |> Result.map (\objects -> Artifacts canonical annotations objects)
                                 )
 
                     Err err ->
-                        IO.pure (Err err)
+                        Err err
             )
 
 
@@ -66,18 +66,14 @@ canonicalize pkg ifaces modul =
             Err (E.BadNames errors)
 
 
-typeCheck : Src.Module -> Can.Module -> IO (Result E.Error (Dict Name Can.Annotation))
+typeCheck : Src.Module -> Can.Module -> Result E.Error (Dict Name Can.Annotation)
 typeCheck modul canonical =
-    IO.bind Type.run (Type.constrain canonical)
-        |> IO.fmap
-            (\result ->
-                case result of
-                    Ok annotations ->
-                        Ok annotations
+    case TypeCheck.unsafePerformIO (TypeCheck.bind Type.run (Type.constrain canonical)) of
+        Ok annotations ->
+            Ok annotations
 
-                    Err errors ->
-                        Err (E.BadTypes (Localizer.fromModule modul) errors)
-            )
+        Err errors ->
+            Err (E.BadTypes (Localizer.fromModule modul) errors)
 
 
 nitpick : Can.Module -> Result E.Error ()

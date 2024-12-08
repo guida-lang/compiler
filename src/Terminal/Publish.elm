@@ -23,9 +23,10 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import List.Extra as List
-import Prelude
+import System.Exit as Exit
+import System.IO as IO exposing (IO)
+import System.Process as Process
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -126,9 +127,9 @@ publish ((Env root _ manager registry outline) as env) =
                                                             verifyZip env pkg vsn
                                                                 |> Task.bind
                                                                     (\zipHash ->
-                                                                        Task.io (Prelude.putStrLn "")
+                                                                        Task.io (IO.putStrLn "")
                                                                             |> Task.bind (\_ -> register manager pkg vsn docs commitHash zipHash)
-                                                                            |> Task.bind (\_ -> Task.io (Prelude.putStrLn "Success!"))
+                                                                            |> Task.bind (\_ -> Task.io (IO.putStrLn "Success!"))
                                                                     )
                                                         )
                                             )
@@ -249,7 +250,7 @@ verifyBuild root =
 
 
 type Git
-    = Git (List String -> IO IO.ExitCode)
+    = Git (List String -> IO Exit.ExitCode)
 
 
 getGit : Task.Task Exit.Publish Git
@@ -266,20 +267,20 @@ getGit =
                             Git
                                 (\args ->
                                     let
-                                        process : { cmdspec : IO.CmdSpec, std_in : IO.StdStream, std_out : IO.StdStream, std_err : IO.StdStream }
+                                        process : { cmdspec : Process.CmdSpec, std_in : Process.StdStream, std_out : Process.StdStream, std_err : Process.StdStream }
                                         process =
-                                            IO.procProc git args
+                                            Process.proc git args
                                                 |> (\cp ->
                                                         { cp
-                                                            | std_in = IO.CreatePipe
-                                                            , std_out = IO.CreatePipe
-                                                            , std_err = IO.CreatePipe
+                                                            | std_in = Process.CreatePipe
+                                                            , std_out = Process.CreatePipe
+                                                            , std_err = Process.CreatePipe
                                                         }
                                                    )
                                     in
-                                    IO.procWithCreateProcess process
+                                    Process.withCreateProcess process
                                         (\_ _ _ handle ->
-                                            IO.procWaitForProcess handle
+                                            Process.waitForProcess handle
                                         )
                                 )
             )
@@ -297,10 +298,10 @@ verifyTag (Git run_) manager pkg vsn =
             |> IO.bind
                 (\exitCode ->
                     case exitCode of
-                        IO.ExitFailure _ ->
+                        Exit.ExitFailure _ ->
                             IO.pure (Err (Exit.PublishMissingTag vsn))
 
-                        IO.ExitSuccess ->
+                        Exit.ExitSuccess ->
                             let
                                 url : String
                                 url =
@@ -340,10 +341,10 @@ verifyNoChanges (Git run_) commitHash vsn =
             |> IO.fmap
                 (\exitCode ->
                     case exitCode of
-                        IO.ExitSuccess ->
+                        Exit.ExitSuccess ->
                             Ok ()
 
-                        IO.ExitFailure _ ->
+                        Exit.ExitFailure _ ->
                             Err (Exit.PublishLocalChanges vsn)
                 )
         )
@@ -528,10 +529,10 @@ reportPublishStart pkg vsn maybeKnownVersions =
     Task.io <|
         case maybeKnownVersions of
             Nothing ->
-                Prelude.putStrLn <| Exit.newPackageOverview ++ "\nI will now verify that everything is in order...\n"
+                IO.putStrLn <| Exit.newPackageOverview ++ "\nI will now verify that everything is in order...\n"
 
             Just _ ->
-                Prelude.putStrLn <| "Verifying " ++ Pkg.toChars pkg ++ " " ++ V.toChars vsn ++ " ...\n"
+                IO.putStrLn <| "Verifying " ++ Pkg.toChars pkg ++ " " ++ V.toChars vsn ++ " ...\n"
 
 
 

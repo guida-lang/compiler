@@ -32,6 +32,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
 import Serialize exposing (Codec)
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -70,7 +71,7 @@ type DecisionTree
 
 
 type Test
-    = IsCtor ModuleName.Canonical Name.Name Index.ZeroBased Int Can.CtorOpts
+    = IsCtor IO.Canonical Name.Name Index.ZeroBased Int Can.CtorOpts
     | IsCons
     | IsNil
     | IsTuple

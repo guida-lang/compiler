@@ -16,8 +16,9 @@ module Terminal.Terminal exposing
 
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import List.Extra as List
+import System.Exit as Exit
+import System.IO as IO exposing (IO)
 import Terminal.Terminal.Error as Error
 import Terminal.Terminal.Internal exposing (Args(..), Command(..), CompleteArgs(..), Flag(..), Flags(..), Parser, RequiredArgs(..), toName)
 import Utils.Main as Utils
@@ -41,7 +42,7 @@ app intro outro commands =
 
                     [ "--version" ] ->
                         IO.hPutStrLn IO.stdout (V.toChars V.compiler)
-                            |> IO.bind (\_ -> Utils.exitSuccess)
+                            |> IO.bind (\_ -> Exit.exitSuccess)
 
                     command :: chunks ->
                         case List.find (\cmd -> toName cmd == command) commands of

@@ -35,10 +35,10 @@ module Text.PrettyPrint.ANSI.Leijen exposing
     , yellow
     )
 
-import Data.IO as IO exposing (IO)
 import Pretty as P
 import Pretty.Renderer as PR
 import System.Console.Ansi as Ansi
+import System.IO as IO exposing (IO)
 
 
 type alias Doc =

@@ -15,12 +15,13 @@ module Builder.File exposing
     , zeroTime
     )
 
-import Data.IO as IO exposing (IO)
+import Codec.Archive.Zip as Zip
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Serialize exposing (Codec)
+import System.IO as IO exposing (IO(..))
 import Time
-import Utils.Main as Utils exposing (FilePath, ZipArchive, ZipEntry)
+import Utils.Main as Utils exposing (FilePath)
 
 
 
@@ -96,7 +97,7 @@ readBinary codec path =
 
 writeUtf8 : FilePath -> String -> IO ()
 writeUtf8 path content =
-    IO.make (Decode.succeed ()) (IO.WriteString path content)
+    IO (\s -> ( s, IO.WriteString IO.pure path content ))
 
 
 
@@ -105,7 +106,7 @@ writeUtf8 path content =
 
 readUtf8 : FilePath -> IO String
 readUtf8 path =
-    IO.make Decode.string (IO.Read path)
+    IO (\s -> ( s, IO.Read IO.pure path ))
 
 
 
@@ -114,16 +115,16 @@ readUtf8 path =
 
 writeBuilder : FilePath -> String -> IO ()
 writeBuilder path builder =
-    IO.make (Decode.succeed ()) (IO.WriteString path builder)
+    IO (\s -> ( s, IO.WriteString IO.pure path builder ))
 
 
 
 -- WRITE PACKAGE
 
 
-writePackage : FilePath -> ZipArchive -> IO ()
+writePackage : FilePath -> Zip.Archive -> IO ()
 writePackage destination archive =
-    case Utils.zipZEntries archive of
+    case Zip.zEntries archive of
         [] ->
             IO.pure ()
 
@@ -131,17 +132,17 @@ writePackage destination archive =
             let
                 root : Int
                 root =
-                    String.length (Utils.zipERelativePath entry)
+                    String.length (Zip.eRelativePath entry)
             in
             Utils.mapM_ (writeEntry destination root) entries
 
 
-writeEntry : FilePath -> Int -> ZipEntry -> IO ()
+writeEntry : FilePath -> Int -> Zip.Entry -> IO ()
 writeEntry destination root entry =
     let
         path : String
         path =
-            String.dropLeft root (Utils.zipERelativePath entry)
+            String.dropLeft root (Zip.eRelativePath entry)
     in
     if
         String.startsWith "src/" path
@@ -153,7 +154,7 @@ writeEntry destination root entry =
             Utils.dirCreateDirectoryIfMissing True (Utils.fpForwardSlash destination path)
 
         else
-            writeUtf8 (Utils.fpForwardSlash destination path) (Utils.zipFromEntry entry)
+            writeUtf8 (Utils.fpForwardSlash destination path) (Zip.fromEntry entry)
 
     else
         IO.pure ()

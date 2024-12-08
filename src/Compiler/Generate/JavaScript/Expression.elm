@@ -28,6 +28,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Prelude
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -289,7 +290,7 @@ generateCtor mode (Opt.Global home name) index arity =
                 (( JsName.dollar, ctorTag ) :: List.map (\n -> ( n, JS.ExprRef n )) argNames)
 
 
-ctorToInt : ModuleName.Canonical -> Name.Name -> Index.ZeroBased -> Int
+ctorToInt : IO.Canonical -> Name.Name -> Index.ZeroBased -> Int
 ctorToInt home name index =
     if home == ModuleName.dict && (name == "RBNode_elm_builtin" || name == "RBEmpty_elm_builtin") then
         -(Index.toHuman index)
@@ -326,8 +327,8 @@ generateField mode name =
 -- DEBUG
 
 
-generateDebug : Name.Name -> ModuleName.Canonical -> A.Region -> Maybe Name.Name -> JS.Expr
-generateDebug name (ModuleName.Canonical _ home) region unhandledValueName =
+generateDebug : Name.Name -> IO.Canonical -> A.Region -> Maybe Name.Name -> JS.Expr
+generateDebug name (IO.Canonical _ home) region unhandledValueName =
     if name /= "todo" then
         JS.ExprRef (JsName.fromGlobal ModuleName.debug name)
 
@@ -401,7 +402,7 @@ funcHelpers =
 generateCall : Mode.Mode -> Opt.Expr -> List Opt.Expr -> JS.Expr
 generateCall mode func args =
     case func of
-        Opt.VarGlobal ((Opt.Global (ModuleName.Canonical pkg _) _) as global) ->
+        Opt.VarGlobal ((Opt.Global (IO.Canonical pkg _) _) as global) ->
             if pkg == Pkg.core then
                 generateCoreCall mode global args
 
@@ -432,7 +433,7 @@ generateCallHelp mode func args =
         (List.map (generateJsExpr mode) args)
 
 
-generateGlobalCall : ModuleName.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
+generateGlobalCall : IO.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
 generateGlobalCall home name args =
     generateNormalCall (JS.ExprRef (JsName.fromGlobal home name)) args
 
@@ -458,7 +459,7 @@ callHelpers =
 
 
 generateCoreCall : Mode.Mode -> Opt.Global -> List Opt.Expr -> JS.Expr
-generateCoreCall mode (Opt.Global ((ModuleName.Canonical _ moduleName) as home) name) args =
+generateCoreCall mode (Opt.Global ((IO.Canonical _ moduleName) as home) name) args =
     if moduleName == Name.basics then
         generateBasicsCall mode home name args
 
@@ -475,7 +476,7 @@ generateCoreCall mode (Opt.Global ((ModuleName.Canonical _ moduleName) as home) 
         generateGlobalCall home name (List.map (generateJsExpr mode) args)
 
 
-generateTupleCall : ModuleName.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
+generateTupleCall : IO.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
 generateTupleCall home name args =
     case args of
         [ value ] ->
@@ -493,7 +494,7 @@ generateTupleCall home name args =
             generateGlobalCall home name args
 
 
-generateJsArrayCall : ModuleName.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
+generateJsArrayCall : IO.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
 generateJsArrayCall home name args =
     case ( args, name ) of
         ( [ entry ], "singleton" ) ->
@@ -506,7 +507,7 @@ generateJsArrayCall home name args =
             generateGlobalCall home name args
 
 
-generateBitwiseCall : ModuleName.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
+generateBitwiseCall : IO.Canonical -> Name.Name -> List JS.Expr -> JS.Expr
 generateBitwiseCall home name args =
     case args of
         [ arg ] ->
@@ -544,7 +545,7 @@ generateBitwiseCall home name args =
             generateGlobalCall home name args
 
 
-generateBasicsCall : Mode.Mode -> ModuleName.Canonical -> Name.Name -> List Opt.Expr -> JS.Expr
+generateBasicsCall : Mode.Mode -> IO.Canonical -> Name.Name -> List Opt.Expr -> JS.Expr
 generateBasicsCall mode home name args =
     case args of
         [ elmArg ] ->
@@ -1196,7 +1197,7 @@ pathToJsExpr mode root path =
 -- GENERATE MAIN
 
 
-generateMain : Mode.Mode -> ModuleName.Canonical -> Opt.Main -> JS.Expr
+generateMain : Mode.Mode -> IO.Canonical -> Opt.Main -> JS.Expr
 generateMain mode home main =
     case main of
         Opt.Static ->

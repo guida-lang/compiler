@@ -27,8 +27,8 @@ import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
-import Data.IO exposing (IO)
 import Data.Map as Dict
+import System.IO exposing (IO)
 
 
 

@@ -13,10 +13,12 @@ import Compiler.Type.Error as ET
 import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type exposing (Constraint(..), Type, nextMark)
 import Compiler.Type.Unify as Unify
-import Compiler.Type.UnionFind as UF exposing (Content, Descriptor(..), Mark, Variable)
-import Data.IO as IO exposing (IO)
+import Compiler.Type.UnionFind as UF
+import Data.IORef exposing (IORef)
 import Data.Map as Dict exposing (Dict)
-import Serialize
+import Data.Vector as Vector
+import Data.Vector.Mutable as MVector
+import System.TypeCheck.IO as IO exposing (Content, Descriptor(..), IO, Mark, Variable)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -27,7 +29,7 @@ import Utils.Main as Utils
 
 run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict Name.Name Can.Annotation))
 run constraint =
-    IO.mVectorReplicate (Serialize.list UF.variableCodec) 8 []
+    MVector.replicate 8 []
         |> IO.bind
             (\pools ->
                 solve Dict.empty Type.outermostRank pools emptyState constraint
@@ -35,7 +37,7 @@ run constraint =
                         (\(State env _ errors) ->
                             case errors of
                                 [] ->
-                                    Utils.mapTraverse compare Type.toAnnotation env
+                                    IO.traverseMap compare Type.toAnnotation env
                                         |> IO.fmap Ok
 
                                 e :: es ->
@@ -58,7 +60,7 @@ type alias Env =
 
 
 type alias Pools =
-    IO.IORef (Array (Maybe (List Variable)))
+    IORef (Array (Maybe (List Variable)))
 
 
 type State
@@ -185,7 +187,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                     )
 
         CAnd constraints ->
-            Utils.ioFoldM (solve env rank pools) state constraints
+            IO.foldM (solve env rank pools) state constraints
 
         CLet [] flexs _ headerCon CTrue ->
             introduce rank pools flexs
@@ -195,7 +197,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
             solve env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
-                        Utils.mapTraverse compare (A.traverse (typeToVariable rank pools)) header
+                        IO.traverseMap compare (A.traverse (typeToVariable rank pools)) header
                             |> IO.bind
                                 (\locals ->
                                     let
@@ -206,7 +208,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                     solve newEnv rank pools state1 subCon
                                         |> IO.bind
                                             (\state2 ->
-                                                Utils.ioFoldM occurs state2 (Dict.toList locals)
+                                                IO.foldM occurs state2 (Dict.toList locals)
                                             )
                                 )
                     )
@@ -218,16 +220,14 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                 nextRank =
                     rank + 1
             in
-            IO.mVectorLength (Serialize.list UF.variableCodec) pools
+            MVector.length pools
                 |> IO.bind
                     (\poolsLength ->
                         (if nextRank < poolsLength then
                             IO.pure pools
 
                          else
-                            IO.mVectorGrow (Serialize.list UF.variableCodec)
-                                pools
-                                poolsLength
+                            MVector.grow pools poolsLength
                         )
                             |> IO.bind
                                 (\nextPools ->
@@ -237,7 +237,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                         vars =
                                             rigids ++ flexs
                                     in
-                                    Utils.forM_ vars
+                                    IO.forM_ vars
                                         (\var ->
                                             UF.modify var <|
                                                 \(Descriptor content _ mark copy) ->
@@ -245,11 +245,11 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                         )
                                         |> IO.bind
                                             (\_ ->
-                                                IO.mVectorWrite (Serialize.list UF.variableCodec) nextPools nextRank vars
+                                                MVector.write nextPools nextRank vars
                                                     |> IO.bind
                                                         (\_ ->
                                                             -- run solver in next pool
-                                                            Utils.mapTraverse compare (A.traverse (typeToVariable nextRank nextPools)) header
+                                                            IO.traverseMap compare (A.traverse (typeToVariable nextRank nextPools)) header
                                                                 |> IO.bind
                                                                     (\locals ->
                                                                         solve env nextRank nextPools state headerCon
@@ -272,11 +272,11 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                     generalize youngMark visitMark nextRank nextPools
                                                                                         |> IO.bind
                                                                                             (\_ ->
-                                                                                                IO.mVectorWrite (Serialize.list UF.variableCodec) nextPools nextRank []
+                                                                                                MVector.write nextPools nextRank []
                                                                                                     |> IO.bind
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
-                                                                                                            Utils.mapM_ isGeneric rigids
+                                                                                                            IO.mapM_ isGeneric rigids
                                                                                                                 |> IO.bind
                                                                                                                     (\_ ->
                                                                                                                         let
@@ -291,7 +291,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                                         solve newEnv rank nextPools tempState subCon
                                                                                                                             |> IO.bind
                                                                                                                                 (\newState ->
-                                                                                                                                    Utils.ioFoldM occurs newState (Dict.toList locals)
+                                                                                                                                    IO.foldM occurs newState (Dict.toList locals)
                                                                                                                                 )
                                                                                                                     )
                                                                                                         )
@@ -386,7 +386,7 @@ occurs state ( name, A.At region variable ) =
                                 UF.get variable
                                     |> IO.bind
                                         (\(Descriptor _ rank mark copy) ->
-                                            UF.set variable (Descriptor UF.Error rank mark copy)
+                                            UF.set variable (Descriptor IO.Error rank mark copy)
                                                 |> IO.fmap (\_ -> addError state (Error.InfiniteType region name errorType))
                                         )
                             )
@@ -405,7 +405,7 @@ This sorts variables into the young and old pools accordingly.
 -}
 generalize : Mark -> Mark -> Int -> Pools -> IO ()
 generalize youngMark visitMark youngRank pools =
-    IO.mVectorRead (Serialize.list UF.variableCodec) pools youngRank
+    MVector.read pools youngRank
         |> IO.bind
             (\youngVars ->
                 poolToRankTable youngMark youngRank youngVars
@@ -414,19 +414,18 @@ generalize youngMark visitMark youngRank pools =
                             -- get the ranks right for each entry.
                             -- start at low ranks so that we only have to pass
                             -- over the information once.
-                            IO.vectorImapM_ (Serialize.list UF.variableCodec)
+                            Vector.imapM_
                                 (\rank table ->
-                                    Utils.mapM_ (adjustRank youngMark visitMark rank) table
+                                    IO.mapM_ (adjustRank youngMark visitMark rank) table
                                 )
                                 rankTable
                                 |> IO.bind
                                     (\_ ->
                                         -- For variables that have rank lowerer than youngRank, register them in
                                         -- the appropriate old pool if they are not redundant.
-                                        IO.vectorForM_ (Serialize.list UF.variableCodec)
-                                            (IO.vectorUnsafeInit rankTable)
+                                        Vector.forM_ (Vector.unsafeInit rankTable)
                                             (\vars ->
-                                                Utils.forM_ vars
+                                                IO.forM_ vars
                                                     (\var ->
                                                         UF.redundant var
                                                             |> IO.bind
@@ -438,7 +437,7 @@ generalize youngMark visitMark youngRank pools =
                                                                         UF.get var
                                                                             |> IO.bind
                                                                                 (\(Descriptor _ rank _ _) ->
-                                                                                    IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
+                                                                                    MVector.modify pools ((::) var) rank
                                                                                 )
                                                                 )
                                                     )
@@ -448,10 +447,10 @@ generalize youngMark visitMark youngRank pools =
                                                     -- For variables with rank youngRank
                                                     --   If rank < youngRank: register in oldPool
                                                     --   otherwise generalize
-                                                    IO.vectorUnsafeLast (Serialize.list UF.variableCodec) rankTable
+                                                    Vector.unsafeLast rankTable
                                                         |> IO.bind
                                                             (\lastRankTable ->
-                                                                Utils.forM_ lastRankTable <|
+                                                                IO.forM_ lastRankTable <|
                                                                     \var ->
                                                                         UF.redundant var
                                                                             |> IO.bind
@@ -464,7 +463,7 @@ generalize youngMark visitMark youngRank pools =
                                                                                             |> IO.bind
                                                                                                 (\(Descriptor content rank mark copy) ->
                                                                                                     if rank < youngRank then
-                                                                                                        IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
+                                                                                                        MVector.modify pools ((::) var) rank
 
                                                                                                     else
                                                                                                         UF.set var <| Descriptor content Type.noRank mark copy
@@ -477,13 +476,13 @@ generalize youngMark visitMark youngRank pools =
             )
 
 
-poolToRankTable : Mark -> Int -> List Variable -> IO (IO.IORef (Array (Maybe (List Variable))))
+poolToRankTable : Mark -> Int -> List Variable -> IO (IORef (Array (Maybe (List Variable))))
 poolToRankTable youngMark youngRank youngInhabitants =
-    IO.mVectorReplicate (Serialize.list UF.variableCodec) (youngRank + 1) []
+    MVector.replicate (youngRank + 1) []
         |> IO.bind
             (\mutableTable ->
                 -- Sort the youngPool variables into buckets by rank.
-                Utils.forM_ youngInhabitants
+                IO.forM_ youngInhabitants
                     (\var ->
                         UF.get var
                             |> IO.bind
@@ -491,11 +490,11 @@ poolToRankTable youngMark youngRank youngInhabitants =
                                     UF.set var (Descriptor content rank youngMark copy)
                                         |> IO.bind
                                             (\_ ->
-                                                IO.mVectorModify (Serialize.list UF.variableCodec) mutableTable ((::) var) rank
+                                                MVector.modify mutableTable ((::) var) rank
                                             )
                                 )
                     )
-                    |> IO.bind (\_ -> IO.vectorUnsafeFreeze mutableTable)
+                    |> IO.bind (\_ -> Vector.unsafeFreeze mutableTable)
             )
 
 
@@ -548,44 +547,44 @@ adjustRankContent youngMark visitMark groupRank content =
             adjustRank youngMark visitMark groupRank
     in
     case content of
-        UF.FlexVar _ ->
+        IO.FlexVar _ ->
             IO.pure groupRank
 
-        UF.FlexSuper _ _ ->
+        IO.FlexSuper _ _ ->
             IO.pure groupRank
 
-        UF.RigidVar _ ->
+        IO.RigidVar _ ->
             IO.pure groupRank
 
-        UF.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             IO.pure groupRank
 
-        UF.Structure flatType ->
+        IO.Structure flatType ->
             case flatType of
-                UF.App1 _ _ args ->
-                    Utils.ioFoldM (\rank arg -> IO.fmap (max rank) (go arg)) Type.outermostRank args
+                IO.App1 _ _ args ->
+                    IO.foldM (\rank arg -> IO.fmap (max rank) (go arg)) Type.outermostRank args
 
-                UF.Fun1 arg result ->
+                IO.Fun1 arg result ->
                     IO.pure max
                         |> IO.apply (go arg)
                         |> IO.apply (go result)
 
-                UF.EmptyRecord1 ->
+                IO.EmptyRecord1 ->
                     -- THEORY: an empty record never needs to get generalized
                     IO.pure Type.outermostRank
 
-                UF.Record1 fields extension ->
+                IO.Record1 fields extension ->
                     go extension
                         |> IO.bind
                             (\extRank ->
-                                Utils.ioDictFoldM (\rank field -> IO.fmap (max rank) (go field)) extRank fields
+                                IO.foldMDict (\rank field -> IO.fmap (max rank) (go field)) extRank fields
                             )
 
-                UF.Unit1 ->
+                IO.Unit1 ->
                     -- THEORY: a unit never needs to get generalized
                     IO.pure Type.outermostRank
 
-                UF.Tuple1 a b maybeC ->
+                IO.Tuple1 a b maybeC ->
                     go a
                         |> IO.bind
                             (\ma ->
@@ -602,11 +601,11 @@ adjustRankContent youngMark visitMark groupRank content =
                                         )
                             )
 
-        UF.Alias _ _ args _ ->
+        IO.Alias _ _ args _ ->
             -- THEORY: anything in the realVar would be outermostRank
-            Utils.ioFoldM (\rank ( _, argVar ) -> IO.fmap (max rank) (go argVar)) Type.outermostRank args
+            IO.foldM (\rank ( _, argVar ) -> IO.fmap (max rank) (go argVar)) Type.outermostRank args
 
-        UF.Error ->
+        IO.Error ->
             IO.pure groupRank
 
 
@@ -616,13 +615,12 @@ adjustRankContent youngMark visitMark groupRank content =
 
 introduce : Int -> Pools -> List Variable -> IO ()
 introduce rank pools variables =
-    IO.mVectorModify (Serialize.list UF.variableCodec)
-        pools
+    MVector.modify pools
         (\a -> variables ++ a)
         rank
         |> IO.bind
             (\_ ->
-                Utils.forM_ variables
+                IO.forM_ variables
                     (\var ->
                         UF.modify var <|
                             \(Descriptor content _ mark copy) ->
@@ -662,10 +660,10 @@ typeToVar rank pools aliasDict tipe =
             IO.pure v
 
         Type.AppN home name args ->
-            Utils.listTraverse go args
+            IO.traverseList go args
                 |> IO.bind
                     (\argVars ->
-                        register rank pools (UF.Structure (UF.App1 home name argVars))
+                        register rank pools (IO.Structure (IO.App1 home name argVars))
                     )
 
         Type.FunN a b ->
@@ -675,18 +673,18 @@ typeToVar rank pools aliasDict tipe =
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    register rank pools (UF.Structure (UF.Fun1 aVar bVar))
+                                    register rank pools (IO.Structure (IO.Fun1 aVar bVar))
                                 )
                     )
 
         Type.AliasN home name args aliasType ->
-            Utils.listTraverse (Utils.tupleTraverse go) args
+            IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
                         typeToVar rank pools (Dict.fromList compare argVars) aliasType
                             |> IO.bind
                                 (\aliasVar ->
-                                    register rank pools (UF.Alias home name argVars aliasVar)
+                                    register rank pools (IO.Alias home name argVars aliasVar)
                                 )
                     )
 
@@ -694,13 +692,13 @@ typeToVar rank pools aliasDict tipe =
             IO.pure (Utils.find name aliasDict)
 
         Type.RecordN fields ext ->
-            Utils.mapTraverse compare go fields
+            IO.traverseMap compare go fields
                 |> IO.bind
                     (\fieldVars ->
                         go ext
                             |> IO.bind
                                 (\extVar ->
-                                    register rank pools (UF.Structure (UF.Record1 fieldVars extVar))
+                                    register rank pools (IO.Structure (IO.Record1 fieldVars extVar))
                                 )
                     )
 
@@ -717,10 +715,10 @@ typeToVar rank pools aliasDict tipe =
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    Utils.maybeTraverse go c
+                                    IO.traverseMaybe go c
                                         |> IO.bind
                                             (\cVar ->
-                                                register rank pools (UF.Structure (UF.Tuple1 aVar bVar cVar))
+                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
                                             )
                                 )
                     )
@@ -731,19 +729,19 @@ register rank pools content =
     UF.fresh (Descriptor content rank Type.noMark Nothing)
         |> IO.bind
             (\var ->
-                IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) var) rank
+                MVector.modify pools ((::) var) rank
                     |> IO.fmap (\_ -> var)
             )
 
 
 emptyRecord1 : Content
 emptyRecord1 =
-    UF.Structure UF.EmptyRecord1
+    IO.Structure IO.EmptyRecord1
 
 
 unit1 : Content
 unit1 =
-    UF.Structure UF.Unit1
+    IO.Structure IO.Unit1
 
 
 
@@ -756,28 +754,28 @@ srcTypeToVariable rank pools freeVars srcType =
         nameToContent : Name.Name -> Content
         nameToContent name =
             if Name.isNumberType name then
-                UF.FlexSuper UF.Number (Just name)
+                IO.FlexSuper IO.Number (Just name)
 
             else if Name.isComparableType name then
-                UF.FlexSuper UF.Comparable (Just name)
+                IO.FlexSuper IO.Comparable (Just name)
 
             else if Name.isAppendableType name then
-                UF.FlexSuper UF.Appendable (Just name)
+                IO.FlexSuper IO.Appendable (Just name)
 
             else if Name.isCompappendType name then
-                UF.FlexSuper UF.CompAppend (Just name)
+                IO.FlexSuper IO.CompAppend (Just name)
 
             else
-                UF.FlexVar (Just name)
+                IO.FlexVar (Just name)
 
         makeVar : Name.Name -> b -> IO Variable
         makeVar name _ =
             UF.fresh (Descriptor (nameToContent name) rank Type.noMark Nothing)
     in
-    Utils.mapTraverseWithKey compare makeVar freeVars
+    IO.traverseMapWithKey compare makeVar freeVars
         |> IO.bind
             (\flexVars ->
-                IO.mVectorModify (Serialize.list UF.variableCodec) pools (\a -> Dict.values flexVars ++ a) rank
+                MVector.modify pools (\a -> Dict.values flexVars ++ a) rank
                     |> IO.bind (\_ -> srcTypeToVar rank pools flexVars srcType)
             )
 
@@ -797,7 +795,7 @@ srcTypeToVar rank pools flexVars srcType =
                         go result
                             |> IO.bind
                                 (\resultVar ->
-                                    register rank pools (UF.Structure (UF.Fun1 argVar resultVar))
+                                    register rank pools (IO.Structure (IO.Fun1 argVar resultVar))
                                 )
                     )
 
@@ -805,14 +803,14 @@ srcTypeToVar rank pools flexVars srcType =
             IO.pure (Utils.find name flexVars)
 
         Can.TType home name args ->
-            Utils.listTraverse go args
+            IO.traverseList go args
                 |> IO.bind
                     (\argVars ->
-                        register rank pools (UF.Structure (UF.App1 home name argVars))
+                        register rank pools (IO.Structure (IO.App1 home name argVars))
                     )
 
         Can.TRecord fields maybeExt ->
-            Utils.mapTraverse compare (srcFieldTypeToVar rank pools flexVars) fields
+            IO.traverseMap compare (srcFieldTypeToVar rank pools flexVars) fields
                 |> IO.bind
                     (\fieldVars ->
                         (case maybeExt of
@@ -824,7 +822,7 @@ srcTypeToVar rank pools flexVars srcType =
                         )
                             |> IO.bind
                                 (\extVar ->
-                                    register rank pools (UF.Structure (UF.Record1 fieldVars extVar))
+                                    register rank pools (IO.Structure (IO.Record1 fieldVars extVar))
                                 )
                     )
 
@@ -838,16 +836,16 @@ srcTypeToVar rank pools flexVars srcType =
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    Utils.maybeTraverse go c
+                                    IO.traverseMaybe go c
                                         |> IO.bind
                                             (\cVar ->
-                                                register rank pools (UF.Structure (UF.Tuple1 aVar bVar cVar))
+                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
                                             )
                                 )
                     )
 
         Can.TAlias home name args aliasType ->
-            Utils.listTraverse (Utils.tupleTraverse go) args
+            IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
                         (case aliasType of
@@ -859,7 +857,7 @@ srcTypeToVar rank pools flexVars srcType =
                         )
                             |> IO.bind
                                 (\aliasVar ->
-                                    register rank pools (UF.Alias home name argVars aliasVar)
+                                    register rank pools (IO.Alias home name argVars aliasVar)
                                 )
                     )
 
@@ -905,7 +903,7 @@ makeCopyHelp maxRank pools variable =
                             UF.fresh (makeDescriptor content)
                                 |> IO.bind
                                     (\copy ->
-                                        IO.mVectorModify (Serialize.list UF.variableCodec) pools ((::) copy) maxRank
+                                        MVector.modify pools ((::) copy) maxRank
                                             |> IO.bind
                                                 (\_ ->
                                                     -- Link the original variable to the new variable. This lets us
@@ -919,41 +917,41 @@ makeCopyHelp maxRank pools variable =
                                                                 -- We have already marked the variable as copied, so we
                                                                 -- will not repeat this work or crawl this variable again.
                                                                 case content of
-                                                                    UF.Structure term ->
+                                                                    IO.Structure term ->
                                                                         traverseFlatType (makeCopyHelp maxRank pools) term
                                                                             |> IO.bind
                                                                                 (\newTerm ->
-                                                                                    UF.set copy (makeDescriptor (UF.Structure newTerm))
+                                                                                    UF.set copy (makeDescriptor (IO.Structure newTerm))
                                                                                         |> IO.fmap (\_ -> copy)
                                                                                 )
 
-                                                                    UF.FlexVar _ ->
+                                                                    IO.FlexVar _ ->
                                                                         IO.pure copy
 
-                                                                    UF.FlexSuper _ _ ->
+                                                                    IO.FlexSuper _ _ ->
                                                                         IO.pure copy
 
-                                                                    UF.RigidVar name ->
-                                                                        UF.set copy (makeDescriptor (UF.FlexVar (Just name)))
+                                                                    IO.RigidVar name ->
+                                                                        UF.set copy (makeDescriptor (IO.FlexVar (Just name)))
                                                                             |> IO.fmap (\_ -> copy)
 
-                                                                    UF.RigidSuper super name ->
-                                                                        UF.set copy (makeDescriptor (UF.FlexSuper super (Just name)))
+                                                                    IO.RigidSuper super name ->
+                                                                        UF.set copy (makeDescriptor (IO.FlexSuper super (Just name)))
                                                                             |> IO.fmap (\_ -> copy)
 
-                                                                    UF.Alias home name args realType ->
-                                                                        Utils.mapM (Utils.tupleTraverse (makeCopyHelp maxRank pools)) args
+                                                                    IO.Alias home name args realType ->
+                                                                        IO.mapM (IO.traverseTuple (makeCopyHelp maxRank pools)) args
                                                                             |> IO.bind
                                                                                 (\newArgs ->
                                                                                     makeCopyHelp maxRank pools realType
                                                                                         |> IO.bind
                                                                                             (\newRealType ->
-                                                                                                UF.set copy (makeDescriptor (UF.Alias home name newArgs newRealType))
+                                                                                                UF.set copy (makeDescriptor (IO.Alias home name newArgs newRealType))
                                                                                                     |> IO.fmap (\_ -> copy)
                                                                                             )
                                                                                 )
 
-                                                                    UF.Error ->
+                                                                    IO.Error ->
                                                                         IO.pure copy
                                                             )
                                                 )
@@ -983,38 +981,38 @@ restore variable =
 restoreContent : Content -> IO ()
 restoreContent content =
     case content of
-        UF.FlexVar _ ->
+        IO.FlexVar _ ->
             IO.pure ()
 
-        UF.FlexSuper _ _ ->
+        IO.FlexSuper _ _ ->
             IO.pure ()
 
-        UF.RigidVar _ ->
+        IO.RigidVar _ ->
             IO.pure ()
 
-        UF.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             IO.pure ()
 
-        UF.Structure term ->
+        IO.Structure term ->
             case term of
-                UF.App1 _ _ args ->
-                    Utils.mapM_ restore args
+                IO.App1 _ _ args ->
+                    IO.mapM_ restore args
 
-                UF.Fun1 arg result ->
+                IO.Fun1 arg result ->
                     restore arg
                         |> IO.bind (\_ -> restore result)
 
-                UF.EmptyRecord1 ->
+                IO.EmptyRecord1 ->
                     IO.pure ()
 
-                UF.Record1 fields ext ->
-                    Utils.mapM_ restore (Dict.values fields)
+                IO.Record1 fields ext ->
+                    IO.mapM_ restore (Dict.values fields)
                         |> IO.bind (\_ -> restore ext)
 
-                UF.Unit1 ->
+                IO.Unit1 ->
                     IO.pure ()
 
-                UF.Tuple1 a b maybeC ->
+                IO.Tuple1 a b maybeC ->
                     restore a
                         |> IO.bind (\_ -> restore b)
                         |> IO.bind
@@ -1027,11 +1025,11 @@ restoreContent content =
                                         restore c
                             )
 
-        UF.Alias _ _ args var ->
-            Utils.mapM_ restore (List.map Tuple.second args)
+        IO.Alias _ _ args var ->
+            IO.mapM_ restore (List.map Tuple.second args)
                 |> IO.bind (\_ -> restore var)
 
-        UF.Error ->
+        IO.Error ->
             IO.pure ()
 
 
@@ -1039,30 +1037,30 @@ restoreContent content =
 -- TRAVERSE FLAT TYPE
 
 
-traverseFlatType : (Variable -> IO Variable) -> UF.FlatType -> IO UF.FlatType
+traverseFlatType : (Variable -> IO Variable) -> IO.FlatType -> IO IO.FlatType
 traverseFlatType f flatType =
     case flatType of
-        UF.App1 home name args ->
-            IO.fmap (UF.App1 home name) (Utils.listTraverse f args)
+        IO.App1 home name args ->
+            IO.fmap (IO.App1 home name) (IO.traverseList f args)
 
-        UF.Fun1 a b ->
-            IO.pure UF.Fun1
+        IO.Fun1 a b ->
+            IO.pure IO.Fun1
                 |> IO.apply (f a)
                 |> IO.apply (f b)
 
-        UF.EmptyRecord1 ->
-            IO.pure UF.EmptyRecord1
+        IO.EmptyRecord1 ->
+            IO.pure IO.EmptyRecord1
 
-        UF.Record1 fields ext ->
-            IO.pure UF.Record1
-                |> IO.apply (Utils.mapTraverse compare f fields)
+        IO.Record1 fields ext ->
+            IO.pure IO.Record1
+                |> IO.apply (IO.traverseMap compare f fields)
                 |> IO.apply (f ext)
 
-        UF.Unit1 ->
-            IO.pure UF.Unit1
+        IO.Unit1 ->
+            IO.pure IO.Unit1
 
-        UF.Tuple1 a b cs ->
-            IO.pure UF.Tuple1
+        IO.Tuple1 a b cs ->
+            IO.pure IO.Tuple1
                 |> IO.apply (f a)
                 |> IO.apply (f b)
-                |> IO.apply (Utils.maybeTraverse f cs)
+                |> IO.apply (IO.traverseMaybe f cs)

@@ -26,11 +26,10 @@ module Compiler.Json.Encode exposing
 
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore exposing (OneOrMore(..))
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
 import Json.Encode as Encode
+import System.IO as IO exposing (IO(..))
 
 
 
@@ -219,9 +218,11 @@ writeUgly path value =
     fileWriteBuilder path (encodeUgly value)
 
 
+{-| FIXME Builder.File.writeBuilder
+-}
 fileWriteBuilder : String -> String -> IO ()
 fileWriteBuilder path value =
-    IO.make (Decode.succeed ()) (IO.WriteString path value)
+    IO (\s -> ( s, IO.WriteString IO.pure path value ))
 
 
 

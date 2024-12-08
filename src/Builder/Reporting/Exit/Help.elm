@@ -8,14 +8,13 @@ module Builder.Reporting.Exit.Help exposing
     , reportToJson
     , toStderr
     , toStdout
-    , toString
     )
 
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error
-import Data.IO as IO exposing (IO)
 import Maybe.Extra as Maybe
+import System.IO as IO exposing (IO)
 
 
 

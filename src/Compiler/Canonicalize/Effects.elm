@@ -15,6 +15,7 @@ import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Maybe exposing (Maybe(..))
+import System.TypeCheck.IO as IO
 
 
 
@@ -264,14 +265,14 @@ checkFieldPayload (Can.FieldType _ tipe) =
     checkPayload tipe
 
 
-isIntFloatBool : ModuleName.Canonical -> Name.Name -> Bool
+isIntFloatBool : IO.Canonical -> Name.Name -> Bool
 isIntFloatBool home name =
     home
         == ModuleName.basics
         && (name == Name.int || name == Name.float || name == Name.bool)
 
 
-isString : ModuleName.Canonical -> Name.Name -> Bool
+isString : IO.Canonical -> Name.Name -> Bool
 isString home name =
     home
         == ModuleName.string
@@ -279,13 +280,13 @@ isString home name =
         == Name.string
 
 
-isJson : ModuleName.Canonical -> Name.Name -> Bool
+isJson : IO.Canonical -> Name.Name -> Bool
 isJson home name =
     (home == ModuleName.jsonEncode)
         && (name == Name.value)
 
 
-isList : ModuleName.Canonical -> Name.Name -> Bool
+isList : IO.Canonical -> Name.Name -> Bool
 isList home name =
     home
         == ModuleName.list
@@ -293,7 +294,7 @@ isList home name =
         == Name.list
 
 
-isMaybe : ModuleName.Canonical -> Name.Name -> Bool
+isMaybe : IO.Canonical -> Name.Name -> Bool
 isMaybe home name =
     home
         == ModuleName.maybe
@@ -301,7 +302,7 @@ isMaybe home name =
         == Name.maybe
 
 
-isArray : ModuleName.Canonical -> Name.Name -> Bool
+isArray : IO.Canonical -> Name.Name -> Bool
 isArray home name =
     home
         == ModuleName.array

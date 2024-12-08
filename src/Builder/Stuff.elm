@@ -22,11 +22,11 @@ module Builder.Stuff exposing
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
 import Serialize exposing (Codec)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

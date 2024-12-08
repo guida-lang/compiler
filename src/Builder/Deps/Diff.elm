@@ -22,10 +22,10 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V exposing (Version)
 import Compiler.Json.Decode as D
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import List
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

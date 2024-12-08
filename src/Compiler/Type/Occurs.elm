@@ -1,20 +1,20 @@
 module Compiler.Type.Occurs exposing (occurs)
 
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 
 -- OCCURS
 
 
-occurs : UF.Variable -> IO Bool
+occurs : IO.Variable -> IO Bool
 occurs var =
     occursHelp [] var False
 
 
-occursHelp : List UF.Variable -> UF.Variable -> Bool -> IO Bool
+occursHelp : List IO.Variable -> IO.Variable -> Bool -> IO Bool
 occursHelp seen var foundCycle =
     if List.member var seen then
         IO.pure True
@@ -22,45 +22,45 @@ occursHelp seen var foundCycle =
     else
         UF.get var
             |> IO.bind
-                (\(UF.Descriptor content _ _ _) ->
+                (\(IO.Descriptor content _ _ _) ->
                     case content of
-                        UF.FlexVar _ ->
+                        IO.FlexVar _ ->
                             IO.pure foundCycle
 
-                        UF.FlexSuper _ _ ->
+                        IO.FlexSuper _ _ ->
                             IO.pure foundCycle
 
-                        UF.RigidVar _ ->
+                        IO.RigidVar _ ->
                             IO.pure foundCycle
 
-                        UF.RigidSuper _ _ ->
+                        IO.RigidSuper _ _ ->
                             IO.pure foundCycle
 
-                        UF.Structure term ->
+                        IO.Structure term ->
                             let
-                                newSeen : List UF.Variable
+                                newSeen : List IO.Variable
                                 newSeen =
                                     var :: seen
                             in
                             case term of
-                                UF.App1 _ _ args ->
+                                IO.App1 _ _ args ->
                                     IO.foldrM (occursHelp newSeen) foundCycle args
 
-                                UF.Fun1 a b ->
+                                IO.Fun1 a b ->
                                     IO.bind (occursHelp newSeen a)
                                         (occursHelp newSeen b foundCycle)
 
-                                UF.EmptyRecord1 ->
+                                IO.EmptyRecord1 ->
                                     IO.pure foundCycle
 
-                                UF.Record1 fields ext ->
+                                IO.Record1 fields ext ->
                                     IO.bind (occursHelp newSeen ext) <|
                                         IO.foldrM (occursHelp newSeen) foundCycle (Dict.values fields)
 
-                                UF.Unit1 ->
+                                IO.Unit1 ->
                                     IO.pure foundCycle
 
-                                UF.Tuple1 a b maybeC ->
+                                IO.Tuple1 a b maybeC ->
                                     case maybeC of
                                         Nothing ->
                                             IO.bind (occursHelp newSeen a)
@@ -72,9 +72,9 @@ occursHelp seen var foundCycle =
                                                     (occursHelp newSeen c foundCycle)
                                                 )
 
-                        UF.Alias _ _ args _ ->
+                        IO.Alias _ _ args _ ->
                             IO.foldrM (occursHelp (var :: seen)) foundCycle (List.map Tuple.second args)
 
-                        UF.Error ->
+                        IO.Error ->
                             IO.pure foundCycle
                 )

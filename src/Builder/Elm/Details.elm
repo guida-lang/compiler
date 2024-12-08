@@ -48,12 +48,13 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
 import Compiler.Serialize as S
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Serialize exposing (Codec)
+import System.IO as IO exposing (IO)
+import System.TypeCheck.IO as TypeCheck
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
 
@@ -105,7 +106,7 @@ type Extras
 
 
 type alias Interfaces =
-    Dict ModuleName.Canonical I.DependencyInterface
+    Dict TypeCheck.Canonical I.DependencyInterface
 
 
 
@@ -451,7 +452,7 @@ addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
     Dict.union ModuleName.compareCanonical
         dependencyInterfaces
         (Dict.fromList ModuleName.compareCanonical
-            (List.map (Tuple.mapFirst (ModuleName.Canonical pkg))
+            (List.map (Tuple.mapFirst (TypeCheck.Canonical pkg))
                 (Dict.toList
                     (if Dict.member pkg directDeps then
                         ifaces

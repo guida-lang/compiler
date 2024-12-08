@@ -21,6 +21,7 @@ import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 
 
@@ -39,9 +40,9 @@ type alias MResult i w a =
 canonicalize : Pkg.Name -> Dict ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
 canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops effects) as modul) =
     let
-        home : ModuleName.Canonical
+        home : IO.Canonical
         home =
-            ModuleName.Canonical pkg (Src.getName modul)
+            IO.Canonical pkg (Src.getName modul)
 
         cbinops : Dict Name Can.Binop
         cbinops =

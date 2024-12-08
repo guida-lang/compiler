@@ -22,6 +22,7 @@ import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Serialize exposing (Codec)
+import System.TypeCheck.IO as IO
 
 
 
@@ -52,13 +53,13 @@ empty =
 -- LOCALIZE
 
 
-toDoc : Localizer -> ModuleName.Canonical -> Name -> D.Doc
+toDoc : Localizer -> IO.Canonical -> Name -> D.Doc
 toDoc localizer home name =
     D.fromChars (toChars localizer home name)
 
 
-toChars : Localizer -> ModuleName.Canonical -> Name -> String
-toChars (Localizer localizer) ((ModuleName.Canonical _ home) as moduleName) name =
+toChars : Localizer -> IO.Canonical -> Name -> String
+toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
     case Dict.get home localizer of
         Nothing ->
             home ++ "." ++ name

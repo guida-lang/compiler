@@ -42,6 +42,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Serialize exposing (Codec)
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 
@@ -575,8 +576,8 @@ checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases
             Ok (Dict.foldr (\_ -> (<|)) (emptyModule name overview) inserters)
 
 
-emptyModule : ModuleName.Canonical -> Src.Comment -> Module
-emptyModule (ModuleName.Canonical _ name) (Src.Comment overview) =
+emptyModule : IO.Canonical -> Src.Comment -> Module
+emptyModule (IO.Canonical _ name) (Src.Comment overview) =
     Module name (Json.fromComment overview) Dict.empty Dict.empty Dict.empty Dict.empty
 
 
