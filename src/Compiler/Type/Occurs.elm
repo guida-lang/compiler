@@ -1,67 +1,66 @@
 module Compiler.Type.Occurs exposing (occurs)
 
-import Compiler.Type.Type as Type
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 
 -- OCCURS
 
 
-occurs : Type.Variable -> IO Bool
+occurs : IO.Variable -> IO Bool
 occurs var =
     occursHelp [] var False
 
 
-occursHelp : List Type.Variable -> Type.Variable -> Bool -> IO Bool
+occursHelp : List IO.Variable -> IO.Variable -> Bool -> IO Bool
 occursHelp seen var foundCycle =
     if List.member var seen then
         IO.pure True
 
     else
-        UF.get Type.descriptorDecoder var
+        UF.get var
             |> IO.bind
-                (\(Type.Descriptor content _ _ _) ->
+                (\(IO.Descriptor content _ _ _) ->
                     case content of
-                        Type.FlexVar _ ->
+                        IO.FlexVar _ ->
                             IO.pure foundCycle
 
-                        Type.FlexSuper _ _ ->
+                        IO.FlexSuper _ _ ->
                             IO.pure foundCycle
 
-                        Type.RigidVar _ ->
+                        IO.RigidVar _ ->
                             IO.pure foundCycle
 
-                        Type.RigidSuper _ _ ->
+                        IO.RigidSuper _ _ ->
                             IO.pure foundCycle
 
-                        Type.Structure term ->
+                        IO.Structure term ->
                             let
-                                newSeen : List Type.Variable
+                                newSeen : List IO.Variable
                                 newSeen =
                                     var :: seen
                             in
                             case term of
-                                Type.App1 _ _ args ->
+                                IO.App1 _ _ args ->
                                     IO.foldrM (occursHelp newSeen) foundCycle args
 
-                                Type.Fun1 a b ->
+                                IO.Fun1 a b ->
                                     IO.bind (occursHelp newSeen a)
                                         (occursHelp newSeen b foundCycle)
 
-                                Type.EmptyRecord1 ->
+                                IO.EmptyRecord1 ->
                                     IO.pure foundCycle
 
-                                Type.Record1 fields ext ->
+                                IO.Record1 fields ext ->
                                     IO.bind (occursHelp newSeen ext) <|
                                         IO.foldrM (occursHelp newSeen) foundCycle (Dict.values fields)
 
-                                Type.Unit1 ->
+                                IO.Unit1 ->
                                     IO.pure foundCycle
 
-                                Type.Tuple1 a b maybeC ->
+                                IO.Tuple1 a b maybeC ->
                                     case maybeC of
                                         Nothing ->
                                             IO.bind (occursHelp newSeen a)
@@ -73,9 +72,9 @@ occursHelp seen var foundCycle =
                                                     (occursHelp newSeen c foundCycle)
                                                 )
 
-                        Type.Alias _ _ args _ ->
+                        IO.Alias _ _ args _ ->
                             IO.foldrM (occursHelp (var :: seen)) foundCycle (List.map Tuple.second args)
 
-                        Type.Error ->
+                        IO.Error ->
                             IO.pure foundCycle
                 )

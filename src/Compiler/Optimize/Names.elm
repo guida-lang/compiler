@@ -24,6 +24,7 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 
@@ -65,7 +66,7 @@ registerKernel home value =
             TResult uid (EverySet.insert Opt.compareGlobal (Opt.toKernelGlobal home) deps) fields value
 
 
-registerGlobal : ModuleName.Canonical -> Name -> Tracker Opt.Expr
+registerGlobal : IO.Canonical -> Name -> Tracker Opt.Expr
 registerGlobal home name =
     Tracker <|
         \uid deps fields ->
@@ -77,7 +78,7 @@ registerGlobal home name =
             TResult uid (EverySet.insert Opt.compareGlobal global deps) fields (Opt.VarGlobal global)
 
 
-registerDebug : Name -> ModuleName.Canonical -> A.Region -> Tracker Opt.Expr
+registerDebug : Name -> IO.Canonical -> A.Region -> Tracker Opt.Expr
 registerDebug name home region =
     Tracker <|
         \uid deps fields ->
@@ -89,7 +90,7 @@ registerDebug name home region =
             TResult uid (EverySet.insert Opt.compareGlobal global deps) fields (Opt.VarDebug name home region Nothing)
 
 
-registerCtor : ModuleName.Canonical -> Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
+registerCtor : IO.Canonical -> Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
 registerCtor home name index opts =
     Tracker <|
         \uid deps fields ->

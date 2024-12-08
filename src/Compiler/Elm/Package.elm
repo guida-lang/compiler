@@ -1,6 +1,6 @@
 module Compiler.Elm.Package exposing
     ( Author
-    , Name(..)
+    , Name
     , Project
     , browser
     , compareName
@@ -40,17 +40,20 @@ import Json.Encode as Encode
 -- PACKAGE NAMES
 
 
-type Name
-    = Name Author Project
+{-| This has been simplified from `Name Author Project` as part of the work for
+`System.TypeCheck.IO`.
+-}
+type alias Name =
+    ( Author, Project )
 
 
 toString : Name -> String
-toString (Name author project) =
+toString ( author, project ) =
     author ++ "/" ++ project
 
 
 compareName : Name -> Name -> Order
-compareName (Name name1 project1) (Name name2 project2) =
+compareName ( name1, project1 ) ( name2, project2 ) =
     case compare name1 name2 of
         LT ->
             LT
@@ -75,22 +78,22 @@ type alias Project =
 
 
 isKernel : Name -> Bool
-isKernel (Name author _) =
+isKernel ( author, _ ) =
     author == elm || author == elm_explorations
 
 
 toChars : Name -> String
-toChars (Name author project) =
+toChars ( author, project ) =
     author ++ "/" ++ project
 
 
 toUrl : Name -> String
-toUrl (Name author project) =
+toUrl ( author, project ) =
     author ++ "/" ++ project
 
 
 toJsonString : Name -> String
-toJsonString (Name author project) =
+toJsonString ( author, project ) =
     String.join "/" [ author, project ]
 
 
@@ -100,7 +103,7 @@ toJsonString (Name author project) =
 
 toName : Author -> Project -> Name
 toName =
-    Name
+    Tuple.pair
 
 
 dummyName : Name
@@ -210,7 +213,7 @@ suggestions =
 
 
 nearbyNames : Name -> List Name -> List Name
-nearbyNames (Name author1 project1) possibleNames =
+nearbyNames ( author1, project1 ) possibleNames =
     let
         authorDist : Author -> Int
         authorDist =
@@ -221,7 +224,7 @@ nearbyNames (Name author1 project1) possibleNames =
             projectDistance project1
 
         nameDistance : Name -> Int
-        nameDistance (Name author2 project2) =
+        nameDistance ( author2, project2 ) =
             authorDist author2 + projectDist project2
     in
     List.take 4 (List.sortBy nameDistance possibleNames)
@@ -277,7 +280,7 @@ parser =
                 P.word1 '/' Tuple.pair
                     |> P.bind (\_ -> parseName isLower isLowerOrDigit)
                     |> P.fmap
-                        (\project -> Name author project)
+                        (\project -> ( author, project ))
             )
 
 
@@ -367,7 +370,7 @@ chompName isGoodChar src pos end prevWasDash =
 
 
 nameEncoder : Name -> Encode.Value
-nameEncoder (Name author project) =
+nameEncoder ( author, project ) =
     Encode.object
         [ ( "author", Encode.string author )
         , ( "project", Encode.string project )
@@ -376,6 +379,6 @@ nameEncoder (Name author project) =
 
 nameDecoder : Decode.Decoder Name
 nameDecoder =
-    Decode.map2 Name
+    Decode.map2 Tuple.pair
         (Decode.field "author" Decode.string)
         (Decode.field "project" Decode.string)

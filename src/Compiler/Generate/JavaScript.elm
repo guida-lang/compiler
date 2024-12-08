@@ -24,6 +24,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -37,7 +38,7 @@ type alias Graph =
 
 
 type alias Mains =
-    Dict ModuleName.Canonical Opt.Main
+    Dict IO.Canonical Opt.Main
 
 
 generate : Mode.Mode -> Opt.GlobalGraph -> Mains -> String
@@ -55,7 +56,7 @@ generate mode (Opt.GlobalGraph graph _) mains =
         ++ "}(this));"
 
 
-addMain : Mode.Mode -> Graph -> ModuleName.Canonical -> Opt.Main -> State -> State
+addMain : Mode.Mode -> Graph -> IO.Canonical -> Opt.Main -> State -> State
 addMain mode graph home _ state =
     addGlobal mode graph state (Opt.Global home "main")
 
@@ -77,7 +78,7 @@ perfNote mode =
                 ++ " for better performance and smaller assets.');"
 
 
-generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> ModuleName.Canonical -> Name.Name -> Can.Annotation -> String
+generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Name.Name -> Can.Annotation -> String
 generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.Forall _ tipe) =
     let
         mode : Mode.Mode
@@ -98,7 +99,7 @@ generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.Forall _
         ++ print ansi localizer home name tipe
 
 
-print : Bool -> L.Localizer -> ModuleName.Canonical -> Name.Name -> Can.Type -> String
+print : Bool -> L.Localizer -> IO.Canonical -> Name.Name -> Can.Type -> String
 print ansi localizer home name tipe =
     let
         value : JsName.Name
@@ -138,7 +139,7 @@ print ansi localizer home name tipe =
 -- GENERATE FOR REPL ENDPOINT
 
 
-generateForReplEndpoint : L.Localizer -> Opt.GlobalGraph -> ModuleName.Canonical -> Maybe Name.Name -> Can.Annotation -> String
+generateForReplEndpoint : L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Maybe Name.Name -> Can.Annotation -> String
 generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.Forall _ tipe) =
     let
         name : Name.Name
@@ -162,7 +163,7 @@ generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.
         ++ postMessage localizer home maybeName tipe
 
 
-postMessage : L.Localizer -> ModuleName.Canonical -> Maybe Name.Name -> Can.Type -> String
+postMessage : L.Localizer -> IO.Canonical -> Maybe Name.Name -> Can.Type -> String
 postMessage localizer home maybeName tipe =
     let
         name : Name.Name
@@ -311,7 +312,7 @@ var (Opt.Global home name) code =
 
 
 isDebugger : Opt.Global -> Bool
-isDebugger (Opt.Global (ModuleName.Canonical _ home) _) =
+isDebugger (Opt.Global (IO.Canonical _ home) _) =
     home == Name.debugger
 
 
@@ -320,7 +321,7 @@ isDebugger (Opt.Global (ModuleName.Canonical _ home) _) =
 
 
 generateCycle : Mode.Mode -> Opt.Global -> List Name.Name -> List ( Name.Name, Opt.Expr ) -> List Opt.Def -> JS.Stmt
-generateCycle mode (Opt.Global ((ModuleName.Canonical _ module_) as home) _) names values functions =
+generateCycle mode (Opt.Global ((IO.Canonical _ module_) as home) _) names values functions =
     JS.Block
         [ JS.Block <| List.map (generateCycleFunc mode home) functions
         , JS.Block <| List.map (generateSafeCycle mode home) values
@@ -347,7 +348,7 @@ generateCycle mode (Opt.Global ((ModuleName.Canonical _ module_) as home) _) nam
         ]
 
 
-generateCycleFunc : Mode.Mode -> ModuleName.Canonical -> Opt.Def -> JS.Stmt
+generateCycleFunc : Mode.Mode -> IO.Canonical -> Opt.Def -> JS.Stmt
 generateCycleFunc mode home def =
     case def of
         Opt.Def name expr ->
@@ -357,13 +358,13 @@ generateCycleFunc mode home def =
             JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generateTailDef mode name args expr))
 
 
-generateSafeCycle : Mode.Mode -> ModuleName.Canonical -> ( Name.Name, Opt.Expr ) -> JS.Stmt
+generateSafeCycle : Mode.Mode -> IO.Canonical -> ( Name.Name, Opt.Expr ) -> JS.Stmt
 generateSafeCycle mode home ( name, expr ) =
     JS.FunctionStmt (JsName.fromCycle home name) [] <|
         Expr.codeToStmtList (Expr.generate mode expr)
 
 
-generateRealCycle : ModuleName.Canonical -> ( Name.Name, expr ) -> JS.Stmt
+generateRealCycle : IO.Canonical -> ( Name.Name, expr ) -> JS.Stmt
 generateRealCycle home ( name, _ ) =
     let
         safeName : JsName.Name
@@ -500,7 +501,7 @@ generatePort mode (Opt.Global home name) makePort converter =
 
 
 generateManager : Mode.Mode -> Graph -> Opt.Global -> Opt.EffectsType -> State -> State
-generateManager mode graph (Opt.Global ((ModuleName.Canonical _ moduleName) as home) _) effectsType state =
+generateManager mode graph (Opt.Global ((IO.Canonical _ moduleName) as home) _) effectsType state =
     let
         managerLVar : JS.LValue
         managerLVar =
@@ -521,8 +522,8 @@ generateManager mode graph (Opt.Global ((ModuleName.Canonical _ moduleName) as h
         JS.Block (createManager :: stmts)
 
 
-generateLeaf : ModuleName.Canonical -> Name.Name -> JS.Stmt
-generateLeaf ((ModuleName.Canonical _ moduleName) as home) name =
+generateLeaf : IO.Canonical -> Name.Name -> JS.Stmt
+generateLeaf ((IO.Canonical _ moduleName) as home) name =
     JS.Var (JsName.fromGlobal home name) <|
         JS.ExprCall leaf [ JS.ExprString moduleName ]
 
@@ -532,7 +533,7 @@ leaf =
     JS.ExprRef (JsName.fromKernel Name.platform "leaf")
 
 
-generateManagerHelp : ModuleName.Canonical -> Opt.EffectsType -> ( List Opt.Global, List JS.Expr, List JS.Stmt )
+generateManagerHelp : IO.Canonical -> Opt.EffectsType -> ( List Opt.Global, List JS.Expr, List JS.Stmt )
 generateManagerHelp home effectsType =
     let
         dep : Name.Name -> Opt.Global
@@ -620,7 +621,7 @@ addSubTrie mode end ( name, trie ) =
 
 
 type Trie
-    = Trie (Maybe ( ModuleName.Canonical, Opt.Main )) (Dict Name.Name Trie)
+    = Trie (Maybe ( IO.Canonical, Opt.Main )) (Dict Name.Name Trie)
 
 
 emptyTrie : Trie
@@ -628,12 +629,12 @@ emptyTrie =
     Trie Nothing Dict.empty
 
 
-addToTrie : ModuleName.Canonical -> Opt.Main -> Trie -> Trie
-addToTrie ((ModuleName.Canonical _ moduleName) as home) main trie =
+addToTrie : IO.Canonical -> Opt.Main -> Trie -> Trie
+addToTrie ((IO.Canonical _ moduleName) as home) main trie =
     merge trie <| segmentsToTrie home (Name.splitDots moduleName) main
 
 
-segmentsToTrie : ModuleName.Canonical -> List Name.Name -> Opt.Main -> Trie
+segmentsToTrie : IO.Canonical -> List Name.Name -> Opt.Main -> Trie
 segmentsToTrie home segments main =
     case segments of
         [] ->

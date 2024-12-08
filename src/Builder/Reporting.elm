@@ -27,11 +27,11 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as CoreEncode
-import Prelude
-import Utils.Main as Utils exposing (AsyncException(..), Chan, MVar)
+import System.Exit as Exit
+import System.IO as IO exposing (IO)
+import Utils.Main as Utils exposing (Chan, MVar)
 
 
 
@@ -75,7 +75,7 @@ attempt toReport work =
 
                     Err x ->
                         Exit.toStderr (toReport x)
-                            |> IO.bind (\_ -> Utils.exitFailure)
+                            |> IO.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -92,16 +92,16 @@ attemptWithStyle style toReport work =
                     Err x ->
                         case style of
                             Silent ->
-                                Utils.exitFailure
+                                Exit.exitFailure
 
                             Json ->
                                 Utils.builderHPutBuilder IO.stderr (Encode.encodeUgly (Exit.toJson (toReport x)))
-                                    |> IO.bind (\_ -> Utils.exitFailure)
+                                    |> IO.bind (\_ -> Exit.exitFailure)
 
                             Terminal mvar ->
                                 Utils.readMVar (Decode.map (\_ -> ()) Decode.bool) mvar
                                     |> IO.bind (\_ -> Exit.toStderr (toReport x))
-                                    |> IO.bind (\_ -> Utils.exitFailure)
+                                    |> IO.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -243,7 +243,7 @@ detailsLoop chan ((DState total _ _ _ _ built _) as state) =
                         IO.bind (detailsLoop chan) (detailsStep dmsg state)
 
                     Nothing ->
-                        Prelude.putStrLn
+                        IO.putStrLn
                             (clear (toBuildProgress total total)
                                 (if built == total then
                                     "Dependencies ready!"
@@ -280,7 +280,7 @@ detailsStep msg (DState total cached rqst rcvd failed built broken) =
 
         DRequested ->
             (if rqst == 0 then
-                Prelude.putStrLn "Starting downloads...\n"
+                IO.putStrLn "Starting downloads...\n"
 
              else
                 IO.pure ()
@@ -431,7 +431,7 @@ buildLoop decoder chan done =
                             width =
                                 12 + String.length (String.fromInt done)
                         in
-                        Prelude.putStrLn
+                        IO.putStrLn
                             (if String.length message < width then
                                 String.cons '\u{000D}' (String.repeat width " ")
                                     ++ String.cons '\u{000D}' message
@@ -490,7 +490,7 @@ reportGenerate style names output =
                             cnames =
                                 NE.map (ModuleName.toChars >> String.fromList) names
                         in
-                        Prelude.putStrLn (String.cons '\n' (toGenDiagram cnames output))
+                        IO.putStrLn (String.cons '\n' (toGenDiagram cnames output))
                     )
 
 

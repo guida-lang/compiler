@@ -25,6 +25,7 @@ import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 
@@ -78,8 +79,8 @@ extract astType =
                     )
 
 
-toPublicName : ModuleName.Canonical -> Name.Name -> Name.Name
-toPublicName (ModuleName.Canonical _ home) name =
+toPublicName : IO.Canonical -> Name.Name -> Name.Name
+toPublicName (IO.Canonical _ home) name =
     Name.sepBy '.' home name
 
 
@@ -91,7 +92,7 @@ type Types
     = -- PERF profile Opt.Global representation
       -- current representation needs less allocation
       -- but maybe the lookup is much worse
-      Types (Dict ModuleName.Canonical Types_)
+      Types (Dict IO.Canonical Types_)
 
 
 type Types_
@@ -116,11 +117,11 @@ merge (Types types1) (Types types2) =
 fromInterface : ModuleName.Raw -> I.Interface -> Types
 fromInterface name (I.Interface pkg _ unions aliases _) =
     Types <|
-        Dict.singleton (ModuleName.Canonical pkg name) <|
+        Dict.singleton (IO.Canonical pkg name) <|
             Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
 
-fromDependencyInterface : ModuleName.Canonical -> I.DependencyInterface -> Types
+fromDependencyInterface : IO.Canonical -> I.DependencyInterface -> Types
 fromDependencyInterface home di =
     Types
         (Dict.singleton home <|

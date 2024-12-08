@@ -6,8 +6,8 @@ module Compiler.Type.Instantiate exposing
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Name exposing (Name)
 import Compiler.Type.Type exposing (Type(..))
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.TypeCheck.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 
@@ -36,10 +36,10 @@ fromSrcType freeVars sourceType =
 
         Can.TType home name args ->
             IO.fmap (AppN home name)
-                (Utils.listTraverse (fromSrcType freeVars) args)
+                (IO.traverseList (fromSrcType freeVars) args)
 
         Can.TAlias home name args aliasedType ->
-            Utils.listTraverse (Utils.tupleTraverse (fromSrcType freeVars)) args
+            IO.traverseList (IO.traverseTuple (fromSrcType freeVars)) args
                 |> IO.bind
                     (\targs ->
                         IO.fmap (AliasN home name targs)
@@ -56,14 +56,14 @@ fromSrcType freeVars sourceType =
             IO.pure TupleN
                 |> IO.apply (fromSrcType freeVars a)
                 |> IO.apply (fromSrcType freeVars b)
-                |> IO.apply (Utils.maybeTraverse (fromSrcType freeVars) maybeC)
+                |> IO.apply (IO.traverseMaybe (fromSrcType freeVars) maybeC)
 
         Can.TUnit ->
             IO.pure UnitN
 
         Can.TRecord fields maybeExt ->
             IO.pure RecordN
-                |> IO.apply (Utils.mapTraverse compare (fromSrcFieldType freeVars) fields)
+                |> IO.apply (IO.traverseMap compare (fromSrcFieldType freeVars) fields)
                 |> IO.apply
                     (case maybeExt of
                         Nothing ->

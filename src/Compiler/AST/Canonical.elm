@@ -70,6 +70,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO as IO
 
 
 
@@ -86,19 +87,19 @@ type alias Expr =
 
 type Expr_
     = VarLocal Name
-    | VarTopLevel ModuleName.Canonical Name
+    | VarTopLevel IO.Canonical Name
     | VarKernel Name Name
-    | VarForeign ModuleName.Canonical Name Annotation
-    | VarCtor CtorOpts ModuleName.Canonical Name Index.ZeroBased Annotation
-    | VarDebug ModuleName.Canonical Name Annotation
-    | VarOperator Name ModuleName.Canonical Name Annotation -- CACHE real name for optimization
+    | VarForeign IO.Canonical Name Annotation
+    | VarCtor CtorOpts IO.Canonical Name Index.ZeroBased Annotation
+    | VarDebug IO.Canonical Name Annotation
+    | VarOperator Name IO.Canonical Name Annotation -- CACHE real name for optimization
     | Chr String
     | Str String
     | Int Int
     | Float Float
     | List (List Expr)
     | Negate Expr
-    | Binop Name ModuleName.Canonical Name Annotation Expr Expr -- CACHE real name for optimization
+    | Binop Name IO.Canonical Name Annotation Expr Expr -- CACHE real name for optimization
     | Lambda (List Pattern) Expr
     | Call Expr (List Expr)
     | If (List ( Expr, Expr )) Expr
@@ -164,7 +165,7 @@ type Pattern_
         -- CACHE p_index to replace p_name in PROD code gen
         -- CACHE p_opts to allocate less in PROD code gen
         -- CACHE p_alts and p_numAlts for exhaustiveness checker
-        { home : ModuleName.Canonical
+        { home : IO.Canonical
         , type_ : Name
         , union : Union
         , name : Name
@@ -197,11 +198,11 @@ type alias FreeVars =
 type Type
     = TLambda Type Type
     | TVar Name
-    | TType ModuleName.Canonical Name (List Type)
+    | TType IO.Canonical Name (List Type)
     | TRecord (Dict Name FieldType) (Maybe Name)
     | TUnit
     | TTuple Type Type (Maybe Type)
-    | TAlias ModuleName.Canonical Name (List ( Name, Type )) AliasType
+    | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
 
 
 type AliasType
@@ -240,7 +241,7 @@ fieldsToList fields =
 
 
 type Module
-    = Module ModuleName.Canonical Exports Src.Docs Decls (Dict Name Union) (Dict Name Alias) (Dict Name Binop) Effects
+    = Module IO.Canonical Exports Src.Docs Decls (Dict Name Union) (Dict Name Alias) (Dict Name Binop) Effects
 
 
 type Alias

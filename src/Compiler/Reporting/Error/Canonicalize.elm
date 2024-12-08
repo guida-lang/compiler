@@ -31,6 +31,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO as IO
 
 
 
@@ -39,10 +40,10 @@ import Json.Encode as Encode
 
 type Error
     = AnnotationTooShort A.Region Name Index.ZeroBased Int
-    | AmbiguousVar A.Region (Maybe Name) Name ModuleName.Canonical (OneOrMore ModuleName.Canonical)
-    | AmbiguousType A.Region (Maybe Name) Name ModuleName.Canonical (OneOrMore ModuleName.Canonical)
-    | AmbiguousVariant A.Region (Maybe Name) Name ModuleName.Canonical (OneOrMore ModuleName.Canonical)
-    | AmbiguousBinop A.Region Name ModuleName.Canonical (OneOrMore ModuleName.Canonical)
+    | AmbiguousVar A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousType A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousVariant A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousBinop A.Region Name IO.Canonical (OneOrMore IO.Canonical)
     | BadArity A.Region BadArityContext Name Int Int
     | Binop A.Region Name Name
     | DuplicateDecl Name A.Region A.Region
@@ -59,9 +60,9 @@ type Error
     | ExportNotFound A.Region VarKind Name (List Name)
     | ExportOpenAlias A.Region Name
     | ImportCtorByName A.Region Name Name
-    | ImportNotFound A.Region Name (List ModuleName.Canonical)
+    | ImportNotFound A.Region Name (List IO.Canonical)
     | ImportOpenAlias A.Region Name
-    | ImportExposingNotFound A.Region ModuleName.Canonical Name (List Name)
+    | ImportExposingNotFound A.Region IO.Canonical Name (List Name)
     | NotFoundVar A.Region (Maybe Name) Name PossibleNames
     | NotFoundType A.Region (Maybe Name) Name PossibleNames
     | NotFoundVariant A.Region (Maybe Name) Name PossibleNames
@@ -506,7 +507,7 @@ toReport source err =
                         "Remove the (..) and it should work."
                     )
 
-        ImportExposingNotFound region (ModuleName.Canonical _ home) value possibleNames ->
+        ImportExposingNotFound region (IO.Canonical _ home) value possibleNames ->
             let
                 suggestions : List String
                 suggestions =
@@ -1111,10 +1112,10 @@ nameClash source r1 r2 messageThatEndsWithPunctuation =
             )
 
 
-ambiguousName : Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> ModuleName.Canonical -> OneOrMore.OneOrMore ModuleName.Canonical -> String -> Report.Report
+ambiguousName : Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> IO.Canonical -> OneOrMore.OneOrMore IO.Canonical -> String -> Report.Report
 ambiguousName source region maybePrefix name h hs thing =
     let
-        possibleHomes : List ModuleName.Canonical
+        possibleHomes : List IO.Canonical
         possibleHomes =
             List.sortWith ModuleName.compareCanonical (h :: OneOrMore.destruct (::) hs)
     in
@@ -1123,8 +1124,8 @@ ambiguousName source region maybePrefix name h hs thing =
             case maybePrefix of
                 Nothing ->
                     let
-                        homeToYellowDoc : ModuleName.Canonical -> D.Doc
-                        homeToYellowDoc (ModuleName.Canonical _ home) =
+                        homeToYellowDoc : IO.Canonical -> D.Doc
+                        homeToYellowDoc (IO.Canonical _ home) =
                             D.dullyellow
                                 (D.fromName home
                                     |> D.a (D.fromChars ".")
@@ -1145,8 +1146,8 @@ ambiguousName source region maybePrefix name h hs thing =
 
                 Just prefix ->
                     let
-                        homeToYellowDoc : ModuleName.Canonical -> D.Doc
-                        homeToYellowDoc (ModuleName.Canonical _ home) =
+                        homeToYellowDoc : IO.Canonical -> D.Doc
+                        homeToYellowDoc (IO.Canonical _ home) =
                             if prefix == home then
                                 D.cyan (D.fromChars "import")
                                     |> D.plus (D.fromName home)

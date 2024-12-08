@@ -16,9 +16,8 @@ import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
-import Prelude
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -89,7 +88,7 @@ attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Cha
 attemptChanges root env oldOutline toChars changes =
     case changes of
         AlreadyInstalled ->
-            Task.io (Prelude.putStrLn "It is already installed!")
+            Task.io (IO.putStrLn "It is already installed!")
 
         PromoteIndirect newOutline ->
             attemptChangesHelp root env oldOutline newOutline <|
@@ -194,12 +193,12 @@ attemptChangesHelp root env oldOutline newOutline question =
                                                         |> IO.fmap (\_ -> Err exit)
 
                                                 Ok () ->
-                                                    Prelude.putStrLn "Success!"
+                                                    IO.putStrLn "Success!"
                                                         |> IO.fmap (\_ -> Ok ())
                                         )
 
                             else
-                                Prelude.putStrLn "Okay, I did not change anything!"
+                                IO.putStrLn "Okay, I did not change anything!"
                                     |> IO.fmap (\_ -> Ok ())
                         )
             )

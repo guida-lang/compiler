@@ -15,6 +15,7 @@ import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 
@@ -47,17 +48,17 @@ type alias Nodes =
     Dict Opt.Global Opt.Node
 
 
-addUnions : ModuleName.Canonical -> Dict Name.Name Can.Union -> Opt.LocalGraph -> Opt.LocalGraph
+addUnions : IO.Canonical -> Dict Name.Name Can.Union -> Opt.LocalGraph -> Opt.LocalGraph
 addUnions home unions (Opt.LocalGraph main nodes fields) =
     Opt.LocalGraph main (Dict.foldr (\_ -> addUnion home) nodes unions) fields
 
 
-addUnion : ModuleName.Canonical -> Can.Union -> Nodes -> Nodes
+addUnion : IO.Canonical -> Can.Union -> Nodes -> Nodes
 addUnion home (Can.Union _ ctors _ opts) nodes =
     List.foldl (addCtorNode home opts) nodes ctors
 
 
-addCtorNode : ModuleName.Canonical -> Can.CtorOpts -> Can.Ctor -> Nodes -> Nodes
+addCtorNode : IO.Canonical -> Can.CtorOpts -> Can.Ctor -> Nodes -> Nodes
 addCtorNode home opts (Can.Ctor name index numArgs _) nodes =
     let
         node : Opt.Node
@@ -79,12 +80,12 @@ addCtorNode home opts (Can.Ctor name index numArgs _) nodes =
 -- ALIAS
 
 
-addAliases : ModuleName.Canonical -> Dict Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAliases : IO.Canonical -> Dict Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
 addAliases home aliases graph =
     Dict.foldr (addAlias home) graph aliases
 
 
-addAlias : ModuleName.Canonical -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAlias : IO.Canonical -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
 addAlias home name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
     case tipe of
         Can.TRecord fields Nothing ->
@@ -117,7 +118,7 @@ addRecordCtorField name _ fields =
 -- ADD EFFECTS
 
 
-addEffects : ModuleName.Canonical -> Can.Effects -> Opt.LocalGraph -> Opt.LocalGraph
+addEffects : IO.Canonical -> Can.Effects -> Opt.LocalGraph -> Opt.LocalGraph
 addEffects home effects ((Opt.LocalGraph main nodes fields) as graph) =
     case effects of
         Can.NoEffects ->
@@ -163,7 +164,7 @@ addEffects home effects ((Opt.LocalGraph main nodes fields) as graph) =
             Opt.LocalGraph main newNodes fields
 
 
-addPort : ModuleName.Canonical -> Name.Name -> Can.Port -> Opt.LocalGraph -> Opt.LocalGraph
+addPort : IO.Canonical -> Name.Name -> Can.Port -> Opt.LocalGraph -> Opt.LocalGraph
 addPort home name port_ graph =
     case port_ of
         Can.Incoming { payload } ->
@@ -205,7 +206,7 @@ addToGraph name node fields (Opt.LocalGraph main nodes fieldCounts) =
 -- ADD DECLS
 
 
-addDecls : ModuleName.Canonical -> Annotations -> Can.Decls -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDecls : IO.Canonical -> Annotations -> Can.Decls -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
 addDecls home annotations decls graph =
     case decls of
         Can.Declare def subDecls ->
@@ -266,7 +267,7 @@ defToName def =
 -- ADD DEFS
 
 
-addDef : ModuleName.Canonical -> Annotations -> Can.Def -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDef : IO.Canonical -> Annotations -> Can.Def -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
 addDef home annotations def graph =
     case def of
         Can.Def (A.At region name) args body ->
@@ -281,7 +282,7 @@ addDef home annotations def graph =
             addDefHelp region annotations home name (List.map Tuple.first typedArgs) body graph
 
 
-addDefHelp : A.Region -> Annotations -> ModuleName.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
+addDefHelp : A.Region -> Annotations -> IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
 addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
         R.ok (addDefNode home name args body EverySet.empty graph)
@@ -320,7 +321,7 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
                 R.throw (E.BadType region tipe)
 
 
-addDefNode : ModuleName.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
+addDefNode : IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
 addDefNode home name args body mainDeps graph =
     let
         ( deps, fields, def ) =
@@ -355,7 +356,7 @@ type State
         }
 
 
-addRecDefs : ModuleName.Canonical -> List Can.Def -> Opt.LocalGraph -> Opt.LocalGraph
+addRecDefs : IO.Canonical -> List Can.Def -> Opt.LocalGraph -> Opt.LocalGraph
 addRecDefs home defs (Opt.LocalGraph main nodes fieldCounts) =
     let
         names : List Name.Name
@@ -414,7 +415,7 @@ addValueName def names =
                 names
 
 
-addLink : ModuleName.Canonical -> Opt.Node -> Can.Def -> Dict Opt.Global Opt.Node -> Dict Opt.Global Opt.Node
+addLink : IO.Canonical -> Opt.Node -> Can.Def -> Dict Opt.Global Opt.Node -> Dict Opt.Global Opt.Node
 addLink home link def links =
     case def of
         Can.Def (A.At _ name) _ _ ->

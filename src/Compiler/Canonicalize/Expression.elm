@@ -27,6 +27,7 @@ import Compiler.Reporting.Warning as W
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Prelude
+import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
 
@@ -842,7 +843,7 @@ findVarQual region env prefix name =
 
         Nothing ->
             let
-                (ModuleName.Canonical pkg _) =
+                (IO.Canonical pkg _) =
                     env.home
             in
             if Name.isKernel prefix && Pkg.isKernel pkg then

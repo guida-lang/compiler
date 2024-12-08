@@ -4,8 +4,8 @@ module Compiler.Data.Map.Utils exposing
     , fromKeysA
     )
 
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 

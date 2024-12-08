@@ -24,10 +24,10 @@ import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
 

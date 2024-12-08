@@ -13,20 +13,18 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Type)
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
-import Utils.Main as Utils
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 
 -- ACTUALLY ADD CONSTRAINTS
 -- The constraints are stored in reverse order so that adding a new
 -- constraint is O(1) and we can reverse it at some later time.
---
 
 
 type State
-    = State Header (List Type.Variable) (List Type.Constraint)
+    = State Header (List IO.Variable) (List Type.Constraint)
 
 
 type alias Header =
@@ -79,7 +77,7 @@ add (A.At region pattern) expectation state =
                             listType =
                                 Type.AppN ModuleName.list Name.list [ entryType ]
                         in
-                        Utils.ioFoldM (addEntry region entryType) state (Index.indexedMap Tuple.pair patterns)
+                        IO.foldM (addEntry region entryType) state (Index.indexedMap Tuple.pair patterns)
                             |> IO.fmap
                                 (\(State headers vars revCons) ->
                                     let
@@ -134,7 +132,7 @@ add (A.At region pattern) expectation state =
                             extType =
                                 Type.VarN extVar
                         in
-                        Utils.listTraverse (\field -> IO.fmap (Tuple.pair field) Type.mkFlexVar) fields
+                        IO.traverseList (\field -> IO.fmap (Tuple.pair field) Type.mkFlexVar) fields
                             |> IO.fmap
                                 (\fieldVars ->
                                     let
@@ -322,9 +320,9 @@ simpleAdd pattern patternType state =
 -- CONSTRAIN CONSTRUCTORS
 
 
-addCtor : A.Region -> ModuleName.Canonical -> Name.Name -> List Name.Name -> Name.Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
+addCtor : A.Region -> IO.Canonical -> Name.Name -> List Name.Name -> Name.Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
 addCtor region home typeName typeVarNames ctorName args expectation state =
-    Utils.listTraverse (\var -> IO.fmap (Tuple.pair var) (Type.nameToFlex var)) typeVarNames
+    IO.traverseList (\var -> IO.fmap (Tuple.pair var) (Type.nameToFlex var)) typeVarNames
         |> IO.bind
             (\varPairs ->
                 let
@@ -336,7 +334,7 @@ addCtor region home typeName typeVarNames ctorName args expectation state =
                     freeVarDict =
                         Dict.fromList compare typePairs
                 in
-                Utils.ioFoldM (addCtorArg region ctorName freeVarDict) state args
+                IO.foldM (addCtorArg region ctorName freeVarDict) state args
                     |> IO.bind
                         (\(State headers vars revCons) ->
                             let

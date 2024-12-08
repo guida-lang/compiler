@@ -6,9 +6,10 @@ module Terminal.Terminal.Error exposing
     )
 
 import Compiler.Reporting.Suggest as Suggest
-import Data.IO as IO exposing (IO)
 import List.Extra as List
 import Prelude
+import System.Exit as Exit
+import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal
     exposing
         ( ArgError(..)
@@ -35,15 +36,15 @@ import Utils.Main as Utils
 
 exitSuccess : List P.Doc -> IO a
 exitSuccess =
-    exitWith IO.ExitSuccess
+    exitWith Exit.ExitSuccess
 
 
 exitFailure : List P.Doc -> IO a
 exitFailure =
-    exitWith (IO.ExitFailure 1)
+    exitWith (Exit.ExitFailure 1)
 
 
-exitWith : IO.ExitCode -> List P.Doc -> IO a
+exitWith : Exit.ExitCode -> List P.Doc -> IO a
 exitWith code docs =
     IO.hIsTerminalDevice IO.stderr
         |> IO.bind
@@ -63,7 +64,7 @@ exitWith code docs =
                         (adjust (P.vcat (List.concatMap (\d -> [ d, P.text "" ]) docs)))
                     )
                     |> IO.bind (\_ -> IO.hPutStrLn IO.stderr "")
-                    |> IO.bind (\_ -> IO.exitWith code)
+                    |> IO.bind (\_ -> Exit.exitWith code)
             )
 
 

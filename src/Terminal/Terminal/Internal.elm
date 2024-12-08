@@ -14,7 +14,7 @@ module Terminal.Terminal.Internal exposing
     , toName
     )
 
-import Data.IO exposing (IO)
+import System.IO exposing (IO)
 import Text.PrettyPrint.ANSI.Leijen exposing (Doc)
 
 

@@ -5,7 +5,6 @@ module Terminal.Repl exposing
     , Lines(..)
     , Output(..)
     , Prefill(..)
-    , State(..)
     , run
     )
 
@@ -25,8 +24,6 @@ import Compiler.Elm.Licenses as Licenses
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Parse.Declaration as PD
 import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM
@@ -39,13 +36,14 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as ES
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
-import Data.IO as IO exposing (IO)
+import Control.Monad.State.Strict as State
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import List.Extra as List
 import Maybe.Extra as Maybe
 import Prelude
+import System.Exit as Exit
+import System.IO as IO exposing (IO)
+import System.Process as Process
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -68,12 +66,12 @@ run () flags =
                     |> IO.bind
                         (\env ->
                             let
-                                looper : M IO.ExitCode
+                                looper : M Exit.ExitCode
                                 looper =
-                                    Utils.replRunInputT settings (Utils.replWithInterrupt (loop env initialState))
+                                    Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
-                            IO.evalStateT looper initialState
-                                |> IO.bind (\exitCode -> IO.exitWith exitCode)
+                            State.evalStateT looper IO.initialReplState
+                                |> IO.bind (\exitCode -> Exit.exitWith exitCode)
                         )
             )
 
@@ -136,17 +134,16 @@ initEnv (Flags maybeAlternateInterpreter noColors) =
 
 
 type Outcome
-    = Loop State
-    | End IO.ExitCode
+    = Loop IO.ReplState
+    | End Exit.ExitCode
 
 
 type alias M a =
-    IO.StateT State a
+    State.StateT IO.ReplState a
 
 
-loop : Env -> State -> Utils.ReplInputT IO.ExitCode
+loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
 loop env state =
-    -- Utils.replHandleInterrupt (IO.pure Skip)
     read
         |> IO.bind
             (\input ->
@@ -155,7 +152,7 @@ loop env state =
                         (\outcome ->
                             case outcome of
                                 Loop loopState ->
-                                    Utils.liftInputT (Utils.statePut stateEncoder loopState)
+                                    Utils.liftInputT (State.put loopState)
                                         |> IO.bind (\_ -> loop env loopState)
 
                                 End exitCode ->
@@ -523,65 +520,51 @@ annotation =
 
 
 
--- STATE
-
-
-type State
-    = State (Dict N.Name String) (Dict N.Name String) (Dict N.Name String)
-
-
-initialState : State
-initialState =
-    State Dict.empty Dict.empty Dict.empty
-
-
-
 -- EVAL
 
 
-eval : Env -> State -> Input -> IO Outcome
-eval env ((State imports types decls) as state) input =
-    -- Utils.replHandleInterrupt (Prelude.putStrLn "<cancelled>" |> IO.fmap (\_ -> Loop state)) <|
+eval : Env -> IO.ReplState -> Input -> IO Outcome
+eval env ((IO.ReplState imports types decls) as state) input =
     case input of
         Skip ->
             IO.pure (Loop state)
 
         Exit ->
-            IO.pure (End IO.ExitSuccess)
+            IO.pure (End Exit.ExitSuccess)
 
         Reset ->
-            Prelude.putStrLn "<reset>"
-                |> IO.fmap (\_ -> Loop initialState)
+            IO.putStrLn "<reset>"
+                |> IO.fmap (\_ -> Loop IO.initialReplState)
 
         Help maybeUnknownCommand ->
-            Prelude.putStrLn (toHelpMessage maybeUnknownCommand)
+            IO.putStrLn (toHelpMessage maybeUnknownCommand)
                 |> IO.fmap (\_ -> Loop state)
 
         Import name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State (Dict.insert compare name src imports) types decls
+                    IO.ReplState (Dict.insert compare name src imports) types decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
         Type name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State imports (Dict.insert compare name src types) decls
+                    IO.ReplState imports (Dict.insert compare name src types) decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
         Port ->
-            Prelude.putStrLn "I cannot handle port declarations."
+            IO.putStrLn "I cannot handle port declarations."
                 |> IO.fmap (\_ -> Loop state)
 
         Decl name src ->
             let
-                newState : State
+                newState : IO.ReplState
                 newState =
-                    State imports types (Dict.insert compare name src decls)
+                    IO.ReplState imports types (Dict.insert compare name src decls)
             in
             IO.fmap Loop (attemptEval env state newState (OutputDecl name))
 
@@ -599,7 +582,7 @@ type Output
     | OutputExpr String
 
 
-attemptEval : Env -> State -> State -> Output -> IO State
+attemptEval : Env -> IO.ReplState -> IO.ReplState -> Output -> IO IO.ReplState
 attemptEval (Env root interpreter ansi) oldState newState output =
     BW.withScope
         (\scope ->
@@ -634,30 +617,30 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                             |> IO.fmap
                                 (\exitCode ->
                                     case exitCode of
-                                        IO.ExitSuccess ->
+                                        Exit.ExitSuccess ->
                                             newState
 
-                                        IO.ExitFailure _ ->
+                                        Exit.ExitFailure _ ->
                                             oldState
                                 )
             )
 
 
-interpret : FilePath -> String -> IO IO.ExitCode
+interpret : FilePath -> String -> IO Exit.ExitCode
 interpret interpreter javascript =
     let
-        createProcess : { cmdspec : IO.CmdSpec, std_out : IO.StdStream, std_err : IO.StdStream, std_in : IO.StdStream }
+        createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
         createProcess =
-            IO.procProc interpreter []
-                |> (\cp -> { cp | std_in = IO.CreatePipe })
+            Process.proc interpreter []
+                |> (\cp -> { cp | std_in = Process.CreatePipe })
     in
-    IO.procWithCreateProcess createProcess <|
+    Process.withCreateProcess createProcess <|
         \stdinHandle _ _ handle ->
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
                         |> IO.bind (\_ -> IO.hClose stdin)
-                        |> IO.bind (\_ -> IO.procWaitForProcess handle)
+                        |> IO.bind (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -667,8 +650,8 @@ interpret interpreter javascript =
 -- TO BYTESTRING
 
 
-toByteString : State -> Output -> String
-toByteString (State imports types decls) output =
+toByteString : IO.ReplState -> Output -> String
+toByteString (IO.ReplState imports types decls) output =
     String.concat
         [ "module "
         , N.replModule
@@ -815,7 +798,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> IO.bind (\_ -> IO.exitFailure)
+                            |> IO.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -848,9 +831,9 @@ initSettings =
 
 lookupCompletions : String -> M (List Utils.ReplCompletion)
 lookupCompletions string =
-    Utils.stateGet stateDecoder
-        |> IO.fmapStateT
-            (\(State imports types decls) ->
+    State.get
+        |> State.fmap
+            (\(IO.ReplState imports types decls) ->
                 addMatches string False decls <|
                     addMatches string False types <|
                         addMatches string True imports <|
@@ -885,25 +868,3 @@ addMatch string isFinished name _ completions =
 
     else
         completions
-
-
-
--- ENCODERS and DECODERS
-
-
-stateDecoder : Decode.Decoder State
-stateDecoder =
-    Decode.map3 State
-        (Decode.field "imports" (D.assocListDict compare Decode.string Decode.string))
-        (Decode.field "types" (D.assocListDict compare Decode.string Decode.string))
-        (Decode.field "decls" (D.assocListDict compare Decode.string Decode.string))
-
-
-stateEncoder : State -> Encode.Value
-stateEncoder (State imports types decls) =
-    Encode.object
-        [ ( "type", Encode.string "State" )
-        , ( "imports", E.assocListDict Encode.string Encode.string imports )
-        , ( "types", E.assocListDict Encode.string Encode.string types )
-        , ( "decls", E.assocListDict Encode.string Encode.string decls )
-        ]

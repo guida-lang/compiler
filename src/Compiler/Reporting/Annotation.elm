@@ -16,9 +16,9 @@ module Compiler.Reporting.Annotation exposing
     , zero
     )
 
-import Data.IO as IO exposing (IO)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 

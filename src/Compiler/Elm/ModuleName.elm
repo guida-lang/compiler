@@ -1,6 +1,5 @@
 module Compiler.Elm.ModuleName exposing
-    ( Canonical(..)
-    , Raw
+    ( Raw
     , array
     , basics
     , canonicalDecoder
@@ -43,6 +42,7 @@ import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO exposing (Canonical(..))
 
 
 
@@ -165,14 +165,6 @@ chompInner src pos end col =
 
         else
             chompInner src (pos + width) end (col + 1)
-
-
-
--- CANONICAL
-
-
-type Canonical
-    = Canonical Pkg.Name Name.Name
 
 
 

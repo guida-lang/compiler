@@ -29,6 +29,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import System.TypeCheck.IO as IO
 
 
 
@@ -43,11 +44,11 @@ type Type
     | FlexSuper Super Name
     | RigidVar Name
     | RigidSuper Super Name
-    | Type ModuleName.Canonical Name (List Type)
+    | Type IO.Canonical Name (List Type)
     | Record (Dict Name Type) Extension
     | Unit
     | Tuple Type Type (Maybe Type)
-    | Alias ModuleName.Canonical Name (List ( Name, Type )) Type
+    | Alias IO.Canonical Name (List ( Name, Type )) Type
 
 
 type Super
@@ -125,7 +126,7 @@ toDoc localizer ctx tipe =
             aliasToDoc localizer ctx home name args
 
 
-aliasToDoc : L.Localizer -> RT.Context -> ModuleName.Canonical -> Name -> List ( Name, Type ) -> D.Doc
+aliasToDoc : L.Localizer -> RT.Context -> IO.Canonical -> Name -> List ( Name, Type ) -> D.Doc
 aliasToDoc localizer ctx home name args =
     RT.apply ctx
         (L.toDoc localizer home name)
@@ -543,37 +544,37 @@ isSimilar (Diff _ _ status) =
 -- IS TYPE?
 
 
-isBool : ModuleName.Canonical -> Name -> Bool
+isBool : IO.Canonical -> Name -> Bool
 isBool home name =
     home == ModuleName.basics && name == Name.bool
 
 
-isInt : ModuleName.Canonical -> Name -> Bool
+isInt : IO.Canonical -> Name -> Bool
 isInt home name =
     home == ModuleName.basics && name == Name.int
 
 
-isFloat : ModuleName.Canonical -> Name -> Bool
+isFloat : IO.Canonical -> Name -> Bool
 isFloat home name =
     home == ModuleName.basics && name == Name.float
 
 
-isString : ModuleName.Canonical -> Name -> Bool
+isString : IO.Canonical -> Name -> Bool
 isString home name =
     home == ModuleName.string && name == Name.string
 
 
-isChar : ModuleName.Canonical -> Name -> Bool
+isChar : IO.Canonical -> Name -> Bool
 isChar home name =
     home == ModuleName.char && name == Name.char
 
 
-isMaybe : ModuleName.Canonical -> Name -> Bool
+isMaybe : IO.Canonical -> Name -> Bool
 isMaybe home name =
     home == ModuleName.maybe && name == Name.maybe
 
 
-isList : ModuleName.Canonical -> Name -> Bool
+isList : IO.Canonical -> Name -> Bool
 isList home name =
     home == ModuleName.list && name == Name.list
 
@@ -621,8 +622,8 @@ isSuper super tipe =
 -- NAME CLASH
 
 
-nameClashToDoc : RT.Context -> L.Localizer -> ModuleName.Canonical -> Name -> List Type -> D.Doc
-nameClashToDoc ctx localizer (ModuleName.Canonical _ home) name args =
+nameClashToDoc : RT.Context -> L.Localizer -> IO.Canonical -> Name -> List Type -> D.Doc
+nameClashToDoc ctx localizer (IO.Canonical _ home) name args =
     RT.apply ctx
         (D.yellow (D.fromName home) |> D.a (D.dullyellow (D.fromChars "." |> D.a (D.fromName name))))
         (List.map (toDoc localizer RT.App) args)

@@ -9,8 +9,8 @@ import Compiler.Type.Error as Error
 import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.TypeCheck.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 
@@ -19,11 +19,11 @@ import Utils.Main as Utils
 
 
 type Answer
-    = AnswerOk (List Type.Variable)
-    | AnswerErr (List Type.Variable) Error.Type Error.Type
+    = AnswerOk (List IO.Variable)
+    | AnswerErr (List IO.Variable) Error.Type Error.Type
 
 
-unify : Type.Variable -> Type.Variable -> IO Answer
+unify : IO.Variable -> IO.Variable -> IO Answer
 unify v1 v2 =
     case guardedUnify v1 v2 of
         Unify k ->
@@ -41,21 +41,21 @@ unify v1 v2 =
                                             Type.toErrorType v2
                                                 |> IO.bind
                                                     (\t2 ->
-                                                        UF.union Type.descriptorEncoder v1 v2 errorDescriptor
+                                                        UF.union v1 v2 errorDescriptor
                                                             |> IO.fmap (\_ -> AnswerErr vars t1 t2)
                                                     )
                                         )
                     )
 
 
-onSuccess : List Type.Variable -> () -> IO Answer
+onSuccess : List IO.Variable -> () -> IO Answer
 onSuccess vars () =
     IO.pure (AnswerOk vars)
 
 
-errorDescriptor : Type.Descriptor
+errorDescriptor : IO.Descriptor
 errorDescriptor =
-    Type.Descriptor Type.Error Type.noRank Type.noMark Nothing
+    IO.Descriptor IO.Error Type.noRank Type.noMark Nothing
 
 
 
@@ -63,15 +63,15 @@ errorDescriptor =
 
 
 type Unify a
-    = Unify (List Type.Variable -> IO (Result UnifyErr (UnifyOk a)))
+    = Unify (List IO.Variable -> IO (Result UnifyErr (UnifyOk a)))
 
 
 type UnifyOk a
-    = UnifyOk (List Type.Variable) a
+    = UnifyOk (List IO.Variable) a
 
 
 type UnifyErr
-    = UnifyErr (List Type.Variable) ()
+    = UnifyErr (List IO.Variable) ()
 
 
 fmap : (a -> b) -> Unify a -> Unify b
@@ -110,7 +110,7 @@ bind callback (Unify ka) =
                 (ka vars)
 
 
-register : IO Type.Variable -> Unify Type.Variable
+register : IO IO.Variable -> Unify IO.Variable
 register mkVar =
     Unify
         (\vars ->
@@ -132,7 +132,7 @@ mismatch =
 
 
 type Context
-    = Context Type.Variable Type.Descriptor Type.Variable Type.Descriptor
+    = Context IO.Variable IO.Descriptor IO.Variable IO.Descriptor
 
 
 reorient : Context -> Context
@@ -145,27 +145,27 @@ reorient (Context var1 desc1 var2 desc2) =
 -- merge : Context -> UF.Content -> Unify ( UF.Point UF.Descriptor, UF.Point UF.Descriptor )
 
 
-merge : Context -> Type.Content -> Unify ()
-merge (Context var1 (Type.Descriptor _ rank1 _ _) var2 (Type.Descriptor _ rank2 _ _)) content =
+merge : Context -> IO.Content -> Unify ()
+merge (Context var1 (IO.Descriptor _ rank1 _ _) var2 (IO.Descriptor _ rank2 _ _)) content =
     Unify
         (\vars ->
-            UF.union Type.descriptorEncoder var1 var2 (Type.Descriptor content (min rank1 rank2) Type.noMark Nothing)
+            UF.union var1 var2 (IO.Descriptor content (min rank1 rank2) Type.noMark Nothing)
                 |> IO.fmap (Ok << UnifyOk vars)
         )
 
 
-fresh : Context -> Type.Content -> Unify Type.Variable
-fresh (Context _ (Type.Descriptor _ rank1 _ _) _ (Type.Descriptor _ rank2 _ _)) content =
+fresh : Context -> IO.Content -> Unify IO.Variable
+fresh (Context _ (IO.Descriptor _ rank1 _ _) _ (IO.Descriptor _ rank2 _ _)) content =
     register <|
-        UF.fresh Type.descriptorEncoder <|
-            Type.Descriptor content (min rank1 rank2) Type.noMark Nothing
+        UF.fresh <|
+            IO.Descriptor content (min rank1 rank2) Type.noMark Nothing
 
 
 
 -- ACTUALLY UNIFY THINGS
 
 
-guardedUnify : Type.Variable -> Type.Variable -> Unify ()
+guardedUnify : IO.Variable -> IO.Variable -> Unify ()
 guardedUnify left right =
     Unify
         (\vars ->
@@ -176,10 +176,10 @@ guardedUnify left right =
                             IO.pure (Ok (UnifyOk vars ()))
 
                         else
-                            UF.get Type.descriptorDecoder left
+                            UF.get left
                                 |> IO.bind
                                     (\leftDesc ->
-                                        UF.get Type.descriptorDecoder right
+                                        UF.get right
                                             |> IO.bind
                                                 (\rightDesc ->
                                                     case actuallyUnify (Context left leftDesc right rightDesc) of
@@ -191,49 +191,49 @@ guardedUnify left right =
         )
 
 
-subUnify : Type.Variable -> Type.Variable -> Unify ()
+subUnify : IO.Variable -> IO.Variable -> Unify ()
 subUnify var1 var2 =
     guardedUnify var1 var2
 
 
 actuallyUnify : Context -> Unify ()
-actuallyUnify ((Context _ (Type.Descriptor firstContent _ _ _) _ (Type.Descriptor secondContent _ _ _)) as context) =
+actuallyUnify ((Context _ (IO.Descriptor firstContent _ _ _) _ (IO.Descriptor secondContent _ _ _)) as context) =
     case firstContent of
-        Type.FlexVar _ ->
+        IO.FlexVar _ ->
             unifyFlex context firstContent secondContent
 
-        Type.FlexSuper super _ ->
+        IO.FlexSuper super _ ->
             unifyFlexSuper context super firstContent secondContent
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             unifyRigid context Nothing firstContent secondContent
 
-        Type.RigidSuper super _ ->
+        IO.RigidSuper super _ ->
             unifyRigid context (Just super) firstContent secondContent
 
-        Type.Alias home name args realVar ->
+        IO.Alias home name args realVar ->
             unifyAlias context home name args realVar secondContent
 
-        Type.Structure flatType ->
+        IO.Structure flatType ->
             unifyStructure context flatType firstContent secondContent
 
-        Type.Error ->
+        IO.Error ->
             -- If there was an error, just pretend it is okay. This lets us avoid
             -- "cascading" errors where one problem manifests as multiple message.
-            merge context Type.Error
+            merge context IO.Error
 
 
 
 -- UNIFY FLEXIBLE VARIABLES
 
 
-unifyFlex : Context -> Type.Content -> Type.Content -> Unify ()
+unifyFlex : Context -> IO.Content -> IO.Content -> Unify ()
 unifyFlex context content otherContent =
     case otherContent of
-        Type.Error ->
-            merge context Type.Error
+        IO.Error ->
+            merge context IO.Error
 
-        Type.FlexVar maybeName ->
+        IO.FlexVar maybeName ->
             merge context <|
                 case maybeName of
                     Nothing ->
@@ -242,19 +242,19 @@ unifyFlex context content otherContent =
                     Just _ ->
                         otherContent
 
-        Type.FlexSuper _ _ ->
+        IO.FlexSuper _ _ ->
             merge context otherContent
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             merge context otherContent
 
-        Type.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             merge context otherContent
 
-        Type.Alias _ _ _ _ ->
+        IO.Alias _ _ _ _ ->
             merge context otherContent
 
-        Type.Structure _ ->
+        IO.Structure _ ->
             merge context otherContent
 
 
@@ -262,13 +262,13 @@ unifyFlex context content otherContent =
 -- UNIFY RIGID VARIABLES
 
 
-unifyRigid : Context -> Maybe Type.SuperType -> Type.Content -> Type.Content -> Unify ()
+unifyRigid : Context -> Maybe IO.SuperType -> IO.Content -> IO.Content -> Unify ()
 unifyRigid context maybeSuper content otherContent =
     case otherContent of
-        Type.FlexVar _ ->
+        IO.FlexVar _ ->
             merge context content
 
-        Type.FlexSuper otherSuper _ ->
+        IO.FlexSuper otherSuper _ ->
             case maybeSuper of
                 Just super ->
                     if combineRigidSupers super otherSuper then
@@ -280,181 +280,181 @@ unifyRigid context maybeSuper content otherContent =
                 Nothing ->
                     mismatch
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             mismatch
 
-        Type.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             mismatch
 
-        Type.Alias _ _ _ _ ->
+        IO.Alias _ _ _ _ ->
             mismatch
 
-        Type.Structure _ ->
+        IO.Structure _ ->
             mismatch
 
-        Type.Error ->
-            merge context Type.Error
+        IO.Error ->
+            merge context IO.Error
 
 
 
 -- UNIFY SUPER VARIABLES
 
 
-unifyFlexSuper : Context -> Type.SuperType -> Type.Content -> Type.Content -> Unify ()
+unifyFlexSuper : Context -> IO.SuperType -> IO.Content -> IO.Content -> Unify ()
 unifyFlexSuper ((Context first _ _ _) as context) super content otherContent =
     case otherContent of
-        Type.Structure flatType ->
+        IO.Structure flatType ->
             unifyFlexSuperStructure context super flatType
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             mismatch
 
-        Type.RigidSuper otherSuper _ ->
+        IO.RigidSuper otherSuper _ ->
             if combineRigidSupers otherSuper super then
                 merge context otherContent
 
             else
                 mismatch
 
-        Type.FlexVar _ ->
+        IO.FlexVar _ ->
             merge context content
 
-        Type.FlexSuper otherSuper _ ->
+        IO.FlexSuper otherSuper _ ->
             case super of
-                Type.Number ->
+                IO.Number ->
                     case otherSuper of
-                        Type.Number ->
+                        IO.Number ->
                             merge context content
 
-                        Type.Comparable ->
+                        IO.Comparable ->
                             merge context content
 
-                        Type.Appendable ->
+                        IO.Appendable ->
                             mismatch
 
-                        Type.CompAppend ->
+                        IO.CompAppend ->
                             mismatch
 
-                Type.Comparable ->
+                IO.Comparable ->
                     case otherSuper of
-                        Type.Comparable ->
+                        IO.Comparable ->
                             merge context otherContent
 
-                        Type.Number ->
+                        IO.Number ->
                             merge context otherContent
 
-                        Type.Appendable ->
-                            merge context <| Type.unnamedFlexSuper Type.CompAppend
+                        IO.Appendable ->
+                            merge context <| Type.unnamedFlexSuper IO.CompAppend
 
-                        Type.CompAppend ->
+                        IO.CompAppend ->
                             merge context otherContent
 
-                Type.Appendable ->
+                IO.Appendable ->
                     case otherSuper of
-                        Type.Appendable ->
+                        IO.Appendable ->
                             merge context otherContent
 
-                        Type.Comparable ->
-                            merge context <| Type.unnamedFlexSuper Type.CompAppend
+                        IO.Comparable ->
+                            merge context <| Type.unnamedFlexSuper IO.CompAppend
 
-                        Type.CompAppend ->
+                        IO.CompAppend ->
                             merge context otherContent
 
-                        Type.Number ->
+                        IO.Number ->
                             mismatch
 
-                Type.CompAppend ->
+                IO.CompAppend ->
                     case otherSuper of
-                        Type.Comparable ->
+                        IO.Comparable ->
                             merge context content
 
-                        Type.Appendable ->
+                        IO.Appendable ->
                             merge context content
 
-                        Type.CompAppend ->
+                        IO.CompAppend ->
                             merge context content
 
-                        Type.Number ->
+                        IO.Number ->
                             mismatch
 
-        Type.Alias _ _ _ realVar ->
+        IO.Alias _ _ _ realVar ->
             subUnify first realVar
 
-        Type.Error ->
-            merge context Type.Error
+        IO.Error ->
+            merge context IO.Error
 
 
-combineRigidSupers : Type.SuperType -> Type.SuperType -> Bool
+combineRigidSupers : IO.SuperType -> IO.SuperType -> Bool
 combineRigidSupers rigid flex =
     rigid
         == flex
-        || (rigid == Type.Number && flex == Type.Comparable)
-        || (rigid == Type.CompAppend && (flex == Type.Comparable || flex == Type.Appendable))
+        || (rigid == IO.Number && flex == IO.Comparable)
+        || (rigid == IO.CompAppend && (flex == IO.Comparable || flex == IO.Appendable))
 
 
-atomMatchesSuper : Type.SuperType -> ModuleName.Canonical -> Name.Name -> Bool
+atomMatchesSuper : IO.SuperType -> IO.Canonical -> Name.Name -> Bool
 atomMatchesSuper super home name =
     case super of
-        Type.Number ->
+        IO.Number ->
             isNumber home name
 
-        Type.Comparable ->
+        IO.Comparable ->
             isNumber home name || Error.isString home name || Error.isChar home name
 
-        Type.Appendable ->
+        IO.Appendable ->
             Error.isString home name
 
-        Type.CompAppend ->
+        IO.CompAppend ->
             Error.isString home name
 
 
-isNumber : ModuleName.Canonical -> Name.Name -> Bool
+isNumber : IO.Canonical -> Name.Name -> Bool
 isNumber home name =
     (home == ModuleName.basics)
         && (name == Name.int || name == Name.float)
 
 
-unifyFlexSuperStructure : Context -> Type.SuperType -> Type.FlatType -> Unify ()
+unifyFlexSuperStructure : Context -> IO.SuperType -> IO.FlatType -> Unify ()
 unifyFlexSuperStructure context super flatType =
     case flatType of
-        Type.App1 home name [] ->
+        IO.App1 home name [] ->
             if atomMatchesSuper super home name then
-                merge context (Type.Structure flatType)
+                merge context (IO.Structure flatType)
 
             else
                 mismatch
 
-        Type.App1 home name [ variable ] ->
+        IO.App1 home name [ variable ] ->
             if home == ModuleName.list && name == Name.list then
                 case super of
-                    Type.Number ->
+                    IO.Number ->
                         mismatch
 
-                    Type.Appendable ->
-                        merge context (Type.Structure flatType)
+                    IO.Appendable ->
+                        merge context (IO.Structure flatType)
 
-                    Type.Comparable ->
+                    IO.Comparable ->
                         comparableOccursCheck context
                             |> bind (\_ -> unifyComparableRecursive variable)
-                            |> bind (\_ -> merge context (Type.Structure flatType))
+                            |> bind (\_ -> merge context (IO.Structure flatType))
 
-                    Type.CompAppend ->
+                    IO.CompAppend ->
                         comparableOccursCheck context
                             |> bind (\_ -> unifyComparableRecursive variable)
-                            |> bind (\_ -> merge context (Type.Structure flatType))
+                            |> bind (\_ -> merge context (IO.Structure flatType))
 
             else
                 mismatch
 
-        Type.Tuple1 a b maybeC ->
+        IO.Tuple1 a b maybeC ->
             case super of
-                Type.Number ->
+                IO.Number ->
                     mismatch
 
-                Type.Appendable ->
+                IO.Appendable ->
                     mismatch
 
-                Type.Comparable ->
+                IO.Comparable ->
                     comparableOccursCheck context
                         |> bind (\_ -> unifyComparableRecursive a)
                         |> bind (\_ -> unifyComparableRecursive b)
@@ -467,9 +467,9 @@ unifyFlexSuperStructure context super flatType =
                                     Just c ->
                                         unifyComparableRecursive c
                             )
-                        |> bind (\_ -> merge context (Type.Structure flatType))
+                        |> bind (\_ -> merge context (IO.Structure flatType))
 
-                Type.CompAppend ->
+                IO.CompAppend ->
                     mismatch
 
         _ ->
@@ -497,13 +497,13 @@ comparableOccursCheck (Context _ _ var _) =
         )
 
 
-unifyComparableRecursive : Type.Variable -> Unify ()
+unifyComparableRecursive : IO.Variable -> Unify ()
 unifyComparableRecursive var =
     register
-        (UF.get Type.descriptorDecoder var
+        (UF.get var
             |> IO.bind
-                (\(Type.Descriptor _ rank _ _) ->
-                    UF.fresh Type.descriptorEncoder (Type.Descriptor (Type.unnamedFlexSuper Type.Comparable) rank Type.noMark Nothing)
+                (\(IO.Descriptor _ rank _ _) ->
+                    UF.fresh (IO.Descriptor (Type.unnamedFlexSuper IO.Comparable) rank Type.noMark Nothing)
                 )
         )
         |> bind (\compVar -> guardedUnify compVar var)
@@ -513,22 +513,22 @@ unifyComparableRecursive var =
 -- UNIFY ALIASES
 
 
-unifyAlias : Context -> ModuleName.Canonical -> Name.Name -> List ( Name.Name, Type.Variable ) -> Type.Variable -> Type.Content -> Unify ()
+unifyAlias : Context -> IO.Canonical -> Name.Name -> List ( Name.Name, IO.Variable ) -> IO.Variable -> IO.Content -> Unify ()
 unifyAlias ((Context _ _ second _) as context) home name args realVar otherContent =
     case otherContent of
-        Type.FlexVar _ ->
-            merge context (Type.Alias home name args realVar)
+        IO.FlexVar _ ->
+            merge context (IO.Alias home name args realVar)
 
-        Type.FlexSuper _ _ ->
+        IO.FlexSuper _ _ ->
             subUnify realVar second
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             subUnify realVar second
 
-        Type.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             subUnify realVar second
 
-        Type.Alias otherHome otherName otherArgs otherRealVar ->
+        IO.Alias otherHome otherName otherArgs otherRealVar ->
             if name == otherName && home == otherHome then
                 Unify
                     (\vars ->
@@ -549,14 +549,14 @@ unifyAlias ((Context _ _ second _) as context) home name args realVar otherConte
             else
                 subUnify realVar otherRealVar
 
-        Type.Structure _ ->
+        IO.Structure _ ->
             subUnify realVar second
 
-        Type.Error ->
-            merge context Type.Error
+        IO.Error ->
+            merge context IO.Error
 
 
-unifyAliasArgs : List Type.Variable -> List ( Name.Name, Type.Variable ) -> List ( Name.Name, Type.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
+unifyAliasArgs : List IO.Variable -> List ( Name.Name, IO.Variable ) -> List ( Name.Name, IO.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
 unifyAliasArgs vars args1 args2 =
     case args1 of
         ( _, arg1 ) :: others1 ->
@@ -600,27 +600,27 @@ unifyAliasArgs vars args1 args2 =
 -- UNIFY STRUCTURES
 
 
-unifyStructure : Context -> Type.FlatType -> Type.Content -> Type.Content -> Unify ()
+unifyStructure : Context -> IO.FlatType -> IO.Content -> IO.Content -> Unify ()
 unifyStructure ((Context first _ second _) as context) flatType content otherContent =
     case otherContent of
-        Type.FlexVar _ ->
+        IO.FlexVar _ ->
             merge context content
 
-        Type.FlexSuper super _ ->
+        IO.FlexSuper super _ ->
             unifyFlexSuperStructure (reorient context) super flatType
 
-        Type.RigidVar _ ->
+        IO.RigidVar _ ->
             mismatch
 
-        Type.RigidSuper _ _ ->
+        IO.RigidSuper _ _ ->
             mismatch
 
-        Type.Alias _ _ _ realVar ->
+        IO.Alias _ _ _ realVar ->
             subUnify first realVar
 
-        Type.Structure otherFlatType ->
+        IO.Structure otherFlatType ->
             case ( flatType, otherFlatType ) of
-                ( Type.App1 home name args, Type.App1 otherHome otherName otherArgs ) ->
+                ( IO.App1 home name args, IO.App1 otherHome otherName otherArgs ) ->
                     if home == otherHome && name == otherName then
                         Unify
                             (\vars ->
@@ -641,29 +641,29 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                     else
                         mismatch
 
-                ( Type.Fun1 arg1 res1, Type.Fun1 arg2 res2 ) ->
+                ( IO.Fun1 arg1 res1, IO.Fun1 arg2 res2 ) ->
                     subUnify arg1 arg2
                         |> bind (\_ -> subUnify res1 res2)
                         |> bind (\_ -> merge context otherContent)
 
-                ( Type.EmptyRecord1, Type.EmptyRecord1 ) ->
+                ( IO.EmptyRecord1, IO.EmptyRecord1 ) ->
                     merge context otherContent
 
-                ( Type.Record1 fields ext, Type.EmptyRecord1 ) ->
+                ( IO.Record1 fields ext, IO.EmptyRecord1 ) ->
                     if Dict.isEmpty fields then
                         subUnify ext second
 
                     else
                         mismatch
 
-                ( Type.EmptyRecord1, Type.Record1 fields ext ) ->
+                ( IO.EmptyRecord1, IO.Record1 fields ext ) ->
                     if Dict.isEmpty fields then
                         subUnify first ext
 
                     else
                         mismatch
 
-                ( Type.Record1 fields1 ext1, Type.Record1 fields2 ext2 ) ->
+                ( IO.Record1 fields1 ext1, IO.Record1 fields2 ext2 ) ->
                     Unify
                         (\vars ->
                             gatherFields fields1 ext1
@@ -679,32 +679,32 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                                     )
                         )
 
-                ( Type.Tuple1 a b Nothing, Type.Tuple1 x y Nothing ) ->
+                ( IO.Tuple1 a b Nothing, IO.Tuple1 x y Nothing ) ->
                     subUnify a x
                         |> bind (\_ -> subUnify b y)
                         |> bind (\_ -> merge context otherContent)
 
-                ( Type.Tuple1 a b (Just c), Type.Tuple1 x y (Just z) ) ->
+                ( IO.Tuple1 a b (Just c), IO.Tuple1 x y (Just z) ) ->
                     subUnify a x
                         |> bind (\_ -> subUnify b y)
                         |> bind (\_ -> subUnify c z)
                         |> bind (\_ -> merge context otherContent)
 
-                ( Type.Unit1, Type.Unit1 ) ->
+                ( IO.Unit1, IO.Unit1 ) ->
                     merge context otherContent
 
                 _ ->
                     mismatch
 
-        Type.Error ->
-            merge context Type.Error
+        IO.Error ->
+            merge context IO.Error
 
 
 
 -- UNIFY ARGS
 
 
-unifyArgs : List Type.Variable -> List Type.Variable -> List Type.Variable -> IO (Result UnifyErr (UnifyOk ()))
+unifyArgs : List IO.Variable -> List IO.Variable -> List IO.Variable -> IO (Result UnifyErr (UnifyOk ()))
 unifyArgs vars args1 args2 =
     case args1 of
         arg1 :: others1 ->
@@ -748,15 +748,15 @@ unifyArgs vars args1 args2 =
 unifyRecord : Context -> RecordStructure -> RecordStructure -> Unify ()
 unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2) =
     let
-        sharedFields : Dict Name.Name ( Type.Variable, Type.Variable )
+        sharedFields : Dict Name.Name ( IO.Variable, IO.Variable )
         sharedFields =
             Utils.mapIntersectionWith compare Tuple.pair fields1 fields2
 
-        uniqueFields1 : Dict Name.Name Type.Variable
+        uniqueFields1 : Dict Name.Name IO.Variable
         uniqueFields1 =
             Dict.diff fields1 fields2
 
-        uniqueFields2 : Dict Name.Name Type.Variable
+        uniqueFields2 : Dict Name.Name IO.Variable
         uniqueFields2 =
             Dict.diff fields2 fields1
     in
@@ -766,7 +766,7 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                 |> bind (\_ -> unifySharedFields context sharedFields Dict.empty ext1)
 
         else
-            fresh context (Type.Structure (Type.Record1 uniqueFields2 ext2))
+            fresh context (IO.Structure (IO.Record1 uniqueFields2 ext2))
                 |> bind
                     (\subRecord ->
                         subUnify ext1 subRecord
@@ -774,7 +774,7 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                     )
 
     else if Dict.isEmpty uniqueFields2 then
-        fresh context (Type.Structure (Type.Record1 uniqueFields1 ext1))
+        fresh context (IO.Structure (IO.Record1 uniqueFields1 ext1))
             |> bind
                 (\subRecord ->
                     subUnify subRecord ext2
@@ -783,17 +783,17 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
 
     else
         let
-            otherFields : Dict Name.Name Type.Variable
+            otherFields : Dict Name.Name IO.Variable
             otherFields =
                 Dict.union compare uniqueFields1 uniqueFields2
         in
         fresh context Type.unnamedFlexVar
             |> bind
                 (\ext ->
-                    fresh context (Type.Structure (Type.Record1 uniqueFields1 ext))
+                    fresh context (IO.Structure (IO.Record1 uniqueFields1 ext))
                         |> bind
                             (\sub1 ->
-                                fresh context (Type.Structure (Type.Record1 uniqueFields2 ext))
+                                fresh context (IO.Structure (IO.Record1 uniqueFields2 ext))
                                     |> bind
                                         (\sub2 ->
                                             subUnify ext1 sub2
@@ -804,13 +804,13 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                 )
 
 
-unifySharedFields : Context -> Dict Name.Name ( Type.Variable, Type.Variable ) -> Dict Name.Name Type.Variable -> Type.Variable -> Unify ()
+unifySharedFields : Context -> Dict Name.Name ( IO.Variable, IO.Variable ) -> Dict Name.Name IO.Variable -> IO.Variable -> Unify ()
 unifySharedFields context sharedFields otherFields ext =
     traverseMaybe compare unifyField sharedFields
         |> bind
             (\matchingFields ->
                 if Dict.size sharedFields == Dict.size matchingFields then
-                    merge context (Type.Structure (Type.Record1 (Dict.union compare matchingFields otherFields) ext))
+                    merge context (IO.Structure (IO.Record1 (Dict.union compare matchingFields otherFields) ext))
 
                 else
                     mismatch
@@ -835,7 +835,7 @@ traverseMaybe keyComparison func =
         (pure Dict.empty)
 
 
-unifyField : Name.Name -> ( Type.Variable, Type.Variable ) -> Unify (Maybe Type.Variable)
+unifyField : Name.Name -> ( IO.Variable, IO.Variable ) -> Unify (Maybe IO.Variable)
 unifyField _ ( actual, expected ) =
     Unify
         (\vars ->
@@ -859,19 +859,19 @@ unifyField _ ( actual, expected ) =
 
 
 type RecordStructure
-    = RecordStructure (Dict Name.Name Type.Variable) Type.Variable
+    = RecordStructure (Dict Name.Name IO.Variable) IO.Variable
 
 
-gatherFields : Dict Name.Name Type.Variable -> Type.Variable -> IO RecordStructure
+gatherFields : Dict Name.Name IO.Variable -> IO.Variable -> IO RecordStructure
 gatherFields fields variable =
-    UF.get Type.descriptorDecoder variable
+    UF.get variable
         |> IO.bind
-            (\(Type.Descriptor content _ _ _) ->
+            (\(IO.Descriptor content _ _ _) ->
                 case content of
-                    Type.Structure (Type.Record1 subFields subExt) ->
+                    IO.Structure (IO.Record1 subFields subExt) ->
                         gatherFields (Dict.union compare fields subFields) subExt
 
-                    Type.Alias _ _ _ var ->
+                    IO.Alias _ _ _ var ->
                         -- TODO may be dropping useful alias info here
                         gatherFields fields var
 

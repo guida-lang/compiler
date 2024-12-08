@@ -38,6 +38,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO as IO
 
 
 
@@ -54,8 +55,8 @@ type Expr
     | VarGlobal Global
     | VarEnum Global Index.ZeroBased
     | VarBox Global
-    | VarCycle ModuleName.Canonical Name
-    | VarDebug Name ModuleName.Canonical A.Region (Maybe Name)
+    | VarCycle IO.Canonical Name
+    | VarDebug Name IO.Canonical A.Region (Maybe Name)
     | VarKernel Name Name
     | List (List Expr)
     | Function (List Name) Expr
@@ -75,7 +76,7 @@ type Expr
 
 
 type Global
-    = Global ModuleName.Canonical Name
+    = Global IO.Canonical Name
 
 
 compareGlobal : Global -> Global -> Order
@@ -236,7 +237,7 @@ addKernelDep chunk deps =
 
 toKernelGlobal : Name.Name -> Global
 toKernelGlobal shortName =
-    Global (ModuleName.Canonical Pkg.kernel shortName) Name.dollar
+    Global (IO.Canonical Pkg.kernel shortName) Name.dollar
 
 
 

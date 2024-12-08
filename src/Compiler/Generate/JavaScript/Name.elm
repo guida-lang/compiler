@@ -15,10 +15,9 @@ module Compiler.Generate.JavaScript.Name exposing
 
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import System.TypeCheck.IO as IO
 
 
 
@@ -52,12 +51,12 @@ fromLocal name =
         name
 
 
-fromGlobal : ModuleName.Canonical -> Name.Name -> Name
+fromGlobal : IO.Canonical -> Name.Name -> Name
 fromGlobal home name =
     homeToBuilder home ++ usd ++ name
 
 
-fromCycle : ModuleName.Canonical -> Name.Name -> Name
+fromCycle : IO.Canonical -> Name.Name -> Name
 fromCycle home name =
     homeToBuilder home ++ "$cyclic$" ++ name
 
@@ -67,8 +66,8 @@ fromKernel home name =
     "_" ++ home ++ "_" ++ name
 
 
-homeToBuilder : ModuleName.Canonical -> String
-homeToBuilder (ModuleName.Canonical (Pkg.Name author project) home) =
+homeToBuilder : IO.Canonical -> String
+homeToBuilder (IO.Canonical ( author, project ) home) =
     usd
         ++ String.replace "-" "_" author
         ++ usd

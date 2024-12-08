@@ -8,9 +8,8 @@ import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Constrain.Expression as Expr
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..), mkFlexVar, nameToRigid)
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
-import Utils.Main as Utils
+import System.TypeCheck.IO as IO exposing (IO)
 
 
 
@@ -70,7 +69,7 @@ letPort : Name -> Can.Port -> IO Constraint -> IO Constraint
 letPort name port_ makeConstraint =
     case port_ of
         Can.Incoming { freeVars, func } ->
-            Utils.mapTraverseWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func
@@ -86,7 +85,7 @@ letPort name port_ makeConstraint =
                     )
 
         Can.Outgoing { freeVars, func } ->
-            Utils.mapTraverseWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func
@@ -106,7 +105,7 @@ letPort name port_ makeConstraint =
 -- EFFECT MANAGER HELPERS
 
 
-letCmd : ModuleName.Canonical -> Name -> Constraint -> IO Constraint
+letCmd : IO.Canonical -> Name -> Constraint -> IO Constraint
 letCmd home tipe constraint =
     mkFlexVar
         |> IO.fmap
@@ -128,7 +127,7 @@ letCmd home tipe constraint =
             )
 
 
-letSub : ModuleName.Canonical -> Name -> Constraint -> IO Constraint
+letSub : IO.Canonical -> Name -> Constraint -> IO Constraint
 letSub home tipe constraint =
     mkFlexVar
         |> IO.fmap
@@ -150,7 +149,7 @@ letSub home tipe constraint =
             )
 
 
-constrainEffects : ModuleName.Canonical -> A.Region -> A.Region -> A.Region -> Can.Manager -> IO Constraint
+constrainEffects : IO.Canonical -> A.Region -> A.Region -> A.Region -> Can.Manager -> IO Constraint
 constrainEffects home r0 r1 r2 manager =
     mkFlexVar
         |> IO.bind
@@ -250,7 +249,7 @@ constrainEffects home r0 r1 r2 manager =
             )
 
 
-effectList : ModuleName.Canonical -> Name -> Type -> Type
+effectList : IO.Canonical -> Name -> Type -> Type
 effectList home name msg =
     AppN ModuleName.list Name.list [ AppN home name [ msg ] ]
 
@@ -265,7 +264,7 @@ router msg self =
     AppN ModuleName.platform Name.router [ msg, self ]
 
 
-checkMap : Name -> ModuleName.Canonical -> Name -> Constraint -> IO Constraint
+checkMap : Name -> IO.Canonical -> Name -> Constraint -> IO Constraint
 checkMap name home tipe constraint =
     mkFlexVar
         |> IO.bind
@@ -287,6 +286,6 @@ checkMap name home tipe constraint =
             )
 
 
-toMapType : ModuleName.Canonical -> Name -> Type -> Type -> Type
+toMapType : IO.Canonical -> Name -> Type -> Type -> Type
 toMapType home tipe a b =
     Type.funType (Type.funType a b) (Type.funType (AppN home tipe [ a ]) (AppN home tipe [ b ]))

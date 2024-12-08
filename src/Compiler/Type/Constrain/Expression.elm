@@ -14,8 +14,8 @@ import Compiler.Reporting.Error.Type as E exposing (Category(..), Context(..), E
 import Compiler.Type.Constrain.Pattern as Pattern
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..))
-import Data.IO as IO exposing (IO)
 import Data.Map as Dict exposing (Dict)
+import System.TypeCheck.IO as IO exposing (IO)
 import Utils.Main as Utils
 
 
@@ -252,7 +252,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
                             constrain rtv func (E.NoExpectation funcType)
                                 |> IO.bind
                                     (\funcCon ->
-                                        IO.fmap Utils.unzip3 (Utils.indexedTraverse (constrainArg rtv region maybeName) args)
+                                        IO.fmap Utils.unzip3 (IO.traverseIndexed (constrainArg rtv region maybeName) args)
                                             |> IO.fmap
                                                 (\( argVars, argTypes, argCons ) ->
                                                     let
@@ -278,7 +278,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
             )
 
 
-constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
+constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
     Type.mkFlexVar
         |> IO.bind
@@ -412,7 +412,7 @@ constrainList rtv region entries expected =
                     listType =
                         AppN ModuleName.list Name.list [ entryType ]
                 in
-                Utils.indexedTraverse (constrainListEntry rtv region entryType) entries
+                IO.traverseIndexed (constrainListEntry rtv region entryType) entries
                     |> IO.fmap
                         (\entryCons ->
                             Type.exists [ entryVar ]
@@ -444,12 +444,12 @@ constrainIf rtv region branches final expected =
         ( conditions, exprs ) =
             List.foldr (\( c, e ) ( cs, es ) -> ( c :: cs, e :: es )) ( [], [ final ] ) branches
     in
-    Utils.listTraverse (\c -> constrain rtv c boolExpect) conditions
+    IO.traverseList (\c -> constrain rtv c boolExpect) conditions
         |> IO.bind
             (\condCons ->
                 case expected of
                     FromAnnotation name arity _ tipe ->
-                        Utils.indexedForA exprs (\index expr -> constrain rtv expr (FromAnnotation name arity (TypedIfBranch index) tipe))
+                        IO.indexedForA exprs (\index expr -> constrain rtv expr (FromAnnotation name arity (TypedIfBranch index) tipe))
                             |> IO.fmap
                                 (\branchCons ->
                                     CAnd (CAnd condCons :: branchCons)
@@ -464,7 +464,7 @@ constrainIf rtv region branches final expected =
                                         branchType =
                                             VarN branchVar
                                     in
-                                    Utils.indexedForA exprs
+                                    IO.indexedForA exprs
                                         (\index expr ->
                                             constrain rtv expr (FromContext region (IfBranch index) branchType)
                                         )
@@ -501,7 +501,7 @@ constrainCase rtv region expr branches expected =
                         (\exprCon ->
                             case expected of
                                 FromAnnotation name arity _ tipe ->
-                                    Utils.indexedForA branches
+                                    IO.indexedForA branches
                                         (\index branch ->
                                             constrainCaseBranch rtv
                                                 branch
@@ -522,7 +522,7 @@ constrainCase rtv region expr branches expected =
                                                     branchType =
                                                         VarN branchVar
                                                 in
-                                                Utils.indexedForA branches
+                                                IO.indexedForA branches
                                                     (\index branch ->
                                                         constrainCaseBranch rtv
                                                             branch
@@ -560,7 +560,7 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 
 constrainRecord : RTV -> A.Region -> Dict Name.Name Can.Expr -> Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
-    Utils.mapTraverse compare (constrainField rtv) fields
+    IO.traverseMap compare (constrainField rtv) fields
         |> IO.fmap
             (\dict ->
                 let
@@ -576,7 +576,7 @@ constrainRecord rtv region fields expected =
                     recordCon =
                         CEqual region Record recordType expected
 
-                    vars : List Type.Variable
+                    vars : List IO.Variable
                     vars =
                         Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
@@ -588,7 +588,7 @@ constrainRecord rtv region fields expected =
             )
 
 
-constrainField : RTV -> Can.Expr -> IO ( Type.Variable, Type, Constraint )
+constrainField : RTV -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
 constrainField rtv expr =
     Type.mkFlexVar
         |> IO.bind
@@ -615,7 +615,7 @@ constrainUpdate rtv region name expr fields expected =
     Type.mkFlexVar
         |> IO.bind
             (\extVar ->
-                Utils.mapTraverseWithKey compare (constrainUpdateField rtv region) fields
+                IO.traverseMapWithKey compare (constrainUpdateField rtv region) fields
                     |> IO.bind
                         (\fieldDict ->
                             Type.mkFlexVar
@@ -639,7 +639,7 @@ constrainUpdate rtv region name expr fields expected =
                                             recordCon =
                                                 CEqual region Record recordType expected
 
-                                            vars : List Type.Variable
+                                            vars : List IO.Variable
                                             vars =
                                                 Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [ recordVar, extVar ] fieldDict
 
@@ -654,7 +654,7 @@ constrainUpdate rtv region name expr fields expected =
             )
 
 
-constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( Type.Variable, Type, Constraint )
+constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( IO.Variable, Type, Constraint )
 constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
     Type.mkFlexVar
         |> IO.bind
@@ -867,7 +867,7 @@ constrainDef rtv def bodyCon =
                 newNames =
                     Dict.diff freeVars rtv
             in
-            Utils.mapTraverseWithKey compare (\n _ -> Type.nameToRigid n) newNames
+            IO.traverseMapWithKey compare (\n _ -> Type.nameToRigid n) newNames
                 |> IO.bind
                     (\newRigids ->
                         let
@@ -906,7 +906,7 @@ constrainDef rtv def bodyCon =
 
 
 type Info
-    = Info (List Type.Variable) (List Constraint) (Dict Name (A.Located Type))
+    = Info (List IO.Variable) (List Constraint) (Dict Name (A.Located Type))
 
 
 emptyInfo : Info
@@ -970,7 +970,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                         newNames =
                             Dict.diff freeVars rtv
                     in
-                    Utils.mapTraverseWithKey compare (\n _ -> Type.nameToRigid n) newNames
+                    IO.traverseMapWithKey compare (\n _ -> Type.nameToRigid n) newNames
                         |> IO.bind
                             (\newRigids ->
                                 let
@@ -1015,7 +1015,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
 
 
 type Args
-    = Args (List Type.Variable) Type Type Pattern.State
+    = Args (List IO.Variable) Type Type Pattern.State
 
 
 constrainArgs : List Can.Pattern -> IO Args

@@ -1,16 +1,8 @@
 module Compiler.Type.Type exposing
     ( Constraint(..)
-    , Content(..)
-    , Descriptor(..)
-    , FlatType(..)
-    , Mark
-    , SuperType(..)
     , Type(..)
-    , Variable
     , bool
     , char
-    , descriptorDecoder
-    , descriptorEncoder
     , exists
     , float
     , funType
@@ -31,8 +23,6 @@ module Compiler.Type.Type exposing
     , toErrorType
     , unnamedFlexSuper
     , unnamedFlexVar
-    , variableDecoder
-    , variableEncoder
     , vec2
     , vec3
     , vec4
@@ -42,18 +32,15 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Error as ET
 import Compiler.Type.UnionFind as UF
-import Data.IO as IO exposing (IO)
+import Control.Monad.State.TypeCheck.Strict as State exposing (StateT, liftIO)
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import System.TypeCheck.IO as IO exposing (Content(..), Descriptor(..), FlatType(..), IO, Mark(..), SuperType(..), Variable)
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils
 
 
 
@@ -80,130 +67,11 @@ exists flexVars constraint =
 -- TYPE PRIMITIVES
 
 
-type alias Variable =
-    UF.Point Descriptor
-
-
-variableEncoder : Variable -> Encode.Value
-variableEncoder =
-    UF.pointEncoder
-
-
-variableDecoder : Decode.Decoder Variable
-variableDecoder =
-    UF.pointDecoder
-
-
-type FlatType
-    = App1 ModuleName.Canonical Name (List Variable)
-    | Fun1 Variable Variable
-    | EmptyRecord1
-    | Record1 (Dict Name Variable) Variable
-    | Unit1
-    | Tuple1 Variable Variable (Maybe Variable)
-
-
-flatTypeEncoder : FlatType -> Encode.Value
-flatTypeEncoder flatType =
-    case flatType of
-        App1 canonical name variableList ->
-            Encode.object
-                [ ( "type", Encode.string "App1" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.list variableEncoder variableList )
-                ]
-
-        Fun1 var1 var2 ->
-            Encode.object
-                [ ( "type", Encode.string "Fun1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                ]
-
-        EmptyRecord1 ->
-            Encode.object
-                [ ( "type", Encode.string "EmptyRecord1" )
-                ]
-
-        Record1 variableDict variable ->
-            Encode.object
-                [ ( "type", Encode.string "Record1" )
-                , ( "variableDict"
-                  , Dict.toList variableDict
-                        |> Encode.list
-                            (\( name, var ) ->
-                                Encode.object
-                                    [ ( "a", Encode.string name )
-                                    , ( "b", variableEncoder var )
-                                    ]
-                            )
-                  )
-                , ( "variable", variableEncoder variable )
-                ]
-
-        Unit1 ->
-            Encode.object
-                [ ( "type", Encode.string "Unit1" )
-                ]
-
-        Tuple1 var1 var2 maybeVariable ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple1" )
-                , ( "var1", variableEncoder var1 )
-                , ( "var2", variableEncoder var2 )
-                , ( "maybeVariable"
-                  , maybeVariable
-                        |> Maybe.map variableEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-
-flatTypeDecoder : Decode.Decoder FlatType
-flatTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "App1" ->
-                        Decode.map3 App1
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.list variableDecoder))
-
-                    "Fun1" ->
-                        Decode.map2 Fun1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-
-                    "EmptyRecord1" ->
-                        Decode.succeed EmptyRecord1
-
-                    "Record1" ->
-                        Decode.map2 Record1
-                            (Decode.field "variableDict" (D.assocListDict compare Decode.string variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Unit1" ->
-                        Decode.succeed Unit1
-
-                    "Tuple1" ->
-                        Decode.map3 Tuple1
-                            (Decode.field "var1" variableDecoder)
-                            (Decode.field "var2" variableDecoder)
-                            (Decode.field "maybeVariable" (Decode.maybe variableDecoder))
-
-                    _ ->
-                        Decode.fail ("Unknown FlatType's type: " ++ type_)
-            )
-
-
 type Type
     = PlaceHolder Name
-    | AliasN ModuleName.Canonical Name (List ( Name, Type )) Type
+    | AliasN IO.Canonical Name (List ( Name, Type )) Type
     | VarN Variable
-    | AppN ModuleName.Canonical Name (List Type)
+    | AppN IO.Canonical Name (List Type)
     | FunN Type Type
     | EmptyRecordN
     | RecordN (Dict Name Type) Type
@@ -213,191 +81,6 @@ type Type
 
 
 -- DESCRIPTORS
-
-
-type Descriptor
-    = Descriptor Content Int Mark (Maybe Variable)
-
-
-descriptorEncoder : Descriptor -> Encode.Value
-descriptorEncoder (Descriptor content rank mark copy) =
-    Encode.object
-        [ ( "type", Encode.string "Descriptor" )
-        , ( "content", contentEncoder content )
-        , ( "rank", Encode.int rank )
-        , ( "mark", markEncoder mark )
-        , ( "copy"
-          , copy
-                |> Maybe.map variableEncoder
-                |> Maybe.withDefault Encode.null
-          )
-        ]
-
-
-descriptorDecoder : Decode.Decoder Descriptor
-descriptorDecoder =
-    Decode.map4 Descriptor
-        (Decode.field "content" contentDecoder)
-        (Decode.field "rank" Decode.int)
-        (Decode.field "mark" markDecoder)
-        (Decode.field "copy" (Decode.maybe variableDecoder))
-
-
-type Content
-    = FlexVar (Maybe Name)
-    | FlexSuper SuperType (Maybe Name)
-    | RigidVar Name
-    | RigidSuper SuperType Name
-    | Structure FlatType
-    | Alias ModuleName.Canonical Name (List ( Name, Variable )) Variable
-    | Error
-
-
-contentEncoder : Content -> Encode.Value
-contentEncoder content =
-    case content of
-        FlexVar maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexVar" )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        FlexSuper superType maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "FlexSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name"
-                  , maybeName
-                        |> Maybe.map Encode.string
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        RigidVar name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidVar" )
-                , ( "name", Encode.string name )
-                ]
-
-        RigidSuper superType name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidSuper" )
-                , ( "superType", superTypeEncoder superType )
-                , ( "name", Encode.string name )
-                ]
-
-        Structure flatType ->
-            Encode.object
-                [ ( "type", Encode.string "Structure" )
-                , ( "flatType", flatTypeEncoder flatType )
-                ]
-
-        Alias canonical name variableList variable ->
-            Encode.object
-                [ ( "type", Encode.string "Alias" )
-                , ( "canonical", ModuleName.canonicalEncoder canonical )
-                , ( "name", Encode.string name )
-                , ( "variableList", Encode.object (List.map (Tuple.mapSecond variableEncoder) variableList) )
-                , ( "variable", variableEncoder variable )
-                ]
-
-        Error ->
-            Encode.object
-                [ ( "type", Encode.string "Error" )
-                ]
-
-
-contentDecoder : Decode.Decoder Content
-contentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FlexVar" ->
-                        Decode.map FlexVar
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "FlexSuper" ->
-                        Decode.map2 FlexSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" (Decode.maybe Decode.string))
-
-                    "RigidVar" ->
-                        Decode.map RigidVar
-                            (Decode.field "name" Decode.string)
-
-                    "RigidSuper" ->
-                        Decode.map2 RigidSuper
-                            (Decode.field "superType" superTypeDecoder)
-                            (Decode.field "name" Decode.string)
-
-                    "Structure" ->
-                        Decode.map Structure
-                            (Decode.field "flatType" flatTypeDecoder)
-
-                    "Alias" ->
-                        Decode.map4 Alias
-                            (Decode.field "canonical" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "variableList" (Decode.keyValuePairs variableDecoder))
-                            (Decode.field "variable" variableDecoder)
-
-                    "Error" ->
-                        Decode.succeed Error
-
-                    _ ->
-                        Decode.fail ("Unknown Content's type: " ++ type_)
-            )
-
-
-type SuperType
-    = Number
-    | Comparable
-    | Appendable
-    | CompAppend
-
-
-superTypeEncoder : SuperType -> Encode.Value
-superTypeEncoder superType =
-    case superType of
-        Number ->
-            Encode.string "Number"
-
-        Comparable ->
-            Encode.string "Comparable"
-
-        Appendable ->
-            Encode.string "Appendable"
-
-        CompAppend ->
-            Encode.string "CompAppend"
-
-
-superTypeDecoder : Decode.Decoder SuperType
-superTypeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Number" ->
-                        Decode.succeed Number
-
-                    "Comparable" ->
-                        Decode.succeed Comparable
-
-                    "Appendable" ->
-                        Decode.succeed Appendable
-
-                    "CompAppend" ->
-                        Decode.succeed CompAppend
-
-                    _ ->
-                        Decode.fail ("Failed to decode SuperType: " ++ str)
-            )
 
 
 makeDescriptor : Content -> Descriptor
@@ -421,20 +104,6 @@ outermostRank =
 
 
 -- MARKS
-
-
-type Mark
-    = Mark Int
-
-
-markEncoder : Mark -> Encode.Value
-markEncoder (Mark value) =
-    Encode.int value
-
-
-markDecoder : Decode.Decoder Mark
-markDecoder =
-    Decode.map Mark Decode.int
 
 
 noMark : Mark
@@ -535,7 +204,7 @@ texture =
 
 mkFlexVar : IO Variable
 mkFlexVar =
-    UF.fresh descriptorEncoder flexVarDescriptor
+    UF.fresh flexVarDescriptor
 
 
 flexVarDescriptor : Descriptor
@@ -554,7 +223,7 @@ unnamedFlexVar =
 
 mkFlexNumber : IO Variable
 mkFlexNumber =
-    UF.fresh descriptorEncoder flexNumberDescriptor
+    UF.fresh flexNumberDescriptor
 
 
 flexNumberDescriptor : Descriptor
@@ -573,14 +242,14 @@ unnamedFlexSuper super =
 
 nameToFlex : Name -> IO Variable
 nameToFlex name =
-    UF.fresh descriptorEncoder <|
+    UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap FlexVar FlexSuper (toSuper name) (Just name)
 
 
 nameToRigid : Name -> IO Variable
 nameToRigid name =
-    UF.fresh descriptorEncoder <|
+    UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap RigidVar RigidSuper (toSuper name) name
 
@@ -612,7 +281,7 @@ toAnnotation variable =
     getVarNames variable Dict.empty
         |> IO.bind
             (\userNames ->
-                IO.runStateT (variableToCanType variable) (makeNameState userNames)
+                State.runStateT (variableToCanType variable) (makeNameState userNames)
                     |> IO.fmap
                         (\( tipe, NameState freeVars _ _ _ _ _ ) ->
                             Can.Forall freeVars tipe
@@ -620,10 +289,10 @@ toAnnotation variable =
             )
 
 
-variableToCanType : Variable -> IO.StateT NameState Can.Type
+variableToCanType : Variable -> State.StateT NameState Can.Type
 variableToCanType variable =
-    IO.liftIO (UF.get descriptorDecoder variable)
-        |> IO.bindStateT
+    liftIO (UF.get variable)
+        |> State.bind
             (\(Descriptor content _ _ _) ->
                 case content of
                     Structure term ->
@@ -632,55 +301,51 @@ variableToCanType variable =
                     FlexVar maybeName ->
                         case maybeName of
                             Just name ->
-                                IO.pureStateT (Can.TVar name)
+                                State.pure (Can.TVar name)
 
                             Nothing ->
                                 getFreshVarName
-                                    |> IO.bindStateT
+                                    |> State.bind
                                         (\name ->
-                                            IO.liftIO
-                                                (UF.modify descriptorDecoder
-                                                    descriptorEncoder
-                                                    variable
+                                            liftIO
+                                                (UF.modify variable
                                                     (\(Descriptor _ rank mark copy) ->
                                                         Descriptor (FlexVar (Just name)) rank mark copy
                                                     )
                                                 )
-                                                |> IO.fmapStateT (\_ -> Can.TVar name)
+                                                |> State.fmap (\_ -> Can.TVar name)
                                         )
 
                     FlexSuper super maybeName ->
                         case maybeName of
                             Just name ->
-                                IO.pureStateT (Can.TVar name)
+                                State.pure (Can.TVar name)
 
                             Nothing ->
                                 getFreshSuperName super
-                                    |> IO.bindStateT
+                                    |> State.bind
                                         (\name ->
-                                            IO.liftIO
-                                                (UF.modify descriptorDecoder
-                                                    descriptorEncoder
-                                                    variable
+                                            liftIO
+                                                (UF.modify variable
                                                     (\(Descriptor _ rank mark copy) ->
                                                         Descriptor (FlexSuper super (Just name)) rank mark copy
                                                     )
                                                 )
-                                                |> IO.fmapStateT (\_ -> Can.TVar name)
+                                                |> State.fmap (\_ -> Can.TVar name)
                                         )
 
                     RigidVar name ->
-                        IO.pureStateT (Can.TVar name)
+                        State.pure (Can.TVar name)
 
                     RigidSuper _ name ->
-                        IO.pureStateT (Can.TVar name)
+                        State.pure (Can.TVar name)
 
                     Alias home name args realVariable ->
-                        Utils.listTraverseStateT (Utils.tupleTraverseStateT variableToCanType) args
-                            |> IO.bindStateT
+                        State.traverseList (State.traverseTuple variableToCanType) args
+                            |> State.bind
                                 (\canArgs ->
                                     variableToCanType realVariable
-                                        |> IO.fmapStateT
+                                        |> State.fmap
                                             (\canType ->
                                                 Can.TAlias home name canArgs (Can.Filled canType)
                                             )
@@ -691,28 +356,28 @@ variableToCanType variable =
             )
 
 
-termToCanType : FlatType -> IO.StateT NameState Can.Type
+termToCanType : FlatType -> StateT NameState Can.Type
 termToCanType term =
     case term of
         App1 home name args ->
-            Utils.listTraverseStateT variableToCanType args
-                |> IO.fmapStateT (Can.TType home name)
+            State.traverseList variableToCanType args
+                |> State.fmap (Can.TType home name)
 
         Fun1 a b ->
-            IO.pureStateT Can.TLambda
-                |> IO.applyStateT (variableToCanType a)
-                |> IO.applyStateT (variableToCanType b)
+            State.pure Can.TLambda
+                |> State.apply (variableToCanType a)
+                |> State.apply (variableToCanType b)
 
         EmptyRecord1 ->
-            IO.pureStateT (Can.TRecord Dict.empty Nothing)
+            State.pure (Can.TRecord Dict.empty Nothing)
 
         Record1 fields extension ->
-            Utils.mapTraverseStateT compare fieldToCanType fields
-                |> IO.bindStateT
+            State.traverseMap compare fieldToCanType fields
+                |> State.bind
                     (\canFields ->
                         variableToCanType extension
-                            |> IO.fmapStateT Type.iteratedDealias
-                            |> IO.fmapStateT
+                            |> State.fmap Type.iteratedDealias
+                            |> State.fmap
                                 (\canExt ->
                                     case canExt of
                                         Can.TRecord subFields subExt ->
@@ -727,19 +392,19 @@ termToCanType term =
                     )
 
         Unit1 ->
-            IO.pureStateT Can.TUnit
+            State.pure Can.TUnit
 
         Tuple1 a b maybeC ->
-            IO.pureStateT Can.TTuple
-                |> IO.applyStateT (variableToCanType a)
-                |> IO.applyStateT (variableToCanType b)
-                |> IO.applyStateT (Utils.maybeTraverseStateT variableToCanType maybeC)
+            State.pure Can.TTuple
+                |> State.apply (variableToCanType a)
+                |> State.apply (variableToCanType b)
+                |> State.apply (State.traverseMaybe variableToCanType maybeC)
 
 
-fieldToCanType : Variable -> IO.StateT NameState Can.FieldType
+fieldToCanType : Variable -> StateT NameState Can.FieldType
 fieldToCanType variable =
     variableToCanType variable
-        |> IO.fmapStateT (\tipe -> Can.FieldType 0 tipe)
+        |> State.fmap (\tipe -> Can.FieldType 0 tipe)
 
 
 
@@ -751,33 +416,33 @@ toErrorType variable =
     getVarNames variable Dict.empty
         |> IO.bind
             (\userNames ->
-                IO.evalStateT (variableToErrorType variable) (makeNameState userNames)
+                State.evalStateT (variableToErrorType variable) (makeNameState userNames)
             )
 
 
-variableToErrorType : Variable -> IO.StateT NameState ET.Type
+variableToErrorType : Variable -> StateT NameState ET.Type
 variableToErrorType variable =
-    IO.liftIO (UF.get descriptorDecoder variable)
-        |> IO.bindStateT
+    liftIO (UF.get variable)
+        |> State.bind
             (\(Descriptor content _ mark _) ->
                 if mark == occursMark then
-                    IO.pureStateT ET.Infinite
+                    State.pure ET.Infinite
 
                 else
-                    IO.liftIO (UF.modify descriptorDecoder descriptorEncoder variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ occursMark copy_))
-                        |> IO.bindStateT
+                    liftIO (UF.modify variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ occursMark copy_))
+                        |> State.bind
                             (\_ ->
                                 contentToErrorType variable content
-                                    |> IO.bindStateT
+                                    |> State.bind
                                         (\errType ->
-                                            IO.liftIO (UF.modify descriptorDecoder descriptorEncoder variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ mark copy_))
-                                                |> IO.fmapStateT (\_ -> errType)
+                                            liftIO (UF.modify variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ mark copy_))
+                                                |> State.fmap (\_ -> errType)
                                         )
                             )
             )
 
 
-contentToErrorType : Variable -> Content -> IO.StateT NameState ET.Type
+contentToErrorType : Variable -> Content -> StateT NameState ET.Type
 contentToErrorType variable content =
     case content of
         Structure term ->
@@ -786,62 +451,58 @@ contentToErrorType variable content =
         FlexVar maybeName ->
             case maybeName of
                 Just name ->
-                    IO.pureStateT (ET.FlexVar name)
+                    State.pure (ET.FlexVar name)
 
                 Nothing ->
                     getFreshVarName
-                        |> IO.bindStateT
+                        |> State.bind
                             (\name ->
-                                IO.liftIO
-                                    (UF.modify descriptorDecoder
-                                        descriptorEncoder
-                                        variable
+                                liftIO
+                                    (UF.modify variable
                                         (\(Descriptor _ rank mark copy) ->
                                             Descriptor (FlexVar (Just name)) rank mark copy
                                         )
                                     )
-                                    |> IO.fmapStateT (\_ -> ET.FlexVar name)
+                                    |> State.fmap (\_ -> ET.FlexVar name)
                             )
 
         FlexSuper super maybeName ->
             case maybeName of
                 Just name ->
-                    IO.pureStateT (ET.FlexSuper (superToSuper super) name)
+                    State.pure (ET.FlexSuper (superToSuper super) name)
 
                 Nothing ->
                     getFreshSuperName super
-                        |> IO.bindStateT
+                        |> State.bind
                             (\name ->
-                                IO.liftIO
-                                    (UF.modify descriptorDecoder
-                                        descriptorEncoder
-                                        variable
+                                liftIO
+                                    (UF.modify variable
                                         (\(Descriptor _ rank mark copy) ->
                                             Descriptor (FlexSuper super (Just name)) rank mark copy
                                         )
                                     )
-                                    |> IO.fmapStateT (\_ -> ET.FlexSuper (superToSuper super) name)
+                                    |> State.fmap (\_ -> ET.FlexSuper (superToSuper super) name)
                             )
 
         RigidVar name ->
-            IO.pureStateT (ET.RigidVar name)
+            State.pure (ET.RigidVar name)
 
         RigidSuper super name ->
-            IO.pureStateT (ET.RigidSuper (superToSuper super) name)
+            State.pure (ET.RigidSuper (superToSuper super) name)
 
         Alias home name args realVariable ->
-            Utils.listTraverseStateT (Utils.tupleTraverseStateT variableToErrorType) args
-                |> IO.bindStateT
+            State.traverseList (State.traverseTuple variableToErrorType) args
+                |> State.bind
                     (\errArgs ->
                         variableToErrorType realVariable
-                            |> IO.fmapStateT
+                            |> State.fmap
                                 (\errType ->
                                     ET.Alias home name errArgs errType
                                 )
                     )
 
         Error ->
-            IO.pureStateT ET.Error
+            State.pure ET.Error
 
 
 superToSuper : SuperType -> ET.Super
@@ -860,19 +521,19 @@ superToSuper super =
             ET.CompAppend
 
 
-termToErrorType : FlatType -> IO.StateT NameState ET.Type
+termToErrorType : FlatType -> StateT NameState ET.Type
 termToErrorType term =
     case term of
         App1 home name args ->
-            Utils.listTraverseStateT variableToErrorType args
-                |> IO.fmapStateT (ET.Type home name)
+            State.traverseList variableToErrorType args
+                |> State.fmap (ET.Type home name)
 
         Fun1 a b ->
             variableToErrorType a
-                |> IO.bindStateT
+                |> State.bind
                     (\arg ->
                         variableToErrorType b
-                            |> IO.fmapStateT
+                            |> State.fmap
                                 (\result ->
                                     case result of
                                         ET.Lambda arg1 arg2 others ->
@@ -884,15 +545,15 @@ termToErrorType term =
                     )
 
         EmptyRecord1 ->
-            IO.pureStateT (ET.Record Dict.empty ET.Closed)
+            State.pure (ET.Record Dict.empty ET.Closed)
 
         Record1 fields extension ->
-            Utils.mapTraverseStateT compare variableToErrorType fields
-                |> IO.bindStateT
+            State.traverseMap compare variableToErrorType fields
+                |> State.bind
                     (\errFields ->
                         variableToErrorType extension
-                            |> IO.fmapStateT ET.iteratedDealias
-                            |> IO.fmapStateT
+                            |> State.fmap ET.iteratedDealias
+                            |> State.fmap
                                 (\errExt ->
                                     case errExt of
                                         ET.Record subFields subExt ->
@@ -910,13 +571,13 @@ termToErrorType term =
                     )
 
         Unit1 ->
-            IO.pureStateT ET.Unit
+            State.pure ET.Unit
 
         Tuple1 a b maybeC ->
-            IO.pureStateT ET.Tuple
-                |> IO.applyStateT (variableToErrorType a)
-                |> IO.applyStateT (variableToErrorType b)
-                |> IO.applyStateT (Utils.maybeTraverseStateT variableToErrorType maybeC)
+            State.pure ET.Tuple
+                |> State.apply (variableToErrorType a)
+                |> State.apply (variableToErrorType b)
+                |> State.apply (State.traverseMaybe variableToErrorType maybeC)
 
 
 
@@ -936,23 +597,23 @@ makeNameState taken =
 -- FRESH VAR NAMES
 
 
-getFreshVarName : IO.StateT NameState Name
+getFreshVarName : StateT NameState Name
 getFreshVarName =
-    IO.gets (\(NameState _ normals _ _ _ _) -> normals)
-        |> IO.bindStateT
+    State.gets (\(NameState _ normals _ _ _ _) -> normals)
+        |> State.bind
             (\index ->
-                IO.gets (\(NameState taken _ _ _ _ _) -> taken)
-                    |> IO.bindStateT
+                State.gets (\(NameState taken _ _ _ _ _) -> taken)
+                    |> State.bind
                         (\taken ->
                             let
                                 ( name, newIndex, newTaken ) =
                                     getFreshVarNameHelp index taken
                             in
-                            IO.modify
+                            State.modify
                                 (\(NameState _ _ numbers comparables appendables compAppends) ->
                                     NameState newTaken newIndex numbers comparables appendables compAppends
                                 )
-                                |> IO.fmapStateT (\_ -> name)
+                                |> State.fmap (\_ -> name)
                         )
             )
 
@@ -975,7 +636,7 @@ getFreshVarNameHelp index taken =
 -- FRESH SUPER NAMES
 
 
-getFreshSuperName : SuperType -> IO.StateT NameState Name
+getFreshSuperName : SuperType -> StateT NameState Name
 getFreshSuperName super =
     case super of
         Number ->
@@ -1007,23 +668,23 @@ getFreshSuperName super =
                 )
 
 
-getFreshSuper : Name -> (NameState -> Int) -> (Int -> NameState -> NameState) -> IO.StateT NameState Name
+getFreshSuper : Name -> (NameState -> Int) -> (Int -> NameState -> NameState) -> StateT NameState Name
 getFreshSuper prefix getter setter =
-    IO.gets getter
-        |> IO.bindStateT
+    State.gets getter
+        |> State.bind
             (\index ->
-                IO.gets (\(NameState taken _ _ _ _ _) -> taken)
-                    |> IO.bindStateT
+                State.gets (\(NameState taken _ _ _ _ _) -> taken)
+                    |> State.bind
                         (\taken ->
                             let
                                 ( name, newIndex, newTaken ) =
                                     getFreshSuperHelp prefix index taken
                             in
-                            IO.modify
+                            State.modify
                                 (\(NameState _ normals numbers comparables appendables compAppends) ->
                                     setter newIndex (NameState newTaken normals numbers comparables appendables compAppends)
                                 )
-                                |> IO.fmapStateT (\_ -> name)
+                                |> State.fmap (\_ -> name)
                         )
             )
 
@@ -1048,14 +709,14 @@ getFreshSuperHelp prefix index taken =
 
 getVarNames : Variable -> Dict Name Variable -> IO (Dict Name Variable)
 getVarNames var takenNames =
-    UF.get descriptorDecoder var
+    UF.get var
         |> IO.bind
             (\(Descriptor content rank mark copy) ->
                 if mark == getVarNamesMark then
                     IO.pure takenNames
 
                 else
-                    UF.set descriptorEncoder var (Descriptor content rank getVarNamesMark copy)
+                    UF.set var (Descriptor content rank getVarNamesMark copy)
                         |> IO.bind
                             (\_ ->
                                 case content of
@@ -1085,12 +746,12 @@ getVarNames var takenNames =
                                         addName 0 name var (RigidSuper super) takenNames
 
                                     Alias _ _ args _ ->
-                                        Utils.ioFoldrM getVarNames takenNames (List.map Tuple.second args)
+                                        IO.foldrM getVarNames takenNames (List.map Tuple.second args)
 
                                     Structure flatType ->
                                         case flatType of
                                             App1 _ _ args ->
-                                                Utils.ioFoldrM getVarNames takenNames args
+                                                IO.foldrM getVarNames takenNames args
 
                                             Fun1 arg body ->
                                                 IO.bind (getVarNames arg) (getVarNames body takenNames)
@@ -1100,7 +761,7 @@ getVarNames var takenNames =
 
                                             Record1 fields extension ->
                                                 IO.bind (getVarNames extension)
-                                                    (Utils.ioFoldrM getVarNames takenNames (Dict.values fields))
+                                                    (IO.foldrM getVarNames takenNames (Dict.values fields))
 
                                             Unit1 ->
                                                 IO.pure takenNames
@@ -1133,9 +794,7 @@ addName index givenName var makeContent takenNames =
                 IO.pure ()
 
              else
-                UF.modify descriptorDecoder
-                    descriptorEncoder
-                    var
+                UF.modify var
                     (\(Descriptor _ rank mark copy) ->
                         Descriptor (makeContent indexedName) rank mark copy
                     )

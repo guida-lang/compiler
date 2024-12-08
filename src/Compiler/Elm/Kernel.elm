@@ -20,6 +20,7 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 
 
@@ -29,7 +30,7 @@ import Utils.Crash exposing (crash)
 
 type Chunk
     = JS String
-    | ElmVar ModuleName.Canonical Name
+    | ElmVar IO.Canonical Name
     | JsVar Name Name
     | ElmField Name
     | JsField Int
@@ -357,9 +358,9 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
 
     else
         let
-            home : ModuleName.Canonical
+            home : IO.Canonical
             home =
-                ModuleName.Canonical (Dict.get importName foreigns |> Maybe.withDefault pkg) importName
+                IO.Canonical (Dict.get importName foreigns |> Maybe.withDefault pkg) importName
 
             prefix : Name
             prefix =
