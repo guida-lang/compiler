@@ -154,4 +154,27 @@ badOperatorDecoder =
 
 badOperatorCodec : Codec e BadOperator
 badOperatorCodec =
-    Debug.todo "badOperatorCodec"
+    Serialize.customType
+        (\badDotEncoder badPipeEncoder badArrowEncoder badEqualsEncoder badHasTypeEncoder badOperator ->
+            case badOperator of
+                BadDot ->
+                    badDotEncoder
+
+                BadPipe ->
+                    badPipeEncoder
+
+                BadArrow ->
+                    badArrowEncoder
+
+                BadEquals ->
+                    badEqualsEncoder
+
+                BadHasType ->
+                    badHasTypeEncoder
+        )
+        |> Serialize.variant0 BadDot
+        |> Serialize.variant0 BadPipe
+        |> Serialize.variant0 BadArrow
+        |> Serialize.variant0 BadEquals
+        |> Serialize.variant0 BadHasType
+        |> Serialize.finishCustomType

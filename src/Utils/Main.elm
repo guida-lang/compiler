@@ -1163,7 +1163,12 @@ someExceptionDecoder =
 
 someExceptionCodec : Codec e SomeException
 someExceptionCodec =
-    Debug.todo "someExceptionCodec"
+    Serialize.customType
+        (\someExceptionCodecEncoder SomeException ->
+            someExceptionCodecEncoder
+        )
+        |> Serialize.variant0 SomeException
+        |> Serialize.finishCustomType
 
 
 httpResponseEncoder : HttpResponse body -> Encode.Value
