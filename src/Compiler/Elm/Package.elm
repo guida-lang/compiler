@@ -40,8 +40,11 @@ import Json.Encode as Encode
 -- PACKAGE NAMES
 
 
+{-| This has been simplified from `Name Author Project` as part of the work for
+`System.TypeCheck.IO`.
+-}
 type alias Name =
-    ( String, String )
+    ( Author, Project )
 
 
 toString : Name -> String

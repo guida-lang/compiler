@@ -178,26 +178,34 @@ sequenceAList =
 
 
 
--- Point (Compiler.Type.UnionFind)
+-- POINT
 
 
+{-| FIXME Compiler.Type.UnionFind
+-}
 type Point
     = Pt Int
 
 
+{-| FIXME Compiler.Type.UnionFind
+-}
 type PointInfo
     = Info Int Int
     | Link Point
 
 
 
--- DESCRIPTORS (Compiler.Type.Type)
+-- DESCRIPTORS
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type Descriptor
     = Descriptor Content Int Mark (Maybe Variable)
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type Content
     = FlexVar (Maybe String)
     | FlexSuper SuperType (Maybe String)
@@ -208,6 +216,8 @@ type Content
     | Error
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type SuperType
     = Number
     | Comparable
@@ -219,6 +229,8 @@ type SuperType
 -- MARKS
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type Mark
     = Mark Int
 
@@ -227,10 +239,14 @@ type Mark
 -- TYPE PRIMITIVES
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type alias Variable =
     Point
 
 
+{-| FIXME Compiler.Type.Type
+-}
 type FlatType
     = App1 Canonical String (List Variable)
     | Fun1 Variable Variable
@@ -241,8 +257,10 @@ type FlatType
 
 
 
--- CANONICAL (Compiler.Elm.ModuleName)
+-- CANONICAL
 
 
+{-| FIXME Compiler.Elm.ModuleName
+-}
 type Canonical
     = Canonical ( String, String ) String
