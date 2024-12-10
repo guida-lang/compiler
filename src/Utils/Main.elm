@@ -132,8 +132,9 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import Dict
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
@@ -187,9 +188,9 @@ mapFromListWith : (k -> comparable) -> (a -> a -> a) -> List ( k, a ) -> Dict co
 mapFromListWith toComparable f =
     List.foldl
         (\( k, a ) ->
-            Dict.update toComparable k (Maybe.map (flip f a))
+            Map.update toComparable k (Maybe.map (flip f a))
         )
-        Dict.empty
+        Map.empty
 
 
 maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
@@ -218,7 +219,7 @@ eitherLefts =
 mapFromKeys : (k -> comparable) -> (k -> v) -> List k -> Dict comparable k v
 mapFromKeys toComparable f =
     List.map (\k -> ( k, f k ))
-        >> Dict.fromList toComparable
+        >> Map.fromList toComparable
 
 
 filterM : (a -> IO Bool) -> List a -> IO (List a)
@@ -242,7 +243,7 @@ filterM p =
 
 find : (k -> comparable) -> k -> Dict comparable k a -> a
 find toComparable k items =
-    case Dict.get toComparable k items of
+    case Map.get toComparable k items of
         Just item ->
             item
 
@@ -252,7 +253,7 @@ find toComparable k items =
 
 mapLookupMin : Dict comparable comparable a -> Maybe ( comparable, a )
 mapLookupMin dict =
-    case List.sortBy Tuple.first (Dict.toList compare dict) of
+    case List.sortBy Tuple.first (Map.toList compare dict) of
         firstElem :: _ ->
             Just firstElem
 
@@ -262,7 +263,7 @@ mapLookupMin dict =
 
 mapFindMin : Dict comparable comparable a -> ( comparable, a )
 mapFindMin dict =
-    case List.sortBy Tuple.first (Dict.toList compare dict) of
+    case List.sortBy Tuple.first (Map.toList compare dict) of
         firstElem :: _ ->
             firstElem
 
@@ -272,7 +273,7 @@ mapFindMin dict =
 
 mapInsertWith : (k -> comparable) -> (a -> a -> a) -> k -> a -> Dict comparable k a -> Dict comparable k a
 mapInsertWith toComparable f k a =
-    Dict.update toComparable k (Maybe.map (f a) >> Maybe.withDefault a >> Just)
+    Map.update toComparable k (Maybe.map (f a) >> Maybe.withDefault a >> Just)
 
 
 mapIntersectionWith : (k -> comparable) -> (k -> k -> Order) -> (a -> b -> c) -> Dict comparable k a -> Dict comparable k b -> Dict comparable k c
@@ -282,22 +283,22 @@ mapIntersectionWith toComparable keyComparison func =
 
 mapIntersectionWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> b -> c) -> Dict comparable k a -> Dict comparable k b -> Dict comparable k c
 mapIntersectionWithKey toComparable keyComparison func dict1 dict2 =
-    Dict.merge keyComparison (\_ _ -> identity) (\k v1 v2 -> Dict.insert toComparable k (func k v1 v2)) (\_ _ -> identity) dict1 dict2 Dict.empty
+    Map.merge keyComparison (\_ _ -> identity) (\k v1 v2 -> Map.insert toComparable k (func k v1 v2)) (\_ _ -> identity) dict1 dict2 Map.empty
 
 
 mapUnionWith : (k -> comparable) -> (k -> k -> Order) -> (a -> a -> a) -> Dict comparable k a -> Dict comparable k a -> Dict comparable k a
 mapUnionWith toComparable keyComparison f a b =
-    Dict.merge keyComparison (Dict.insert toComparable) (\k va vb -> Dict.insert toComparable k (f va vb)) (Dict.insert toComparable) a b Dict.empty
+    Map.merge keyComparison (Map.insert toComparable) (\k va vb -> Map.insert toComparable k (f va vb)) (Map.insert toComparable) a b Map.empty
 
 
 mapUnionsWith : (k -> comparable) -> (k -> k -> Order) -> (a -> a -> a) -> List (Dict comparable k a) -> Dict comparable k a
 mapUnionsWith toComparable keyComparison f =
-    List.foldl (mapUnionWith toComparable keyComparison f) Dict.empty
+    List.foldl (mapUnionWith toComparable keyComparison f) Map.empty
 
 
 mapUnions : List (Dict comparable k a) -> Dict comparable k a
 mapUnions =
-    List.foldr Dict.union Dict.empty
+    List.foldr Map.union Map.empty
 
 
 foldM : (b -> a -> R.RResult info warnings error b) -> b -> List a -> R.RResult info warnings error b
@@ -318,7 +319,7 @@ indexedZipWithA func listX listY =
 
 sequenceADict : (k -> comparable) -> (k -> k -> Order) -> Dict comparable k (R.RResult i w e v) -> R.RResult i w e (Dict comparable k v)
 sequenceADict toComparable keyComparison =
-    Dict.foldr keyComparison (\k x acc -> R.apply acc (R.fmap (Dict.insert toComparable k) x)) (R.pure Dict.empty)
+    Map.foldr keyComparison (\k x acc -> R.apply acc (R.fmap (Map.insert toComparable k) x)) (R.pure Map.empty)
 
 
 sequenceAList : List (R.RResult i w e v) -> R.RResult i w e (List v)
@@ -328,12 +329,12 @@ sequenceAList =
 
 sequenceDictMaybe : (k -> comparable) -> (k -> k -> Order) -> Dict comparable k (Maybe a) -> Maybe (Dict comparable k a)
 sequenceDictMaybe toComparable keyComparison =
-    Dict.foldr keyComparison (\k -> Maybe.map2 (Dict.insert toComparable k)) (Just Dict.empty)
+    Map.foldr keyComparison (\k -> Maybe.map2 (Map.insert toComparable k)) (Just Map.empty)
 
 
 sequenceDictResult : (k -> comparable) -> (k -> k -> Order) -> Dict comparable k (Result e v) -> Result e (Dict comparable k v)
 sequenceDictResult toComparable keyComparison =
-    Dict.foldr keyComparison (\k -> Result.map2 (Dict.insert toComparable k)) (Ok Dict.empty)
+    Map.foldr keyComparison (\k -> Result.map2 (Map.insert toComparable k)) (Ok Map.empty)
 
 
 sequenceDictResult_ : (k -> comparable) -> (k -> k -> Order) -> Dict comparable k (Result e a) -> Result e ()
@@ -353,7 +354,7 @@ sequenceNonemptyListResult (NE.Nonempty x xs) =
 
 keysSet : (k -> comparable) -> (k -> k -> Order) -> Dict comparable k a -> EverySet comparable k
 keysSet toComparable keyComparison =
-    Dict.keys keyComparison >> EverySet.fromList toComparable
+    Map.keys keyComparison >> EverySet.fromList toComparable
 
 
 unzip3 : List ( a, b, c ) -> ( List a, List b, List c )
@@ -383,7 +384,7 @@ dictMapM_ keyComparison f =
         c _ x k =
             IO.bind (\_ -> k) (f x)
     in
-    Dict.foldl keyComparison c (IO.pure ())
+    Map.foldl keyComparison c (IO.pure ())
 
 
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -393,9 +394,9 @@ maybeMapM =
 
 mapMinViewWithKey : (k -> comparable) -> (k -> k -> Order) -> (( k, a ) -> comparable) -> Dict comparable k a -> Maybe ( ( k, a ), Dict comparable k a )
 mapMinViewWithKey toComparable keyComparison compare dict =
-    case List.sortBy compare (Dict.toList keyComparison dict) of
+    case List.sortBy compare (Map.toList keyComparison dict) of
         first :: tail ->
-            Just ( first, Dict.fromList toComparable tail )
+            Just ( first, Map.fromList toComparable tail )
 
         _ ->
             Nothing
@@ -403,9 +404,9 @@ mapMinViewWithKey toComparable keyComparison compare dict =
 
 mapMapMaybe : (k -> comparable) -> (k -> k -> Order) -> (a -> Maybe b) -> Dict comparable k a -> Dict comparable k b
 mapMapMaybe toComparable keyComparison func =
-    Dict.toList keyComparison
+    Map.toList keyComparison
         >> List.filterMap (\( k, a ) -> Maybe.map (Tuple.pair k) (func a))
-        >> Dict.fromList toComparable
+        >> Map.fromList toComparable
 
 
 mapTraverse : (k -> comparable) -> (k -> k -> Order) -> (a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
@@ -415,9 +416,9 @@ mapTraverse toComparable keyComparison f =
 
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
 mapTraverseWithKey toComparable keyComparison f =
-    Dict.foldl keyComparison
-        (\k a -> IO.bind (\c -> IO.fmap (\va -> Dict.insert toComparable k va c) (f k a)))
-        (IO.pure Dict.empty)
+    Map.foldl keyComparison
+        (\k a -> IO.bind (\c -> IO.fmap (\va -> Map.insert toComparable k va c) (f k a)))
+        (IO.pure Map.empty)
 
 
 mapTraverseResult : (k -> comparable) -> (k -> k -> Order) -> (a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
@@ -427,9 +428,9 @@ mapTraverseResult toComparable keyComparison f =
 
 mapTraverseWithKeyResult : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
 mapTraverseWithKeyResult toComparable keyComparison f =
-    Dict.foldl keyComparison
-        (\k a -> Result.map2 (Dict.insert toComparable k) (f k a))
-        (Ok Dict.empty)
+    Map.foldl keyComparison
+        (\k a -> Result.map2 (Map.insert toComparable k) (f k a))
+        (Ok Map.empty)
 
 
 listTraverse : (a -> IO b) -> List a -> IO (List b)
@@ -804,7 +805,7 @@ dirWithCurrentDirectory dir action =
 
 envLookupEnv : String -> IO (Maybe String)
 envLookupEnv name =
-    IO (\s -> ( s, IO.Pure (Dict.get identity name s.envVars) ))
+    IO (\s -> ( s, IO.Pure (Dict.get name s.envVars) ))
 
 
 envGetProgName : IO String

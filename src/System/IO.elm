@@ -75,7 +75,7 @@ port module System.IO exposing
 -}
 
 import Codec.Archive.Zip as Zip
-import Data.Map as Dict exposing (Dict)
+import Dict exposing (Dict)
 import Json.Encode as Encode
 import Utils.Crash exposing (crash)
 
@@ -102,7 +102,7 @@ run app =
                     { realWorld =
                         { args = flags.args
                         , currentDirectory = flags.currentDirectory
-                        , envVars = Dict.fromList identity flags.envVars
+                        , envVars = Dict.fromList flags.envVars
                         , homedir = flags.homedir
                         , progName = flags.progName
                         , state = initialReplState
@@ -146,7 +146,7 @@ run app =
 
 type alias Model =
     { realWorld : RealWorld
-    , next : Dict Int Int Next
+    , next : Dict Int Next
     }
 
 
@@ -240,31 +240,31 @@ update msg model =
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (GetLineNext next) model.next }, sendGetLine index )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
 
                 ( newRealWorld, HPutStr next (Handle fd) content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, WriteString next path content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
 
                 ( newRealWorld, Read next fd ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
 
                 ( newRealWorld, HttpFetch next method urlStr headers ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
 
                 ( newRealWorld, GetArchive next method url ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
 
                 ( newRealWorld, HttpUpload next urlStr headers parts ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
 
                 ( newRealWorld, HFlush next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
 
                 ( newRealWorld, WithFile next path mode ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (WithFileNext next) model.next }
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WithFileNext next) model.next }
                     , sendWithFile
                         { index = index
                         , path = path
@@ -285,79 +285,79 @@ update msg model =
                     )
 
                 ( newRealWorld, HFileSize next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWithCreateProcess next createProcess ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
 
                 ( newRealWorld, HClose next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWaitForProcess next ph ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
 
                 ( newRealWorld, ExitWith next code ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ExitWithNext next) model.next }, sendExitWith code )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ExitWithNext next) model.next }, sendExitWith code )
 
                 ( newRealWorld, DirFindExecutable next name ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
 
                 ( newRealWorld, ReplGetInputLine next prompt ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
 
                 ( newRealWorld, DirDoesFileExist next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
 
                 ( newRealWorld, DirCreateDirectoryIfMissing next createParents filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
 
                 ( newRealWorld, LockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
 
                 ( newRealWorld, UnlockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
 
                 ( newRealWorld, DirGetModificationTime next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
 
                 ( newRealWorld, DirDoesDirectoryExist next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
 
                 ( newRealWorld, DirCanonicalizePath next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
 
                 ( newRealWorld, BinaryDecodeFileOrFail next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
 
                 ( newRealWorld, Write next fd content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, DirRemoveFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
 
                 ( newRealWorld, DirRemoveDirectoryRecursive next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
 
                 ( newRealWorld, DirWithCurrentDirectory next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
 
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
                 ( newRealWorld, NewEmptyMVar next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
 
                 ( newRealWorld, ReadMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
 
                 ( newRealWorld, TakeMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
 
                 ( newRealWorld, PutMVar next id value ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert identity index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
 
         GetLineMsg index input ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (GetLineNext fn) ->
                     update (PureMsg index (fn input)) model
 
@@ -365,7 +365,7 @@ update msg model =
                     crash "GetLineMsg"
 
         HPutLineMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HPutLineNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -373,7 +373,7 @@ update msg model =
                     crash "HPutLineMsg"
 
         WriteStringMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (WriteStringNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -381,7 +381,7 @@ update msg model =
                     crash "WriteStringMsg"
 
         ReadMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (ReadNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -389,7 +389,7 @@ update msg model =
                     crash "ReadMsg"
 
         HttpFetchMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HttpFetchNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -397,7 +397,7 @@ update msg model =
                     crash "HttpFetchMsg"
 
         GetArchiveMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (GetArchiveNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -405,7 +405,7 @@ update msg model =
                     crash "GetArchiveMsg"
 
         HttpUploadMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HttpUploadNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -413,7 +413,7 @@ update msg model =
                     crash "HttpUploadMsg"
 
         HFlushMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HFlushNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -421,7 +421,7 @@ update msg model =
                     crash "HFlushMsg"
 
         WithFileMsg index fd ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (WithFileNext fn) ->
                     update (PureMsg index (fn fd)) model
 
@@ -429,7 +429,7 @@ update msg model =
                     crash "WithFileMsg"
 
         HFileSizeMsg index size ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HFileSizeNext fn) ->
                     update (PureMsg index (fn size)) model
 
@@ -437,7 +437,7 @@ update msg model =
                     crash "HFileSizeMsg"
 
         ProcWithCreateProcessMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (ProcWithCreateProcessNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -445,7 +445,7 @@ update msg model =
                     crash "ProcWithCreateProcessMsg"
 
         HCloseMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (HCloseNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -453,7 +453,7 @@ update msg model =
                     crash "HCloseMsg"
 
         ProcWaitForProcessMsg index code ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (ProcWaitForProcessNext fn) ->
                     update (PureMsg index (fn code)) model
 
@@ -461,7 +461,7 @@ update msg model =
                     crash "ProcWaitForProcessMsg"
 
         NewEmptyMVarMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (NewEmptyMVarNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -469,7 +469,7 @@ update msg model =
                     crash "NewEmptyMVarMsg"
 
         DirFindExecutableMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirFindExecutableNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -477,7 +477,7 @@ update msg model =
                     crash "DirFindExecutableMsg"
 
         ReplGetInputLineMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (ReplGetInputLineNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -485,7 +485,7 @@ update msg model =
                     crash "ReplGetInputLineMsg"
 
         PutMVarMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (PutMVarNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -493,7 +493,7 @@ update msg model =
                     crash "PutMVarMsg"
 
         DirDoesFileExistMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirDoesFileExistNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -501,7 +501,7 @@ update msg model =
                     crash "DirDoesFileExistMsg"
 
         DirCreateDirectoryIfMissingMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirCreateDirectoryIfMissingNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -509,7 +509,7 @@ update msg model =
                     crash "DirCreateDirectoryIfMissingMsg"
 
         LockFileMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (LockFileNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -517,7 +517,7 @@ update msg model =
                     crash "LockFileMsg"
 
         UnlockFileMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (UnlockFileNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -525,7 +525,7 @@ update msg model =
                     crash "UnlockFileMsg"
 
         DirGetModificationTimeMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirGetModificationTimeNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -533,7 +533,7 @@ update msg model =
                     crash "DirGetModificationTimeMsg"
 
         DirDoesDirectoryExistMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirDoesDirectoryExistNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -541,7 +541,7 @@ update msg model =
                     crash "DirDoesDirectoryExistMsg"
 
         DirCanonicalizePathMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (DirCanonicalizePathNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -549,7 +549,7 @@ update msg model =
                     crash "DirCanonicalizePathMsg"
 
         ReadMVarMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (ReadMVarNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -560,7 +560,7 @@ update msg model =
                     crash "ReadMVarMsg"
 
         BinaryDecodeFileOrFailMsg index value ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (BinaryDecodeFileOrFailNext fn) ->
                     update (PureMsg index (fn value)) model
 
@@ -568,7 +568,7 @@ update msg model =
                     crash "BinaryDecodeFileOrFailMsg"
 
         WriteMsg index ->
-            case Dict.get identity index model.next of
+            case Dict.get index model.next of
                 Just (WriteNext fn) ->
                     update (PureMsg index (fn ())) model
 
@@ -821,7 +821,7 @@ type ION a
 type alias RealWorld =
     { args : List String
     , currentDirectory : String
-    , envVars : Dict String String String
+    , envVars : Dict String String
     , homedir : FilePath
     , progName : String
     , state : ReplState
@@ -1077,7 +1077,7 @@ getLine =
 
 
 type ReplState
-    = ReplState (Dict String String String) (Dict String String String) (Dict String String String)
+    = ReplState (Dict String String) (Dict String String) (Dict String String)
 
 
 initialReplState : ReplState
