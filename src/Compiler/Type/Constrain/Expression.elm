@@ -32,7 +32,7 @@ dictionary will hold variables for `a` and `b`
 
 -}
 type alias RTV =
-    Dict Name.Name Type
+    Dict String Name.Name Type
 
 
 constrain : RTV -> Can.Expr -> E.Expected Type -> IO Constraint
@@ -144,7 +144,7 @@ constrain rtv (A.At region expression) expected =
 
                                         recordType : Type
                                         recordType =
-                                            RecordN (Dict.singleton field fieldType) extType
+                                            RecordN (Dict.singleton identity field fieldType) extType
                                     in
                                     Type.exists [ fieldVar, extVar ] (CEqual region (Accessor field) (FunN recordType fieldType) expected)
                                 )
@@ -168,7 +168,7 @@ constrain rtv (A.At region expression) expected =
 
                                         recordType : Type
                                         recordType =
-                                            RecordN (Dict.singleton field fieldType) extType
+                                            RecordN (Dict.singleton identity field fieldType) extType
 
                                         context : Context
                                         context =
@@ -558,9 +558,9 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 -- CONSTRAIN RECORD
 
 
-constrainRecord : RTV -> A.Region -> Dict Name.Name Can.Expr -> Expected Type -> IO Constraint
+constrainRecord : RTV -> A.Region -> Dict String Name.Name Can.Expr -> Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
-    IO.traverseMap compare (constrainField rtv) fields
+    IO.traverseMap identity compare (constrainField rtv) fields
         |> IO.fmap
             (\dict ->
                 let
@@ -578,11 +578,11 @@ constrainRecord rtv region fields expected =
 
                     vars : List IO.Variable
                     vars =
-                        Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [] dict
+                        Dict.foldr compare (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
                     cons : List Constraint
                     cons =
-                        Dict.foldr (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
+                        Dict.foldr compare (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
                 in
                 Type.exists vars (CAnd cons)
             )
@@ -610,12 +610,12 @@ constrainField rtv expr =
 -- CONSTRAIN RECORD UPDATE
 
 
-constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict Name.Name Can.FieldUpdate -> Expected Type -> IO Constraint
+constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict String Name.Name Can.FieldUpdate -> Expected Type -> IO Constraint
 constrainUpdate rtv region name expr fields expected =
     Type.mkFlexVar
         |> IO.bind
             (\extVar ->
-                IO.traverseMapWithKey compare (constrainUpdateField rtv region) fields
+                IO.traverseMapWithKey identity compare (constrainUpdateField rtv region) fields
                     |> IO.bind
                         (\fieldDict ->
                             Type.mkFlexVar
@@ -641,11 +641,11 @@ constrainUpdate rtv region name expr fields expected =
 
                                             vars : List IO.Variable
                                             vars =
-                                                Dict.foldr (\_ ( v, _, _ ) vs -> v :: vs) [ recordVar, extVar ] fieldDict
+                                                Dict.foldr compare (\_ ( v, _, _ ) vs -> v :: vs) [ recordVar, extVar ] fieldDict
 
                                             cons : List Constraint
                                             cons =
-                                                Dict.foldr (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] fieldDict
+                                                Dict.foldr compare (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] fieldDict
                                         in
                                         constrain rtv expr (FromContext region (RecordUpdateKeys name fields) recordType)
                                             |> IO.fmap (\con -> Type.exists vars (CAnd (fieldsCon :: con :: cons)))
@@ -774,7 +774,7 @@ constrainShader region (Shader.Types attributes uniforms varyings) expected =
             )
 
 
-toShaderRecord : Dict Name.Name Shader.Type -> Type -> Type
+toShaderRecord : Dict String Name.Name Shader.Type -> Type -> Type
 toShaderRecord types baseRecType =
     if Dict.isEmpty types then
         baseRecType
@@ -850,7 +850,7 @@ constrainDef rtv def bodyCon =
                                 (\exprCon ->
                                     CLet []
                                         vars
-                                        (Dict.singleton name (A.At region tipe))
+                                        (Dict.singleton identity name (A.At region tipe))
                                         (CLet []
                                             pvars
                                             headers
@@ -863,17 +863,17 @@ constrainDef rtv def bodyCon =
 
         Can.TypedDef (A.At region name) freeVars typedArgs expr srcResultType ->
             let
-                newNames : Dict Name ()
+                newNames : Dict String Name ()
                 newNames =
                     Dict.diff freeVars rtv
             in
-            IO.traverseMapWithKey compare (\n _ -> Type.nameToRigid n) newNames
+            IO.traverseMapWithKey identity compare (\n _ -> Type.nameToRigid n) newNames
                 |> IO.bind
                     (\newRigids ->
                         let
-                            newRtv : Dict Name Type
+                            newRtv : Dict String Name Type
                             newRtv =
-                                Dict.union compare rtv (Dict.map (\_ -> VarN) newRigids)
+                                Dict.union rtv (Dict.map (\_ -> VarN) newRigids)
                         in
                         constrainTypedArgs newRtv name typedArgs srcResultType
                             |> IO.bind
@@ -886,9 +886,9 @@ constrainDef rtv def bodyCon =
                                     constrain newRtv expr expected
                                         |> IO.fmap
                                             (\exprCon ->
-                                                CLet (Dict.values newRigids)
+                                                CLet (Dict.values compare newRigids)
                                                     []
-                                                    (Dict.singleton name (A.At region tipe))
+                                                    (Dict.singleton identity name (A.At region tipe))
                                                     (CLet []
                                                         pvars
                                                         headers
@@ -906,7 +906,7 @@ constrainDef rtv def bodyCon =
 
 
 type Info
-    = Info (List IO.Variable) (List Constraint) (Dict Name (A.Located Type))
+    = Info (List IO.Variable) (List Constraint) (Dict String Name (A.Located Type))
 
 
 emptyInfo : Info
@@ -960,23 +960,23 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                             recDefsHelp rtv otherDefs bodyCon rigidInfo <|
                                                 Info newFlexVars
                                                     (defCon :: flexCons)
-                                                    (Dict.insert compare name (A.At region tipe) flexHeaders)
+                                                    (Dict.insert identity name (A.At region tipe) flexHeaders)
                                         )
                             )
 
                 Can.TypedDef (A.At region name) freeVars typedArgs expr srcResultType ->
                     let
-                        newNames : Dict Name ()
+                        newNames : Dict String Name ()
                         newNames =
                             Dict.diff freeVars rtv
                     in
-                    IO.traverseMapWithKey compare (\n _ -> Type.nameToRigid n) newNames
+                    IO.traverseMapWithKey identity compare (\n _ -> Type.nameToRigid n) newNames
                         |> IO.bind
                             (\newRigids ->
                                 let
-                                    newRtv : Dict Name Type
+                                    newRtv : Dict String Name Type
                                     newRtv =
-                                        Dict.union compare rtv (Dict.map (\_ -> VarN) newRigids)
+                                        Dict.union rtv (Dict.map (\_ -> VarN) newRigids)
                                 in
                                 constrainTypedArgs newRtv name typedArgs srcResultType
                                     |> IO.bind
@@ -1000,9 +1000,9 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                                             otherDefs
                                                             bodyCon
                                                             (Info
-                                                                (Dict.foldr (\_ -> (::)) rigidVars newRigids)
-                                                                (CLet (Dict.values newRigids) [] Dict.empty defCon CTrue :: rigidCons)
-                                                                (Dict.insert compare name (A.At region tipe) rigidHeaders)
+                                                                (Dict.foldr compare (\_ -> (::)) rigidVars newRigids)
+                                                                (CLet (Dict.values compare newRigids) [] Dict.empty defCon CTrue :: rigidCons)
+                                                                (Dict.insert identity name (A.At region tipe) rigidHeaders)
                                                             )
                                                             flexInfo
                                                     )
@@ -1064,12 +1064,12 @@ type TypedArgs
     = TypedArgs Type Type Pattern.State
 
 
-constrainTypedArgs : Dict Name.Name Type -> Name.Name -> List ( Can.Pattern, Can.Type ) -> Can.Type -> IO TypedArgs
+constrainTypedArgs : Dict String Name.Name Type -> Name.Name -> List ( Can.Pattern, Can.Type ) -> Can.Type -> IO TypedArgs
 constrainTypedArgs rtv name args srcResultType =
     typedArgsHelp rtv name Index.first args srcResultType Pattern.emptyState
 
 
-typedArgsHelp : Dict Name.Name Type -> Name.Name -> Index.ZeroBased -> List ( Can.Pattern, Can.Type ) -> Can.Type -> Pattern.State -> IO TypedArgs
+typedArgsHelp : Dict String Name.Name Type -> Name.Name -> Index.ZeroBased -> List ( Can.Pattern, Can.Type ) -> Can.Type -> Pattern.State -> IO TypedArgs
 typedArgsHelp rtv name index args srcResultType state =
     case args of
         [] ->

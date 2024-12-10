@@ -78,59 +78,6 @@ type Test
     | IsBool Bool
 
 
-compareTest : Test -> Test -> Order
-compareTest test1 test2 =
-    case ( test1, test2 ) of
-        ( IsCtor home1 _ _ _ _, IsCtor home2 _ _ _ _ ) ->
-            ModuleName.compareCanonical home1 home2
-
-        ( IsInt value1, IsInt value2 ) ->
-            compare value1 value2
-
-        ( IsChr chr1, IsChr chr2 ) ->
-            compare chr1 chr2
-
-        ( IsStr str1, IsStr str2 ) ->
-            compare str1 str2
-
-        ( IsBool True, IsBool False ) ->
-            GT
-
-        ( IsBool False, IsBool True ) ->
-            LT
-
-        _ ->
-            let
-                toOrderVal : Test -> Int
-                toOrderVal t =
-                    case t of
-                        IsCtor _ _ _ _ _ ->
-                            1
-
-                        IsCons ->
-                            2
-
-                        IsNil ->
-                            3
-
-                        IsTuple ->
-                            4
-
-                        IsInt _ ->
-                            5
-
-                        IsChr _ ->
-                            6
-
-                        IsStr _ ->
-                            7
-
-                        IsBool _ ->
-                            8
-            in
-            compare (toOrderVal test1) (toOrderVal test2)
-
-
 type Path
     = Index Index.ZeroBased Path
     | Unbox Path
@@ -358,14 +305,14 @@ testsAtPath selectedPath branches =
         allTests =
             List.filterMap (testAtPath selectedPath) branches
 
-        skipVisited : Test -> ( List Test, EverySet.EverySet Test ) -> ( List Test, EverySet.EverySet Test )
+        skipVisited : Test -> ( List Test, EverySet.EverySet String Test ) -> ( List Test, EverySet.EverySet String Test )
         skipVisited test (( uniqueTests, visitedTests ) as curr) =
-            if EverySet.member test visitedTests then
+            if EverySet.member (Encode.encode 0 << testEncoder) test visitedTests then
                 curr
 
             else
                 ( test :: uniqueTests
-                , EverySet.insert compareTest test visitedTests
+                , EverySet.insert (Encode.encode 0 << testEncoder) test visitedTests
                 )
     in
     Tuple.first (List.foldr skipVisited ( [], EverySet.empty ) allTests)

@@ -175,7 +175,7 @@ elm_explorations =
 -- PACKAGE SUGGESTIONS
 
 
-suggestions : Dict String Name
+suggestions : Dict String String Name
 suggestions =
     let
         random : Name
@@ -190,7 +190,7 @@ suggestions =
         file =
             toName elm "file"
     in
-    Dict.fromList compare
+    Dict.fromList identity
         [ ( "Browser", browser )
         , ( "File", file )
         , ( "File.Download", file )

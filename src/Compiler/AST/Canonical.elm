@@ -109,8 +109,8 @@ type Expr_
     | Case Expr (List CaseBranch)
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Name Expr (Dict Name FieldUpdate)
-    | Record (Dict Name Expr)
+    | Update Name Expr (Dict String Name FieldUpdate)
+    | Record (Dict String Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
     | Shader Shader.Source Shader.Types
@@ -192,14 +192,14 @@ type Annotation
 
 
 type alias FreeVars =
-    Dict Name ()
+    Dict String Name ()
 
 
 type Type
     = TLambda Type Type
     | TVar Name
     | TType IO.Canonical Name (List Type)
-    | TRecord (Dict Name FieldType) (Maybe Name)
+    | TRecord (Dict String Name FieldType) (Maybe Name)
     | TUnit
     | TTuple Type Type (Maybe Type)
     | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
@@ -220,7 +220,7 @@ type FieldType
 -- the orders will all be zeros.
 
 
-fieldsToList : Dict Name FieldType -> List ( Name, Type )
+fieldsToList : Dict String Name FieldType -> List ( Name, Type )
 fieldsToList fields =
     let
         getIndex : ( a, FieldType ) -> Int
@@ -231,7 +231,7 @@ fieldsToList fields =
         dropIndex ( name, FieldType _ tipe ) =
             ( name, tipe )
     in
-    Dict.toList fields
+    Dict.toList compare fields
         |> List.sortBy getIndex
         |> List.map dropIndex
 
@@ -241,7 +241,7 @@ fieldsToList fields =
 
 
 type Module
-    = Module IO.Canonical Exports Src.Docs Decls (Dict Name Union) (Dict Name Alias) (Dict Name Binop) Effects
+    = Module IO.Canonical Exports Src.Docs Decls (Dict String Name Union) (Dict String Name Alias) (Dict String Name Binop) Effects
 
 
 type Alias
@@ -278,7 +278,7 @@ type Ctor
 
 type Exports
     = ExportEverything A.Region
-    | Export (Dict Name (A.Located Export))
+    | Export (Dict String Name (A.Located Export))
 
 
 type Export
@@ -292,7 +292,7 @@ type Export
 
 type Effects
     = NoEffects
-    | Ports (Dict Name Port)
+    | Ports (Dict String Name Port)
     | Manager A.Region A.Region A.Region Manager
 
 
@@ -337,12 +337,12 @@ annotationDecoder =
 
 freeVarsEncoder : FreeVars -> Encode.Value
 freeVarsEncoder =
-    E.assocListDict Encode.string (\_ -> Encode.object [])
+    E.assocListDict compare Encode.string (\_ -> Encode.object [])
 
 
 freeVarsDecoder : Decode.Decoder FreeVars
 freeVarsDecoder =
-    D.assocListDict compare Decode.string (Decode.succeed ())
+    D.assocListDict identity Decode.string (Decode.succeed ())
 
 
 aliasEncoder : Alias -> Encode.Value
@@ -387,7 +387,7 @@ typeEncoder type_ =
         TRecord fields ext ->
             Encode.object
                 [ ( "type", Encode.string "TRecord" )
-                , ( "fields", E.assocListDict Encode.string fieldTypeEncoder fields )
+                , ( "fields", E.assocListDict compare Encode.string fieldTypeEncoder fields )
                 , ( "ext", E.maybe Encode.string ext )
                 ]
 
@@ -437,7 +437,7 @@ typeDecoder =
 
                     "TRecord" ->
                         Decode.map2 TRecord
-                            (Decode.field "fields" (D.assocListDict compare Decode.string fieldTypeDecoder))
+                            (Decode.field "fields" (D.assocListDict identity Decode.string fieldTypeDecoder))
                             (Decode.field "ext" (Decode.maybe Decode.string))
 
                     "TUnit" ->
@@ -784,13 +784,13 @@ expr_Encoder expr_ =
                 [ ( "type", Encode.string "Update" )
                 , ( "name", Encode.string name )
                 , ( "record", exprEncoder record )
-                , ( "updates", E.assocListDict Encode.string fieldUpdateEncoder updates )
+                , ( "updates", E.assocListDict compare Encode.string fieldUpdateEncoder updates )
                 ]
 
         Record fields ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
-                , ( "fields", E.assocListDict Encode.string exprEncoder fields )
+                , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
                 ]
 
         Unit ->
@@ -935,11 +935,11 @@ expr_Decoder =
                         Decode.map3 Update
                             (Decode.field "name" Decode.string)
                             (Decode.field "record" exprDecoder)
-                            (Decode.field "updates" (D.assocListDict compare Decode.string fieldUpdateDecoder))
+                            (Decode.field "updates" (D.assocListDict identity Decode.string fieldUpdateDecoder))
 
                     "Record" ->
                         Decode.map Record
-                            (Decode.field "fields" (D.assocListDict compare Decode.string exprDecoder))
+                            (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Unit" ->
                         Decode.succeed Unit

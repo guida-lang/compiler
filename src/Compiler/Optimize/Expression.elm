@@ -23,7 +23,7 @@ import Data.Set as EverySet exposing (EverySet)
 
 
 type alias Cycle =
-    EverySet Name.Name
+    EverySet String Name.Name
 
 
 optimize : Cycle -> Can.Expr -> Names.Tracker Opt.Expr
@@ -33,7 +33,7 @@ optimize cycle (A.At region expression) =
             Names.pure (Opt.VarLocal name)
 
         Can.VarTopLevel home name ->
-            if EverySet.member name cycle then
+            if EverySet.member identity name cycle then
                 Names.pure (Opt.VarCycle home name)
 
             else
@@ -215,7 +215,7 @@ optimize cycle (A.At region expression) =
                     )
 
         Can.Update _ record updates ->
-            Names.mapTraverse compare (optimizeUpdate cycle) updates
+            Names.mapTraverse identity compare (optimizeUpdate cycle) updates
                 |> Names.bind
                     (\optUpdates ->
                         optimize cycle record
@@ -226,7 +226,7 @@ optimize cycle (A.At region expression) =
                     )
 
         Can.Record fields ->
-            Names.mapTraverse compare (optimize cycle) fields
+            Names.mapTraverse identity compare (optimize cycle) fields
                 |> Names.bind
                     (\optFields ->
                         Names.registerFieldDict fields (Opt.Record optFields)
@@ -257,7 +257,7 @@ optimize cycle (A.At region expression) =
                     )
 
         Can.Shader src (Shader.Types attributes uniforms _) ->
-            Names.pure (Opt.Shader src (EverySet.fromList compare (Dict.keys attributes)) (EverySet.fromList compare (Dict.keys uniforms)))
+            Names.pure (Opt.Shader src (EverySet.fromList identity (Dict.keys compare attributes)) (EverySet.fromList identity (Dict.keys compare uniforms)))
 
 
 

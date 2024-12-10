@@ -24,6 +24,7 @@ module Compiler.Elm.ModuleName exposing
     , sub
     , texture
     , toChars
+    , toComparableCanonical
     , toFilePath
     , toHyphenPath
     , tuple
@@ -182,6 +183,11 @@ compareCanonical (Canonical pkg1 name1) (Canonical pkg2 name2) =
 
         GT ->
             GT
+
+
+toComparableCanonical : Canonical -> List String
+toComparableCanonical (Canonical ( author, project ) name) =
+    [ author, project, name ]
 
 
 

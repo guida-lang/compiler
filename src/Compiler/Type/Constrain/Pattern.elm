@@ -28,7 +28,7 @@ type State
 
 
 type alias Header =
-    Dict Name.Name (A.Located Type)
+    Dict String Name.Name (A.Located Type)
 
 
 add : Can.Pattern -> E.PExpected Type -> State -> IO State
@@ -136,9 +136,9 @@ add (A.At region pattern) expectation state =
                             |> IO.fmap
                                 (\fieldVars ->
                                     let
-                                        fieldTypes : Dict Name.Name Type
+                                        fieldTypes : Dict String Name.Name Type
                                         fieldTypes =
-                                            Dict.fromList compare (List.map (Tuple.mapSecond Type.VarN) fieldVars)
+                                            Dict.fromList identity (List.map (Tuple.mapSecond Type.VarN) fieldVars)
 
                                         recordType : Type
                                         recordType =
@@ -152,7 +152,7 @@ add (A.At region pattern) expectation state =
                                             Type.CPattern region E.PRecord recordType expectation
                                     in
                                     State
-                                        (Dict.union compare headers (Dict.map (\_ v -> A.At region v) fieldTypes))
+                                        (Dict.union headers (Dict.map (\_ v -> A.At region v) fieldTypes))
                                         (List.map Tuple.second fieldVars ++ extVar :: vars)
                                         (recordCon :: revCons)
                                 )
@@ -219,9 +219,9 @@ addToHeaders region name expectation (State headers vars revCons) =
         tipe =
             getType expectation
 
-        newHeaders : Dict Name.Name (A.Located Type)
+        newHeaders : Dict String Name.Name (A.Located Type)
         newHeaders =
-            Dict.insert compare name (A.At region tipe) headers
+            Dict.insert identity name (A.At region tipe) headers
     in
     State newHeaders vars revCons
 
@@ -330,9 +330,9 @@ addCtor region home typeName typeVarNames ctorName args expectation state =
                     typePairs =
                         List.map (Tuple.mapSecond Type.VarN) varPairs
 
-                    freeVarDict : Dict Name.Name Type
+                    freeVarDict : Dict String Name.Name Type
                     freeVarDict =
-                        Dict.fromList compare typePairs
+                        Dict.fromList identity typePairs
                 in
                 IO.foldM (addCtorArg region ctorName freeVarDict) state args
                     |> IO.bind
@@ -354,7 +354,7 @@ addCtor region home typeName typeVarNames ctorName args expectation state =
             )
 
 
-addCtorArg : A.Region -> Name.Name -> Dict Name.Name Type -> State -> Can.PatternCtorArg -> IO State
+addCtorArg : A.Region -> Name.Name -> Dict String Name.Name Type -> State -> Can.PatternCtorArg -> IO State
 addCtorArg region ctorName freeVarDict state (Can.PatternCtorArg index srcType pattern) =
     Instantiate.fromSrcType freeVarDict srcType
         |> IO.bind

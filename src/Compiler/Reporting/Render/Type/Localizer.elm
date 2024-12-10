@@ -28,7 +28,7 @@ import System.TypeCheck.IO as IO
 
 
 type Localizer
-    = Localizer (Dict Name Import)
+    = Localizer (Dict String Name Import)
 
 
 type alias Import =
@@ -39,7 +39,7 @@ type alias Import =
 
 type Exposing
     = All
-    | Only (EverySet Name)
+    | Only (EverySet String Name)
 
 
 empty : Localizer
@@ -58,7 +58,7 @@ toDoc localizer home name =
 
 toChars : Localizer -> IO.Canonical -> Name -> String
 toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
-    case Dict.get home localizer of
+    case Dict.get identity home localizer of
         Nothing ->
             home ++ "." ++ name
 
@@ -68,7 +68,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
                     name
 
                 Only set ->
-                    if EverySet.member name set then
+                    if EverySet.member identity name set then
                         name
 
                     else if name == Name.list && moduleName == ModuleName.list then
@@ -82,7 +82,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
 -- FROM NAMES
 
 
-fromNames : Dict Name a -> Localizer
+fromNames : Dict String Name a -> Localizer
 fromNames names =
     Localizer (Dict.map (\_ _ -> { alias = Nothing, exposing_ = All }) names)
 
@@ -94,7 +94,7 @@ fromNames names =
 fromModule : Src.Module -> Localizer
 fromModule ((Src.Module _ _ _ imports _ _ _ _ _) as modul) =
     Localizer <|
-        Dict.fromList compare <|
+        Dict.fromList identity <|
             (( Src.getName modul, { alias = Nothing, exposing_ = All } ) :: List.map toPair imports)
 
 
@@ -115,14 +115,14 @@ toExposing exposing_ =
             Only (List.foldr addType EverySet.empty exposedList)
 
 
-addType : Src.Exposed -> EverySet Name -> EverySet Name
+addType : Src.Exposed -> EverySet String Name -> EverySet String Name
 addType exposed types =
     case exposed of
         Src.Lower _ ->
             types
 
         Src.Upper (A.At _ name) _ ->
-            EverySet.insert compare name types
+            EverySet.insert identity name types
 
         Src.Operator _ _ ->
             types
@@ -134,12 +134,12 @@ addType exposed types =
 
 localizerEncoder : Localizer -> Encode.Value
 localizerEncoder (Localizer localizer) =
-    EncodeX.assocListDict Encode.string importEncoder localizer
+    EncodeX.assocListDict compare Encode.string importEncoder localizer
 
 
 localizerDecoder : Decode.Decoder Localizer
 localizerDecoder =
-    Decode.map Localizer (DecodeX.assocListDict compare Decode.string importDecoder)
+    Decode.map Localizer (DecodeX.assocListDict identity Decode.string importDecoder)
 
 
 importEncoder : Import -> Encode.Value
@@ -169,7 +169,7 @@ exposingEncoder exposing_ =
         Only set ->
             Encode.object
                 [ ( "type", Encode.string "Only" )
-                , ( "set", EncodeX.everySet Encode.string set )
+                , ( "set", EncodeX.everySet compare Encode.string set )
                 ]
 
 
@@ -183,7 +183,7 @@ exposingDecoder =
                         Decode.succeed All
 
                     "Only" ->
-                        Decode.map Only (Decode.field "set" (DecodeX.everySet compare Decode.string))
+                        Decode.map Only (Decode.field "set" (DecodeX.everySet identity Decode.string))
 
                     _ ->
                         Decode.fail ("Unknown Exposing's type: " ++ type_)

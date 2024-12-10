@@ -55,7 +55,7 @@ type Constraint
     | CForeign A.Region Name Can.Annotation (E.Expected Type)
     | CPattern A.Region E.PCategory Type (E.PExpected Type)
     | CAnd (List Constraint)
-    | CLet (List Variable) (List Variable) (Dict Name (A.Located Type)) Constraint Constraint
+    | CLet (List Variable) (List Variable) (Dict String Name (A.Located Type)) Constraint Constraint
 
 
 exists : List Variable -> Constraint -> Constraint
@@ -74,7 +74,7 @@ type Type
     | AppN IO.Canonical Name (List Type)
     | FunN Type Type
     | EmptyRecordN
-    | RecordN (Dict Name Type) Type
+    | RecordN (Dict String Name Type) Type
     | UnitN
     | TupleN Type Type (Maybe Type)
 
@@ -372,7 +372,7 @@ termToCanType term =
             State.pure (Can.TRecord Dict.empty Nothing)
 
         Record1 fields extension ->
-            State.traverseMap compare fieldToCanType fields
+            State.traverseMap compare identity fieldToCanType fields
                 |> State.bind
                     (\canFields ->
                         variableToCanType extension
@@ -381,7 +381,7 @@ termToCanType term =
                                 (\canExt ->
                                     case canExt of
                                         Can.TRecord subFields subExt ->
-                                            Can.TRecord (Dict.union compare subFields canFields) subExt
+                                            Can.TRecord (Dict.union subFields canFields) subExt
 
                                         Can.TVar name ->
                                             Can.TRecord canFields (Just name)
@@ -548,7 +548,7 @@ termToErrorType term =
             State.pure (ET.Record Dict.empty ET.Closed)
 
         Record1 fields extension ->
-            State.traverseMap compare variableToErrorType fields
+            State.traverseMap compare identity variableToErrorType fields
                 |> State.bind
                     (\errFields ->
                         variableToErrorType extension
@@ -557,7 +557,7 @@ termToErrorType term =
                                 (\errExt ->
                                     case errExt of
                                         ET.Record subFields subExt ->
-                                            ET.Record (Dict.union compare subFields errFields) subExt
+                                            ET.Record (Dict.union subFields errFields) subExt
 
                                         ET.FlexVar ext ->
                                             ET.Record errFields (ET.FlexOpen ext)
@@ -585,10 +585,10 @@ termToErrorType term =
 
 
 type NameState
-    = NameState (Dict Name ()) Int Int Int Int Int
+    = NameState (Dict String Name ()) Int Int Int Int Int
 
 
-makeNameState : Dict Name Variable -> NameState
+makeNameState : Dict String Name Variable -> NameState
 makeNameState taken =
     NameState (Dict.map (\_ _ -> ()) taken) 0 0 0 0 0
 
@@ -618,18 +618,18 @@ getFreshVarName =
             )
 
 
-getFreshVarNameHelp : Int -> Dict Name () -> ( Name, Int, Dict Name () )
+getFreshVarNameHelp : Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
 getFreshVarNameHelp index taken =
     let
         name : Name
         name =
             Name.fromTypeVariableScheme index
     in
-    if Dict.member name taken then
+    if Dict.member identity name taken then
         getFreshVarNameHelp (index + 1) taken
 
     else
-        ( name, index + 1, Dict.insert compare name () taken )
+        ( name, index + 1, Dict.insert identity name () taken )
 
 
 
@@ -689,25 +689,25 @@ getFreshSuper prefix getter setter =
             )
 
 
-getFreshSuperHelp : Name -> Int -> Dict Name () -> ( Name, Int, Dict Name () )
+getFreshSuperHelp : Name -> Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
 getFreshSuperHelp prefix index taken =
     let
         name : Name
         name =
             Name.fromTypeVariable prefix index
     in
-    if Dict.member name taken then
+    if Dict.member identity name taken then
         getFreshSuperHelp prefix (index + 1) taken
 
     else
-        ( name, index + 1, Dict.insert compare name () taken )
+        ( name, index + 1, Dict.insert identity name () taken )
 
 
 
 -- GET ALL VARIABLE NAMES
 
 
-getVarNames : Variable -> Dict Name Variable -> IO (Dict Name Variable)
+getVarNames : Variable -> Dict String Name Variable -> IO (Dict String Name Variable)
 getVarNames var takenNames =
     UF.get var
         |> IO.bind
@@ -761,7 +761,7 @@ getVarNames var takenNames =
 
                                             Record1 fields extension ->
                                                 IO.bind (getVarNames extension)
-                                                    (IO.foldrM getVarNames takenNames (Dict.values fields))
+                                                    (IO.foldrM getVarNames takenNames (Dict.values compare fields))
 
                                             Unit1 ->
                                                 IO.pure takenNames
@@ -781,14 +781,14 @@ getVarNames var takenNames =
 -- REGISTER NAME / RENAME DUPLICATES
 
 
-addName : Int -> Name -> Variable -> (Name -> Content) -> Dict Name Variable -> IO (Dict Name Variable)
+addName : Int -> Name -> Variable -> (Name -> Content) -> Dict String Name Variable -> IO (Dict String Name Variable)
 addName index givenName var makeContent takenNames =
     let
         indexedName : Name
         indexedName =
             Name.fromTypeVariable givenName index
     in
-    case Dict.get indexedName takenNames of
+    case Dict.get identity indexedName takenNames of
         Nothing ->
             (if indexedName == givenName then
                 IO.pure ()
@@ -799,7 +799,7 @@ addName index givenName var makeContent takenNames =
                         Descriptor (makeContent indexedName) rank mark copy
                     )
             )
-                |> IO.fmap (\_ -> Dict.insert compare indexedName var takenNames)
+                |> IO.fmap (\_ -> Dict.insert identity indexedName var takenNames)
 
         Just otherVar ->
             UF.equivalent var otherVar

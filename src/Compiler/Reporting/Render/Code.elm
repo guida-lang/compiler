@@ -271,7 +271,7 @@ detectKeywords c rest =
         name =
             String.fromChar c ++ cs
     in
-    if EverySet.member name reservedWords then
+    if EverySet.member identity name reservedWords then
         Keyword name
 
     else
@@ -285,7 +285,7 @@ isInner char =
 
 isSymbol : Char -> Bool
 isSymbol char =
-    EverySet.member (Char.toCode char) binopCharSet
+    EverySet.member identity (Char.toCode char) binopCharSet
 
 
 startsWithKeyword : String -> String -> Bool

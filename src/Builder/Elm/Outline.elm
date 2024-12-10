@@ -44,11 +44,11 @@ type Outline
 
 
 type AppOutline
-    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict Pkg.Name V.Version) (Dict Pkg.Name V.Version) (Dict Pkg.Name V.Version) (Dict Pkg.Name V.Version)
+    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version)
 
 
 type PkgOutline
-    = PkgOutline Pkg.Name String Licenses.License V.Version Exposed (Dict Pkg.Name Con.Constraint) (Dict Pkg.Name Con.Constraint) Con.Constraint
+    = PkgOutline Pkg.Name String Licenses.License V.Version Exposed (Dict ( String, String ) Pkg.Name Con.Constraint) (Dict ( String, String ) Pkg.Name Con.Constraint) Con.Constraint
 
 
 type Exposed
@@ -148,7 +148,7 @@ encodeModule name =
     E.name name
 
 
-encodeDeps : (a -> E.Value) -> Dict Pkg.Name a -> E.Value
+encodeDeps : (a -> E.Value) -> Dict ( String, String ) Pkg.Name a -> E.Value
 encodeDeps encodeValue deps =
     E.dict Pkg.compareName Pkg.toJsonString encodeValue deps
 
@@ -180,17 +180,17 @@ read root =
                         case outline of
                             Pkg (PkgOutline pkg _ _ _ _ deps _ _) ->
                                 IO.pure <|
-                                    if not (Dict.member Pkg.core deps) && pkg /= Pkg.core then
+                                    if not (Dict.member identity Pkg.core deps) && pkg /= Pkg.core then
                                         Err Exit.OutlineNoPkgCore
 
                                     else
                                         Ok outline
 
                             App (AppOutline _ srcDirs direct indirect _ _) ->
-                                if not (Dict.member Pkg.core direct) then
+                                if not (Dict.member identity Pkg.core direct) then
                                     IO.pure <| Err Exit.OutlineNoAppCore
 
-                                else if not (Dict.member Pkg.json direct) && not (Dict.member Pkg.json indirect) then
+                                else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then
                                     IO.pure <| Err Exit.OutlineNoAppJson
 
                                 else
@@ -247,8 +247,8 @@ detectDuplicates root srcDirs =
         |> IO.fmap
             (\pairs ->
                 Utils.mapLookupMin <|
-                    Utils.mapMapMaybe compare isDup <|
-                        Utils.mapFromListWith compare OneOrMore.more pairs
+                    Utils.mapMapMaybe identity compare isDup <|
+                        Utils.mapFromListWith identity OneOrMore.more pairs
             )
 
 
@@ -354,9 +354,9 @@ constraintDecoder =
     D.mapError Exit.OP_BadConstraint Con.decoder
 
 
-depsDecoder : Decoder a -> Decoder (Dict Pkg.Name a)
+depsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.Name a)
 depsDecoder valueDecoder =
-    D.dict Pkg.compareName (Pkg.keyDecoder Exit.OP_BadDependencyName) valueDecoder
+    D.dict identity (Pkg.keyDecoder Exit.OP_BadDependencyName) valueDecoder
 
 
 dirsDecoder : Decoder (NE.Nonempty SrcDir)

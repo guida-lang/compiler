@@ -37,7 +37,7 @@ import Utils.Main as Utils
 
 
 type Interface
-    = Interface Pkg.Name (Dict Name.Name Can.Annotation) (Dict Name.Name Union) (Dict Name.Name Alias) (Dict Name.Name Binop)
+    = Interface Pkg.Name (Dict String Name.Name Can.Annotation) (Dict String Name.Name Union) (Dict String Name.Name Alias) (Dict String Name.Name Binop)
 
 
 type Union
@@ -59,7 +59,7 @@ type Binop
 -- FROM MODULE
 
 
-fromModule : Pkg.Name -> Can.Module -> Dict Name.Name Can.Annotation -> Interface
+fromModule : Pkg.Name -> Can.Module -> Dict String Name.Name Can.Annotation -> Interface
 fromModule home (Can.Module _ exports _ _ unions aliases binops _) annotations =
     Interface home
         (restrict exports annotations)
@@ -68,57 +68,58 @@ fromModule home (Can.Module _ exports _ _ unions aliases binops _) annotations =
         (restrict exports (Dict.map (\_ -> toOp annotations) binops))
 
 
-restrict : Can.Exports -> Dict Name.Name a -> Dict Name.Name a
+restrict : Can.Exports -> Dict String Name.Name a -> Dict String Name.Name a
 restrict exports dict =
     case exports of
         Can.ExportEverything _ ->
             dict
 
         Can.Export explicitExports ->
-            Dict.intersection dict explicitExports
+            Dict.intersection compare dict explicitExports
 
 
-toOp : Dict Name.Name Can.Annotation -> Can.Binop -> Binop
+toOp : Dict String Name.Name Can.Annotation -> Can.Binop -> Binop
 toOp types (Can.Binop_ associativity precedence name) =
-    Binop name (Utils.find name types) associativity precedence
+    Binop name (Utils.find identity name types) associativity precedence
 
 
-restrictUnions : Can.Exports -> Dict Name.Name Can.Union -> Dict Name.Name Union
+restrictUnions : Can.Exports -> Dict String Name.Name Can.Union -> Dict String Name.Name Union
 restrictUnions exports unions =
     case exports of
         Can.ExportEverything _ ->
             Dict.map (\_ -> OpenUnion) unions
 
         Can.Export explicitExports ->
-            Dict.merge
+            Dict.merge compare
                 (\_ _ result -> result)
                 (\k (A.At _ export) union result ->
                     case export of
                         Can.ExportUnionOpen ->
-                            Dict.insert compare k (OpenUnion union) result
+                            Dict.insert identity k (OpenUnion union) result
 
                         Can.ExportUnionClosed ->
-                            Dict.insert compare k (ClosedUnion union) result
+                            Dict.insert identity k (ClosedUnion union) result
 
                         _ ->
                             crash "impossible exports discovered in restrictUnions"
                 )
-                (\k union result -> Dict.insert compare k (PrivateUnion union) result)
+                (\k union result -> Dict.insert identity k (PrivateUnion union) result)
                 explicitExports
                 unions
                 Dict.empty
 
 
-restrictAliases : Can.Exports -> Dict Name.Name Can.Alias -> Dict Name.Name Alias
+restrictAliases : Can.Exports -> Dict String Name.Name Can.Alias -> Dict String Name.Name Alias
 restrictAliases exports aliases =
     case exports of
         Can.ExportEverything _ ->
             Dict.map (\_ alias -> PublicAlias alias) aliases
 
         Can.Export explicitExports ->
-            Dict.merge (\_ _ result -> result)
-                (\k _ alias result -> Dict.insert compare k (PublicAlias alias) result)
-                (\k alias result -> Dict.insert compare k (PrivateAlias alias) result)
+            Dict.merge compare
+                (\_ _ result -> result)
+                (\k _ alias result -> Dict.insert identity k (PublicAlias alias) result)
+                (\k alias result -> Dict.insert identity k (PrivateAlias alias) result)
                 explicitExports
                 aliases
                 Dict.empty
@@ -157,7 +158,7 @@ toPublicAlias iAlias =
 
 type DependencyInterface
     = Public Interface
-    | Private Pkg.Name (Dict Name.Name Can.Union) (Dict Name.Name Can.Alias)
+    | Private Pkg.Name (Dict String Name.Name Can.Union) (Dict String Name.Name Can.Alias)
 
 
 public : Interface -> DependencyInterface
@@ -212,10 +213,10 @@ interfaceEncoder (Interface home values unions aliases binops) =
     Encode.object
         [ ( "type", Encode.string "Interface" )
         , ( "home", Pkg.nameEncoder home )
-        , ( "values", E.assocListDict Encode.string Can.annotationEncoder values )
-        , ( "unions", E.assocListDict Encode.string unionEncoder unions )
-        , ( "aliases", E.assocListDict Encode.string aliasEncoder aliases )
-        , ( "binops", E.assocListDict Encode.string binopEncoder binops )
+        , ( "values", E.assocListDict compare Encode.string Can.annotationEncoder values )
+        , ( "unions", E.assocListDict compare Encode.string unionEncoder unions )
+        , ( "aliases", E.assocListDict compare Encode.string aliasEncoder aliases )
+        , ( "binops", E.assocListDict compare Encode.string binopEncoder binops )
         ]
 
 
@@ -223,10 +224,10 @@ interfaceDecoder : Decode.Decoder Interface
 interfaceDecoder =
     Decode.map5 Interface
         (Decode.field "home" Pkg.nameDecoder)
-        (Decode.field "values" (D.assocListDict compare Decode.string Can.annotationDecoder))
-        (Decode.field "unions" (D.assocListDict compare Decode.string unionDecoder))
-        (Decode.field "aliases" (D.assocListDict compare Decode.string aliasDecoder))
-        (Decode.field "binops" (D.assocListDict compare Decode.string binopDecoder))
+        (Decode.field "values" (D.assocListDict identity Decode.string Can.annotationDecoder))
+        (Decode.field "unions" (D.assocListDict identity Decode.string unionDecoder))
+        (Decode.field "aliases" (D.assocListDict identity Decode.string aliasDecoder))
+        (Decode.field "binops" (D.assocListDict identity Decode.string binopDecoder))
 
 
 unionEncoder : Union -> Encode.Value
@@ -342,8 +343,8 @@ dependencyInterfaceEncoder dependencyInterface =
             Encode.object
                 [ ( "type", Encode.string "Private" )
                 , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "unions", E.assocListDict Encode.string Can.unionEncoder unions )
-                , ( "aliases", E.assocListDict Encode.string Can.aliasEncoder aliases )
+                , ( "unions", E.assocListDict compare Encode.string Can.unionEncoder unions )
+                , ( "aliases", E.assocListDict compare Encode.string Can.aliasEncoder aliases )
                 ]
 
 
@@ -359,8 +360,8 @@ dependencyInterfaceDecoder =
                     "Private" ->
                         Decode.map3 Private
                             (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "unions" (D.assocListDict compare Decode.string Can.unionDecoder))
-                            (Decode.field "aliases" (D.assocListDict compare Decode.string Can.aliasDecoder))
+                            (Decode.field "unions" (D.assocListDict identity Decode.string Can.unionDecoder))
+                            (Decode.field "aliases" (D.assocListDict identity Decode.string Can.aliasDecoder))
 
                     _ ->
                         Decode.fail ("Failed to decode DependencyInterface's type: " ++ type_)

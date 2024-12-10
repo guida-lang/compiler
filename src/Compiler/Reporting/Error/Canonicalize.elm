@@ -66,7 +66,7 @@ type Error
     | NotFoundVar A.Region (Maybe Name) Name PossibleNames
     | NotFoundType A.Region (Maybe Name) Name PossibleNames
     | NotFoundVariant A.Region (Maybe Name) Name PossibleNames
-    | NotFoundBinop A.Region Name (EverySet Name)
+    | NotFoundBinop A.Region Name (EverySet String Name)
     | PatternHasRecordCtor A.Region Name
     | PortPayloadInvalid A.Region Name Can.Type InvalidPayload
     | PortTypeInvalid A.Region Name PortProblem
@@ -108,8 +108,8 @@ type PortProblem
 
 
 type alias PossibleNames =
-    { locals : EverySet Name
-    , quals : Dict Name (EverySet Name)
+    { locals : EverySet String Name
+    , quals : Dict String Name (EverySet String Name)
     }
 
 
@@ -612,7 +612,7 @@ toReport source err =
                 let
                     suggestions : List String
                     suggestions =
-                        List.take 2 <| Suggest.sort op identity (EverySet.toList locals)
+                        List.take 2 <| Suggest.sort op identity (EverySet.toList compare locals)
 
                     format : D.Doc -> D.Doc
                     format altOp =
@@ -1190,11 +1190,11 @@ notFound source region maybePrefix name thing { locals, quals } =
         possibleNames : List String
         possibleNames =
             let
-                addQuals : Name -> EverySet Name -> List String -> List String
+                addQuals : Name -> EverySet String Name -> List String -> List String
                 addQuals prefix localSet allNames =
-                    EverySet.foldr (\x xs -> toQualString prefix x :: xs) allNames localSet
+                    EverySet.foldr compare (\x xs -> toQualString prefix x :: xs) allNames localSet
             in
-            Dict.foldr addQuals (EverySet.toList locals) quals
+            Dict.foldr compare addQuals (EverySet.toList compare locals) quals
 
         nearbyNames : List String
         nearbyNames =
@@ -1228,7 +1228,7 @@ notFound source region maybePrefix name thing { locals, quals } =
                         "These names seem close though:"
 
                 Just prefix ->
-                    case Dict.get prefix quals of
+                    case Dict.get identity prefix quals of
                         Nothing ->
                             toDetails
                                 ("I cannot find a `" ++ prefix ++ "` module. Is there an `import` for it?")
@@ -1536,7 +1536,7 @@ errorEncoder error =
                 [ ( "type", Encode.string "NotFoundBinop" )
                 , ( "region", A.regionEncoder region )
                 , ( "op", Encode.string op )
-                , ( "locals", EncodeX.everySet Encode.string locals )
+                , ( "locals", EncodeX.everySet compare Encode.string locals )
                 ]
 
         PatternHasRecordCtor region name ->
@@ -1809,7 +1809,7 @@ errorDecoder =
                         Decode.map3 NotFoundBinop
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "op" Decode.string)
-                            (Decode.field "locals" (DecodeX.everySet compare Decode.string))
+                            (Decode.field "locals" (DecodeX.everySet identity Decode.string))
 
                     "PatternHasRecordCtor" ->
                         Decode.map2 PatternHasRecordCtor
@@ -2004,16 +2004,16 @@ possibleNamesEncoder : PossibleNames -> Encode.Value
 possibleNamesEncoder possibleNames =
     Encode.object
         [ ( "type", Encode.string "PossibleNames" )
-        , ( "locals", EncodeX.everySet Encode.string possibleNames.locals )
-        , ( "quals", EncodeX.assocListDict Encode.string (EncodeX.everySet Encode.string) possibleNames.quals )
+        , ( "locals", EncodeX.everySet compare Encode.string possibleNames.locals )
+        , ( "quals", EncodeX.assocListDict compare Encode.string (EncodeX.everySet compare Encode.string) possibleNames.quals )
         ]
 
 
 possibleNamesDecoder : Decode.Decoder PossibleNames
 possibleNamesDecoder =
     Decode.map2 PossibleNames
-        (Decode.field "locals" (DecodeX.everySet compare Decode.string))
-        (Decode.field "quals" (DecodeX.assocListDict compare Decode.string (DecodeX.everySet compare Decode.string)))
+        (Decode.field "locals" (DecodeX.everySet identity Decode.string))
+        (Decode.field "quals" (DecodeX.assocListDict identity Decode.string (DecodeX.everySet identity Decode.string)))
 
 
 invalidPayloadEncoder : InvalidPayload -> Encode.Value

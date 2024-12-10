@@ -55,7 +55,7 @@ occursHelp seen var foundCycle =
 
                                 IO.Record1 fields ext ->
                                     IO.bind (occursHelp newSeen ext) <|
-                                        IO.foldrM (occursHelp newSeen) foundCycle (Dict.values fields)
+                                        IO.foldrM (occursHelp newSeen) foundCycle (Dict.values compare fields)
 
                                 IO.Unit1 ->
                                     IO.pure foundCycle

@@ -36,9 +36,9 @@ import System.IO as IO exposing (IO(..))
 -- CORE HELPERS
 
 
-assocListDict : (k -> Encode.Value) -> (v -> Encode.Value) -> Dict k v -> Encode.Value
-assocListDict keyEncoder valueEncoder =
-    Encode.list (jsonPair keyEncoder valueEncoder) << List.reverse << Dict.toList
+assocListDict : (k -> k -> Order) -> (k -> Encode.Value) -> (v -> Encode.Value) -> Dict c k v -> Encode.Value
+assocListDict keyComparison keyEncoder valueEncoder =
+    Encode.list (jsonPair keyEncoder valueEncoder) << List.reverse << Dict.toList keyComparison
 
 
 jsonPair : (a -> Encode.Value) -> (b -> Encode.Value) -> ( a, b ) -> Encode.Value
@@ -49,9 +49,9 @@ jsonPair firstEncoder secondEncoder ( a, b ) =
         ]
 
 
-everySet : (a -> Encode.Value) -> EverySet a -> Encode.Value
-everySet encoder =
-    Encode.list encoder << List.reverse << EverySet.toList
+everySet : (a -> a -> Order) -> (a -> Encode.Value) -> EverySet c a -> Encode.Value
+everySet keyComparison encoder =
+    Encode.list encoder << List.reverse << EverySet.toList keyComparison
 
 
 result : (x -> Encode.Value) -> (a -> Encode.Value) -> Result x a -> Encode.Value
@@ -152,11 +152,10 @@ null =
     Null
 
 
-dict : (k -> k -> Order) -> (k -> String) -> (v -> Value) -> Dict k v -> Value
+dict : (k -> k -> Order) -> (k -> String) -> (v -> Value) -> Dict c k v -> Value
 dict keyComparison encodeKey encodeValue pairs =
     Object
-        (Dict.toList pairs
-            |> List.sortWith (\( ka, _ ) ( kb, _ ) -> keyComparison ka kb)
+        (Dict.toList keyComparison pairs
             |> List.map (\( k, v ) -> ( encodeKey k, encodeValue v ))
         )
 

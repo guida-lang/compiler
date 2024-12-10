@@ -35,17 +35,17 @@ import Utils.Main as Utils
 type Tracker a
     = Tracker
         (Int
-         -> EverySet Opt.Global
-         -> Dict Name Int
+         -> EverySet (List String) Opt.Global
+         -> Dict String Name Int
          -> TResult a
         )
 
 
 type TResult a
-    = TResult Int (EverySet Opt.Global) (Dict Name Int) a
+    = TResult Int (EverySet (List String) Opt.Global) (Dict String Name Int) a
 
 
-run : Tracker a -> ( EverySet Opt.Global, Dict Name Int, a )
+run : Tracker a -> ( EverySet (List String) Opt.Global, Dict String Name Int, a )
 run (Tracker k) =
     case k 0 EverySet.empty Dict.empty of
         TResult _ deps fields value ->
@@ -63,7 +63,7 @@ registerKernel : Name -> a -> Tracker a
 registerKernel home value =
     Tracker <|
         \uid deps fields ->
-            TResult uid (EverySet.insert Opt.compareGlobal (Opt.toKernelGlobal home) deps) fields value
+            TResult uid (EverySet.insert Opt.toComparableGlobal (Opt.toKernelGlobal home) deps) fields value
 
 
 registerGlobal : IO.Canonical -> Name -> Tracker Opt.Expr
@@ -75,7 +75,7 @@ registerGlobal home name =
                 global =
                     Opt.Global home name
             in
-            TResult uid (EverySet.insert Opt.compareGlobal global deps) fields (Opt.VarGlobal global)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal global)
 
 
 registerDebug : Name -> IO.Canonical -> A.Region -> Tracker Opt.Expr
@@ -87,7 +87,7 @@ registerDebug name home region =
                 global =
                     Opt.Global ModuleName.debug name
             in
-            TResult uid (EverySet.insert Opt.compareGlobal global deps) fields (Opt.VarDebug name home region Nothing)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug name home region Nothing)
 
 
 registerCtor : IO.Canonical -> Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
@@ -99,9 +99,9 @@ registerCtor home name index opts =
                 global =
                     Opt.Global home name
 
-                newDeps : EverySet Opt.Global
+                newDeps : EverySet (List String) Opt.Global
                 newDeps =
-                    EverySet.insert Opt.compareGlobal global deps
+                    EverySet.insert Opt.toComparableGlobal global deps
             in
             case opts of
                 Can.Normal ->
@@ -128,7 +128,7 @@ registerCtor home name index opts =
                                 Opt.VarEnum global index
 
                 Can.Unbox ->
-                    TResult uid (EverySet.insert Opt.compareGlobal identity newDeps) fields (Opt.VarBox global)
+                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox global)
 
 
 identity : Opt.Global
@@ -140,16 +140,16 @@ registerField : Name -> a -> Tracker a
 registerField name value =
     Tracker <|
         \uid d fields ->
-            TResult uid d (Utils.mapInsertWith compare (+) name 1 fields) value
+            TResult uid d (Utils.mapInsertWith Basics.identity (+) name 1 fields) value
 
 
-registerFieldDict : Dict Name v -> a -> Tracker a
+registerFieldDict : Dict String Name v -> a -> Tracker a
 registerFieldDict newFields value =
     Tracker <|
         \uid d fields ->
             TResult uid
                 d
-                (Utils.mapUnionWith compare (+) fields (Dict.map (\_ -> toOne) newFields))
+                (Utils.mapUnionWith Basics.identity compare (+) fields (Dict.map (\_ -> toOne) newFields))
                 value
 
 
@@ -165,9 +165,9 @@ registerFieldList names value =
             TResult uid deps (List.foldr addOne fields names) value
 
 
-addOne : Name -> Dict Name Int -> Dict Name Int
+addOne : Name -> Dict String Name Int -> Dict String Name Int
 addOne name fields =
-    Utils.mapInsertWith compare (+) name 1 fields
+    Utils.mapInsertWith Basics.identity (+) name 1 fields
 
 
 
@@ -204,6 +204,6 @@ traverse func =
     List.foldl (\a -> bind (\acc -> fmap (\b -> acc ++ [ b ]) (func a))) (pure [])
 
 
-mapTraverse : (k -> k -> Order) -> (a -> Tracker b) -> Dict k a -> Tracker (Dict k b)
-mapTraverse keyComparison func =
-    Dict.foldl (\k a -> bind (\c -> fmap (\va -> Dict.insert keyComparison k va c) (func a))) (pure Dict.empty)
+mapTraverse : (k -> comparable) -> (k -> k -> Order) -> (a -> Tracker b) -> Dict comparable k a -> Tracker (Dict comparable k b)
+mapTraverse toComparable keyComparison func =
+    Dict.foldl keyComparison (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (func a))) (pure Dict.empty)

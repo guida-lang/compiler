@@ -83,12 +83,12 @@ isBinopCharHelp char =
         code =
             Char.toCode char
     in
-    EverySet.member code binopCharSet
+    EverySet.member identity code binopCharSet
 
 
-binopCharSet : EverySet Int
+binopCharSet : EverySet Int Int
 binopCharSet =
-    EverySet.fromList compare (List.map Char.toCode (String.toList "+-/*=.<>:&|^?%!"))
+    EverySet.fromList identity (List.map Char.toCode (String.toList "+-/*=.<>:&|^?%!"))
 
 
 

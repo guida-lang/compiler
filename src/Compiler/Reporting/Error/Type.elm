@@ -64,7 +64,7 @@ type Context
     | CallArity MaybeName Int
     | CallArg MaybeName Index.ZeroBased
     | RecordAccess A.Region (Maybe Name) A.Region Name
-    | RecordUpdateKeys Name (Dict Name Can.FieldUpdate)
+    | RecordUpdateKeys Name (Dict String Name Can.FieldUpdate)
     | RecordUpdateValue Name
     | Destructure
 
@@ -1256,7 +1256,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                         ++ " record does not have a `"
                                         ++ field
                                         ++ "` field:"
-                                , case Suggest.sort field Tuple.first (Dict.toList fields) of
+                                , case Suggest.sort field Tuple.first (Dict.toList compare fields) of
                                     [] ->
                                         D.reflow "In fact, it is a record with NO fields!"
 
@@ -1303,7 +1303,7 @@ toExprReport source localizer exprRegion category tipe expected =
                 RecordUpdateKeys record expectedFields ->
                     case T.iteratedDealias tipe of
                         T.Record actualFields ext ->
-                            case List.sortBy Tuple.first (Dict.toList (Dict.diff expectedFields actualFields)) of
+                            case List.sortBy Tuple.first (Dict.toList compare (Dict.diff expectedFields actualFields)) of
                                 [] ->
                                     mismatch
                                         ( ( Nothing
@@ -1334,7 +1334,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                                 ++ " record does not have a "
                                                 ++ fStr
                                                 ++ " field:"
-                                        , case Suggest.sort field Tuple.first (Dict.toList actualFields) of
+                                        , case Suggest.sort field Tuple.first (Dict.toList compare actualFields) of
                                             [] ->
                                                 D.reflow <| "In fact, " ++ rStr ++ " is a record with NO fields!"
 
@@ -2851,7 +2851,7 @@ contextDecoder =
                     "RecordUpdateKeys" ->
                         Decode.map2 RecordUpdateKeys
                             (Decode.field "record" Decode.string)
-                            (Decode.field "expectedFields" (DecodeX.assocListDict compare Decode.string Can.fieldUpdateDecoder))
+                            (Decode.field "expectedFields" (DecodeX.assocListDict identity Decode.string Can.fieldUpdateDecoder))
 
                     "RecordUpdateValue" ->
                         Decode.map RecordUpdateValue (Decode.field "field" Decode.string)
@@ -2934,7 +2934,7 @@ contextEncoder context =
             Encode.object
                 [ ( "type", Encode.string "RecordUpdateKeys" )
                 , ( "record", Encode.string record )
-                , ( "expectedFields", EncodeX.assocListDict Encode.string Can.fieldUpdateEncoder expectedFields )
+                , ( "expectedFields", EncodeX.assocListDict compare Encode.string Can.fieldUpdateEncoder expectedFields )
                 ]
 
         RecordUpdateValue field ->

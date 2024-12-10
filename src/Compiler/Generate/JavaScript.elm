@@ -34,11 +34,11 @@ import Utils.Main as Utils
 
 
 type alias Graph =
-    Dict Opt.Global Opt.Node
+    Dict (List String) Opt.Global Opt.Node
 
 
 type alias Mains =
-    Dict IO.Canonical Opt.Main
+    Dict (List String) IO.Canonical Opt.Main
 
 
 generate : Mode.Mode -> Opt.GlobalGraph -> Mains -> String
@@ -46,7 +46,7 @@ generate mode (Opt.GlobalGraph graph _) mains =
     let
         state : State
         state =
-            Dict.foldr (addMain mode graph) emptyState mains
+            Dict.foldr ModuleName.compareCanonical (addMain mode graph) emptyState mains
     in
     "(function(scope){\n'use strict';"
         ++ Functions.functions
@@ -198,7 +198,7 @@ postMessage localizer home maybeName tipe =
 
 
 type State
-    = State (List String) (List String) (EverySet Opt.Global)
+    = State (List String) (List String) (EverySet (List String) Opt.Global)
 
 
 emptyState : State
@@ -218,28 +218,28 @@ prependBuilders revBuilders monolith =
 
 addGlobal : Mode.Mode -> Graph -> State -> Opt.Global -> State
 addGlobal mode graph ((State revKernels builders seen) as state) global =
-    if EverySet.member global seen then
+    if EverySet.member Opt.toComparableGlobal global seen then
         state
 
     else
         addGlobalHelp mode graph global <|
-            State revKernels builders (EverySet.insert Opt.compareGlobal global seen)
+            State revKernels builders (EverySet.insert Opt.toComparableGlobal global seen)
 
 
 addGlobalHelp : Mode.Mode -> Graph -> Opt.Global -> State -> State
 addGlobalHelp mode graph global state =
     let
-        addDeps : EverySet Opt.Global -> State -> State
+        addDeps : EverySet (List String) Opt.Global -> State -> State
         addDeps deps someState =
             let
                 sortedDeps : List Opt.Global
                 sortedDeps =
                     -- This is required given that it looks like `Data.Set.union` sorts its elements
-                    List.sortWith Opt.compareGlobal (EverySet.toList deps)
+                    List.sortWith Opt.compareGlobal (EverySet.toList Opt.compareGlobal deps)
             in
             List.foldl (flip (addGlobal mode graph)) someState sortedDeps
     in
-    case Utils.find global graph of
+    case Utils.find Opt.toComparableGlobal global graph of
         Opt.Define expr deps ->
             addStmt (addDeps deps state)
                 (var global (Expr.generate mode expr))
@@ -579,7 +579,7 @@ toMainExports mode mains =
 
         exports : String
         exports =
-            generateExports mode (Dict.foldr addToTrie emptyTrie mains)
+            generateExports mode (Dict.foldr ModuleName.compareCanonical addToTrie emptyTrie mains)
     in
     export ++ "(" ++ exports ++ ");"
 
@@ -598,7 +598,7 @@ generateExports mode (Trie maybeMain subs) =
                         ++ JS.exprToBuilder (Expr.generateMain mode home main)
                         ++ end
     in
-    case Dict.toList subs of
+    case Dict.toList compare subs of
         [] ->
             starter "" ++ "}"
 
@@ -621,7 +621,7 @@ addSubTrie mode end ( name, trie ) =
 
 
 type Trie
-    = Trie (Maybe ( IO.Canonical, Opt.Main )) (Dict Name.Name Trie)
+    = Trie (Maybe ( IO.Canonical, Opt.Main )) (Dict String Name.Name Trie)
 
 
 emptyTrie : Trie
@@ -641,14 +641,14 @@ segmentsToTrie home segments main =
             Trie (Just ( home, main )) Dict.empty
 
         segment :: otherSegments ->
-            Trie Nothing (Dict.singleton segment (segmentsToTrie home otherSegments main))
+            Trie Nothing (Dict.singleton identity segment (segmentsToTrie home otherSegments main))
 
 
 merge : Trie -> Trie -> Trie
 merge (Trie main1 subs1) (Trie main2 subs2) =
     Trie
         (checkedMerge main1 main2)
-        (Utils.mapUnionWith compare merge subs1 subs2)
+        (Utils.mapUnionWith identity compare merge subs1 subs2)
 
 
 checkedMerge : Maybe a -> Maybe a -> Maybe a

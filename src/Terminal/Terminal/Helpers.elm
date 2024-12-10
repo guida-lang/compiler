@@ -143,7 +143,7 @@ suggestPackages given =
 
                                 Just (Registry.Registry _ versions) ->
                                     List.filter (String.startsWith given) <|
-                                        List.map Pkg.toChars (Dict.keys versions)
+                                        List.map Pkg.toChars (Dict.keys compare versions)
                         )
             )
 
@@ -166,6 +166,6 @@ examplePackages given =
                                 Just (Registry.Registry _ versions) ->
                                     List.map Pkg.toChars <|
                                         List.take 4 <|
-                                            Suggest.sort given Pkg.toChars (Dict.keys versions)
+                                            Suggest.sort given Pkg.toChars (Dict.keys compare versions)
                         )
             )

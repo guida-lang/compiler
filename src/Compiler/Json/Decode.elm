@@ -47,10 +47,10 @@ import Utils.Crash exposing (crash)
 -- CORE HELPERS
 
 
-assocListDict : (k -> k -> Order) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict k v)
-assocListDict keyComparison keyDecoder valueDecoder =
+assocListDict : (k -> comparable) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict comparable k v)
+assocListDict toComparable keyDecoder valueDecoder =
     Decode.list (jsonPair keyDecoder valueDecoder)
-        |> Decode.map (Dict.fromList keyComparison)
+        |> Decode.map (Dict.fromList toComparable)
 
 
 jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )
@@ -60,10 +60,10 @@ jsonPair firstDecoder secondDecoder =
         (Decode.field "b" secondDecoder)
 
 
-everySet : (a -> a -> Order) -> Decode.Decoder a -> Decode.Decoder (EverySet a)
-everySet keyComparison decoder =
+everySet : (a -> comparable) -> Decode.Decoder a -> Decode.Decoder (EverySet comparable a)
+everySet toComparable decoder =
     Decode.list decoder
-        |> Decode.map (EverySet.fromList keyComparison)
+        |> Decode.map (EverySet.fromList toComparable)
 
 
 nonempty : Decode.Decoder a -> Decode.Decoder (NE.Nonempty a)
@@ -331,9 +331,9 @@ type KeyDecoder x a
     = KeyDecoder (P.Parser x a) (Row -> Col -> x)
 
 
-dict : (k -> k -> Order) -> KeyDecoder x k -> Decoder x a -> Decoder x (Dict k a)
-dict keyComparison keyDecoder valueDecoder =
-    fmap (Dict.fromList keyComparison) (pairs keyDecoder valueDecoder)
+dict : (k -> comparable) -> KeyDecoder x k -> Decoder x a -> Decoder x (Dict comparable k a)
+dict toComparable keyDecoder valueDecoder =
+    fmap (Dict.fromList toComparable) (pairs keyDecoder valueDecoder)
 
 
 pairs : KeyDecoder x k -> Decoder x a -> Decoder x (List ( k, a ))

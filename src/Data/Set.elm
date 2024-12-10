@@ -50,119 +50,119 @@ import Data.Map as Dict exposing (Dict)
 {-| Represents a set of unique values. So `(Set Int)` is a set of integers and
 `(Set String)` is a set of strings.
 -}
-type EverySet a
-    = EverySet (Dict a ())
+type EverySet c a
+    = EverySet (Dict c a ())
 
 
 {-| Create an empty set.
 -}
-empty : EverySet a
+empty : EverySet c a
 empty =
     EverySet Dict.empty
 
 
 {-| Create a set with one value.
 -}
-singleton : a -> EverySet a
-singleton k =
-    EverySet <| Dict.singleton k ()
+singleton : (a -> comparable) -> a -> EverySet comparable a
+singleton toComparable k =
+    EverySet <| Dict.singleton toComparable k ()
 
 
 {-| Insert a value into a set.
 -}
-insert : (a -> a -> Order) -> a -> EverySet a -> EverySet a
-insert keyComparison k (EverySet d) =
-    EverySet <| Dict.insert keyComparison k () d
+insert : (a -> comparable) -> a -> EverySet comparable a -> EverySet comparable a
+insert toComparable k (EverySet d) =
+    EverySet <| Dict.insert toComparable k () d
 
 
 {-| Remove a value from a set. If the value is not found, no changes are made.
 -}
-remove : a -> EverySet a -> EverySet a
-remove k (EverySet d) =
-    EverySet <| Dict.remove k d
+remove : (a -> comparable) -> a -> EverySet comparable a -> EverySet comparable a
+remove toComparable k (EverySet d) =
+    EverySet <| Dict.remove toComparable k d
 
 
 {-| Determine if a set is empty.
 -}
-isEmpty : EverySet a -> Bool
+isEmpty : EverySet c a -> Bool
 isEmpty (EverySet d) =
     Dict.isEmpty d
 
 
 {-| Determine if a value is in a set.
 -}
-member : a -> EverySet a -> Bool
-member k (EverySet d) =
-    Dict.member k d
+member : (a -> comparable) -> a -> EverySet comparable a -> Bool
+member toComparable k (EverySet d) =
+    Dict.member toComparable k d
 
 
 {-| Determine the number of elements in a set.
 -}
-size : EverySet a -> Int
+size : EverySet c a -> Int
 size (EverySet d) =
     Dict.size d
 
 
 {-| Get the union of two sets. Keep all values.
 -}
-union : (a -> a -> Order) -> EverySet a -> EverySet a -> EverySet a
-union keyComparison (EverySet d1) (EverySet d2) =
-    EverySet <| Dict.union keyComparison d1 d2
+union : EverySet comparable a -> EverySet comparable a -> EverySet comparable a
+union (EverySet d1) (EverySet d2) =
+    EverySet <| Dict.union d1 d2
 
 
 {-| Get the intersection of two sets. Keeps values that appear in both sets.
 -}
-intersect : EverySet a -> EverySet a -> EverySet a
-intersect (EverySet d1) (EverySet d2) =
-    EverySet <| Dict.intersection d1 d2
+intersect : (a -> a -> Order) -> EverySet comparable a -> EverySet comparable a -> EverySet comparable a
+intersect keyComparison (EverySet d1) (EverySet d2) =
+    EverySet <| Dict.intersection keyComparison d1 d2
 
 
 {-| Get the difference between the first set and the second. Keeps values
 that do not appear in the second set.
 -}
-diff : EverySet a -> EverySet a -> EverySet a
+diff : EverySet comparable a -> EverySet comparable a -> EverySet comparable a
 diff (EverySet d1) (EverySet d2) =
     EverySet <| Dict.diff d1 d2
 
 
 {-| Convert a set into a list, sorted from lowest to highest.
 -}
-toList : EverySet a -> List a
-toList (EverySet d) =
-    Dict.keys d
+toList : (a -> a -> Order) -> EverySet c a -> List a
+toList keyComparison (EverySet d) =
+    Dict.keys keyComparison d
 
 
 {-| Convert a list into a set, removing any duplicates.
 -}
-fromList : (a -> a -> Order) -> List a -> EverySet a
-fromList keyComparison xs =
-    List.foldl (insert keyComparison) empty xs
+fromList : (a -> comparable) -> List a -> EverySet comparable a
+fromList toComparable xs =
+    List.foldl (insert toComparable) empty xs
 
 
 {-| Fold over the values in a set, in order from lowest to highest.
 -}
-foldl : (a -> b -> b) -> b -> EverySet a -> b
-foldl f b (EverySet d) =
-    Dict.foldl (\k _ result -> f k result) b d
+foldl : (a -> a -> Order) -> (a -> b -> b) -> b -> EverySet c a -> b
+foldl keyComparison f b (EverySet d) =
+    Dict.foldl keyComparison (\k _ result -> f k result) b d
 
 
 {-| Fold over the values in a set, in order from highest to lowest.
 -}
-foldr : (a -> b -> b) -> b -> EverySet a -> b
-foldr f b (EverySet d) =
-    Dict.foldr (\k _ result -> f k result) b d
+foldr : (a -> a -> Order) -> (a -> b -> b) -> b -> EverySet c a -> b
+foldr keyComparison f b (EverySet d) =
+    Dict.foldr keyComparison (\k _ result -> f k result) b d
 
 
 {-| Map a function onto a set, creating a new set with no duplicates.
 -}
-map : (a2 -> a2 -> Order) -> (a -> a2) -> EverySet a -> EverySet a2
-map keyComparison f s =
-    fromList keyComparison (List.map f (toList s))
+map : (a -> a -> Order) -> (a2 -> comparable) -> (a -> a2) -> EverySet comparable a -> EverySet comparable a2
+map keyComparison toString f s =
+    fromList toString (List.map f (toList keyComparison s))
 
 
 {-| Create a new set consisting only of elements which satisfy a predicate.
 -}
-filter : (a -> Bool) -> EverySet a -> EverySet a
+filter : (a -> Bool) -> EverySet comparable a -> EverySet comparable a
 filter p (EverySet d) =
     EverySet <| Dict.filter (\k _ -> p k) d
 
@@ -170,7 +170,7 @@ filter p (EverySet d) =
 {-| Create two new sets; the first consisting of elements which satisfy a
 predicate, the second consisting of elements which do not.
 -}
-partition : (a -> Bool) -> EverySet a -> ( EverySet a, EverySet a )
+partition : (a -> Bool) -> EverySet comparable a -> ( EverySet comparable a, EverySet comparable a )
 partition p (EverySet d) =
     let
         ( p1, p2 ) =

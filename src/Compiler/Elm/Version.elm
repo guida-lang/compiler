@@ -16,6 +16,7 @@ module Compiler.Elm.Version exposing
     , one
     , parser
     , toChars
+    , toComparable
     , versionDecoder
     , versionEncoder
     )
@@ -53,6 +54,11 @@ compare (Version major1 minor1 patch1) (Version major2 minor2 patch2) =
 
         majorRes ->
             majorRes
+
+
+toComparable : Version -> ( Int, Int, Int )
+toComparable (Version major_ minor_ patch_) =
+    ( major_, minor_, patch_ )
 
 
 min : Version -> Version -> Version

@@ -111,14 +111,15 @@ traverseTuple f ( a, b ) =
     fmap (Tuple.pair a) (f b)
 
 
-traverseMap : (k -> k -> Order) -> (a -> StateT s b) -> Dict k a -> StateT s (Dict k b)
-traverseMap keyComparison f =
-    traverseMapWithKey keyComparison (\_ -> f)
+traverseMap : (k -> k -> Order) -> (k -> comparable) -> (a -> StateT s b) -> Dict comparable k a -> StateT s (Dict comparable k b)
+traverseMap keyComparison toComparable f =
+    traverseMapWithKey keyComparison toComparable (\_ -> f)
 
 
-traverseMapWithKey : (k -> k -> Order) -> (k -> a -> StateT s b) -> Dict k a -> StateT s (Dict k b)
-traverseMapWithKey keyComparison f =
-    Dict.foldl (\k a -> bind (\c -> fmap (\va -> Dict.insert keyComparison k va c) (f k a)))
+traverseMapWithKey : (k -> k -> Order) -> (k -> comparable) -> (k -> a -> StateT s b) -> Dict comparable k a -> StateT s (Dict comparable k b)
+traverseMapWithKey keyComparison toComparable f =
+    Dict.foldl keyComparison
+        (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (f k a)))
         (pure Dict.empty)
 
 

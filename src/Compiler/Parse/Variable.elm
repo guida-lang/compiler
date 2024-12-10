@@ -64,7 +64,7 @@ lower toError =
                     name =
                         Name.fromPtr src pos newPos
                 in
-                if EverySet.member name reservedWords then
+                if EverySet.member identity name reservedWords then
                     Err (P.PErr P.Empty row col toError)
 
                 else
@@ -76,9 +76,9 @@ lower toError =
                     Ok (P.POk P.Consumed name newState)
 
 
-reservedWords : EverySet Name
+reservedWords : EverySet String Name
 reservedWords =
-    EverySet.fromList compare
+    EverySet.fromList identity
         [ "if"
         , "then"
         , "else"
@@ -247,7 +247,7 @@ foreignAlpha toError =
                         P.State src alphaEnd end indent row newCol
                 in
                 if alphaStart == pos then
-                    if EverySet.member name reservedWords then
+                    if EverySet.member identity name reservedWords then
                         Err (P.PErr P.Empty row col toError)
 
                     else

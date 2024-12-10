@@ -37,16 +37,16 @@ type alias MResult i w a =
 -- MODULES
 
 
-canonicalize : Pkg.Name -> Dict ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
+canonicalize : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
 canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops effects) as modul) =
     let
         home : IO.Canonical
         home =
             IO.Canonical pkg (Src.getName modul)
 
-        cbinops : Dict Name Can.Binop
+        cbinops : Dict String Name Can.Binop
         cbinops =
-            Dict.fromList compare (List.map canonicalizeBinop binops)
+            Dict.fromList identity (List.map canonicalizeBinop binops)
     in
     Foreign.createInitialEnv home ifaces imports
         |> R.bind (Local.add modul)
@@ -190,7 +190,7 @@ toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType
                                                 in
                                                 ( toNodeTwo name srcArgs def freeLocals
                                                 , name
-                                                , Dict.keys freeLocals
+                                                , Dict.keys compare freeLocals
                                                 )
                                             )
                                 )
@@ -217,7 +217,7 @@ toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType
                                                             in
                                                             ( toNodeTwo name srcArgs def freeLocals
                                                             , name
-                                                            , Dict.keys freeLocals
+                                                            , Dict.keys compare freeLocals
                                                             )
                                                         )
                                             )
@@ -229,7 +229,7 @@ toNodeTwo : Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
 toNodeTwo name args def freeLocals =
     case args of
         [] ->
-            ( def, name, Dict.foldr addDirects [] freeLocals )
+            ( def, name, Dict.foldr compare addDirects [] freeLocals )
 
         _ ->
             ( def, name, [] )
@@ -250,9 +250,9 @@ addDirects name (Expr.Uses { direct }) directDeps =
 
 canonicalizeExports :
     List (A.Located Src.Value)
-    -> Dict Name union
-    -> Dict Name alias
-    -> Dict Name binop
+    -> Dict String Name union
+    -> Dict String Name alias
+    -> Dict String Name binop
     -> Can.Effects
     -> A.Located Src.Exposing
     -> MResult i w Can.Exports
@@ -263,9 +263,9 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
 
         Src.Explicit exposeds ->
             let
-                names : Dict Name ()
+                names : Dict String Name ()
                 names =
-                    Dict.fromList compare (List.map valueToName values)
+                    Dict.fromList identity (List.map valueToName values)
             in
             R.traverse (checkExposed names unions aliases binops effects) exposeds
                 |> R.bind
@@ -281,17 +281,17 @@ valueToName (A.At _ (Src.Value (A.At _ name) _ _ _)) =
 
 
 checkExposed :
-    Dict Name value
-    -> Dict Name union
-    -> Dict Name alias
-    -> Dict Name binop
+    Dict String Name value
+    -> Dict String Name union
+    -> Dict String Name alias
+    -> Dict String Name binop
     -> Can.Effects
     -> Src.Exposed
     -> MResult i w (Dups.Tracker (A.Located Can.Export))
 checkExposed values unions aliases binops effects exposed =
     case exposed of
         Src.Lower (A.At region name) ->
-            if Dict.member name values then
+            if Dict.member identity name values then
                 ok name region Can.ExportValue
 
             else
@@ -300,34 +300,34 @@ checkExposed values unions aliases binops effects exposed =
                         ok name region Can.ExportPort
 
                     Just ports ->
-                        R.throw (Error.ExportNotFound region Error.BadVar name (ports ++ Dict.keys values))
+                        R.throw (Error.ExportNotFound region Error.BadVar name (ports ++ Dict.keys compare values))
 
         Src.Operator region name ->
-            if Dict.member name binops then
+            if Dict.member identity name binops then
                 ok name region Can.ExportBinop
 
             else
-                R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys binops))
+                R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys compare binops))
 
         Src.Upper (A.At region name) (Src.Public dotDotRegion) ->
-            if Dict.member name unions then
+            if Dict.member identity name unions then
                 ok name region Can.ExportUnionOpen
 
-            else if Dict.member name aliases then
+            else if Dict.member identity name aliases then
                 R.throw (Error.ExportOpenAlias dotDotRegion name)
 
             else
-                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys unions ++ Dict.keys aliases))
+                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
         Src.Upper (A.At region name) Src.Private ->
-            if Dict.member name unions then
+            if Dict.member identity name unions then
                 ok name region Can.ExportUnionClosed
 
-            else if Dict.member name aliases then
+            else if Dict.member identity name aliases then
                 ok name region Can.ExportAlias
 
             else
-                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys unions ++ Dict.keys aliases))
+                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
 
 checkPorts : Can.Effects -> Name -> Maybe (List Name)
@@ -337,11 +337,11 @@ checkPorts effects name =
             Just []
 
         Can.Ports ports ->
-            if Dict.member name ports then
+            if Dict.member identity name ports then
                 Nothing
 
             else
-                Just (Dict.keys ports)
+                Just (Dict.keys compare ports)
 
         Can.Manager _ _ _ _ ->
             Just []

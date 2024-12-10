@@ -28,7 +28,7 @@ import Json.Encode as Encode
 
 
 type Error
-    = Error A.Region ModuleName.Raw (EverySet ModuleName.Raw) Problem
+    = Error A.Region ModuleName.Raw (EverySet String ModuleName.Raw) Problem
 
 
 type Problem
@@ -59,7 +59,7 @@ toReport source (Error region name unimportedModules problem) =
                             D.indent 4 <|
                                 D.vcat <|
                                     List.map D.fromName (toSuggestions name unimportedModules)
-                        , case Dict.get name Pkg.suggestions of
+                        , case Dict.get identity name Pkg.suggestions of
                             Nothing ->
                                 D.toSimpleHint
                                     "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
@@ -176,10 +176,10 @@ toReport source (Error region name unimportedModules problem) =
                     )
 
 
-toSuggestions : ModuleName.Raw -> EverySet ModuleName.Raw -> List ModuleName.Raw
+toSuggestions : ModuleName.Raw -> EverySet String ModuleName.Raw -> List ModuleName.Raw
 toSuggestions name unimportedModules =
     List.take 4 <|
-        Suggest.sort name identity (EverySet.toList unimportedModules)
+        Suggest.sort name identity (EverySet.toList compare unimportedModules)
 
 
 
@@ -259,7 +259,7 @@ errorEncoder (Error region name unimportedModules problem) =
         [ ( "type", Encode.string "Error" )
         , ( "region", A.regionEncoder region )
         , ( "name", ModuleName.rawEncoder name )
-        , ( "unimportedModules", EncodeX.everySet ModuleName.rawEncoder unimportedModules )
+        , ( "unimportedModules", EncodeX.everySet compare ModuleName.rawEncoder unimportedModules )
         , ( "problem", problemEncoder problem )
         ]
 
@@ -269,5 +269,5 @@ errorDecoder =
     Decode.map4 Error
         (Decode.field "region" A.regionDecoder)
         (Decode.field "name" ModuleName.rawDecoder)
-        (Decode.field "unimportedModules" (DecodeX.everySet compare ModuleName.rawDecoder))
+        (Decode.field "unimportedModules" (DecodeX.everySet identity ModuleName.rawDecoder))
         (Decode.field "problem" problemDecoder)

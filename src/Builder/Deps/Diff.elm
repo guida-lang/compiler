@@ -30,25 +30,25 @@ import Utils.Main as Utils
 
 
 type PackageChanges
-    = PackageChanges (List ModuleName.Raw) (Dict ModuleName.Raw ModuleChanges) (List ModuleName.Raw)
+    = PackageChanges (List ModuleName.Raw) (Dict String ModuleName.Raw ModuleChanges) (List ModuleName.Raw)
 
 
 type ModuleChanges
-    = ModuleChanges (Changes Name.Name Docs.Union) (Changes Name.Name Docs.Alias) (Changes Name.Name Docs.Value) (Changes Name.Name Docs.Binop)
+    = ModuleChanges (Changes String Name.Name Docs.Union) (Changes String Name.Name Docs.Alias) (Changes String Name.Name Docs.Value) (Changes String Name.Name Docs.Binop)
 
 
-type Changes k v
-    = Changes (Dict k v) (Dict k ( v, v )) (Dict k v)
+type Changes c k v
+    = Changes (Dict c k v) (Dict c k ( v, v )) (Dict c k v)
 
 
-getChanges : (k -> k -> Order) -> (v -> v -> Bool) -> Dict k v -> Dict k v -> Changes k v
-getChanges keyComparison isEquivalent old new =
+getChanges : (k -> comparable) -> (k -> k -> Order) -> (v -> v -> Bool) -> Dict comparable k v -> Dict comparable k v -> Changes comparable k v
+getChanges toComparable keyComparison isEquivalent old new =
     let
-        overlap : Dict k ( v, v )
+        overlap : Dict comparable k ( v, v )
         overlap =
-            Utils.mapIntersectionWith keyComparison Tuple.pair old new
+            Utils.mapIntersectionWith toComparable keyComparison Tuple.pair old new
 
-        changed : Dict k ( v, v )
+        changed : Dict comparable k ( v, v )
         changed =
             Dict.filter (\_ ( v1, v2 ) -> not (isEquivalent v1 v2)) overlap
     in
@@ -65,26 +65,26 @@ getChanges keyComparison isEquivalent old new =
 diff : Docs.Documentation -> Docs.Documentation -> PackageChanges
 diff oldDocs newDocs =
     let
-        filterOutPatches : Dict a ModuleChanges -> Dict a ModuleChanges
+        filterOutPatches : Dict comparable a ModuleChanges -> Dict comparable a ModuleChanges
         filterOutPatches chngs =
             Dict.filter (\_ chng -> moduleChangeMagnitude chng /= M.PATCH) chngs
 
         (Changes added changed removed) =
-            getChanges compare (\_ _ -> False) oldDocs newDocs
+            getChanges identity compare (\_ _ -> False) oldDocs newDocs
     in
     PackageChanges
-        (Dict.keys added)
+        (Dict.keys compare added)
         (filterOutPatches (Dict.map (\_ -> diffModule) changed))
-        (Dict.keys removed)
+        (Dict.keys compare removed)
 
 
 diffModule : ( Docs.Module, Docs.Module ) -> ModuleChanges
 diffModule ( Docs.Module _ _ u1 a1 v1 b1, Docs.Module _ _ u2 a2 v2 b2 ) =
     ModuleChanges
-        (getChanges compare isEquivalentUnion u1 u2)
-        (getChanges compare isEquivalentAlias a1 a2)
-        (getChanges compare isEquivalentValue v1 v2)
-        (getChanges compare isEquivalentBinop b1 b2)
+        (getChanges identity compare isEquivalentUnion u1 u2)
+        (getChanges identity compare isEquivalentAlias a1 a2)
+        (getChanges identity compare isEquivalentValue v1 v2)
+        (getChanges identity compare isEquivalentBinop b1 b2)
 
 
 
@@ -109,7 +109,7 @@ isEquivalentUnion (Docs.Union oldComment oldVars oldCtors) (Docs.Union newCommen
     in
     (List.length oldCtors == List.length newCtors)
         && List.all identity (List.map2 (==) (List.map Tuple.first oldCtors) (List.map Tuple.first newCtors))
-        && List.all identity (Dict.values (Utils.mapIntersectionWith compare equiv (Dict.fromList compare oldCtors) (Dict.fromList compare newCtors)))
+        && List.all identity (Dict.values compare (Utils.mapIntersectionWith identity compare equiv (Dict.fromList identity oldCtors) (Dict.fromList identity newCtors)))
 
 
 isEquivalentAlias : Docs.Alias -> Docs.Alias -> Bool
@@ -243,11 +243,11 @@ isEquivalentRenaming varPairs =
     let
         renamings : List ( Name.Name, List Name.Name )
         renamings =
-            Dict.toList (List.foldr insert Dict.empty varPairs)
+            Dict.toList compare (List.foldr insert Dict.empty varPairs)
 
-        insert : ( Name.Name, Name.Name ) -> Dict Name.Name (List Name.Name) -> Dict Name.Name (List Name.Name)
+        insert : ( Name.Name, Name.Name ) -> Dict String Name.Name (List Name.Name) -> Dict String Name.Name (List Name.Name)
         insert ( old, new ) dict =
-            Utils.mapInsertWith compare (++) old [ new ] dict
+            Utils.mapInsertWith identity (++) old [ new ] dict
 
         verify : ( a, List b ) -> Maybe ( a, b )
         verify ( old, news ) =
@@ -264,7 +264,7 @@ isEquivalentRenaming varPairs =
 
         allUnique : List comparable -> Bool
         allUnique list =
-            List.length list == EverySet.size (EverySet.fromList compare list)
+            List.length list == EverySet.size (EverySet.fromList identity list)
     in
     case Utils.maybeMapM verify renamings of
         Nothing ->
@@ -364,7 +364,7 @@ toMagnitude (PackageChanges added changed removed) =
 
         changeMags : List M.Magnitude
         changeMags =
-            List.map moduleChangeMagnitude (Dict.values changed)
+            List.map moduleChangeMagnitude (Dict.values compare changed)
     in
     Utils.listMaximum M.compare (addMag :: removeMag :: changeMags)
 
@@ -379,7 +379,7 @@ moduleChangeMagnitude (ModuleChanges unions aliases values binops) =
         ]
 
 
-changeMagnitude : Changes k v -> M.Magnitude
+changeMagnitude : Changes comparable k v -> M.Magnitude
 changeMagnitude (Changes added changed removed) =
     if Dict.size removed > 0 || Dict.size changed > 0 then
         M.MAJOR

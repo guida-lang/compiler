@@ -62,7 +62,7 @@ canonicalize env (A.At typeRegion tipe) =
 
         Src.TRecord fields ext ->
             Dups.checkFields (canonicalizeFields env fields)
-                |> R.bind (Utils.sequenceADict compare)
+                |> R.bind (Utils.sequenceADict identity compare)
                 |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map A.toValue ext))
 
         Src.TUnit ->
@@ -135,23 +135,23 @@ checkArity expected region name args answer =
 -- ADD FREE VARS
 
 
-addFreeVars : Dict Name.Name () -> Can.Type -> Dict Name.Name ()
+addFreeVars : Dict String Name.Name () -> Can.Type -> Dict String Name.Name ()
 addFreeVars freeVars tipe =
     case tipe of
         Can.TLambda arg result ->
             addFreeVars (addFreeVars freeVars result) arg
 
         Can.TVar var ->
-            Dict.insert compare var () freeVars
+            Dict.insert identity var () freeVars
 
         Can.TType _ _ args ->
             List.foldl (\b c -> addFreeVars c b) freeVars args
 
         Can.TRecord fields Nothing ->
-            Dict.foldl (\_ b c -> addFieldFreeVars c b) freeVars fields
+            Dict.foldl compare (\_ b c -> addFieldFreeVars c b) freeVars fields
 
         Can.TRecord fields (Just ext) ->
-            Dict.foldl (\_ b c -> addFieldFreeVars c b) (Dict.insert compare ext () freeVars) fields
+            Dict.foldl compare (\_ b c -> addFieldFreeVars c b) (Dict.insert identity ext () freeVars) fields
 
         Can.TUnit ->
             freeVars
@@ -168,6 +168,6 @@ addFreeVars freeVars tipe =
             List.foldl (\( _, arg ) fvs -> addFreeVars fvs arg) freeVars args
 
 
-addFieldFreeVars : Dict Name.Name () -> Can.FieldType -> Dict Name.Name ()
+addFieldFreeVars : Dict String Name.Name () -> Can.FieldType -> Dict String Name.Name ()
 addFieldFreeVars freeVars (Can.FieldType _ tipe) =
     addFreeVars freeVars tipe

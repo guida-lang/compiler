@@ -30,7 +30,7 @@ type Source
 
 
 type Types
-    = Types (Dict Name Type) (Dict Name Type) (Dict Name Type)
+    = Types (Dict String Name Type) (Dict String Name Type) (Dict String Name Type)
 
 
 type Type
@@ -113,18 +113,18 @@ typesEncoder : Types -> Encode.Value
 typesEncoder (Types attribute uniform varying) =
     Encode.object
         [ ( "type", Encode.string "Types" )
-        , ( "attribute", E.assocListDict Encode.string typeEncoder attribute )
-        , ( "uniform", E.assocListDict Encode.string typeEncoder uniform )
-        , ( "varying", E.assocListDict Encode.string typeEncoder varying )
+        , ( "attribute", E.assocListDict compare Encode.string typeEncoder attribute )
+        , ( "uniform", E.assocListDict compare Encode.string typeEncoder uniform )
+        , ( "varying", E.assocListDict compare Encode.string typeEncoder varying )
         ]
 
 
 typesDecoder : Decode.Decoder Types
 typesDecoder =
     Decode.map3 Types
-        (Decode.field "attribute" (assocListDict compare Decode.string typeDecoder))
-        (Decode.field "uniform" (assocListDict compare Decode.string typeDecoder))
-        (Decode.field "varying" (assocListDict compare Decode.string typeDecoder))
+        (Decode.field "attribute" (assocListDict identity Decode.string typeDecoder))
+        (Decode.field "uniform" (assocListDict identity Decode.string typeDecoder))
+        (Decode.field "varying" (assocListDict identity Decode.string typeDecoder))
 
 
 typeEncoder : Type -> Encode.Value
@@ -188,10 +188,10 @@ typeDecoder =
 -- COPIED FROM JSON.DECODEX
 
 
-assocListDict : (k -> k -> Order) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict k v)
-assocListDict keyComparison keyDecoder valueDecoder =
+assocListDict : (k -> comparable) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict comparable k v)
+assocListDict toComparable keyDecoder valueDecoder =
     Decode.list (jsonPair keyDecoder valueDecoder)
-        |> Decode.map (Dict.fromList keyComparison)
+        |> Decode.map (Dict.fromList toComparable)
 
 
 jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )

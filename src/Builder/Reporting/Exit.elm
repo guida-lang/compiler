@@ -1844,7 +1844,7 @@ type Details
 
 type DetailsBadDep
     = BD_BadDownload Pkg.Name V.Version PackageProblem
-    | BD_BadBuild Pkg.Name V.Version (Dict Pkg.Name V.Version)
+    | BD_BadBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2023,7 +2023,7 @@ toDetailsReport details =
                                 , D.indent 4 <|
                                     D.vcat <|
                                         List.map (\( p, v ) -> D.fromChars <| Pkg.toChars p ++ " " ++ V.toChars v) <|
-                                            Dict.toList fingerprint
+                                            Dict.toList compare fingerprint
                                 , D.reflow <|
                                     "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
                                 ]
@@ -2840,7 +2840,7 @@ detailsBadDepEncoder detailsBadDep =
                 [ ( "type", CoreEncode.string "BD_BadBuild" )
                 , ( "pkg", Pkg.nameEncoder pkg )
                 , ( "vsn", V.versionEncoder vsn )
-                , ( "fingerprint", Encode.assocListDict Pkg.nameEncoder V.versionEncoder fingerprint )
+                , ( "fingerprint", Encode.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint )
                 ]
 
 
@@ -2860,7 +2860,7 @@ detailsBadDepDecoder =
                         CoreDecode.map3 BD_BadBuild
                             (CoreDecode.field "pkg" Pkg.nameDecoder)
                             (CoreDecode.field "vsn" V.versionDecoder)
-                            (CoreDecode.field "fingerprint" (Decode.assocListDict Pkg.compareName Pkg.nameDecoder V.versionDecoder))
+                            (CoreDecode.field "fingerprint" (Decode.assocListDict identity Pkg.nameDecoder V.versionDecoder))
 
                     _ ->
                         CoreDecode.fail ("Failed to decode DetailsBadDep's type: " ++ type_)

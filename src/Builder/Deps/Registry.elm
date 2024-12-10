@@ -33,7 +33,7 @@ import System.IO as IO exposing (IO)
 
 
 type Registry
-    = Registry Int (Dict Pkg.Name KnownVersions)
+    = Registry Int (Dict ( String, String ) Pkg.Name KnownVersions)
 
 
 type KnownVersions
@@ -75,7 +75,7 @@ fetch manager cache =
             let
                 size : Int
                 size =
-                    Dict.foldr (\_ -> addEntry) 0 versions
+                    Dict.foldr Pkg.compareName (\_ -> addEntry) 0 versions
 
                 registry : Registry
                 registry =
@@ -94,7 +94,7 @@ addEntry (KnownVersions _ vs) count =
     count + 1 + List.length vs
 
 
-allPkgsDecoder : D.Decoder () (Dict Pkg.Name KnownVersions)
+allPkgsDecoder : D.Decoder () (Dict ( String, String ) Pkg.Name KnownVersions)
 allPkgsDecoder =
     let
         keyDecoder : D.KeyDecoder () Pkg.Name
@@ -114,7 +114,7 @@ allPkgsDecoder =
                 [] ->
                     D.failure ()
     in
-    D.dict Pkg.compareName keyDecoder (D.bind toKnownVersions versionsDecoder)
+    D.dict identity keyDecoder (D.bind toKnownVersions versionsDecoder)
 
 
 
@@ -135,7 +135,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         newSize =
                             size + List.length news
 
-                        newPkgs : Dict Pkg.Name KnownVersions
+                        newPkgs : Dict ( String, String ) Pkg.Name KnownVersions
                         newPkgs =
                             List.foldr addNew packages news
 
@@ -147,7 +147,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         |> IO.fmap (\_ -> newRegistry)
 
 
-addNew : ( Pkg.Name, V.Version ) -> Dict Pkg.Name KnownVersions -> Dict Pkg.Name KnownVersions
+addNew : ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
 addNew ( name, version ) versions =
     let
         add : Maybe KnownVersions -> KnownVersions
@@ -159,7 +159,7 @@ addNew ( name, version ) versions =
                 Nothing ->
                     KnownVersions version []
     in
-    Dict.update Pkg.compareName name (Just << add) versions
+    Dict.update identity name (Just << add) versions
 
 
 
@@ -211,17 +211,17 @@ latest manager cache =
 
 getVersions : Pkg.Name -> Registry -> Maybe KnownVersions
 getVersions name (Registry _ versions) =
-    Dict.get name versions
+    Dict.get identity name versions
 
 
 getVersions_ : Pkg.Name -> Registry -> Result (List Pkg.Name) KnownVersions
 getVersions_ name (Registry _ versions) =
-    case Dict.get name versions of
+    case Dict.get identity name versions of
         Just kvs ->
             Ok kvs
 
         Nothing ->
-            Err (Pkg.nearbyNames name (Dict.keys versions))
+            Err (Pkg.nearbyNames name (Dict.keys compare versions))
 
 
 
@@ -253,12 +253,12 @@ registryDecoder : Decode.Decoder Registry
 registryDecoder =
     Decode.map2 Registry
         (Decode.field "size" Decode.int)
-        (Decode.field "packages" (D.assocListDict Pkg.compareName Pkg.nameDecoder knownVersionsDecoder))
+        (Decode.field "packages" (D.assocListDict identity Pkg.nameDecoder knownVersionsDecoder))
 
 
 registryEncoder : Registry -> Encode.Value
 registryEncoder (Registry size versions) =
     Encode.object
         [ ( "size", Encode.int size )
-        , ( "packages", E.assocListDict Pkg.nameEncoder knownVersionsEncoder versions )
+        , ( "packages", E.assocListDict Pkg.compareName Pkg.nameEncoder knownVersionsEncoder versions )
         ]

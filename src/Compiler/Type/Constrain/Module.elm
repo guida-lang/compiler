@@ -23,7 +23,7 @@ constrain (Can.Module home _ _ decls _ _ _ effects) =
             constrainDecls decls CSaveTheEnvironment
 
         Can.Ports ports ->
-            Dict.foldr letPort (constrainDecls decls CSaveTheEnvironment) ports
+            Dict.foldr compare letPort (constrainDecls decls CSaveTheEnvironment) ports
 
         Can.Manager r0 r1 r2 manager ->
             case manager of
@@ -69,34 +69,34 @@ letPort : Name -> Can.Port -> IO Constraint -> IO Constraint
 letPort name port_ makeConstraint =
     case port_ of
         Can.Incoming { freeVars, func } ->
-            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey identity compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func
                             |> IO.bind
                                 (\tipe ->
                                     let
-                                        header : Dict Name (A.Located Type)
+                                        header : Dict String Name (A.Located Type)
                                         header =
-                                            Dict.singleton name (A.At A.zero tipe)
+                                            Dict.singleton identity name (A.At A.zero tipe)
                                     in
-                                    IO.fmap (CLet (Dict.values vars) [] header CTrue) makeConstraint
+                                    IO.fmap (CLet (Dict.values compare vars) [] header CTrue) makeConstraint
                                 )
                     )
 
         Can.Outgoing { freeVars, func } ->
-            IO.traverseMapWithKey compare (\k _ -> nameToRigid k) freeVars
+            IO.traverseMapWithKey identity compare (\k _ -> nameToRigid k) freeVars
                 |> IO.bind
                     (\vars ->
                         Instantiate.fromSrcType (Dict.map (\_ v -> VarN v) vars) func
                             |> IO.bind
                                 (\tipe ->
                                     let
-                                        header : Dict Name (A.Located Type)
+                                        header : Dict String Name (A.Located Type)
                                         header =
-                                            Dict.singleton name (A.At A.zero tipe)
+                                            Dict.singleton identity name (A.At A.zero tipe)
                                     in
-                                    IO.fmap (CLet (Dict.values vars) [] header CTrue) makeConstraint
+                                    IO.fmap (CLet (Dict.values compare vars) [] header CTrue) makeConstraint
                                 )
                     )
 
@@ -119,9 +119,9 @@ letCmd home tipe constraint =
                     cmdType =
                         FunN (AppN home tipe [ msg ]) (AppN ModuleName.cmd Name.cmd [ msg ])
 
-                    header : Dict Name (A.Located Type)
+                    header : Dict String Name (A.Located Type)
                     header =
-                        Dict.singleton "command" (A.At A.zero cmdType)
+                        Dict.singleton identity "command" (A.At A.zero cmdType)
                 in
                 CLet [ msgVar ] [] header CTrue constraint
             )
@@ -141,9 +141,9 @@ letSub home tipe constraint =
                     subType =
                         FunN (AppN home tipe [ msg ]) (AppN ModuleName.sub Name.sub [ msg ])
 
-                    header : Dict Name (A.Located Type)
+                    header : Dict String Name (A.Located Type)
                     header =
-                        Dict.singleton "subscription" (A.At A.zero subType)
+                        Dict.singleton identity "subscription" (A.At A.zero subType)
                 in
                 CLet [ msgVar ] [] header CTrue constraint
             )

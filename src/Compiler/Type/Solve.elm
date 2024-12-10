@@ -27,7 +27,7 @@ import Utils.Main as Utils
 -- RUN SOLVER
 
 
-run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict Name.Name Can.Annotation))
+run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.Name Can.Annotation))
 run constraint =
     MVector.replicate 8 []
         |> IO.bind
@@ -37,7 +37,7 @@ run constraint =
                         (\(State env _ errors) ->
                             case errors of
                                 [] ->
-                                    IO.traverseMap compare Type.toAnnotation env
+                                    IO.traverseMap identity compare Type.toAnnotation env
                                         |> IO.fmap Ok
 
                                 e :: es ->
@@ -56,7 +56,7 @@ emptyState =
 
 
 type alias Env =
-    Dict Name.Name Variable
+    Dict String Name.Name Variable
 
 
 type alias Pools =
@@ -104,7 +104,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                     )
 
         CLocal region name expectation ->
-            makeCopy rank pools (Utils.find name env)
+            makeCopy rank pools (Utils.find identity name env)
                 |> IO.bind
                     (\actual ->
                         expectedToVariable rank pools expectation
@@ -197,18 +197,18 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
             solve env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
-                        IO.traverseMap compare (A.traverse (typeToVariable rank pools)) header
+                        IO.traverseMap identity compare (A.traverse (typeToVariable rank pools)) header
                             |> IO.bind
                                 (\locals ->
                                     let
                                         newEnv : Env
                                         newEnv =
-                                            Dict.union compare env (Dict.map (\_ -> A.toValue) locals)
+                                            Dict.union env (Dict.map (\_ -> A.toValue) locals)
                                     in
                                     solve newEnv rank pools state1 subCon
                                         |> IO.bind
                                             (\state2 ->
-                                                IO.foldM occurs state2 (Dict.toList locals)
+                                                IO.foldM occurs state2 (Dict.toList compare locals)
                                             )
                                 )
                     )
@@ -249,7 +249,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                     |> IO.bind
                                                         (\_ ->
                                                             -- run solver in next pool
-                                                            IO.traverseMap compare (A.traverse (typeToVariable nextRank nextPools)) header
+                                                            IO.traverseMap identity compare (A.traverse (typeToVariable nextRank nextPools)) header
                                                                 |> IO.bind
                                                                     (\locals ->
                                                                         solve env nextRank nextPools state headerCon
@@ -282,7 +282,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                                         let
                                                                                                                             newEnv : Env
                                                                                                                             newEnv =
-                                                                                                                                Dict.union compare env (Dict.map (\_ -> A.toValue) locals)
+                                                                                                                                Dict.union env (Dict.map (\_ -> A.toValue) locals)
 
                                                                                                                             tempState : State
                                                                                                                             tempState =
@@ -291,7 +291,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                                         solve newEnv rank nextPools tempState subCon
                                                                                                                             |> IO.bind
                                                                                                                                 (\newState ->
-                                                                                                                                    IO.foldM occurs newState (Dict.toList locals)
+                                                                                                                                    IO.foldM occurs newState (Dict.toList compare locals)
                                                                                                                                 )
                                                                                                                     )
                                                                                                         )
@@ -577,7 +577,7 @@ adjustRankContent youngMark visitMark groupRank content =
                     go extension
                         |> IO.bind
                             (\extRank ->
-                                IO.foldMDict (\rank field -> IO.fmap (max rank) (go field)) extRank fields
+                                IO.foldMDict compare (\rank field -> IO.fmap (max rank) (go field)) extRank fields
                             )
 
                 IO.Unit1 ->
@@ -648,7 +648,7 @@ typeToVariable rank pools tipe =
 --
 
 
-typeToVar : Int -> Pools -> Dict Name.Name Variable -> Type -> IO Variable
+typeToVar : Int -> Pools -> Dict String Name.Name Variable -> Type -> IO Variable
 typeToVar rank pools aliasDict tipe =
     let
         go : Type -> IO Variable
@@ -681,7 +681,7 @@ typeToVar rank pools aliasDict tipe =
             IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
-                        typeToVar rank pools (Dict.fromList compare argVars) aliasType
+                        typeToVar rank pools (Dict.fromList identity argVars) aliasType
                             |> IO.bind
                                 (\aliasVar ->
                                     register rank pools (IO.Alias home name argVars aliasVar)
@@ -689,10 +689,10 @@ typeToVar rank pools aliasDict tipe =
                     )
 
         Type.PlaceHolder name ->
-            IO.pure (Utils.find name aliasDict)
+            IO.pure (Utils.find identity name aliasDict)
 
         Type.RecordN fields ext ->
-            IO.traverseMap compare go fields
+            IO.traverseMap identity compare go fields
                 |> IO.bind
                     (\fieldVars ->
                         go ext
@@ -748,7 +748,7 @@ unit1 =
 -- SOURCE TYPE TO VARIABLE
 
 
-srcTypeToVariable : Int -> Pools -> Dict Name.Name () -> Can.Type -> IO Variable
+srcTypeToVariable : Int -> Pools -> Dict String Name.Name () -> Can.Type -> IO Variable
 srcTypeToVariable rank pools freeVars srcType =
     let
         nameToContent : Name.Name -> Content
@@ -772,15 +772,15 @@ srcTypeToVariable rank pools freeVars srcType =
         makeVar name _ =
             UF.fresh (Descriptor (nameToContent name) rank Type.noMark Nothing)
     in
-    IO.traverseMapWithKey compare makeVar freeVars
+    IO.traverseMapWithKey identity compare makeVar freeVars
         |> IO.bind
             (\flexVars ->
-                MVector.modify pools (\a -> Dict.values flexVars ++ a) rank
+                MVector.modify pools (\a -> Dict.values compare flexVars ++ a) rank
                     |> IO.bind (\_ -> srcTypeToVar rank pools flexVars srcType)
             )
 
 
-srcTypeToVar : Int -> Pools -> Dict Name.Name Variable -> Can.Type -> IO Variable
+srcTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.Type -> IO Variable
 srcTypeToVar rank pools flexVars srcType =
     let
         go : Can.Type -> IO Variable
@@ -800,7 +800,7 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
         Can.TVar name ->
-            IO.pure (Utils.find name flexVars)
+            IO.pure (Utils.find identity name flexVars)
 
         Can.TType home name args ->
             IO.traverseList go args
@@ -810,7 +810,7 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
         Can.TRecord fields maybeExt ->
-            IO.traverseMap compare (srcFieldTypeToVar rank pools flexVars) fields
+            IO.traverseMap identity compare (srcFieldTypeToVar rank pools flexVars) fields
                 |> IO.bind
                     (\fieldVars ->
                         (case maybeExt of
@@ -818,7 +818,7 @@ srcTypeToVar rank pools flexVars srcType =
                                 register rank pools emptyRecord1
 
                             Just ext ->
-                                IO.pure (Utils.find ext flexVars)
+                                IO.pure (Utils.find identity ext flexVars)
                         )
                             |> IO.bind
                                 (\extVar ->
@@ -850,7 +850,7 @@ srcTypeToVar rank pools flexVars srcType =
                     (\argVars ->
                         (case aliasType of
                             Can.Holey tipe ->
-                                srcTypeToVar rank pools (Dict.fromList compare argVars) tipe
+                                srcTypeToVar rank pools (Dict.fromList identity argVars) tipe
 
                             Can.Filled tipe ->
                                 go tipe
@@ -862,7 +862,7 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
 
-srcFieldTypeToVar : Int -> Pools -> Dict Name.Name Variable -> Can.FieldType -> IO Variable
+srcFieldTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.FieldType -> IO Variable
 srcFieldTypeToVar rank pools flexVars (Can.FieldType _ srcTipe) =
     srcTypeToVar rank pools flexVars srcTipe
 
@@ -1006,7 +1006,7 @@ restoreContent content =
                     IO.pure ()
 
                 IO.Record1 fields ext ->
-                    IO.mapM_ restore (Dict.values fields)
+                    IO.mapM_ restore (Dict.values compare fields)
                         |> IO.bind (\_ -> restore ext)
 
                 IO.Unit1 ->
@@ -1053,7 +1053,7 @@ traverseFlatType f flatType =
 
         IO.Record1 fields ext ->
             IO.pure IO.Record1
-                |> IO.apply (IO.traverseMap compare f fields)
+                |> IO.apply (IO.traverseMap identity compare f fields)
                 |> IO.apply (f ext)
 
         IO.Unit1 ->

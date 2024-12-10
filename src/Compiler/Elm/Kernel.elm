@@ -43,12 +43,12 @@ type Chunk
 -- COUNT FIELDS
 
 
-countFields : List Chunk -> Dict Name Int
+countFields : List Chunk -> Dict String Name Int
 countFields chunks =
     List.foldr addField Dict.empty chunks
 
 
-addField : Chunk -> Dict Name Int -> Dict Name Int
+addField : Chunk -> Dict String Name Int -> Dict String Name Int
 addField chunk fields =
     case chunk of
         JS _ ->
@@ -61,7 +61,7 @@ addField chunk fields =
             fields
 
         ElmField f ->
-            Dict.update compare
+            Dict.update identity
                 f
                 (Maybe.map ((+) 1)
                     >> Maybe.withDefault 1
@@ -91,7 +91,7 @@ type Content
 
 
 type alias Foreigns =
-    Dict ModuleName.Raw Pkg.Name
+    Dict String ModuleName.Raw Pkg.Name
 
 
 fromByteString : Pkg.Name -> Foreigns -> String -> Maybe Content
@@ -198,11 +198,11 @@ chompChunks vs es fs src pos end row col lastPos revChunks =
 
 
 type alias Enums =
-    Dict Int (Dict Name Int)
+    Dict Int Int (Dict String Name Int)
 
 
 type alias Fields =
-    Dict Name Int
+    Dict String Name Int
 
 
 toByteString : String -> Int -> Int -> String
@@ -276,7 +276,7 @@ chompTag vs es fs src pos end row col revChunks =
             chompChunks vs es fs src newPos end row newCol newPos (Prod :: revChunks)
 
         else
-            case Dict.get name vs of
+            case Dict.get identity name vs of
                 Just chunk ->
                     chompChunks vs es fs src newPos end row newCol newPos (chunk :: revChunks)
 
@@ -286,7 +286,7 @@ chompTag vs es fs src pos end row col revChunks =
 
 lookupField : Name -> Fields -> ( Int, Fields )
 lookupField name fields =
-    case Dict.get name fields of
+    case Dict.get identity name fields of
         Just n ->
             ( n, fields )
 
@@ -296,7 +296,7 @@ lookupField name fields =
                 n =
                     Dict.size fields
             in
-            ( n, Dict.insert compare name n fields )
+            ( n, Dict.insert identity name n fields )
 
 
 lookupEnum : Char -> Name -> Enums -> ( Int, Enums )
@@ -306,12 +306,12 @@ lookupEnum word var allEnums =
         code =
             Char.toCode word
 
-        enums : Dict Name Int
+        enums : Dict String Name Int
         enums =
-            Dict.get code allEnums
+            Dict.get identity code allEnums
                 |> Maybe.withDefault Dict.empty
     in
-    case Dict.get var enums of
+    case Dict.get identity var enums of
         Just n ->
             ( n, allEnums )
 
@@ -321,7 +321,7 @@ lookupEnum word var allEnums =
                 n =
                     Dict.size enums
             in
-            ( n, Dict.insert compare code (Dict.insert compare var n enums) allEnums )
+            ( n, Dict.insert identity code (Dict.insert identity var n enums) allEnums )
 
 
 
@@ -329,7 +329,7 @@ lookupEnum word var allEnums =
 
 
 type alias VarTable =
-    Dict Name Chunk
+    Dict String Name Chunk
 
 
 toVarTable : Pkg.Name -> Foreigns -> List Src.Import -> VarTable
@@ -350,9 +350,9 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
                     home =
                         Name.getKernel importName
 
-                    add : Name -> Dict Name Chunk -> Dict Name Chunk
+                    add : Name -> Dict String Name Chunk -> Dict String Name Chunk
                     add name table =
-                        Dict.insert compare (Name.sepBy '_' home name) (JsVar home name) table
+                        Dict.insert identity (Name.sepBy '_' home name) (JsVar home name) table
                 in
                 List.foldl add vtable (toNames exposing_)
 
@@ -360,15 +360,15 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
         let
             home : IO.Canonical
             home =
-                IO.Canonical (Dict.get importName foreigns |> Maybe.withDefault pkg) importName
+                IO.Canonical (Dict.get identity importName foreigns |> Maybe.withDefault pkg) importName
 
             prefix : Name
             prefix =
                 toPrefix importName maybeAlias
 
-            add : Name -> Dict Name Chunk -> Dict Name Chunk
+            add : Name -> Dict String Name Chunk -> Dict String Name Chunk
             add name table =
-                Dict.insert compare (Name.sepBy '_' prefix name) (ElmVar home name) table
+                Dict.insert identity (Name.sepBy '_' prefix name) (ElmVar home name) table
         in
         List.foldl add vtable (toNames exposing_)
 

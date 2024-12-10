@@ -544,7 +544,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
             let
                 newState : IO.ReplState
                 newState =
-                    IO.ReplState (Dict.insert compare name src imports) types decls
+                    IO.ReplState (Dict.insert identity name src imports) types decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
@@ -552,7 +552,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
             let
                 newState : IO.ReplState
                 newState =
-                    IO.ReplState imports (Dict.insert compare name src types) decls
+                    IO.ReplState imports (Dict.insert identity name src types) decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
@@ -564,7 +564,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
             let
                 newState : IO.ReplState
                 newState =
-                    IO.ReplState imports types (Dict.insert compare name src decls)
+                    IO.ReplState imports types (Dict.insert identity name src decls)
             in
             IO.fmap Loop (attemptEval env state newState (OutputDecl name))
 
@@ -656,9 +656,9 @@ toByteString (IO.ReplState imports types decls) output =
         [ "module "
         , N.replModule
         , " exposing (..)\n"
-        , Dict.foldr (\_ -> (++)) "" imports
-        , Dict.foldr (\_ -> (++)) "" types
-        , Dict.foldr (\_ -> (++)) "" decls
+        , Dict.foldr compare (\_ -> (++)) "" imports
+        , Dict.foldr compare (\_ -> (++)) "" types
+        , Dict.foldr compare (\_ -> (++)) "" decls
         , outputToBuilder output
         ]
 
@@ -757,9 +757,9 @@ getRoot =
             )
 
 
-defaultDeps : Dict Pkg.Name C.Constraint
+defaultDeps : Dict ( String, String ) Pkg.Name C.Constraint
 defaultDeps =
-    Dict.fromList Pkg.compareName
+    Dict.fromList identity
         [ ( Pkg.core, C.anything )
         , ( Pkg.json, C.anything )
         , ( Pkg.html, C.anything )
@@ -841,9 +841,9 @@ lookupCompletions string =
             )
 
 
-commands : Dict N.Name ()
+commands : Dict String N.Name ()
 commands =
-    Dict.fromList compare
+    Dict.fromList identity
         [ ( ":exit", () )
         , ( ":quit", () )
         , ( ":reset", () )
@@ -851,9 +851,9 @@ commands =
         ]
 
 
-addMatches : String -> Bool -> Dict N.Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
+addMatches : String -> Bool -> Dict String N.Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
 addMatches string isFinished dict completions =
-    Dict.foldr (addMatch string isFinished) completions dict
+    Dict.foldr compare (addMatch string isFinished) completions dict
 
 
 addMatch : String -> Bool -> N.Name -> v -> List Utils.ReplCompletion -> List Utils.ReplCompletion

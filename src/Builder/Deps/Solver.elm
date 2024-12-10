@@ -47,11 +47,11 @@ type InnerSolver a
 
 
 type State
-    = State Stuff.PackageCache Connection Registry.Registry (Dict ( Pkg.Name, V.Version ) Constraints)
+    = State Stuff.PackageCache Connection Registry.Registry (Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.Name, V.Version ) Constraints)
 
 
 type Constraints
-    = Constraints C.Constraint (Dict Pkg.Name C.Constraint)
+    = Constraints C.Constraint (Dict ( String, String ) Pkg.Name C.Constraint)
 
 
 type Connection
@@ -75,10 +75,10 @@ type SolverResult a
 
 
 type Details
-    = Details V.Version (Dict Pkg.Name C.Constraint)
+    = Details V.Version (Dict ( String, String ) Pkg.Name C.Constraint)
 
 
-verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict Pkg.Name C.Constraint -> IO (SolverResult (Dict Pkg.Name Details))
+verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name C.Constraint -> IO (SolverResult (Dict ( String, String ) Pkg.Name Details))
 verify cache connection registry constraints =
     Stuff.withRegistryLock cache <|
         case try constraints of
@@ -100,7 +100,7 @@ verify cache connection registry constraints =
 
 addDeps : State -> Pkg.Name -> V.Version -> Details
 addDeps (State _ _ _ constraints) name vsn =
-    case Dict.get ( name, vsn ) constraints of
+    case Dict.get (Tuple.mapSecond V.toComparable) ( name, vsn ) constraints of
         Just (Constraints _ deps) ->
             Details vsn deps
 
@@ -123,28 +123,28 @@ noSolution connection =
 
 
 type AppSolution
-    = AppSolution (Dict Pkg.Name V.Version) (Dict Pkg.Name V.Version) Outline.AppOutline
+    = AppSolution (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) Outline.AppOutline
 
 
 addToApp : Stuff.PackageCache -> Connection -> Registry.Registry -> Pkg.Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
 addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect testDirect testIndirect) as outline) =
     Stuff.withRegistryLock cache <|
         let
-            allIndirects : Dict Pkg.Name V.Version
+            allIndirects : Dict ( String, String ) Pkg.Name V.Version
             allIndirects =
-                Dict.union Pkg.compareName indirect testIndirect
+                Dict.union indirect testIndirect
 
-            allDirects : Dict Pkg.Name V.Version
+            allDirects : Dict ( String, String ) Pkg.Name V.Version
             allDirects =
-                Dict.union Pkg.compareName direct testDirect
+                Dict.union direct testDirect
 
-            allDeps : Dict Pkg.Name V.Version
+            allDeps : Dict ( String, String ) Pkg.Name V.Version
             allDeps =
-                Dict.union Pkg.compareName allDirects allIndirects
+                Dict.union allDirects allIndirects
 
-            attempt : (a -> C.Constraint) -> Dict Pkg.Name a -> Solver (Dict Pkg.Name V.Version)
+            attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
             attempt toConstraint deps =
-                try (Dict.insert Pkg.compareName pkg C.anything (Dict.map (\_ -> toConstraint) deps))
+                try (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
         in
         case
             oneOf
@@ -171,50 +171,50 @@ addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect 
                         )
 
 
-toApp : State -> Pkg.Name -> Outline.AppOutline -> Dict Pkg.Name V.Version -> Dict Pkg.Name V.Version -> AppSolution
+toApp : State -> Pkg.Name -> Outline.AppOutline -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> AppSolution
 toApp (State _ _ _ constraints) pkg (Outline.AppOutline elm srcDirs direct _ testDirect _) old new =
     let
-        d : Dict Pkg.Name V.Version
+        d : Dict ( String, String ) Pkg.Name V.Version
         d =
-            Dict.intersection new (Dict.insert Pkg.compareName pkg V.one direct)
+            Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
 
-        i : Dict Pkg.Name V.Version
+        i : Dict ( String, String ) Pkg.Name V.Version
         i =
-            Dict.diff (getTransitive constraints new (Dict.toList d) Dict.empty) d
+            Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
 
-        td : Dict Pkg.Name V.Version
+        td : Dict ( String, String ) Pkg.Name V.Version
         td =
-            Dict.intersection new (Dict.remove pkg testDirect)
+            Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
 
-        ti : Dict Pkg.Name V.Version
+        ti : Dict ( String, String ) Pkg.Name V.Version
         ti =
-            Dict.diff new (Utils.mapUnions Pkg.compareName [ d, i, td ])
+            Dict.diff new (Utils.mapUnions [ d, i, td ])
     in
     AppSolution old new (Outline.AppOutline elm srcDirs d i td ti)
 
 
-getTransitive : Dict ( Pkg.Name, V.Version ) Constraints -> Dict Pkg.Name V.Version -> List ( Pkg.Name, V.Version ) -> Dict Pkg.Name V.Version -> Dict Pkg.Name V.Version
+getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.Name, V.Version ) Constraints -> Dict ( String, String ) Pkg.Name V.Version -> List ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version
 getTransitive constraints solution unvisited visited =
     case unvisited of
         [] ->
             visited
 
         (( pkg, vsn ) as info) :: infos ->
-            if Dict.member pkg visited then
+            if Dict.member identity pkg visited then
                 getTransitive constraints solution infos visited
 
             else
                 let
                     (Constraints _ newDeps) =
-                        Utils.find info constraints
+                        Utils.find (Tuple.mapSecond V.toComparable) info constraints
 
                     newUnvisited : List ( Pkg.Name, V.Version )
                     newUnvisited =
-                        Dict.toList (Dict.intersection solution (Dict.diff newDeps visited))
+                        Dict.toList compare (Dict.intersection Pkg.compareName solution (Dict.diff newDeps visited))
 
-                    newVisited : Dict Pkg.Name V.Version
+                    newVisited : Dict ( String, String ) Pkg.Name V.Version
                     newVisited =
-                        Dict.insert Pkg.compareName pkg vsn visited
+                        Dict.insert identity pkg vsn visited
                 in
                 getTransitive constraints solution infos <|
                     getTransitive constraints solution newUnvisited newVisited
@@ -224,7 +224,7 @@ getTransitive constraints solution unvisited visited =
 -- TRY
 
 
-try : Dict Pkg.Name C.Constraint -> Solver (Dict Pkg.Name V.Version)
+try : Dict ( String, String ) Pkg.Name C.Constraint -> Solver (Dict ( String, String ) Pkg.Name V.Version)
 try constraints =
     exploreGoals (Goals constraints Dict.empty)
 
@@ -234,17 +234,17 @@ try constraints =
 
 
 type Goals
-    = Goals (Dict Pkg.Name C.Constraint) (Dict Pkg.Name V.Version)
+    = Goals (Dict ( String, String ) Pkg.Name C.Constraint) (Dict ( String, String ) Pkg.Name V.Version)
 
 
-exploreGoals : Goals -> Solver (Dict Pkg.Name V.Version)
+exploreGoals : Goals -> Solver (Dict ( String, String ) Pkg.Name V.Version)
 exploreGoals (Goals pending solved) =
     let
-        compare : ( Pkg.Name, b ) -> String
-        compare ( name, _ ) =
-            Pkg.toString name
+        compare : ( Pkg.Name, C.Constraint ) -> Pkg.Name
+        compare =
+            Tuple.first
     in
-    case Utils.mapMinViewWithKey Pkg.compareName compare pending of
+    case Utils.mapMinViewWithKey identity Basics.compare compare pending of
         Nothing ->
             pure solved
 
@@ -269,10 +269,10 @@ addVersion (Goals pending solved) name version =
         |> bind
             (\(Constraints elm deps) ->
                 if C.goodElm elm then
-                    foldM (addConstraint solved) pending (Dict.toList deps)
+                    foldM (addConstraint solved) pending (Dict.toList compare deps)
                         |> fmap
                             (\newPending ->
-                                Goals newPending (Dict.insert Pkg.compareName name version solved)
+                                Goals newPending (Dict.insert identity name version solved)
                             )
 
                 else
@@ -280,9 +280,9 @@ addVersion (Goals pending solved) name version =
             )
 
 
-addConstraint : Dict Pkg.Name V.Version -> Dict Pkg.Name C.Constraint -> ( Pkg.Name, C.Constraint ) -> Solver (Dict Pkg.Name C.Constraint)
+addConstraint : Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name C.Constraint -> ( Pkg.Name, C.Constraint ) -> Solver (Dict ( String, String ) Pkg.Name C.Constraint)
 addConstraint solved unsolved ( name, newConstraint ) =
-    case Dict.get name solved of
+    case Dict.get identity name solved of
         Just version ->
             if C.satisfies newConstraint version then
                 pure unsolved
@@ -291,9 +291,9 @@ addConstraint solved unsolved ( name, newConstraint ) =
                 backtrack
 
         Nothing ->
-            case Dict.get name unsolved of
+            case Dict.get identity name unsolved of
                 Nothing ->
-                    pure (Dict.insert Pkg.compareName name newConstraint unsolved)
+                    pure (Dict.insert identity name newConstraint unsolved)
 
                 Just oldConstraint ->
                     case C.intersect oldConstraint newConstraint of
@@ -305,7 +305,7 @@ addConstraint solved unsolved ( name, newConstraint ) =
                                 pure unsolved
 
                             else
-                                pure (Dict.insert Pkg.compareName name mergedConstraint unsolved)
+                                pure (Dict.insert identity name mergedConstraint unsolved)
 
 
 
@@ -341,17 +341,8 @@ getConstraints pkg vsn =
                 key : ( Pkg.Name, V.Version )
                 key =
                     ( pkg, vsn )
-
-                compare : ( Pkg.Name, V.Version ) -> ( Pkg.Name, V.Version ) -> Order
-                compare ( pkg1, vsn1 ) ( pkg2, vsn2 ) =
-                    case Pkg.compareName pkg1 pkg2 of
-                        EQ ->
-                            V.compare vsn1 vsn2
-
-                        order ->
-                            order
             in
-            case Dict.get key cDict of
+            case Dict.get (Tuple.mapSecond V.toComparable) key cDict of
                 Just cs ->
                     IO.pure (ISOk state cs)
 
@@ -359,7 +350,7 @@ getConstraints pkg vsn =
                     let
                         toNewState : Constraints -> State
                         toNewState cs =
-                            State cache connection registry (Dict.insert compare key cs cDict)
+                            State cache connection registry (Dict.insert (Tuple.mapSecond V.toComparable) key cs cDict)
 
                         home : String
                         home =

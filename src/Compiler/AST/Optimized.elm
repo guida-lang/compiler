@@ -20,6 +20,7 @@ module Compiler.AST.Optimized exposing
     , globalGraphEncoder
     , localGraphDecoder
     , localGraphEncoder
+    , toComparableGlobal
     , toKernelGlobal
     )
 
@@ -68,11 +69,11 @@ type Expr
     | Case Name Name (Decider Choice) (List ( Int, Expr ))
     | Accessor Name
     | Access Expr Name
-    | Update Expr (Dict Name Expr)
-    | Record (Dict Name Expr)
+    | Update Expr (Dict String Name Expr)
+    | Record (Dict String Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
-    | Shader Shader.Source (EverySet Name) (EverySet Name)
+    | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
 type Global
@@ -90,6 +91,11 @@ compareGlobal (Global home1 name1) (Global home2 name2) =
 
         GT ->
             GT
+
+
+toComparableGlobal : Global -> List String
+toComparableGlobal (Global home name) =
+    ModuleName.toComparableCanonical home ++ [ name ]
 
 
 
@@ -132,15 +138,15 @@ type Choice
 
 
 type GlobalGraph
-    = GlobalGraph (Dict Global Node) (Dict Name Int)
+    = GlobalGraph (Dict (List String) Global Node) (Dict String Name Int)
 
 
 type LocalGraph
     = LocalGraph
         (Maybe Main)
         -- PERF profile switching Global to Name
-        (Dict Global Node)
-        (Dict Name Int)
+        (Dict (List String) Global Node)
+        (Dict String Name Int)
 
 
 type Main
@@ -149,17 +155,17 @@ type Main
 
 
 type Node
-    = Define Expr (EverySet Global)
-    | DefineTailFunc (List Name) Expr (EverySet Global)
+    = Define Expr (EverySet (List String) Global)
+    | DefineTailFunc (List Name) Expr (EverySet (List String) Global)
     | Ctor Index.ZeroBased Int
     | Enum Index.ZeroBased
     | Box
     | Link Global
-    | Cycle (List Name) (List ( Name, Expr )) (List Def) (EverySet Global)
+    | Cycle (List Name) (List ( Name, Expr )) (List Def) (EverySet (List String) Global)
     | Manager EffectsType
-    | Kernel (List K.Chunk) (EverySet Global)
-    | PortIncoming Expr (EverySet Global)
-    | PortOutgoing Expr (EverySet Global)
+    | Kernel (List K.Chunk) (EverySet (List String) Global)
+    | PortIncoming Expr (EverySet (List String) Global)
+    | PortOutgoing Expr (EverySet (List String) Global)
 
 
 type EffectsType
@@ -180,15 +186,15 @@ empty =
 addGlobalGraph : GlobalGraph -> GlobalGraph -> GlobalGraph
 addGlobalGraph (GlobalGraph nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
-        (Dict.union compareGlobal nodes1 nodes2)
-        (Dict.union compare fields1 fields2)
+        (Dict.union nodes1 nodes2)
+        (Dict.union fields1 fields2)
 
 
 addLocalGraph : LocalGraph -> GlobalGraph -> GlobalGraph
 addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
-        (Dict.union compareGlobal nodes1 nodes2)
-        (Dict.union compare fields1 fields2)
+        (Dict.union nodes1 nodes2)
+        (Dict.union fields1 fields2)
 
 
 addKernel : Name -> List K.Chunk -> GlobalGraph -> GlobalGraph
@@ -203,21 +209,21 @@ addKernel shortName chunks (GlobalGraph nodes fields) =
             Kernel chunks (List.foldr addKernelDep EverySet.empty chunks)
     in
     GlobalGraph
-        (Dict.insert compareGlobal global node nodes)
-        (Dict.union compare (K.countFields chunks) fields)
+        (Dict.insert toComparableGlobal global node nodes)
+        (Dict.union (K.countFields chunks) fields)
 
 
-addKernelDep : K.Chunk -> EverySet Global -> EverySet Global
+addKernelDep : K.Chunk -> EverySet (List String) Global -> EverySet (List String) Global
 addKernelDep chunk deps =
     case chunk of
         K.JS _ ->
             deps
 
         K.ElmVar home name ->
-            EverySet.insert compareGlobal (Global home name) deps
+            EverySet.insert toComparableGlobal (Global home name) deps
 
         K.JsVar shortName _ ->
-            EverySet.insert compareGlobal (toKernelGlobal shortName) deps
+            EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
 
         K.ElmField _ ->
             deps
@@ -248,16 +254,16 @@ globalGraphEncoder : GlobalGraph -> Encode.Value
 globalGraphEncoder (GlobalGraph nodes fields) =
     Encode.object
         [ ( "type", Encode.string "GlobalGraph" )
-        , ( "nodes", E.assocListDict globalEncoder nodeEncoder nodes )
-        , ( "fields", E.assocListDict Encode.string Encode.int fields )
+        , ( "nodes", E.assocListDict compareGlobal globalEncoder nodeEncoder nodes )
+        , ( "fields", E.assocListDict compare Encode.string Encode.int fields )
         ]
 
 
 globalGraphDecoder : Decode.Decoder GlobalGraph
 globalGraphDecoder =
     Decode.map2 GlobalGraph
-        (Decode.field "nodes" (D.assocListDict compareGlobal globalDecoder nodeDecoder))
-        (Decode.field "fields" (D.assocListDict compare Decode.string Decode.int))
+        (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
+        (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
 
 
 localGraphEncoder : LocalGraph -> Encode.Value
@@ -265,8 +271,8 @@ localGraphEncoder (LocalGraph main nodes fields) =
     Encode.object
         [ ( "type", Encode.string "LocalGraph" )
         , ( "main", E.maybe mainEncoder main )
-        , ( "nodes", E.assocListDict globalEncoder nodeEncoder nodes )
-        , ( "fields", E.assocListDict Encode.string Encode.int fields )
+        , ( "nodes", E.assocListDict compareGlobal globalEncoder nodeEncoder nodes )
+        , ( "fields", E.assocListDict compare Encode.string Encode.int fields )
         ]
 
 
@@ -274,8 +280,8 @@ localGraphDecoder : Decode.Decoder LocalGraph
 localGraphDecoder =
     Decode.map3 LocalGraph
         (Decode.field "main" (Decode.maybe mainDecoder))
-        (Decode.field "nodes" (D.assocListDict compareGlobal globalDecoder nodeDecoder))
-        (Decode.field "fields" (D.assocListDict compare Decode.string Decode.int))
+        (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
+        (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
 
 
 mainEncoder : Main -> Encode.Value
@@ -336,7 +342,7 @@ nodeEncoder node =
             Encode.object
                 [ ( "type", Encode.string "Define" )
                 , ( "expr", exprEncoder expr )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
         DefineTailFunc argNames body deps ->
@@ -344,7 +350,7 @@ nodeEncoder node =
                 [ ( "type", Encode.string "DefineTailFunc" )
                 , ( "argNames", Encode.list Encode.string argNames )
                 , ( "body", exprEncoder body )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
         Ctor index arity ->
@@ -377,7 +383,7 @@ nodeEncoder node =
                 , ( "names", Encode.list Encode.string names )
                 , ( "values", Encode.list (E.jsonPair Encode.string exprEncoder) values )
                 , ( "functions", Encode.list defEncoder functions )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
         Manager effectsType ->
@@ -390,21 +396,21 @@ nodeEncoder node =
             Encode.object
                 [ ( "type", Encode.string "Kernel" )
                 , ( "chunks", Encode.list K.chunkEncoder chunks )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
         PortIncoming decoder deps ->
             Encode.object
                 [ ( "type", Encode.string "PortIncoming" )
                 , ( "decoder", exprEncoder decoder )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
         PortOutgoing encoder deps ->
             Encode.object
                 [ ( "type", Encode.string "PortOutgoing" )
                 , ( "encoder", exprEncoder encoder )
-                , ( "deps", E.everySet globalEncoder deps )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
 
@@ -417,13 +423,13 @@ nodeDecoder =
                     "Define" ->
                         Decode.map2 Define
                             (Decode.field "expr" exprDecoder)
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "DefineTailFunc" ->
                         Decode.map3 DefineTailFunc
                             (Decode.field "argNames" (Decode.list Decode.string))
                             (Decode.field "body" exprDecoder)
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "Ctor" ->
                         Decode.map2 Ctor
@@ -445,7 +451,7 @@ nodeDecoder =
                             (Decode.field "names" (Decode.list Decode.string))
                             (Decode.field "values" (Decode.list (D.jsonPair Decode.string exprDecoder)))
                             (Decode.field "functions" (Decode.list defDecoder))
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "Manager" ->
                         Decode.map Manager (Decode.field "effectsType" effectsTypeDecoder)
@@ -453,17 +459,17 @@ nodeDecoder =
                     "Kernel" ->
                         Decode.map2 Kernel
                             (Decode.field "chunks" (Decode.list K.chunkDecoder))
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "PortIncoming" ->
                         Decode.map2 PortIncoming
                             (Decode.field "decoder" exprDecoder)
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "PortOutgoing" ->
                         Decode.map2 PortOutgoing
                             (Decode.field "encoder" exprDecoder)
-                            (Decode.field "deps" (D.everySet compareGlobal globalDecoder))
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     _ ->
                         Decode.fail ("Unknown Node's type: " ++ type_)
@@ -625,13 +631,13 @@ exprEncoder expr =
             Encode.object
                 [ ( "type", Encode.string "Update" )
                 , ( "record", exprEncoder record )
-                , ( "fields", E.assocListDict Encode.string exprEncoder fields )
+                , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
                 ]
 
         Record value ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
-                , ( "value", E.assocListDict Encode.string exprEncoder value )
+                , ( "value", E.assocListDict compare Encode.string exprEncoder value )
                 ]
 
         Unit ->
@@ -651,8 +657,8 @@ exprEncoder expr =
             Encode.object
                 [ ( "type", Encode.string "Shader" )
                 , ( "src", Shader.sourceEncoder src )
-                , ( "attributes", E.everySet Encode.string attributes )
-                , ( "uniforms", E.everySet Encode.string uniforms )
+                , ( "attributes", E.everySet compare Encode.string attributes )
+                , ( "uniforms", E.everySet compare Encode.string uniforms )
                 ]
 
 
@@ -759,10 +765,10 @@ exprDecoder =
                     "Update" ->
                         Decode.map2 Update
                             (Decode.field "record" exprDecoder)
-                            (Decode.field "fields" (D.assocListDict compare Decode.string exprDecoder))
+                            (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Record" ->
-                        Decode.map Record (Decode.field "value" (D.assocListDict compare Decode.string exprDecoder))
+                        Decode.map Record (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Unit" ->
                         Decode.succeed Unit
@@ -776,8 +782,8 @@ exprDecoder =
                     "Shader" ->
                         Decode.map3 Shader
                             (Decode.field "src" Shader.sourceDecoder)
-                            (Decode.field "attributes" (D.everySet compare Decode.string))
-                            (Decode.field "uniforms" (D.everySet compare Decode.string))
+                            (Decode.field "attributes" (D.everySet identity Decode.string))
+                            (Decode.field "uniforms" (D.everySet identity Decode.string))
 
                     _ ->
                         Decode.fail ("Unknown Expr's type: " ++ type_)

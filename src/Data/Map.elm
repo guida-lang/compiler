@@ -52,6 +52,8 @@ for more information about this topic.
 
 -}
 
+import Dict
+
 
 {-| A dictionary of keys and values. So a `Dict String User` is a dictionary
 that lets you look up a `String` (such as user names) and find the associated
@@ -74,15 +76,15 @@ that lets you look up a `String` (such as user names) and find the associated
         }
 
 -}
-type Dict a b
-    = D (List ( a, b ))
+type Dict c k v
+    = D (Dict.Dict c ( k, v ))
 
 
 {-| Create an empty dictionary.
 -}
-empty : Dict k v
+empty : Dict c k v
 empty =
-    D []
+    D Dict.empty
 
 
 {-| Get the value associated with a key. If the key is not found, return
@@ -106,30 +108,17 @@ dictionary.
     --> Nothing
 
 -}
-get : k -> Dict k v -> Maybe v
-get targetKey (D alist) =
-    case alist of
-        [] ->
-            Nothing
-
-        ( key, value ) :: rest ->
-            if key == targetKey then
-                Just value
-
-            else
-                get targetKey (D rest)
+get : (k -> comparable) -> k -> Dict comparable k v -> Maybe v
+get toComparable targetKey (D dict) =
+    Dict.get (toComparable targetKey) dict
+        |> Maybe.map Tuple.second
 
 
 {-| Determine if a key is in a dictionary.
 -}
-member : k -> Dict k v -> Bool
-member targetKey dict =
-    case get targetKey dict of
-        Just _ ->
-            True
-
-        Nothing ->
-            False
+member : (k -> comparable) -> k -> Dict comparable k v -> Bool
+member toComparable targetKey (D dict) =
+    Dict.member (toComparable targetKey) dict
 
 
 {-| Determine the number of key-value pairs in the dictionary.
@@ -141,9 +130,9 @@ member targetKey dict =
     --> 1
 
 -}
-size : Dict k v -> Int
-size (D alist) =
-    List.length alist
+size : Dict c k v -> Int
+size (D dict) =
+    Dict.size dict
 
 
 {-| Determine if a dictionary is empty.
@@ -152,9 +141,9 @@ size (D alist) =
     --> True
 
 -}
-isEmpty : Dict k v -> Bool
-isEmpty dict =
-    dict == D []
+isEmpty : Dict c k v -> Bool
+isEmpty (D dict) =
+    Dict.isEmpty dict
 
 
 {-| Compare two dictionaries for equality, ignoring insertion order.
@@ -170,9 +159,9 @@ dictionaries from this module since association lists have no canonical form.
     --> True
 
 -}
-eq : Dict k v -> Dict k v -> Bool
+eq : Dict comparable k v -> Dict comparable k v -> Bool
 eq leftDict rightDict =
-    merge
+    merge (\_ _ -> EQ)
         (\_ _ _ -> False)
         (\_ a b result -> result && a == b)
         (\_ _ _ -> False)
@@ -184,24 +173,17 @@ eq leftDict rightDict =
 {-| Insert a key-value pair into a dictionary. Replaces value when there is
 a collision.
 -}
-insert : (k -> k -> Order) -> k -> v -> Dict k v -> Dict k v
-insert keyComparison key value dict =
-    let
-        (D alteredAlist) =
-            remove key dict
-    in
-    D
-        (List.sortWith (\( ka, _ ) ( kb, _ ) -> keyComparison ka kb)
-            (( key, value ) :: alteredAlist)
-        )
+insert : (k -> comparable) -> k -> v -> Dict comparable k v -> Dict comparable k v
+insert toComparable key value (D dict) =
+    D (Dict.insert (toComparable key) ( key, value ) dict)
 
 
 {-| Remove a key-value pair from a dictionary. If the key is not found,
 no changes are made.
 -}
-remove : k -> Dict k v -> Dict k v
-remove targetKey (D alist) =
-    D (List.filter (\( key, _ ) -> key /= targetKey) alist)
+remove : (k -> comparable) -> k -> Dict comparable k v -> Dict comparable k v
+remove toComparable targetKey (D dict) =
+    D (Dict.remove (toComparable targetKey) dict)
 
 
 {-| Update the value of a dictionary for a specific key with a given function.
@@ -212,46 +194,23 @@ is in the insertion order. (If you do want to change the insertion order,
 consider using `get` in conjunction with `insert` instead.)
 
 -}
-update : (k -> k -> Order) -> k -> (Maybe v -> Maybe v) -> Dict k v -> Dict k v
-update keyComparison targetKey alter ((D alist) as dict) =
-    let
-        maybeValue : Maybe v
-        maybeValue =
-            get targetKey dict
-    in
-    case maybeValue of
-        Just _ ->
-            case alter maybeValue of
-                Just alteredValue ->
-                    D
-                        (List.map
-                            (\(( key, _ ) as entry) ->
-                                if key == targetKey then
-                                    ( targetKey, alteredValue )
-
-                                else
-                                    entry
-                            )
-                            alist
-                        )
-
-                Nothing ->
-                    remove targetKey dict
-
-        Nothing ->
-            case alter Nothing of
-                Just alteredValue ->
-                    insert keyComparison targetKey alteredValue dict
-
-                Nothing ->
-                    dict
+update : (k -> comparable) -> k -> (Maybe v -> Maybe v) -> Dict comparable k v -> Dict comparable k v
+update toComparable targetKey alter (D dict) =
+    D
+        (Dict.update (toComparable targetKey)
+            (Maybe.map Tuple.second
+                >> alter
+                >> Maybe.map (Tuple.pair targetKey)
+            )
+            dict
+        )
 
 
 {-| Create a dictionary with one key-value pair.
 -}
-singleton : k -> v -> Dict k v
-singleton key value =
-    D [ ( key, value ) ]
+singleton : (k -> comparable) -> k -> v -> Dict comparable k v
+singleton toComparable key value =
+    D (Dict.singleton (toComparable key) ( key, value ))
 
 
 
@@ -267,34 +226,29 @@ recently inserted to least recently inserted) followed by all the entries of
 the second dictionary (from most recently inserted to least recently inserted).
 
 -}
-union : (k -> k -> Order) -> Dict k v -> Dict k v -> Dict k v
-union keyComparison (D leftAlist) rightDict =
-    List.foldr
-        (\( lKey, lValue ) result ->
-            insert keyComparison lKey lValue result
-        )
-        rightDict
-        leftAlist
+union : Dict comparable k v -> Dict comparable k v -> Dict comparable k v
+union (D leftDict) (D rightDict) =
+    D (Dict.union leftDict rightDict)
 
 
 {-| Keep a key-value pair when its key appears in the second dictionary.
 Preference is given to values in the first dictionary.
 -}
-intersection : Dict k a -> Dict k b -> Dict k a
-intersection dict1 dict2 =
+intersection : (k -> k -> Order) -> Dict comparable k a -> Dict comparable k b -> Dict comparable k a
+intersection keyComparison dict1 dict2 =
     let
         keys2 : List k
         keys2 =
-            keys dict2
+            keys keyComparison dict2
     in
     filter (\k _ -> List.member k keys2) dict1
 
 
 {-| Keep a key-value pair when its key does not appear in the second dictionary.
 -}
-diff : Dict k a -> Dict k b -> Dict k a
-diff (D leftAlist) rightDict =
-    D (List.filter (\( key, _ ) -> not (member key rightDict)) leftAlist)
+diff : Dict comparable k a -> Dict comparable k b -> Dict comparable k a
+diff (D leftDict) (D rightDict) =
+    D (Dict.diff leftDict rightDict)
 
 
 {-| The most general way of combining two dictionaries. You provide three
@@ -315,42 +269,22 @@ you want:
 
 -}
 merge :
-    (k -> a -> result -> result)
+    (k -> k -> Order)
+    -> (k -> a -> result -> result)
     -> (k -> a -> b -> result -> result)
     -> (k -> b -> result -> result)
-    -> Dict k a
-    -> Dict k b
+    -> Dict comparable k a
+    -> Dict comparable k b
     -> result
     -> result
-merge leftStep bothStep rightStep ((D leftAlist) as leftDict) (D rightAlist) initialResult =
-    let
-        ( inBothAlist, inRightOnlyAlist ) =
-            List.partition
-                (\( key, _ ) ->
-                    member key leftDict
-                )
-                rightAlist
-
-        intermediateResult : result
-        intermediateResult =
-            List.foldr
-                (\( rKey, rValue ) result ->
-                    rightStep rKey rValue result
-                )
-                initialResult
-                inRightOnlyAlist
-    in
-    List.foldr
-        (\( lKey, lValue ) result ->
-            case get lKey (D inBothAlist) of
-                Just rValue ->
-                    bothStep lKey lValue rValue result
-
-                Nothing ->
-                    leftStep lKey lValue result
-        )
-        intermediateResult
-        leftAlist
+merge keyComparison leftStep bothStep rightStep (D leftDict) (D rightDict) initialResult =
+    Dict.merge
+        (\_ ( k, a ) -> leftStep k a)
+        (\_ ( k, a ) ( _, b ) -> bothStep k a b)
+        (\_ ( k, b ) -> rightStep k b)
+        leftDict
+        rightDict
+        initialResult
 
 
 
@@ -359,9 +293,9 @@ merge leftStep bothStep rightStep ((D leftAlist) as leftDict) (D rightAlist) ini
 
 {-| Apply a function to all values in a dictionary.
 -}
-map : (k -> a -> b) -> Dict k a -> Dict k b
-map alter (D alist) =
-    D (List.map (\( key, value ) -> ( key, alter key value )) alist)
+map : (k -> a -> b) -> Dict c k a -> Dict c k b
+map alter (D dict) =
+    D (Dict.map (\_ ( key, value ) -> ( key, alter key value )) dict)
 
 
 {-| Fold over the key-value pairs in a dictionary from most recently inserted
@@ -378,14 +312,14 @@ to least recently inserted.
     --> [28,19,33]
 
 -}
-foldl : (k -> v -> b -> b) -> b -> Dict k v -> b
-foldl func initialResult (D alist) =
+foldl : (k -> k -> Order) -> (k -> v -> b -> b) -> b -> Dict c k v -> b
+foldl keyComparison func initialResult dict =
     List.foldl
         (\( key, value ) result ->
             func key value result
         )
         initialResult
-        alist
+        (toList keyComparison dict)
 
 
 {-| Fold over the key-value pairs in a dictionary from least recently inserted
@@ -402,32 +336,32 @@ to most recently insered.
     --> [33,19,28]
 
 -}
-foldr : (k -> v -> b -> b) -> b -> Dict k v -> b
-foldr func initialResult (D alist) =
+foldr : (k -> k -> Order) -> (k -> v -> b -> b) -> b -> Dict c k v -> b
+foldr keyComparison func initialResult dict =
     List.foldr
         (\( key, value ) result ->
             func key value result
         )
         initialResult
-        alist
+        (toList keyComparison dict)
 
 
 {-| Keep only the key-value pairs that pass the given test.
 -}
-filter : (k -> v -> Bool) -> Dict k v -> Dict k v
-filter isGood (D alist) =
-    D (List.filter (\( key, value ) -> isGood key value) alist)
+filter : (k -> v -> Bool) -> Dict comparable k v -> Dict comparable k v
+filter isGood (D dict) =
+    D (Dict.filter (\_ ( key, value ) -> isGood key value) dict)
 
 
 {-| Partition a dictionary according to some test. The first dictionary
 contains all key-value pairs which passed the test, and the second contains
 the pairs that did not.
 -}
-partition : (k -> v -> Bool) -> Dict k v -> ( Dict k v, Dict k v )
-partition isGood (D alist) =
+partition : (k -> v -> Bool) -> Dict comparable k v -> ( Dict comparable k v, Dict comparable k v )
+partition isGood (D dict) =
     let
         ( good, bad ) =
-            List.partition (\( key, value ) -> isGood key value) alist
+            Dict.partition (\_ ( key, value ) -> isGood key value) dict
     in
     ( D good, D bad )
 
@@ -443,9 +377,11 @@ with the most recently inserted key at the head of the list.
     --> [ 1, 0 ]
 
 -}
-keys : Dict k v -> List k
-keys (D alist) =
-    List.map Tuple.first alist
+keys : (k -> k -> Order) -> Dict c k v -> List k
+keys keyComparison (D dict) =
+    Dict.values dict
+        |> List.sortWith (\( k1, _ ) ( k2, _ ) -> keyComparison k1 k2)
+        |> List.map Tuple.first
 
 
 {-| Get all of the values in a dictionary, in the order that they were inserted
@@ -455,29 +391,28 @@ with the most recently inserted value at the head of the list.
     --> [ "Bob", "Alice" ]
 
 -}
-values : Dict k v -> List v
-values (D alist) =
-    List.map Tuple.second alist
+values : (k -> k -> Order) -> Dict c k v -> List v
+values keyComparison (D dict) =
+    Dict.values dict
+        |> List.sortWith (\( k1, _ ) ( k2, _ ) -> keyComparison k1 k2)
+        |> List.map Tuple.second
 
 
 {-| Convert a dictionary into an association list of key-value pairs, in the
 order that they were inserted with the most recently inserted entry at the
 head of the list.
 -}
-toList : Dict k v -> List ( k, v )
-toList (D alist) =
-    alist
+toList : (k -> k -> Order) -> Dict c k v -> List ( k, v )
+toList keyComparison (D dict) =
+    Dict.values dict
+        |> List.sortWith (\( k1, _ ) ( k2, _ ) -> keyComparison k1 k2)
 
 
 {-| Convert an association list into a dictionary. The elements are inserted
 from left to right. (If you want to insert the elements from right to left, you
 can simply call `List.reverse` on the input before passing it to `fromList`.)
 -}
-fromList : (k -> k -> Order) -> List ( k, v ) -> Dict k v
-fromList keyComparison alist =
-    List.foldl
-        (\( key, value ) result ->
-            insert keyComparison key value result
-        )
-        (D [])
-        alist
+fromList : (k -> comparable) -> List ( k, v ) -> Dict comparable k v
+fromList toComparable =
+    List.foldl (\( key, value ) -> Dict.insert (toComparable key) ( key, value )) Dict.empty
+        >> D

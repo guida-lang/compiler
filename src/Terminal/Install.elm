@@ -77,7 +77,7 @@ type Changes vsn
     = AlreadyInstalled
     | PromoteTest Outline.Outline
     | PromoteIndirect Outline.Outline
-    | Changes (Dict Pkg.Name (Change vsn)) Outline.Outline
+    | Changes (Dict ( String, String ) Pkg.Name (Change vsn)) Outline.Outline
 
 
 type alias Task a =
@@ -159,11 +159,11 @@ attemptChanges root env oldOutline toChars changes =
             let
                 widths : Widths
                 widths =
-                    Dict.foldr (widen toChars) (Widths 0 0 0) changeDict
+                    Dict.foldr compare (widen toChars) (Widths 0 0 0) changeDict
 
                 changeDocs : ChangeDocs
                 changeDocs =
-                    Dict.foldr (addChange toChars widths) (Docs [] [] []) changeDict
+                    Dict.foldr compare (addChange toChars widths) (Docs [] [] []) changeDict
             in
             attemptChangesHelp root env oldOutline newOutline <|
                 D.vcat
@@ -210,50 +210,50 @@ attemptChangesHelp root env oldOutline newOutline question =
 
 makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task (Changes V.Version)
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
-    if Dict.member pkg direct then
+    if Dict.member identity pkg direct then
         Task.pure AlreadyInstalled
 
     else
         -- is it already indirect?
-        case Dict.get pkg indirect of
+        case Dict.get identity pkg indirect of
             Just vsn ->
                 Task.pure <|
                     PromoteIndirect <|
                         Outline.App <|
                             Outline.AppOutline elmVersion
                                 sourceDirs
-                                (Dict.insert Pkg.compareName pkg vsn direct)
-                                (Dict.remove pkg indirect)
+                                (Dict.insert identity pkg vsn direct)
+                                (Dict.remove identity pkg indirect)
                                 testDirect
                                 testIndirect
 
             Nothing ->
                 -- is it already a test dependency?
-                case Dict.get pkg testDirect of
+                case Dict.get identity pkg testDirect of
                     Just vsn ->
                         Task.pure <|
                             PromoteTest <|
                                 Outline.App <|
                                     Outline.AppOutline elmVersion
                                         sourceDirs
-                                        (Dict.insert Pkg.compareName pkg vsn direct)
+                                        (Dict.insert identity pkg vsn direct)
                                         indirect
-                                        (Dict.remove pkg testDirect)
+                                        (Dict.remove identity pkg testDirect)
                                         testIndirect
 
                     Nothing ->
                         -- is it already an indirect test dependency?
-                        case Dict.get pkg testIndirect of
+                        case Dict.get identity pkg testIndirect of
                             Just vsn ->
                                 Task.pure <|
                                     PromoteTest <|
                                         Outline.App <|
                                             Outline.AppOutline elmVersion
                                                 sourceDirs
-                                                (Dict.insert Pkg.compareName pkg vsn direct)
+                                                (Dict.insert identity pkg vsn direct)
                                                 indirect
                                                 testDirect
-                                                (Dict.remove pkg testIndirect)
+                                                (Dict.remove identity pkg testIndirect)
 
                             Nothing ->
                                 -- finally try to add it from scratch
@@ -291,12 +291,12 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 
 makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
 makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
-    if Dict.member pkg deps then
+    if Dict.member identity pkg deps then
         Task.pure AlreadyInstalled
 
     else
         -- is already in test dependencies?
-        case Dict.get pkg test of
+        case Dict.get identity pkg test of
             Just con ->
                 Task.pure <|
                     PromoteTest <|
@@ -306,8 +306,8 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                 license
                                 version
                                 exposed
-                                (Dict.insert Pkg.compareName pkg con deps)
-                                (Dict.remove pkg test)
+                                (Dict.insert identity pkg con deps)
+                                (Dict.remove identity pkg test)
                                 elmVersion
 
             Nothing ->
@@ -323,13 +323,13 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
 
                     Ok (Registry.KnownVersions _ _) ->
                         let
-                            old : Dict Pkg.Name C.Constraint
+                            old : Dict ( String, String ) Pkg.Name C.Constraint
                             old =
-                                Dict.union Pkg.compareName deps test
+                                Dict.union deps test
 
-                            cons : Dict Pkg.Name C.Constraint
+                            cons : Dict ( String, String ) Pkg.Name C.Constraint
                             cons =
-                                Dict.insert Pkg.compareName pkg C.anything old
+                                Dict.insert identity pkg C.anything old
                         in
                         Task.io (Solver.verify cache connection registry cons)
                             |> Task.bind
@@ -338,23 +338,23 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                         Solver.SolverOk solution ->
                                             let
                                                 (Solver.Details vsn _) =
-                                                    Utils.find pkg solution
+                                                    Utils.find identity pkg solution
 
                                                 con : C.Constraint
                                                 con =
                                                     C.untilNextMajor vsn
 
-                                                new : Dict Pkg.Name C.Constraint
+                                                new : Dict ( String, String ) Pkg.Name C.Constraint
                                                 new =
-                                                    Dict.insert Pkg.compareName pkg con old
+                                                    Dict.insert identity pkg con old
 
-                                                changes : Dict Pkg.Name (Change C.Constraint)
+                                                changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
                                                 changes =
                                                     detectChanges old new
 
-                                                news : Dict Pkg.Name C.Constraint
+                                                news : Dict ( String, String ) Pkg.Name C.Constraint
                                                 news =
-                                                    Utils.mapMapMaybe Pkg.compareName keepNew changes
+                                                    Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                             in
                                             Task.pure <|
                                                 Changes changes <|
@@ -379,14 +379,14 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                 )
 
 
-addNews : Maybe Pkg.Name -> Dict Pkg.Name C.Constraint -> Dict Pkg.Name C.Constraint -> Dict Pkg.Name C.Constraint
+addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
 addNews pkg new old =
-    Dict.merge
-        (Dict.insert Pkg.compareName)
-        (\k _ n -> Dict.insert Pkg.compareName k n)
+    Dict.merge compare
+        (Dict.insert identity)
+        (\k _ n -> Dict.insert identity k n)
         (\k c acc ->
             if Just k == pkg then
-                Dict.insert Pkg.compareName k c acc
+                Dict.insert identity k c acc
 
             else
                 acc
@@ -406,19 +406,19 @@ type Change a
     | Remove a
 
 
-detectChanges : Dict Pkg.Name a -> Dict Pkg.Name a -> Dict Pkg.Name (Change a)
+detectChanges : Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name (Change a)
 detectChanges old new =
-    Dict.merge
-        (\k v -> Dict.insert Pkg.compareName k (Remove v))
+    Dict.merge compare
+        (\k v -> Dict.insert identity k (Remove v))
         (\k oldElem newElem acc ->
             case keepChange k oldElem newElem of
                 Just change ->
-                    Dict.insert Pkg.compareName k change acc
+                    Dict.insert identity k change acc
 
                 Nothing ->
                     acc
         )
-        (\k v -> Dict.insert Pkg.compareName k (Insert v))
+        (\k v -> Dict.insert identity k (Insert v))
         old
         new
         Dict.empty

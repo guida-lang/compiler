@@ -44,7 +44,7 @@ fromInt n =
 
 fromLocal : Name.Name -> Name
 fromLocal name =
-    if EverySet.member name reservedNames then
+    if EverySet.member identity name reservedNames then
         "_" ++ name
 
     else
@@ -114,14 +114,14 @@ usd =
 -- RESERVED NAMES
 
 
-reservedNames : EverySet String
+reservedNames : EverySet String String
 reservedNames =
-    EverySet.union compare jsReservedWords elmReservedWords
+    EverySet.union jsReservedWords elmReservedWords
 
 
-jsReservedWords : EverySet String
+jsReservedWords : EverySet String String
 jsReservedWords =
-    EverySet.fromList compare
+    EverySet.fromList identity
         [ "do"
         , "if"
         , "in"
@@ -192,9 +192,9 @@ jsReservedWords =
         ]
 
 
-elmReservedWords : EverySet String
+elmReservedWords : EverySet String String
 elmReservedWords =
-    EverySet.fromList compare
+    EverySet.fromList identity
         [ "F2"
         , "F3"
         , "F4"
@@ -250,7 +250,7 @@ intToAsciiHelp width blockSize badFields n =
                     name =
                         unsafeIntToAscii width [] n
                 in
-                Dict.get name renamings |> Maybe.withDefault name
+                Dict.get identity name renamings |> Maybe.withDefault name
 
             else
                 intToAsciiHelp (width + 1) (blockSize * numInnerBytes) biggerBadFields (n - availableSize)
@@ -328,17 +328,17 @@ type BadFields
 
 
 type alias Renamings =
-    Dict Name.Name Name.Name
+    Dict String Name.Name Name.Name
 
 
 allBadFields : List BadFields
 allBadFields =
     let
-        add : String -> Dict Int BadFields -> Dict Int BadFields
+        add : String -> Dict Int Int BadFields -> Dict Int Int BadFields
         add keyword dict =
-            Dict.update compare (String.length keyword) (Just << addRenaming keyword) dict
+            Dict.update identity (String.length keyword) (Just << addRenaming keyword) dict
     in
-    Dict.values (EverySet.foldr add Dict.empty jsReservedWords)
+    Dict.values compare (EverySet.foldr compare add Dict.empty jsReservedWords)
 
 
 addRenaming : String -> Maybe BadFields -> BadFields
@@ -354,7 +354,7 @@ addRenaming keyword maybeBadFields =
     in
     case maybeBadFields of
         Nothing ->
-            BadFields (Dict.singleton keyword (unsafeIntToAscii width [] maxName))
+            BadFields (Dict.singleton identity keyword (unsafeIntToAscii width [] maxName))
 
         Just (BadFields renamings) ->
-            BadFields (Dict.insert compare keyword (unsafeIntToAscii width [] (maxName - Dict.size renamings)) renamings)
+            BadFields (Dict.insert identity keyword (unsafeIntToAscii width [] (maxName - Dict.size renamings)) renamings)

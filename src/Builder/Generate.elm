@@ -60,7 +60,7 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                                             graph =
                                                 objectsToGlobalGraph objects
 
-                                            mains : Dict TypeCheck.Canonical Opt.Main
+                                            mains : Dict (List String) TypeCheck.Canonical Opt.Main
                                             mains =
                                                 gatherMains pkg objects roots
                                         in
@@ -84,7 +84,7 @@ dev root details (Build.Artifacts pkg _ roots modules) =
                     graph =
                         objectsToGlobalGraph objects
 
-                    mains : Dict TypeCheck.Canonical Opt.Main
+                    mains : Dict (List String) TypeCheck.Canonical Opt.Main
                     mains =
                         gatherMains pkg objects roots
                 in
@@ -109,7 +109,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                                 mode =
                                     Mode.Prod (Mode.shortenFieldNames graph)
 
-                                mains : Dict TypeCheck.Canonical Opt.Main
+                                mains : Dict (List String) TypeCheck.Canonical Opt.Main
                                 mains =
                                     gatherMains pkg objects roots
                             in
@@ -128,7 +128,7 @@ repl root details ansi (Build.ReplArtifacts home modules localizer annotations) 
                     graph =
                         objectsToGlobalGraph objects
                 in
-                JS.generateForRepl ansi localizer graph home name (Utils.find name annotations)
+                JS.generateForRepl ansi localizer graph home name (Utils.find identity name annotations)
             )
 
 
@@ -138,7 +138,7 @@ repl root details ansi (Build.ReplArtifacts home modules localizer annotations) 
 
 checkForDebugUses : Objects -> Task ()
 checkForDebugUses (Objects _ locals) =
-    case Dict.keys (Dict.filter (\_ -> Nitpick.hasDebugUses) locals) of
+    case Dict.keys compare (Dict.filter (\_ -> Nitpick.hasDebugUses) locals) of
         [] ->
             Task.pure ()
 
@@ -150,12 +150,12 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
-gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict TypeCheck.Canonical Opt.Main
+gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) TypeCheck.Canonical Opt.Main
 gatherMains pkg (Objects _ locals) roots =
-    Dict.fromList ModuleName.compareCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
+    Dict.fromList ModuleName.toComparableCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
-lookupMain : Pkg.Name -> Dict ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( TypeCheck.Canonical, Opt.Main )
+lookupMain : Pkg.Name -> Dict String ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( TypeCheck.Canonical, Opt.Main )
 lookupMain pkg locals root =
     let
         toPair : N.Name -> Opt.LocalGraph -> Maybe ( TypeCheck.Canonical, Opt.Main )
@@ -164,7 +164,7 @@ lookupMain pkg locals root =
     in
     case root of
         Build.Inside name ->
-            Maybe.andThen (toPair name) (Dict.get name locals)
+            Maybe.andThen (toPair name) (Dict.get identity name locals)
 
         Build.Outside name _ g ->
             toPair name g
@@ -175,7 +175,7 @@ lookupMain pkg locals root =
 
 
 type LoadingObjects
-    = LoadingObjects (MVar (Maybe Opt.GlobalGraph)) (Dict ModuleName.Raw (MVar (Maybe Opt.LocalGraph)))
+    = LoadingObjects (MVar (Maybe Opt.GlobalGraph)) (Dict String ModuleName.Raw (MVar (Maybe Opt.LocalGraph)))
 
 
 loadObjects : FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
@@ -187,7 +187,7 @@ loadObjects root details modules =
                     Utils.listTraverse (loadObject root) modules
                         |> IO.fmap
                             (\mvars ->
-                                LoadingObjects mvar (Dict.fromList compare mvars)
+                                LoadingObjects mvar (Dict.fromList identity mvars)
                             )
                 )
         )
@@ -214,7 +214,7 @@ loadObject root modul =
 
 
 type Objects
-    = Objects Opt.GlobalGraph (Dict ModuleName.Raw Opt.LocalGraph)
+    = Objects Opt.GlobalGraph (Dict String ModuleName.Raw Opt.LocalGraph)
 
 
 finalizeObjects : LoadingObjects -> Task Objects
@@ -223,10 +223,10 @@ finalizeObjects (LoadingObjects mvar mvars) =
         (Utils.readMVar (Decode.maybe Opt.globalGraphDecoder) mvar
             |> IO.bind
                 (\result ->
-                    Utils.mapTraverse compare (Utils.readMVar (Decode.maybe Opt.localGraphDecoder)) mvars
+                    Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe Opt.localGraphDecoder)) mvars
                         |> IO.fmap
                             (\results ->
-                                case Maybe.map2 Objects result (Utils.sequenceDictMaybe compare results) of
+                                case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
                                     Just loaded ->
                                         Ok loaded
 
@@ -239,14 +239,14 @@ finalizeObjects (LoadingObjects mvar mvars) =
 
 objectsToGlobalGraph : Objects -> Opt.GlobalGraph
 objectsToGlobalGraph (Objects globals locals) =
-    Dict.foldr (\_ -> Opt.addLocalGraph) globals locals
+    Dict.foldr compare (\_ -> Opt.addLocalGraph) globals locals
 
 
 
 -- LOAD TYPES
 
 
-loadTypes : FilePath -> Dict TypeCheck.Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
+loadTypes : FilePath -> Dict (List String) TypeCheck.Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules
@@ -255,7 +255,7 @@ loadTypes root ifaces modules =
                     let
                         foreigns : Extract.Types
                         foreigns =
-                            Extract.mergeMany (Dict.values (Dict.map Extract.fromDependencyInterface ifaces))
+                            Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
                     in
                     Utils.listTraverse (Utils.readMVar (Decode.maybe Extract.typesDecoder)) mvars
                         |> IO.fmap
