@@ -4,10 +4,9 @@ module Serialize exposing
     , string, bool, float, int, unit, bytes, byte
     , maybe, list, array, dict, set, tuple, triple, result, enum
     , RecordCodec, record, field, finishRecord
-    , CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, finishCustomType, VariantEncoder
+    , CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, variant9, finishCustomType, VariantEncoder
     , map, mapValid, mapError
     , lazy
-    , variant9
     )
 
 {-| Ref.: **Initial implementation from `MartinSStewart/elm-serialize/1.3.1`**
@@ -49,7 +48,7 @@ Here's some advice when choosing:
 
 # Custom Types
 
-@docs CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, finishCustomType, VariantEncoder
+@docs CustomTypeCodec, customType, variant0, variant1, variant2, variant3, variant4, variant5, variant6, variant7, variant8, variant9, finishCustomType, VariantEncoder
 
 
 # Mapping
@@ -141,6 +140,7 @@ getJsonDecoderHelper (Codec m) =
 decodeFromBytes : Codec e a -> Bytes.Bytes -> Result (Error e) a
 decodeFromBytes codec bytes_ =
     let
+        decoder : BD.Decoder (Result (Error e) a)
         decoder =
             BD.unsignedInt8
                 |> BD.andThen
@@ -208,6 +208,7 @@ decodeFromString codec base64 =
 decodeFromJson : Codec e a -> JE.Value -> Result (Error e) a
 decodeFromJson codec json =
     let
+        decoder : JD.Decoder (Result (Error e) a)
         decoder =
             JD.index 0 JD.int
                 |> JD.andThen
@@ -274,6 +275,7 @@ getJsonDecoder errorToString codec =
 decode : String -> Maybe Bytes.Bytes
 decode base64text =
     let
+        replaceChar : Regex.Match -> String
         replaceChar rematch =
             case rematch.match of
                 "-" ->
@@ -282,6 +284,7 @@ decode base64text =
                 _ ->
                     "/"
 
+        strlen : Int
         strlen =
             String.length base64text
     in
@@ -290,9 +293,11 @@ decode base64text =
 
     else
         let
+            hanging : Int
             hanging =
                 modBy 4 strlen
 
+            ilen : Int
             ilen =
                 if hanging == 0 then
                     0
@@ -366,6 +371,7 @@ encodeToJson codec value =
 replaceBase64Chars : Bytes.Bytes -> String
 replaceBase64Chars =
     let
+        replaceChar : Regex.Match -> String
         replaceChar rematch =
             case rematch.match of
                 "+" ->
@@ -758,12 +764,14 @@ It's safe to add items to the end of the list though.
 enum : a -> List a -> Codec e a
 enum defaultItem items =
     let
+        getIndex : a -> Int
         getIndex value =
             items
                 |> findIndex ((==) value)
                 |> Maybe.withDefault -1
                 |> (+) 1
 
+        getItem : Int -> Result (Error e) a
         getItem index =
             if index < 0 then
                 Err DataCorrupted
@@ -1944,4 +1952,4 @@ lazy f =
         (\value -> getBytesEncoderHelper (f ()) value)
         (BD.succeed () |> BD.andThen (\() -> getBytesDecoderHelper (f ())))
         (\value -> getJsonEncoderHelper (f ()) value)
-        (JD.succeed () |> JD.andThen (\() -> getJsonDecoderHelper (f ())))
+        (JD.lazy (\() -> getJsonDecoderHelper (f ())))

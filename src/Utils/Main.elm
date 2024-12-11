@@ -57,8 +57,6 @@ module Utils.Main exposing
     , fpTakeExtension
     , fpTakeFileName
     , httpExceptionContentCodec
-    , httpExceptionContentDecoder
-    , httpExceptionContentEncoder
     , httpHLocation
     , httpResponseHeaders
     , httpResponseStatus
@@ -75,8 +73,6 @@ module Utils.Main exposing
     , listTraverse_
     , lockWithFileLock
     , mVarCodec
-    , mVarDecoder
-    , mVarEncoder
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -94,7 +90,6 @@ module Utils.Main exposing
     , mapUnionWith
     , mapUnions
     , mapUnionsWith
-    , maybeEncoder
     , maybeMapM
     , maybeTraverseTask
     , newChan
@@ -116,8 +111,6 @@ module Utils.Main exposing
     , sequenceListMaybe
     , sequenceNonemptyListResult
     , someExceptionCodec
-    , someExceptionDecoder
-    , someExceptionEncoder
     , takeMVar
     , unlines
     , unzip3
@@ -129,16 +122,11 @@ import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Version exposing (toComparable)
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Dict
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
 import Serialize exposing (Codec)
@@ -194,16 +182,6 @@ mapFromListWith toComparable f =
             Map.update toComparable k (Maybe.map (flip f a))
         )
         Map.empty
-
-
-maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybeEncoder encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
 
 
 eitherLefts : List (Result e a) -> List e
@@ -1130,16 +1108,6 @@ replGetInputLineWithInitial prompt ( left, right ) =
 -- ENCODERS and DECODERS
 
 
-mVarEncoder : MVar a -> Encode.Value
-mVarEncoder (MVar ref) =
-    Encode.int ref
-
-
-mVarDecoder : Decode.Decoder (MVar a)
-mVarDecoder =
-    Decode.map MVar Decode.int
-
-
 mVarCodec : Codec e (MVar a)
 mVarCodec =
     Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref)
@@ -1155,16 +1123,6 @@ chItemCodec codec =
         |> Serialize.finishCustomType
 
 
-someExceptionEncoder : SomeException -> Encode.Value
-someExceptionEncoder _ =
-    Encode.object [ ( "type", Encode.string "SomeException" ) ]
-
-
-someExceptionDecoder : Decode.Decoder SomeException
-someExceptionDecoder =
-    Decode.succeed SomeException
-
-
 someExceptionCodec : Codec e SomeException
 someExceptionCodec =
     Serialize.customType
@@ -1173,99 +1131,6 @@ someExceptionCodec =
         )
         |> Serialize.variant0 SomeException
         |> Serialize.finishCustomType
-
-
-httpResponseEncoder : HttpResponse body -> Encode.Value
-httpResponseEncoder (HttpResponse httpResponse) =
-    Encode.object
-        [ ( "type", Encode.string "HttpResponse" )
-        , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
-        , ( "responseHeaders", httpResponseHeadersEncoder httpResponse.responseHeaders )
-        ]
-
-
-httpResponseDecoder : Decode.Decoder (HttpResponse body)
-httpResponseDecoder =
-    Decode.map2
-        (\responseStatus responseHeaders ->
-            HttpResponse
-                { responseStatus = responseStatus
-                , responseHeaders = responseHeaders
-                }
-        )
-        (Decode.field "responseStatus" httpStatusDecoder)
-        (Decode.field "responseHeaders" httpResponseHeadersDecoder)
-
-
-httpStatusEncoder : HttpStatus -> Encode.Value
-httpStatusEncoder (HttpStatus statusCode statusMessage) =
-    Encode.object
-        [ ( "type", Encode.string "HttpStatus" )
-        , ( "statusCode", Encode.int statusCode )
-        , ( "statusMessage", Encode.string statusMessage )
-        ]
-
-
-httpStatusDecoder : Decode.Decoder HttpStatus
-httpStatusDecoder =
-    Decode.map2 HttpStatus
-        (Decode.field "statusCode" Decode.int)
-        (Decode.field "statusMessage" Decode.string)
-
-
-httpResponseHeadersEncoder : HttpResponseHeaders -> Encode.Value
-httpResponseHeadersEncoder =
-    Encode.list (E.jsonPair Encode.string Encode.string)
-
-
-httpResponseHeadersDecoder : Decode.Decoder HttpResponseHeaders
-httpResponseHeadersDecoder =
-    Decode.list (D.jsonPair Decode.string Decode.string)
-
-
-httpExceptionContentEncoder : HttpExceptionContent -> Encode.Value
-httpExceptionContentEncoder httpExceptionContent =
-    case httpExceptionContent of
-        StatusCodeException response body ->
-            Encode.object
-                [ ( "type", Encode.string "StatusCodeException" )
-                , ( "response", httpResponseEncoder response )
-                , ( "body", Encode.string body )
-                ]
-
-        TooManyRedirects responses ->
-            Encode.object
-                [ ( "type", Encode.string "TooManyRedirects" )
-                , ( "responses", Encode.list httpResponseEncoder responses )
-                ]
-
-        ConnectionFailure someException ->
-            Encode.object
-                [ ( "type", Encode.string "ConnectionFailure" )
-                , ( "someException", someExceptionEncoder someException )
-                ]
-
-
-httpExceptionContentDecoder : Decode.Decoder HttpExceptionContent
-httpExceptionContentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StatusCodeException" ->
-                        Decode.map2 StatusCodeException
-                            (Decode.field "response" httpResponseDecoder)
-                            (Decode.field "body" Decode.string)
-
-                    "TooManyRedirects" ->
-                        Decode.map TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
-
-                    "ConnectionFailure" ->
-                        Decode.map ConnectionFailure (Decode.field "someException" someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
-            )
 
 
 httpExceptionContentCodec : Codec e HttpExceptionContent
