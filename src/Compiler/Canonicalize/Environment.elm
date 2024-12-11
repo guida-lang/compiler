@@ -45,7 +45,7 @@ type alias EResult i w a =
 
 type alias Env =
     { home : Canonical
-    , vars : Dict Name.Name Var
+    , vars : Dict String Name.Name Var
     , types : Exposed Type
     , ctors : Exposed Ctor
     , binops : Exposed Binop
@@ -56,11 +56,11 @@ type alias Env =
 
 
 type alias Exposed a =
-    Dict Name.Name (Info a)
+    Dict String Name.Name (Info a)
 
 
 type alias Qualified a =
-    Dict Name.Name (Dict Name.Name (Info a))
+    Dict String Name.Name (Dict String Name.Name (Info a))
 
 
 
@@ -137,15 +137,16 @@ type Binop
 -- VARIABLE -- ADD LOCALS
 
 
-addLocals : Dict Name.Name A.Region -> Env -> EResult i w Env
+addLocals : Dict String Name.Name A.Region -> Env -> EResult i w Env
 addLocals names env =
     R.fmap (\newVars -> { env | vars = newVars })
-        (Dict.merge (\name region -> R.fmap (Dict.insert compare name (addLocalLeft name region)))
+        (Dict.merge compare
+            (\name region -> R.fmap (Dict.insert identity name (addLocalLeft name region)))
             (\name region var acc ->
                 addLocalBoth name region var
-                    |> R.bind (\var_ -> R.fmap (Dict.insert compare name var_) acc)
+                    |> R.bind (\var_ -> R.fmap (Dict.insert identity name var_) acc)
             )
-            (\name var -> R.fmap (Dict.insert compare name var))
+            (\name var -> R.fmap (Dict.insert identity name var))
             names
             env.vars
             (R.ok Dict.empty)
@@ -179,7 +180,7 @@ addLocalBoth name region var =
 
 findType : A.Region -> Env -> Name.Name -> EResult i w Type
 findType region { types, q_types } name =
-    case Dict.get name types of
+    case Dict.get identity name types of
         Just (Specific _ tipe) ->
             R.ok tipe
 
@@ -192,9 +193,9 @@ findType region { types, q_types } name =
 
 findTypeQual : A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Type
 findTypeQual region { types, q_types } prefix name =
-    case Dict.get prefix q_types of
+    case Dict.get identity prefix q_types of
         Just qualified ->
-            case Dict.get name qualified of
+            case Dict.get identity name qualified of
                 Just (Specific _ tipe) ->
                     R.ok tipe
 
@@ -214,7 +215,7 @@ findTypeQual region { types, q_types } prefix name =
 
 findCtor : A.Region -> Env -> Name.Name -> EResult i w Ctor
 findCtor region { ctors, q_ctors } name =
-    case Dict.get name ctors of
+    case Dict.get identity name ctors of
         Just (Specific _ ctor) ->
             R.ok ctor
 
@@ -227,9 +228,9 @@ findCtor region { ctors, q_ctors } name =
 
 findCtorQual : A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Ctor
 findCtorQual region { ctors, q_ctors } prefix name =
-    case Dict.get prefix q_ctors of
+    case Dict.get identity prefix q_ctors of
         Just qualified ->
-            case Dict.get name qualified of
+            case Dict.get identity name qualified of
                 Just (Specific _ pattern) ->
                     R.ok pattern
 
@@ -249,7 +250,7 @@ findCtorQual region { ctors, q_ctors } prefix name =
 
 findBinop : A.Region -> Env -> Name.Name -> EResult i w Binop
 findBinop region { binops } name =
-    case Dict.get name binops of
+    case Dict.get identity name binops of
         Just (Specific _ binop) ->
             R.ok binop
 
@@ -257,7 +258,7 @@ findBinop region { binops } name =
             R.throw (Error.AmbiguousBinop region name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundBinop region name (EverySet.fromList compare (Dict.keys binops)))
+            R.throw (Error.NotFoundBinop region name (EverySet.fromList identity (Dict.keys compare binops)))
 
 
 
@@ -266,4 +267,4 @@ findBinop region { binops } name =
 
 toPossibleNames : Exposed a -> Qualified a -> Error.PossibleNames
 toPossibleNames exposed qualified =
-    Error.PossibleNames (EverySet.fromList compare (Dict.keys exposed)) (Dict.map (\_ -> Dict.keys >> EverySet.fromList compare) qualified)
+    Error.PossibleNames (EverySet.fromList identity (Dict.keys compare exposed)) (Dict.map (\_ -> Dict.keys compare >> EverySet.fromList identity) qualified)

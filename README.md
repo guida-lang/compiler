@@ -30,6 +30,16 @@ This phase will foster a unified ecosystem that adapts to the needs of its users
 Our ultimate goal is to create a language that inherits the best aspects of Elm while adapting and
 growing to meet the needs of its users.
 
+# Install
+
+To install Guida as an npm package, run the following command:
+
+```
+npm install -g guida
+```
+
+You should now be able to run `guida --version`.
+
 # Development
 
 Start by installing [Node Version Manager](https://github.com/nvm-sh/nvm).
@@ -120,6 +130,32 @@ npm run test:elm-format-validate
 ```
 npm run elm-format
 ```
+
+# Publish new npm package version
+
+Before publishing a new npm package version, make sure you are on the correct
+branch, ie. in case of wanting to publish a 0.x version, you should have the
+`v0.x` branch checked out.
+
+To publish a new version, we should then run the following commands:
+
+```
+npm version <newversion>
+npm publish
+git push origin <currentbranch>
+git push origin tag v<newversion>
+```
+
+As an example, these should have been the commands ran for publishing `v0.2.0-alpha`
+
+```
+npm version 0.2.0-alpha
+npm publish
+git push origin v0.x
+git push origin tag v0.2.0-alpha
+```
+
+The `<newversion>` value relates to the `version` field value found on `package.json`.
 
 # References
 

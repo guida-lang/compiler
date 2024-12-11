@@ -101,8 +101,8 @@ type Expr_
     | Case Expr (List CaseBranch)
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Name Expr (Dict Name FieldUpdate)
-    | Record (Dict Name Expr)
+    | Update Name Expr (Dict String Name FieldUpdate)
+    | Record (Dict String Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
     | Shader Shader.Source Shader.Types
@@ -184,14 +184,14 @@ type Annotation
 
 
 type alias FreeVars =
-    Dict Name ()
+    Dict String Name ()
 
 
 type Type
     = TLambda Type Type
     | TVar Name
     | TType IO.Canonical Name (List Type)
-    | TRecord (Dict Name FieldType) (Maybe Name)
+    | TRecord (Dict String Name FieldType) (Maybe Name)
     | TUnit
     | TTuple Type Type (Maybe Type)
     | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
@@ -212,7 +212,7 @@ type FieldType
 -- the orders will all be zeros.
 
 
-fieldsToList : Dict Name FieldType -> List ( Name, Type )
+fieldsToList : Dict String Name FieldType -> List ( Name, Type )
 fieldsToList fields =
     let
         getIndex : ( a, FieldType ) -> Int
@@ -223,7 +223,7 @@ fieldsToList fields =
         dropIndex ( name, FieldType _ tipe ) =
             ( name, tipe )
     in
-    Dict.toList fields
+    Dict.toList compare fields
         |> List.sortBy getIndex
         |> List.map dropIndex
 
@@ -233,7 +233,7 @@ fieldsToList fields =
 
 
 type Module
-    = Module IO.Canonical Exports Src.Docs Decls (Dict Name Union) (Dict Name Alias) (Dict Name Binop) Effects
+    = Module IO.Canonical Exports Src.Docs Decls (Dict String Name Union) (Dict String Name Alias) (Dict String Name Binop) Effects
 
 
 type Alias
@@ -270,7 +270,7 @@ type Ctor
 
 type Exports
     = ExportEverything A.Region
-    | Export (Dict Name (A.Located Export))
+    | Export (Dict String Name (A.Located Export))
 
 
 type Export
@@ -284,7 +284,7 @@ type Export
 
 type Effects
     = NoEffects
-    | Ports (Dict Name Port)
+    | Ports (Dict String Name Port)
     | Manager A.Region A.Region A.Region Manager
 
 
@@ -323,7 +323,7 @@ annotationCodec =
 
 freeVarsCodec : Codec e FreeVars
 freeVarsCodec =
-    S.assocListDict compare Serialize.string Serialize.unit
+    S.assocListDict identity compare Serialize.string Serialize.unit
 
 
 aliasCodec : Codec e Alias
@@ -365,7 +365,7 @@ typeCodec =
         |> Serialize.variant2 TLambda (Serialize.lazy (\() -> typeCodec)) (Serialize.lazy (\() -> typeCodec))
         |> Serialize.variant1 TVar Serialize.string
         |> Serialize.variant3 TType ModuleName.canonicalCodec Serialize.string (Serialize.list (Serialize.lazy (\() -> typeCodec)))
-        |> Serialize.variant2 TRecord (S.assocListDict compare Serialize.string fieldTypeCodec) (Serialize.maybe Serialize.string)
+        |> Serialize.variant2 TRecord (S.assocListDict identity compare Serialize.string fieldTypeCodec) (Serialize.maybe Serialize.string)
         |> Serialize.variant0 TUnit
         |> Serialize.variant3 TTuple (Serialize.lazy (\() -> typeCodec)) (Serialize.lazy (\() -> typeCodec)) (Serialize.maybe (Serialize.lazy (\() -> typeCodec)))
         |> Serialize.variant4 TAlias ModuleName.canonicalCodec Serialize.string (Serialize.list (Serialize.tuple Serialize.string (Serialize.lazy (\() -> typeCodec)))) aliasTypeCodec
@@ -614,8 +614,8 @@ expr_Codec =
             Update
             Serialize.string
             (A.locatedCodec (Serialize.lazy (\() -> expr_Codec)))
-            (S.assocListDict compare Serialize.string fieldUpdateCodec)
-        |> Serialize.variant1 Record (S.assocListDict compare Serialize.string (A.locatedCodec (Serialize.lazy (\() -> expr_Codec))))
+            (S.assocListDict identity compare Serialize.string fieldUpdateCodec)
+        |> Serialize.variant1 Record (S.assocListDict identity compare Serialize.string (A.locatedCodec (Serialize.lazy (\() -> expr_Codec))))
         |> Serialize.variant0 Unit
         |> Serialize.variant3
             Tuple

@@ -24,7 +24,7 @@ optimize temp root optBranches =
         decider =
             treeToDecider (DT.compile patterns)
 
-        targetCounts : Dict Int Int
+        targetCounts : Dict Int Int Int
         targetCounts =
             countTargets decider
 
@@ -33,7 +33,7 @@ optimize temp root optBranches =
     in
     Opt.Case temp
         root
-        (insertChoices (Dict.fromList compare choices) decider)
+        (insertChoices (Dict.fromList identity choices) decider)
         (List.filterMap identity maybeJumps)
 
 
@@ -116,22 +116,22 @@ toChain path test successTree failureTree =
 -- can be inlined. Whether things are inlined or jumps is called a "choice".
 
 
-countTargets : Opt.Decider Int -> Dict Int Int
+countTargets : Opt.Decider Int -> Dict Int Int Int
 countTargets decisionTree =
     case decisionTree of
         Opt.Leaf target ->
-            Dict.singleton target 1
+            Dict.singleton identity target 1
 
         Opt.Chain _ success failure ->
-            Utils.mapUnionWith compare (+) (countTargets success) (countTargets failure)
+            Utils.mapUnionWith identity compare (+) (countTargets success) (countTargets failure)
 
         Opt.FanOut _ tests fallback ->
-            Utils.mapUnionsWith compare (+) (List.map countTargets (fallback :: List.map Tuple.second tests))
+            Utils.mapUnionsWith identity compare (+) (List.map countTargets (fallback :: List.map Tuple.second tests))
 
 
-createChoices : Dict Int Int -> ( Int, Opt.Expr ) -> ( ( Int, Opt.Choice ), Maybe ( Int, Opt.Expr ) )
+createChoices : Dict Int Int Int -> ( Int, Opt.Expr ) -> ( ( Int, Opt.Choice ), Maybe ( Int, Opt.Expr ) )
 createChoices targetCounts ( target, branch ) =
-    if Dict.get target targetCounts == Just 1 then
+    if Dict.get identity target targetCounts == Just 1 then
         ( ( target, Opt.Inline branch )
         , Nothing
         )
@@ -142,7 +142,7 @@ createChoices targetCounts ( target, branch ) =
         )
 
 
-insertChoices : Dict Int Opt.Choice -> Opt.Decider Int -> Opt.Decider Opt.Choice
+insertChoices : Dict Int Int Opt.Choice -> Opt.Decider Int -> Opt.Decider Opt.Choice
 insertChoices choiceDict decider =
     let
         go : Opt.Decider Int -> Opt.Decider Opt.Choice
@@ -151,7 +151,7 @@ insertChoices choiceDict decider =
     in
     case decider of
         Opt.Leaf target ->
-            Opt.Leaf (Utils.find target choiceDict)
+            Opt.Leaf (Utils.find identity target choiceDict)
 
         Opt.Chain testChain success failure ->
             Opt.Chain testChain (go success) (go failure)

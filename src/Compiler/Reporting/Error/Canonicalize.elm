@@ -62,7 +62,7 @@ type Error
     | NotFoundVar A.Region (Maybe Name) Name PossibleNames
     | NotFoundType A.Region (Maybe Name) Name PossibleNames
     | NotFoundVariant A.Region (Maybe Name) Name PossibleNames
-    | NotFoundBinop A.Region Name (EverySet Name)
+    | NotFoundBinop A.Region Name (EverySet String Name)
     | PatternHasRecordCtor A.Region Name
     | PortPayloadInvalid A.Region Name Can.Type InvalidPayload
     | PortTypeInvalid A.Region Name PortProblem
@@ -104,8 +104,8 @@ type PortProblem
 
 
 type alias PossibleNames =
-    { locals : EverySet Name
-    , quals : Dict Name (EverySet Name)
+    { locals : EverySet String Name
+    , quals : Dict String Name (EverySet String Name)
     }
 
 
@@ -608,7 +608,7 @@ toReport source err =
                 let
                     suggestions : List String
                     suggestions =
-                        List.take 2 <| Suggest.sort op identity (EverySet.toList locals)
+                        List.take 2 <| Suggest.sort op identity (EverySet.toList compare locals)
 
                     format : D.Doc -> D.Doc
                     format altOp =
@@ -1186,11 +1186,11 @@ notFound source region maybePrefix name thing { locals, quals } =
         possibleNames : List String
         possibleNames =
             let
-                addQuals : Name -> EverySet Name -> List String -> List String
+                addQuals : Name -> EverySet String Name -> List String -> List String
                 addQuals prefix localSet allNames =
-                    EverySet.foldr (\x xs -> toQualString prefix x :: xs) allNames localSet
+                    EverySet.foldr compare (\x xs -> toQualString prefix x :: xs) allNames localSet
             in
-            Dict.foldr addQuals (EverySet.toList locals) quals
+            Dict.foldr compare addQuals (EverySet.toList compare locals) quals
 
         nearbyNames : List String
         nearbyNames =
@@ -1224,7 +1224,7 @@ notFound source region maybePrefix name thing { locals, quals } =
                         "These names seem close though:"
 
                 Just prefix ->
-                    case Dict.get prefix quals of
+                    case Dict.get identity prefix quals of
                         Nothing ->
                             toDetails
                                 ("I cannot find a `" ++ prefix ++ "` module. Is there an `import` for it?")
@@ -1488,7 +1488,7 @@ errorCodec =
             (Serialize.maybe Serialize.string)
             Serialize.string
             possibleNamesCodec
-        |> Serialize.variant3 NotFoundBinop A.regionCodec Serialize.string (S.everySet compare Serialize.string)
+        |> Serialize.variant3 NotFoundBinop A.regionCodec Serialize.string (S.everySet identity compare Serialize.string)
         |> Serialize.variant2 PatternHasRecordCtor A.regionCodec Serialize.string
         |> Serialize.variant4 PortPayloadInvalid A.regionCodec Serialize.string Can.typeCodec invalidPayloadCodec
         |> Serialize.variant3 PortTypeInvalid A.regionCodec Serialize.string portProblemCodec
@@ -1591,8 +1591,8 @@ varKindCodec =
 possibleNamesCodec : Codec e PossibleNames
 possibleNamesCodec =
     Serialize.record PossibleNames
-        |> Serialize.field .locals (S.everySet compare Serialize.string)
-        |> Serialize.field .quals (S.assocListDict compare Serialize.string (S.everySet compare Serialize.string))
+        |> Serialize.field .locals (S.everySet identity compare Serialize.string)
+        |> Serialize.field .quals (S.assocListDict identity compare Serialize.string (S.everySet identity compare Serialize.string))
         |> Serialize.finishRecord
 
 

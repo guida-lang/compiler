@@ -18,6 +18,7 @@ module Compiler.AST.Optimized exposing
     , empty
     , globalGraphCodec
     , localGraphCodec
+    , toComparableGlobal
     , toKernelGlobal
     )
 
@@ -64,11 +65,11 @@ type Expr
     | Case Name Name (Decider Choice) (List ( Int, Expr ))
     | Accessor Name
     | Access Expr Name
-    | Update Expr (Dict Name Expr)
-    | Record (Dict Name Expr)
+    | Update Expr (Dict String Name Expr)
+    | Record (Dict String Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
-    | Shader Shader.Source (EverySet Name) (EverySet Name)
+    | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
 type Global
@@ -86,6 +87,11 @@ compareGlobal (Global home1 name1) (Global home2 name2) =
 
         GT ->
             GT
+
+
+toComparableGlobal : Global -> List String
+toComparableGlobal (Global home name) =
+    ModuleName.toComparableCanonical home ++ [ name ]
 
 
 
@@ -128,15 +134,15 @@ type Choice
 
 
 type GlobalGraph
-    = GlobalGraph (Dict Global Node) (Dict Name Int)
+    = GlobalGraph (Dict (List String) Global Node) (Dict String Name Int)
 
 
 type LocalGraph
     = LocalGraph
         (Maybe Main)
         -- PERF profile switching Global to Name
-        (Dict Global Node)
-        (Dict Name Int)
+        (Dict (List String) Global Node)
+        (Dict String Name Int)
 
 
 type Main
@@ -145,17 +151,17 @@ type Main
 
 
 type Node
-    = Define Expr (EverySet Global)
-    | DefineTailFunc (List Name) Expr (EverySet Global)
+    = Define Expr (EverySet (List String) Global)
+    | DefineTailFunc (List Name) Expr (EverySet (List String) Global)
     | Ctor Index.ZeroBased Int
     | Enum Index.ZeroBased
     | Box
     | Link Global
-    | Cycle (List Name) (List ( Name, Expr )) (List Def) (EverySet Global)
+    | Cycle (List Name) (List ( Name, Expr )) (List Def) (EverySet (List String) Global)
     | Manager EffectsType
-    | Kernel (List K.Chunk) (EverySet Global)
-    | PortIncoming Expr (EverySet Global)
-    | PortOutgoing Expr (EverySet Global)
+    | Kernel (List K.Chunk) (EverySet (List String) Global)
+    | PortIncoming Expr (EverySet (List String) Global)
+    | PortOutgoing Expr (EverySet (List String) Global)
 
 
 type EffectsType
@@ -176,15 +182,15 @@ empty =
 addGlobalGraph : GlobalGraph -> GlobalGraph -> GlobalGraph
 addGlobalGraph (GlobalGraph nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
-        (Dict.union compareGlobal nodes1 nodes2)
-        (Dict.union compare fields1 fields2)
+        (Dict.union nodes1 nodes2)
+        (Dict.union fields1 fields2)
 
 
 addLocalGraph : LocalGraph -> GlobalGraph -> GlobalGraph
 addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
-        (Dict.union compareGlobal nodes1 nodes2)
-        (Dict.union compare fields1 fields2)
+        (Dict.union nodes1 nodes2)
+        (Dict.union fields1 fields2)
 
 
 addKernel : Name -> List K.Chunk -> GlobalGraph -> GlobalGraph
@@ -199,21 +205,21 @@ addKernel shortName chunks (GlobalGraph nodes fields) =
             Kernel chunks (List.foldr addKernelDep EverySet.empty chunks)
     in
     GlobalGraph
-        (Dict.insert compareGlobal global node nodes)
-        (Dict.union compare (K.countFields chunks) fields)
+        (Dict.insert toComparableGlobal global node nodes)
+        (Dict.union (K.countFields chunks) fields)
 
 
-addKernelDep : K.Chunk -> EverySet Global -> EverySet Global
+addKernelDep : K.Chunk -> EverySet (List String) Global -> EverySet (List String) Global
 addKernelDep chunk deps =
     case chunk of
         K.JS _ ->
             deps
 
         K.ElmVar home name ->
-            EverySet.insert compareGlobal (Global home name) deps
+            EverySet.insert toComparableGlobal (Global home name) deps
 
         K.JsVar shortName _ ->
-            EverySet.insert compareGlobal (toKernelGlobal shortName) deps
+            EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
 
         K.ElmField _ ->
             deps
@@ -246,7 +252,7 @@ globalGraphCodec =
         (\globalGraphCodecEncoder (GlobalGraph nodes fields) ->
             globalGraphCodecEncoder nodes fields
         )
-        |> Serialize.variant2 GlobalGraph (S.assocListDict compareGlobal globalCodec nodeCodec) (S.assocListDict compare Serialize.string Serialize.int)
+        |> Serialize.variant2 GlobalGraph (S.assocListDict toComparableGlobal compareGlobal globalCodec nodeCodec) (S.assocListDict identity compare Serialize.string Serialize.int)
         |> Serialize.finishCustomType
 
 
@@ -258,8 +264,8 @@ localGraphCodec =
         )
         |> Serialize.variant3 LocalGraph
             (Serialize.maybe mainCodec)
-            (S.assocListDict compareGlobal globalCodec nodeCodec)
-            (S.assocListDict compare Serialize.string Serialize.int)
+            (S.assocListDict toComparableGlobal compareGlobal globalCodec nodeCodec)
+            (S.assocListDict identity compare Serialize.string Serialize.int)
         |> Serialize.finishCustomType
 
 
@@ -327,17 +333,17 @@ nodeCodec =
                 PortOutgoing encoder deps ->
                     portOutgoingEncoder encoder deps
         )
-        |> Serialize.variant2 Define exprCodec (S.everySet compareGlobal globalCodec)
-        |> Serialize.variant3 DefineTailFunc (Serialize.list Serialize.string) exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant2 Define exprCodec (S.everySet toComparableGlobal compareGlobal globalCodec)
+        |> Serialize.variant3 DefineTailFunc (Serialize.list Serialize.string) exprCodec (S.everySet toComparableGlobal compareGlobal globalCodec)
         |> Serialize.variant2 Ctor Index.zeroBasedCodec Serialize.int
         |> Serialize.variant1 Enum Index.zeroBasedCodec
         |> Serialize.variant0 Box
         |> Serialize.variant1 Link globalCodec
-        |> Serialize.variant4 Cycle (Serialize.list Serialize.string) (Serialize.list (Serialize.tuple Serialize.string exprCodec)) (Serialize.list defCodec) (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant4 Cycle (Serialize.list Serialize.string) (Serialize.list (Serialize.tuple Serialize.string exprCodec)) (Serialize.list defCodec) (S.everySet toComparableGlobal compareGlobal globalCodec)
         |> Serialize.variant1 Manager effectsTypeCodec
-        |> Serialize.variant2 Kernel (Serialize.list K.chunkCodec) (S.everySet compareGlobal globalCodec)
-        |> Serialize.variant2 PortIncoming exprCodec (S.everySet compareGlobal globalCodec)
-        |> Serialize.variant2 PortOutgoing exprCodec (S.everySet compareGlobal globalCodec)
+        |> Serialize.variant2 Kernel (Serialize.list K.chunkCodec) (S.everySet toComparableGlobal compareGlobal globalCodec)
+        |> Serialize.variant2 PortIncoming exprCodec (S.everySet toComparableGlobal compareGlobal globalCodec)
+        |> Serialize.variant2 PortOutgoing exprCodec (S.everySet toComparableGlobal compareGlobal globalCodec)
         |> Serialize.finishCustomType
 
 
@@ -449,11 +455,11 @@ exprCodec =
         |> Serialize.variant4 Case Serialize.string Serialize.string (deciderCodec choiceCodec) (Serialize.list (Serialize.tuple Serialize.int (Serialize.lazy (\() -> exprCodec))))
         |> Serialize.variant1 Accessor Serialize.string
         |> Serialize.variant2 Access (Serialize.lazy (\() -> exprCodec)) Serialize.string
-        |> Serialize.variant2 Update (Serialize.lazy (\() -> exprCodec)) (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
-        |> Serialize.variant1 Record (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant2 Update (Serialize.lazy (\() -> exprCodec)) (S.assocListDict identity compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
+        |> Serialize.variant1 Record (S.assocListDict identity compare Serialize.string (Serialize.lazy (\() -> exprCodec)))
         |> Serialize.variant0 Unit
         |> Serialize.variant3 Tuple (Serialize.lazy (\() -> exprCodec)) (Serialize.lazy (\() -> exprCodec)) (Serialize.maybe (Serialize.lazy (\() -> exprCodec)))
-        |> Serialize.variant3 Shader Shader.sourceCodec (S.everySet compare Serialize.string) (S.everySet compare Serialize.string)
+        |> Serialize.variant3 Shader Shader.sourceCodec (S.everySet identity compare Serialize.string) (S.everySet identity compare Serialize.string)
         |> Serialize.finishCustomType
 
 

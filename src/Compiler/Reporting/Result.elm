@@ -142,15 +142,16 @@ traverse func =
     List.foldr (\a -> bind (\acc -> fmap (\b -> b :: acc) (func a))) (ok [])
 
 
-mapTraverseWithKey : (k -> k -> Order) -> (k -> a -> RResult i w x b) -> Dict k a -> RResult i w x (Dict k b)
-mapTraverseWithKey keyComparison f =
-    Dict.foldr (\k a -> bind (\c -> fmap (\va -> Dict.insert keyComparison k va c) (f k a)))
+mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> RResult i w x b) -> Dict comparable k a -> RResult i w x (Dict comparable k b)
+mapTraverseWithKey toComparable keyComparison f =
+    Dict.foldr keyComparison
+        (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (f k a)))
         (pure Dict.empty)
 
 
-traverseDict : (k -> k -> Order) -> (a -> RResult i w x b) -> Dict k a -> RResult i w x (Dict k b)
-traverseDict keyComparison func =
-    Dict.foldr (\k a -> bind (\acc -> fmap (\b -> Dict.insert keyComparison k b acc) (func a))) (ok Dict.empty)
+traverseDict : (k -> comparable) -> (k -> k -> Order) -> (a -> RResult i w x b) -> Dict comparable k a -> RResult i w x (Dict comparable k b)
+traverseDict toComparable keyComparison func =
+    Dict.foldr keyComparison (\k a -> bind (\acc -> fmap (\b -> Dict.insert toComparable k b acc) (func a))) (ok Dict.empty)
 
 
 indexedTraverse : (Index.ZeroBased -> a -> RResult i w error b) -> List a -> RResult i w error (List b)

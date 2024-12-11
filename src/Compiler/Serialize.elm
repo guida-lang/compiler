@@ -12,16 +12,16 @@ import Data.Set as EverySet exposing (EverySet)
 import Serialize as S exposing (Codec)
 
 
-assocListDict : (k -> k -> Order) -> Codec e k -> Codec e a -> Codec e (Dict k a)
-assocListDict keyComparison keyCodec valueCodec =
+assocListDict : (k -> comparable) -> (k -> k -> Order) -> Codec e k -> Codec e a -> Codec e (Dict comparable k a)
+assocListDict toComparable keyComparison keyCodec valueCodec =
     S.list (S.tuple keyCodec valueCodec)
-        |> S.map (Dict.fromList keyComparison) Dict.toList
+        |> S.map (Dict.fromList toComparable) (Dict.toList keyComparison)
 
 
-everySet : (a -> a -> Order) -> Codec e a -> Codec e (EverySet a)
-everySet keyComparison codec =
+everySet : (a -> comparable) -> (a -> a -> Order) -> Codec e a -> Codec e (EverySet comparable a)
+everySet toComparable keyComparison codec =
     S.list codec
-        |> S.map (EverySet.fromList keyComparison) (List.reverse << EverySet.toList)
+        |> S.map (EverySet.fromList toComparable) (List.reverse << EverySet.toList keyComparison)
 
 
 nonempty : Codec e a -> Codec (S.Error e) (NE.Nonempty a)

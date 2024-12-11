@@ -59,7 +59,7 @@ import Utils.Main as Utils exposing (FilePath, MVar)
 
 
 type Details
-    = Details File.Time ValidOutline BuildID (Dict ModuleName.Raw Local) (Dict ModuleName.Raw Foreign) Extras
+    = Details File.Time ValidOutline BuildID (Dict String ModuleName.Raw Local) (Dict String ModuleName.Raw Foreign) Extras
 
 
 type alias BuildID =
@@ -68,7 +68,7 @@ type alias BuildID =
 
 type ValidOutline
     = ValidApp (NE.Nonempty Outline.SrcDir)
-    | ValidPkg Pkg.Name (List ModuleName.Raw) (Dict Pkg.Name V.Version {- for docs in reactor -})
+    | ValidPkg Pkg.Name (List ModuleName.Raw) (Dict ( String, String ) Pkg.Name V.Version {- for docs in reactor -})
 
 
 
@@ -101,7 +101,7 @@ type Extras
 
 
 type alias Interfaces =
-    Dict TypeCheck.Canonical I.DependencyInterface
+    Dict (List String) TypeCheck.Canonical I.DependencyInterface
 
 
 
@@ -253,7 +253,7 @@ type alias Task a =
 verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Details
 verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
-        union Pkg.compareName noDups direct testDirect
+        union identity Pkg.compareName noDups direct testDirect
             |> Task.bind (verifyConstraints env)
             |> Task.bind
                 (\solution ->
@@ -262,7 +262,7 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
                         exposedList =
                             Outline.flattenExposed exposed
 
-                        exactDeps : Dict Pkg.Name V.Version
+                        exactDeps : Dict ( String, String ) Pkg.Name V.Version
                         exactDeps =
                             Dict.map (\_ (Solver.Details v _) -> v) solution
 
@@ -296,13 +296,13 @@ verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outl
         Task.throw (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
-checkAppDeps : Outline.AppOutline -> Task (Dict Pkg.Name V.Version)
+checkAppDeps : Outline.AppOutline -> Task (Dict ( String, String ) Pkg.Name V.Version)
 checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
-    union Pkg.compareName allowEqualDups indirect testDirect
+    union identity Pkg.compareName allowEqualDups indirect testDirect
         |> Task.bind
             (\x ->
-                union Pkg.compareName noDups direct testIndirect
-                    |> Task.bind (\y -> union Pkg.compareName noDups x y)
+                union identity Pkg.compareName noDups direct testIndirect
+                    |> Task.bind (\y -> union identity Pkg.compareName noDups x y)
             )
 
 
@@ -310,7 +310,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 -- VERIFY CONSTRAINTS
 
 
-verifyConstraints : Env -> Dict Pkg.Name Con.Constraint -> Task (Dict Pkg.Name Solver.Details)
+verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task (Dict ( String, String ) Pkg.Name Solver.Details)
 verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
     Task.io (Solver.verify cache connection registry constraints)
         |> Task.bind
@@ -334,15 +334,15 @@ verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
 -- UNION
 
 
-union : (k -> k -> Order) -> (k -> v -> v -> Task v) -> Dict k v -> Dict k v -> Task (Dict k v)
-union keyComparison tieBreaker deps1 deps2 =
-    Dict.merge
-        (\k dep -> Task.fmap (Dict.insert keyComparison k dep))
+union : (k -> comparable) -> (k -> k -> Order) -> (k -> v -> v -> Task v) -> Dict comparable k v -> Dict comparable k v -> Task (Dict comparable k v)
+union toComparable keyComparison tieBreaker deps1 deps2 =
+    Dict.merge keyComparison
+        (\k dep -> Task.fmap (Dict.insert toComparable k dep))
         (\k dep1 dep2 acc ->
             tieBreaker k dep1 dep2
-                |> Task.bind (\v -> Task.fmap (Dict.insert keyComparison k v) acc)
+                |> Task.bind (\v -> Task.fmap (Dict.insert toComparable k v) acc)
         )
-        (\k dep -> Task.fmap (Dict.insert keyComparison k dep))
+        (\k dep -> Task.fmap (Dict.insert toComparable k dep))
         deps1
         deps2
         (Task.pure Dict.empty)
@@ -380,7 +380,7 @@ fork codec work =
 -- VERIFY DEPENDENCIES
 
 
-verifyDependencies : Env -> File.Time -> ValidOutline -> Dict Pkg.Name Solver.Details -> Dict Pkg.Name a -> Task Details
+verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.Name Solver.Details -> Dict ( String, String ) Pkg.Name a -> Task Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
@@ -388,23 +388,23 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
             |> IO.bind
                 (\mvar ->
                     Stuff.withRegistryLock cache
-                        (Utils.mapTraverseWithKey Pkg.compareName (\k v -> fork depCodec (verifyDep env mvar solution k v)) solution)
+                        (Utils.mapTraverseWithKey identity Pkg.compareName (\k v -> fork depCodec (verifyDep env mvar solution k v)) solution)
                         |> IO.bind
                             (\mvars ->
                                 Utils.putMVar dictNameMVarDepCodec mvar mvars
                                     |> IO.bind
                                         (\_ ->
-                                            Utils.mapTraverse Pkg.compareName (Utils.readMVar depCodec) mvars
+                                            Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depCodec) mvars
                                                 |> IO.bind
                                                     (\deps ->
-                                                        case Utils.sequenceDictResult Pkg.compareName deps of
+                                                        case Utils.sequenceDictResult identity Pkg.compareName deps of
                                                             Err _ ->
                                                                 Stuff.getElmHome
                                                                     |> IO.fmap
                                                                         (\home ->
                                                                             Err
                                                                                 (Exit.DetailsBadDeps home
-                                                                                    (List.filterMap identity (Utils.eitherLefts (Dict.values deps)))
+                                                                                    (List.filterMap identity (Utils.eitherLefts (Dict.values compare deps)))
                                                                                 )
                                                                         )
 
@@ -412,15 +412,15 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                 let
                                                                     objs : Opt.GlobalGraph
                                                                     objs =
-                                                                        Dict.foldr (\_ -> addObjects) Opt.empty artifacts
+                                                                        Dict.foldr compare (\_ -> addObjects) Opt.empty artifacts
 
                                                                     ifaces : Interfaces
                                                                     ifaces =
-                                                                        Dict.foldr (addInterfaces directDeps) Dict.empty artifacts
+                                                                        Dict.foldr compare (addInterfaces directDeps) Dict.empty artifacts
 
-                                                                    foreigns : Dict ModuleName.Raw Foreign
+                                                                    foreigns : Dict String ModuleName.Raw Foreign
                                                                     foreigns =
-                                                                        Dict.map (\_ -> OneOrMore.destruct Foreign) (Dict.foldr gatherForeigns Dict.empty (Dict.intersection artifacts directDeps))
+                                                                        Dict.map (\_ -> OneOrMore.destruct Foreign) (Dict.foldr compare gatherForeigns Dict.empty (Dict.intersection compare artifacts directDeps))
 
                                                                     details : Details
                                                                     details =
@@ -442,14 +442,14 @@ addObjects (Artifacts _ objs) graph =
     Opt.addGlobalGraph objs graph
 
 
-addInterfaces : Dict Pkg.Name a -> Pkg.Name -> Artifacts -> Interfaces -> Interfaces
+addInterfaces : Dict ( String, String ) Pkg.Name a -> Pkg.Name -> Artifacts -> Interfaces -> Interfaces
 addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
-    Dict.union ModuleName.compareCanonical
+    Dict.union
         dependencyInterfaces
-        (Dict.fromList ModuleName.compareCanonical
+        (Dict.fromList ModuleName.toComparableCanonical
             (List.map (Tuple.mapFirst (TypeCheck.Canonical pkg))
-                (Dict.toList
-                    (if Dict.member pkg directDeps then
+                (Dict.toList compare
+                    (if Dict.member identity pkg directDeps then
                         ifaces
 
                      else
@@ -460,7 +460,7 @@ addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
         )
 
 
-gatherForeigns : Pkg.Name -> Artifacts -> Dict ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name) -> Dict ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name)
+gatherForeigns : Pkg.Name -> Artifacts -> Dict String ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name) -> Dict String ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name)
 gatherForeigns pkg (Artifacts ifaces _) foreigns =
     let
         isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore Pkg.Name)
@@ -472,7 +472,7 @@ gatherForeigns pkg (Artifacts ifaces _) foreigns =
                 I.Private _ _ _ ->
                     Nothing
     in
-    Utils.mapUnionWith compare OneOrMore.more foreigns (Utils.mapMapMaybe compare isPublic ifaces)
+    Utils.mapUnionWith identity compare OneOrMore.more foreigns (Utils.mapMapMaybe identity compare isPublic ifaces)
 
 
 
@@ -480,19 +480,19 @@ gatherForeigns pkg (Artifacts ifaces _) foreigns =
 
 
 type Artifacts
-    = Artifacts (Dict ModuleName.Raw I.DependencyInterface) Opt.GlobalGraph
+    = Artifacts (Dict String ModuleName.Raw I.DependencyInterface) Opt.GlobalGraph
 
 
 type alias Dep =
     Result (Maybe Exit.DetailsBadDep) Artifacts
 
 
-verifyDep : Env -> MVar (Dict Pkg.Name (MVar Dep)) -> Dict Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> IO Dep
+verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> IO Dep
 verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
-        fingerprint : Dict Pkg.Name V.Version
+        fingerprint : Dict ( String, String ) Pkg.Name V.Version
         fingerprint =
-            Utils.mapIntersectionWith Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
+            Utils.mapIntersectionWith identity Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
     in
     Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
         |> IO.bind
@@ -509,7 +509,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                                                     build key cache depsMVar pkg details fingerprint EverySet.empty
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
-                                                    if EverySet.member fingerprint fingerprints then
+                                                    if EverySet.member toComparableFingerprint fingerprint fingerprints then
                                                         IO.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
 
                                                     else
@@ -542,18 +542,24 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
 
 type ArtifactCache
-    = ArtifactCache (EverySet Fingerprint) Artifacts
+    = ArtifactCache (EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint) Artifacts
 
 
 type alias Fingerprint =
-    Dict Pkg.Name V.Version
+    Dict ( String, String ) Pkg.Name V.Version
+
+
+toComparableFingerprint : Fingerprint -> List ( ( String, String ), ( Int, Int, Int ) )
+toComparableFingerprint fingerprint =
+    Dict.toList compare fingerprint
+        |> List.map (Tuple.mapSecond V.toComparable)
 
 
 
 -- BUILD
 
 
-build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet Fingerprint -> IO Dep
+build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Outline.read (Stuff.package cache pkg vsn)
         |> IO.bind
@@ -571,10 +577,10 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                         Utils.readMVar dictPkgNameMVarDepCodec depsMVar
                             |> IO.bind
                                 (\allDeps ->
-                                    Utils.mapTraverse Pkg.compareName (Utils.readMVar depCodec) (Dict.intersection allDeps deps)
+                                    Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depCodec) (Dict.intersection compare allDeps deps)
                                         |> IO.bind
                                             (\directDeps ->
-                                                case Utils.sequenceDictResult Pkg.compareName directDeps of
+                                                case Utils.sequenceDictResult identity Pkg.compareName directDeps of
                                                     Err _ ->
                                                         Reporting.report key Reporting.DBroken
                                                             |> IO.fmap (\_ -> Err Nothing)
@@ -585,13 +591,13 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                             src =
                                                                 Stuff.package cache pkg vsn ++ "/src"
 
-                                                            foreignDeps : Dict ModuleName.Raw ForeignInterface
+                                                            foreignDeps : Dict String ModuleName.Raw ForeignInterface
                                                             foreignDeps =
                                                                 gatherForeignInterfaces directArtifacts
 
-                                                            exposedDict : Dict ModuleName.Raw ()
+                                                            exposedDict : Dict String ModuleName.Raw ()
                                                             exposedDict =
-                                                                Utils.mapFromKeys compare (\_ -> ()) (Outline.flattenExposed exposed)
+                                                                Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
                                                         in
                                                         getDocsStatus cache pkg vsn
                                                             |> IO.bind
@@ -599,15 +605,15 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                     Utils.newEmptyMVar
                                                                         |> IO.bind
                                                                             (\mvar ->
-                                                                                Utils.mapTraverseWithKey compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                Utils.mapTraverseWithKey identity compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                     |> IO.bind
                                                                                         (\mvars ->
                                                                                             Utils.putMVar statusDictCodec mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe statusCodec))) (Utils.readMVar statusDictCodec mvar))
+                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
+                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (Serialize.maybe statusCodec))) (Utils.readMVar statusDictCodec mvar))
                                                                                                 |> IO.bind
                                                                                                     (\maybeStatuses ->
-                                                                                                        case Utils.sequenceDictMaybe compare maybeStatuses of
+                                                                                                        case Utils.sequenceDictMaybe identity compare maybeStatuses of
                                                                                                             Nothing ->
                                                                                                                 Reporting.report key Reporting.DBroken
                                                                                                                     |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
@@ -616,14 +622,14 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                 Utils.newEmptyMVar
                                                                                                                     |> IO.bind
                                                                                                                         (\rmvar ->
-                                                                                                                            Utils.mapTraverse compare (fork (Serialize.maybe dResultCodec) << compile pkg rmvar) statuses
+                                                                                                                            Utils.mapTraverse identity compare (fork (Serialize.maybe dResultCodec) << compile pkg rmvar) statuses
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvars ->
                                                                                                                                         Utils.putMVar dictRawMVarMaybeDResultCodec rmvar rmvars
-                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe dResultCodec)) rmvars)
+                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (Serialize.maybe dResultCodec)) rmvars)
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\maybeResults ->
-                                                                                                                                                    case Utils.sequenceDictMaybe compare maybeResults of
+                                                                                                                                                    case Utils.sequenceDictMaybe identity compare maybeResults of
                                                                                                                                                         Nothing ->
                                                                                                                                                             Reporting.report key Reporting.DBroken
                                                                                                                                                                 |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
@@ -634,7 +640,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                 path =
                                                                                                                                                                     Stuff.package cache pkg vsn ++ "/artifacts.json"
 
-                                                                                                                                                                ifaces : Dict ModuleName.Raw I.DependencyInterface
+                                                                                                                                                                ifaces : Dict String ModuleName.Raw I.DependencyInterface
                                                                                                                                                                 ifaces =
                                                                                                                                                                     gatherInterfaces exposedDict results
 
@@ -646,9 +652,9 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                 artifacts =
                                                                                                                                                                     Artifacts ifaces objects
 
-                                                                                                                                                                fingerprints : EverySet Fingerprint
+                                                                                                                                                                fingerprints : EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint
                                                                                                                                                                 fingerprints =
-                                                                                                                                                                    EverySet.insert (\_ _ -> EQ) f fs
+                                                                                                                                                                    EverySet.insert toComparableFingerprint f fs
                                                                                                                                                             in
                                                                                                                                                             writeDocs cache pkg vsn docsStatus results
                                                                                                                                                                 |> IO.bind (\_ -> File.writeBinary artifactCacheCodec path (ArtifactCache fingerprints artifacts))
@@ -670,9 +676,9 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 -- GATHER
 
 
-gatherObjects : Dict ModuleName.Raw DResult -> Opt.GlobalGraph
+gatherObjects : Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
 gatherObjects results =
-    Dict.foldr addLocalGraph Opt.empty results
+    Dict.foldr compare addLocalGraph Opt.empty results
 
 
 addLocalGraph : ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
@@ -691,26 +697,26 @@ addLocalGraph name status graph =
             graph
 
 
-gatherInterfaces : Dict ModuleName.Raw () -> Dict ModuleName.Raw DResult -> Dict ModuleName.Raw I.DependencyInterface
+gatherInterfaces : Dict String ModuleName.Raw () -> Dict String ModuleName.Raw DResult -> Dict String ModuleName.Raw I.DependencyInterface
 gatherInterfaces exposed artifacts =
     let
         onLeft : a -> b -> c -> d
         onLeft _ _ _ =
             crash "compiler bug manifesting in Elm.Details.gatherInterfaces"
 
-        onBoth : comparable -> () -> DResult -> Dict comparable I.DependencyInterface -> Dict comparable I.DependencyInterface
+        onBoth : comparable -> () -> DResult -> Dict comparable comparable I.DependencyInterface -> Dict comparable comparable I.DependencyInterface
         onBoth k () iface =
             toLocalInterface I.public iface
-                |> Maybe.map (Dict.insert compare k)
+                |> Maybe.map (Dict.insert identity k)
                 |> Maybe.withDefault identity
 
-        onRight : comparable -> DResult -> Dict comparable I.DependencyInterface -> Dict comparable I.DependencyInterface
+        onRight : comparable -> DResult -> Dict comparable comparable I.DependencyInterface -> Dict comparable comparable I.DependencyInterface
         onRight k iface =
             toLocalInterface I.private iface
-                |> Maybe.map (Dict.insert compare k)
+                |> Maybe.map (Dict.insert identity k)
                 |> Maybe.withDefault identity
     in
-    Dict.merge onLeft onBoth onRight exposed artifacts Dict.empty
+    Dict.merge compare onLeft onBoth onRight exposed artifacts Dict.empty
 
 
 toLocalInterface : (I.Interface -> a) -> DResult -> Maybe a
@@ -738,7 +744,7 @@ type ForeignInterface
     | ForeignSpecific I.Interface
 
 
-gatherForeignInterfaces : Dict Pkg.Name Artifacts -> Dict ModuleName.Raw ForeignInterface
+gatherForeignInterfaces : Dict ( String, String ) Pkg.Name Artifacts -> Dict String ModuleName.Raw ForeignInterface
 gatherForeignInterfaces directArtifacts =
     let
         finalize : I.Interface -> List I.Interface -> ForeignInterface
@@ -750,9 +756,9 @@ gatherForeignInterfaces directArtifacts =
                 _ :: _ ->
                     ForeignAmbiguous
 
-        gather : Pkg.Name -> Artifacts -> Dict ModuleName.Raw (OneOrMore.OneOrMore I.Interface) -> Dict ModuleName.Raw (OneOrMore.OneOrMore I.Interface)
+        gather : Pkg.Name -> Artifacts -> Dict String ModuleName.Raw (OneOrMore.OneOrMore I.Interface) -> Dict String ModuleName.Raw (OneOrMore.OneOrMore I.Interface)
         gather _ (Artifacts ifaces _) buckets =
-            Utils.mapUnionWith compare OneOrMore.more buckets (Utils.mapMapMaybe compare isPublic ifaces)
+            Utils.mapUnionWith identity compare OneOrMore.more buckets (Utils.mapMapMaybe identity compare isPublic ifaces)
 
         isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore I.Interface)
         isPublic di =
@@ -764,7 +770,7 @@ gatherForeignInterfaces directArtifacts =
                     Nothing
     in
     Dict.map (\_ -> OneOrMore.destruct finalize) <|
-        Dict.foldr gather Dict.empty directArtifacts
+        Dict.foldr compare gather Dict.empty directArtifacts
 
 
 
@@ -772,17 +778,17 @@ gatherForeignInterfaces directArtifacts =
 
 
 type alias StatusDict =
-    Dict ModuleName.Raw (MVar (Maybe Status))
+    Dict String ModuleName.Raw (MVar (Maybe Status))
 
 
 type Status
-    = SLocal DocsStatus (Dict ModuleName.Raw ()) Src.Module
+    = SLocal DocsStatus (Dict String ModuleName.Raw ()) Src.Module
     | SForeign I.Interface
     | SKernelLocal (List Kernel.Chunk)
     | SKernelForeign
 
 
-crawlModule : Dict ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> IO (Maybe Status)
+crawlModule : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> IO (Maybe Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
         path : FilePath
@@ -792,7 +798,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
     File.exists path
         |> IO.bind
             (\exists ->
-                case Dict.get name foreignDeps of
+                case Dict.get identity name foreignDeps of
                     Just ForeignAmbiguous ->
                         IO.pure Nothing
 
@@ -815,7 +821,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : Dict ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> IO (Maybe Status)
+crawlFile : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> IO (Maybe Status)
 crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> IO.bind
@@ -834,31 +840,31 @@ crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
             )
 
 
-crawlImports : Dict ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> IO (Dict ModuleName.Raw ())
+crawlImports : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> IO (Dict String ModuleName.Raw ())
 crawlImports foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictCodec mvar
         |> IO.bind
             (\statusDict ->
                 let
-                    deps : Dict Name.Name ()
+                    deps : Dict String Name.Name ()
                     deps =
-                        Dict.fromList compare (List.map (\i -> ( Src.getImportName i, () )) imports)
+                        Dict.fromList identity (List.map (\i -> ( Src.getImportName i, () )) imports)
 
-                    news : Dict Name.Name ()
+                    news : Dict String Name.Name ()
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork (Serialize.maybe statusCodec) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
-                            Utils.putMVar statusDictCodec mvar (Dict.union compare mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
+                            Utils.putMVar statusDictCodec mvar (Dict.union mvars statusDict)
+                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Serialize.maybe statusCodec)) mvars)
                                 |> IO.fmap (\_ -> deps)
                         )
             )
 
 
-crawlKernel : Dict ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> IO (Maybe Status)
+crawlKernel : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> IO (Maybe Status)
 crawlKernel foreignDeps mvar pkg src name =
     let
         path : FilePath
@@ -872,7 +878,7 @@ crawlKernel foreignDeps mvar pkg src name =
                     File.readUtf8 path
                         |> IO.bind
                             (\bytes ->
-                                case Kernel.fromByteString pkg (Utils.mapMapMaybe compare getDepHome foreignDeps) bytes of
+                                case Kernel.fromByteString pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
                                         IO.pure Nothing
 
@@ -907,19 +913,19 @@ type DResult
     | RKernelForeign
 
 
-compile : Pkg.Name -> MVar (Dict ModuleName.Raw (MVar (Maybe DResult))) -> Status -> IO (Maybe DResult)
+compile : Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> IO (Maybe DResult)
 compile pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultCodec mvar
                 |> IO.bind
                     (\resultsDict ->
-                        Utils.mapTraverse compare (Utils.readMVar (Serialize.maybe dResultCodec)) (Dict.intersection resultsDict deps)
+                        Utils.mapTraverse identity compare (Utils.readMVar (Serialize.maybe dResultCodec)) (Dict.intersection compare resultsDict deps)
                             |> IO.bind
                                 (\maybeResults ->
-                                    case Utils.sequenceDictMaybe compare maybeResults of
+                                    case Utils.sequenceDictMaybe identity compare maybeResults of
                                         Just results ->
-                                            Compile.compile pkg (Utils.mapMapMaybe compare getInterface results) modul
+                                            Compile.compile pkg (Utils.mapMapMaybe identity compare getInterface results) modul
                                                 |> IO.fmap
                                                     (\result ->
                                                         case result of
@@ -1007,12 +1013,12 @@ makeDocs status modul =
             Nothing
 
 
-writeDocs : Stuff.PackageCache -> Pkg.Name -> V.Version -> DocsStatus -> Dict ModuleName.Raw DResult -> IO ()
+writeDocs : Stuff.PackageCache -> Pkg.Name -> V.Version -> DocsStatus -> Dict String ModuleName.Raw DResult -> IO ()
 writeDocs cache pkg vsn status results =
     case status of
         DocsNeeded ->
             E.writeUgly (Stuff.package cache pkg vsn ++ "/docs.json")
-                (Docs.encode (Utils.mapMapMaybe compare toDocs results))
+                (Docs.encode (Utils.mapMapMaybe identity compare toDocs results))
 
         DocsNotNeeded ->
             IO.pure ()
@@ -1092,15 +1098,15 @@ detailsCodec =
             File.timeCodec
             validOutlineCodec
             Serialize.int
-            (S.assocListDict compare ModuleName.rawCodec localCodec)
-            (S.assocListDict compare ModuleName.rawCodec foreignCodec)
+            (S.assocListDict identity compare ModuleName.rawCodec localCodec)
+            (S.assocListDict identity compare ModuleName.rawCodec foreignCodec)
             extrasCodec
         |> Serialize.finishCustomType
 
 
 interfacesCodec : Codec e Interfaces
 interfacesCodec =
-    S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
+    S.assocListDict ModuleName.toComparableCanonical ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
 
 
 resultRegistryProblemEnvCodec : Codec e (Result Exit.RegistryProblem Solver.Env)
@@ -1119,13 +1125,13 @@ artifactsCodec =
         (\artifactsCodecEncoder (Artifacts ifaces objects) ->
             artifactsCodecEncoder ifaces objects
         )
-        |> Serialize.variant2 Artifacts (S.assocListDict compare ModuleName.rawCodec I.dependencyInterfaceCodec) Opt.globalGraphCodec
+        |> Serialize.variant2 Artifacts (S.assocListDict identity compare ModuleName.rawCodec I.dependencyInterfaceCodec) Opt.globalGraphCodec
         |> Serialize.finishCustomType
 
 
-dictNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
+dictNameMVarDepCodec : Codec e (Dict ( String, String ) Pkg.Name (MVar Dep))
 dictNameMVarDepCodec =
-    S.assocListDict Pkg.compareName Pkg.nameCodec Utils.mVarCodec
+    S.assocListDict identity Pkg.compareName Pkg.nameCodec Utils.mVarCodec
 
 
 artifactCacheCodec : Codec e ArtifactCache
@@ -1134,13 +1140,13 @@ artifactCacheCodec =
         (\artifactCacheCodecEncoder (ArtifactCache fingerprints artifacts) ->
             artifactCacheCodecEncoder fingerprints artifacts
         )
-        |> Serialize.variant2 ArtifactCache (S.everySet (\_ _ -> EQ) fingerprintCodec) artifactsCodec
+        |> Serialize.variant2 ArtifactCache (S.everySet toComparableFingerprint (\_ _ -> EQ) fingerprintCodec) artifactsCodec
         |> Serialize.finishCustomType
 
 
-dictPkgNameMVarDepCodec : Codec e (Dict Pkg.Name (MVar Dep))
+dictPkgNameMVarDepCodec : Codec e (Dict ( String, String ) Pkg.Name (MVar Dep))
 dictPkgNameMVarDepCodec =
-    S.assocListDict Pkg.compareName Pkg.nameCodec Utils.mVarCodec
+    S.assocListDict identity Pkg.compareName Pkg.nameCodec Utils.mVarCodec
 
 
 statusCodec : Codec e Status
@@ -1160,21 +1166,21 @@ statusCodec =
                 SKernelForeign ->
                     sKernelForeignEncoder
         )
-        |> Serialize.variant3 SLocal docsStatusCodec (S.assocListDict compare ModuleName.rawCodec Serialize.unit) Src.moduleCodec
+        |> Serialize.variant3 SLocal docsStatusCodec (S.assocListDict identity compare ModuleName.rawCodec Serialize.unit) Src.moduleCodec
         |> Serialize.variant1 SForeign I.interfaceCodec
         |> Serialize.variant1 SKernelLocal (Serialize.list Kernel.chunkCodec)
         |> Serialize.variant0 SKernelForeign
         |> Serialize.finishCustomType
 
 
-dictRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
+dictRawMVarMaybeDResultCodec : Codec e (Dict String ModuleName.Raw (MVar (Maybe DResult)))
 dictRawMVarMaybeDResultCodec =
-    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
 
 
-moduleNameRawMVarMaybeDResultCodec : Codec e (Dict ModuleName.Raw (MVar (Maybe DResult)))
+moduleNameRawMVarMaybeDResultCodec : Codec e (Dict String ModuleName.Raw (MVar (Maybe DResult)))
 moduleNameRawMVarMaybeDResultCodec =
-    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
 
 
 dResultCodec : Codec e DResult
@@ -1203,7 +1209,7 @@ dResultCodec =
 
 statusDictCodec : Codec e StatusDict
 statusDictCodec =
-    S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
 
 
 localCodec : Codec e Local
@@ -1228,7 +1234,7 @@ validOutlineCodec =
                     validPkgEncoder pkg exposedList exactDeps
         )
         |> Serialize.variant1 ValidApp (S.nonempty Outline.srcDirCodec)
-        |> Serialize.variant3 ValidPkg Pkg.nameCodec (Serialize.list ModuleName.rawCodec) (S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec)
+        |> Serialize.variant3 ValidPkg Pkg.nameCodec (Serialize.list ModuleName.rawCodec) (S.assocListDict identity Pkg.compareName Pkg.nameCodec V.versionCodec)
         |> Serialize.finishCustomType
 
 
@@ -1260,7 +1266,7 @@ extrasCodec =
 
 fingerprintCodec : Codec e Fingerprint
 fingerprintCodec =
-    S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec
+    S.assocListDict identity Pkg.compareName Pkg.nameCodec V.versionCodec
 
 
 docsStatusCodec : Codec e DocsStatus

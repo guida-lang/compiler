@@ -748,15 +748,15 @@ unifyArgs vars args1 args2 =
 unifyRecord : Context -> RecordStructure -> RecordStructure -> Unify ()
 unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2) =
     let
-        sharedFields : Dict Name.Name ( IO.Variable, IO.Variable )
+        sharedFields : Dict String Name.Name ( IO.Variable, IO.Variable )
         sharedFields =
-            Utils.mapIntersectionWith compare Tuple.pair fields1 fields2
+            Utils.mapIntersectionWith identity compare Tuple.pair fields1 fields2
 
-        uniqueFields1 : Dict Name.Name IO.Variable
+        uniqueFields1 : Dict String Name.Name IO.Variable
         uniqueFields1 =
             Dict.diff fields1 fields2
 
-        uniqueFields2 : Dict Name.Name IO.Variable
+        uniqueFields2 : Dict String Name.Name IO.Variable
         uniqueFields2 =
             Dict.diff fields2 fields1
     in
@@ -783,9 +783,9 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
 
     else
         let
-            otherFields : Dict Name.Name IO.Variable
+            otherFields : Dict String Name.Name IO.Variable
             otherFields =
-                Dict.union compare uniqueFields1 uniqueFields2
+                Dict.union uniqueFields1 uniqueFields2
         in
         fresh context Type.unnamedFlexVar
             |> bind
@@ -804,29 +804,29 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                 )
 
 
-unifySharedFields : Context -> Dict Name.Name ( IO.Variable, IO.Variable ) -> Dict Name.Name IO.Variable -> IO.Variable -> Unify ()
+unifySharedFields : Context -> Dict String Name.Name ( IO.Variable, IO.Variable ) -> Dict String Name.Name IO.Variable -> IO.Variable -> Unify ()
 unifySharedFields context sharedFields otherFields ext =
-    traverseMaybe compare unifyField sharedFields
+    traverseMaybe identity compare unifyField sharedFields
         |> bind
             (\matchingFields ->
                 if Dict.size sharedFields == Dict.size matchingFields then
-                    merge context (IO.Structure (IO.Record1 (Dict.union compare matchingFields otherFields) ext))
+                    merge context (IO.Structure (IO.Record1 (Dict.union matchingFields otherFields) ext))
 
                 else
                     mismatch
             )
 
 
-traverseMaybe : (a -> a -> Order) -> (a -> b -> Unify (Maybe c)) -> Dict a b -> Unify (Dict a c)
-traverseMaybe keyComparison func =
-    Dict.foldl
+traverseMaybe : (a -> comparable) -> (a -> a -> Order) -> (a -> b -> Unify (Maybe c)) -> Dict comparable a b -> Unify (Dict comparable a c)
+traverseMaybe toComparable keyComparison func =
+    Dict.foldl keyComparison
         (\a b ->
             bind
                 (\acc ->
                     fmap
                         (\maybeC ->
                             maybeC
-                                |> Maybe.map (\c -> Dict.insert keyComparison a c acc)
+                                |> Maybe.map (\c -> Dict.insert toComparable a c acc)
                                 |> Maybe.withDefault acc
                         )
                         (func a b)
@@ -859,17 +859,17 @@ unifyField _ ( actual, expected ) =
 
 
 type RecordStructure
-    = RecordStructure (Dict Name.Name IO.Variable) IO.Variable
+    = RecordStructure (Dict String Name.Name IO.Variable) IO.Variable
 
 
-gatherFields : Dict Name.Name IO.Variable -> IO.Variable -> IO RecordStructure
+gatherFields : Dict String Name.Name IO.Variable -> IO.Variable -> IO RecordStructure
 gatherFields fields variable =
     UF.get variable
         |> IO.bind
             (\(IO.Descriptor content _ _ _) ->
                 case content of
                     IO.Structure (IO.Record1 subFields subExt) ->
-                        gatherFields (Dict.union compare fields subFields) subExt
+                        gatherFields (Dict.union fields subFields) subExt
 
                     IO.Alias _ _ _ var ->
                         -- TODO may be dropping useful alias info here

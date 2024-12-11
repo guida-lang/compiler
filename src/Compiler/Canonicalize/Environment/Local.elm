@@ -25,11 +25,11 @@ type alias LResult i w a =
 
 
 type alias Unions =
-    Dict Name Can.Union
+    Dict String Name Can.Union
 
 
 type alias Aliases =
-    Dict Name Can.Alias
+    Dict String Name Can.Alias
 
 
 add : Src.Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
@@ -49,16 +49,16 @@ addVars module_ env =
         |> R.fmap
             (\topLevelVars ->
                 let
-                    vs2 : Dict Name Env.Var
+                    vs2 : Dict String Name Env.Var
                     vs2 =
-                        Dict.union compare topLevelVars env.vars
+                        Dict.union topLevelVars env.vars
                 in
                 -- Use union to overwrite foreign stuff.
                 { env | vars = vs2 }
             )
 
 
-collectVars : Src.Module -> LResult i w (Dict Name.Name Env.Var)
+collectVars : Src.Module -> LResult i w (Dict String Name.Name Env.Var)
 collectVars (Src.Module _ _ _ _ values _ _ _ effects) =
     let
         addDecl : A.Located Src.Value -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
@@ -133,7 +133,7 @@ addUnion home types ((A.At _ (Src.Union (A.At _ name) _ _)) as union) =
                 one =
                     Env.Specific home (Env.Union arity home)
             in
-            Dict.insert compare name one types
+            Dict.insert identity name one types
         )
         (checkUnionFreeVars union)
 
@@ -171,9 +171,9 @@ addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env)
                                         one =
                                             Env.Specific home (Env.Alias (List.length args) home args ctype)
 
-                                        ts1 : Dict Name (Env.Info Env.Type)
+                                        ts1 : Dict String Name (Env.Info Env.Type)
                                         ts1 =
-                                            Dict.insert compare name one types
+                                            Dict.insert identity name one types
                                     in
                                     R.ok (Env.Env home vars ts1 ctors binops q_vars q_types q_ctors)
                                 )
@@ -240,7 +240,7 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
         addArg (A.At region arg) dict =
             Dups.insert arg region region dict
 
-        addCtorFreeVars : ( a, List Src.Type ) -> Dict Name A.Region -> Dict Name A.Region
+        addCtorFreeVars : ( a, List Src.Type ) -> Dict String Name A.Region -> Dict String Name A.Region
         addCtorFreeVars ( _, tipes ) freeVars =
             List.foldl addFreeVars freeVars tipes
     in
@@ -248,11 +248,11 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
         |> R.bind
             (\boundVars ->
                 let
-                    freeVars : Dict Name A.Region
+                    freeVars : Dict String Name A.Region
                     freeVars =
                         List.foldr addCtorFreeVars Dict.empty ctors
                 in
-                case Dict.toList (Dict.diff freeVars boundVars) of
+                case Dict.toList compare (Dict.diff freeVars boundVars) of
                     [] ->
                         R.ok (List.length args)
 
@@ -273,13 +273,13 @@ checkAliasFreeVars (A.At aliasRegion (Src.Alias (A.At _ name) args tipe)) =
         |> R.bind
             (\boundVars ->
                 let
-                    freeVars : Dict Name A.Region
+                    freeVars : Dict String Name A.Region
                     freeVars =
                         addFreeVars tipe Dict.empty
 
                     overlap : Int
                     overlap =
-                        Dict.size (Dict.intersection boundVars freeVars)
+                        Dict.size (Dict.intersection compare boundVars freeVars)
                 in
                 if Dict.size boundVars == overlap && Dict.size freeVars == overlap then
                     R.ok (List.map A.toValue args)
@@ -289,19 +289,19 @@ checkAliasFreeVars (A.At aliasRegion (Src.Alias (A.At _ name) args tipe)) =
                         Error.TypeVarsMessedUpInAlias aliasRegion
                             name
                             (List.map A.toValue args)
-                            (Dict.toList (Dict.diff boundVars freeVars))
-                            (Dict.toList (Dict.diff freeVars boundVars))
+                            (Dict.toList compare (Dict.diff boundVars freeVars))
+                            (Dict.toList compare (Dict.diff freeVars boundVars))
             )
 
 
-addFreeVars : Src.Type -> Dict Name.Name A.Region -> Dict Name.Name A.Region
+addFreeVars : Src.Type -> Dict String Name.Name A.Region -> Dict String Name.Name A.Region
 addFreeVars (A.At region tipe) freeVars =
     case tipe of
         Src.TLambda arg result ->
             addFreeVars result (addFreeVars arg freeVars)
 
         Src.TVar name ->
-            Dict.insert compare name region freeVars
+            Dict.insert identity name region freeVars
 
         Src.TType _ _ args ->
             List.foldl addFreeVars freeVars args
@@ -311,14 +311,14 @@ addFreeVars (A.At region tipe) freeVars =
 
         Src.TRecord fields maybeExt ->
             let
-                extFreeVars : Dict Name A.Region
+                extFreeVars : Dict String Name A.Region
                 extFreeVars =
                     case maybeExt of
                         Nothing ->
                             freeVars
 
                         Just (A.At extRegion ext) ->
-                            Dict.insert compare ext extRegion freeVars
+                            Dict.insert identity ext extRegion freeVars
             in
             List.foldl (\( _, t ) fvs -> addFreeVars t fvs) extFreeVars fields
 
@@ -349,14 +349,14 @@ addCtors (Src.Module _ _ _ _ _ unions aliases _ _) env =
                                 |> R.bind
                                     (\ctors ->
                                         let
-                                            cs2 : Dict Name (Env.Info Env.Ctor)
+                                            cs2 : Dict String Name (Env.Info Env.Ctor)
                                             cs2 =
-                                                Dict.union compare ctors env.ctors
+                                                Dict.union ctors env.ctors
                                         in
                                         R.ok
                                             ( { env | ctors = cs2 }
-                                            , Dict.fromList compare (List.map Tuple.first unionInfo)
-                                            , Dict.fromList compare (List.map Tuple.first aliasInfo)
+                                            , Dict.fromList identity (List.map Tuple.first unionInfo)
+                                            , Dict.fromList identity (List.map Tuple.first aliasInfo)
                                             )
                                     )
                         )
@@ -393,7 +393,7 @@ canonicalizeAlias ({ home } as env) (A.At _ (Src.Alias (A.At region name) args t
             )
 
 
-toRecordCtor : IO.Canonical -> Name.Name -> List Name.Name -> Dict Name.Name Can.FieldType -> Env.Ctor
+toRecordCtor : IO.Canonical -> Name.Name -> List Name.Name -> Dict String Name.Name Can.FieldType -> Env.Ctor
 toRecordCtor home name vars fields =
     let
         avars : List ( Name, Can.Type )

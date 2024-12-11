@@ -24,7 +24,7 @@ import Serialize exposing (Codec)
 
 
 type Error
-    = Error A.Region ModuleName.Raw (EverySet ModuleName.Raw) Problem
+    = Error A.Region ModuleName.Raw (EverySet String ModuleName.Raw) Problem
 
 
 type Problem
@@ -55,7 +55,7 @@ toReport source (Error region name unimportedModules problem) =
                             D.indent 4 <|
                                 D.vcat <|
                                     List.map D.fromName (toSuggestions name unimportedModules)
-                        , case Dict.get name Pkg.suggestions of
+                        , case Dict.get identity name Pkg.suggestions of
                             Nothing ->
                                 D.toSimpleHint
                                     "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
@@ -172,10 +172,10 @@ toReport source (Error region name unimportedModules problem) =
                     )
 
 
-toSuggestions : ModuleName.Raw -> EverySet ModuleName.Raw -> List ModuleName.Raw
+toSuggestions : ModuleName.Raw -> EverySet String ModuleName.Raw -> List ModuleName.Raw
 toSuggestions name unimportedModules =
     List.take 4 <|
-        Suggest.sort name identity (EverySet.toList unimportedModules)
+        Suggest.sort name identity (EverySet.toList compare unimportedModules)
 
 
 
@@ -212,5 +212,5 @@ errorCodec =
         (\errorCodecEncoder (Error region name unimportedModules problem) ->
             errorCodecEncoder region name unimportedModules problem
         )
-        |> Serialize.variant4 Error A.regionCodec ModuleName.rawCodec (S.everySet compare ModuleName.rawCodec) problemCodec
+        |> Serialize.variant4 Error A.regionCodec ModuleName.rawCodec (S.everySet identity compare ModuleName.rawCodec) problemCodec
         |> Serialize.finishCustomType

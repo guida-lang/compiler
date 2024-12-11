@@ -32,13 +32,13 @@ dealias : List ( Name, Type ) -> AliasType -> Type
 dealias args aliasType =
     case aliasType of
         Holey tipe ->
-            dealiasHelp (Dict.fromList compare args) tipe
+            dealiasHelp (Dict.fromList identity args) tipe
 
         Filled tipe ->
             tipe
 
 
-dealiasHelp : Dict Name Type -> Type -> Type
+dealiasHelp : Dict String Name Type -> Type -> Type
 dealiasHelp typeTable tipe =
     case tipe of
         TLambda a b ->
@@ -47,7 +47,7 @@ dealiasHelp typeTable tipe =
                 (dealiasHelp typeTable b)
 
         TVar x ->
-            Dict.get x typeTable
+            Dict.get identity x typeTable
                 |> Maybe.withDefault tipe
 
         TRecord fields ext ->
@@ -69,7 +69,7 @@ dealiasHelp typeTable tipe =
                 (Maybe.map (dealiasHelp typeTable) maybeC)
 
 
-dealiasField : Dict Name Type -> FieldType -> FieldType
+dealiasField : Dict String Name Type -> FieldType -> FieldType
 dealiasField typeTable (FieldType index tipe) =
     FieldType index (dealiasHelp typeTable tipe)
 

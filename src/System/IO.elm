@@ -75,7 +75,7 @@ port module System.IO exposing
 -}
 
 import Codec.Archive.Zip as Zip
-import Data.Map as Dict exposing (Dict)
+import Dict exposing (Dict)
 import Json.Encode as Encode
 import Utils.Crash exposing (crash)
 
@@ -102,7 +102,7 @@ run app =
                     { realWorld =
                         { args = flags.args
                         , currentDirectory = flags.currentDirectory
-                        , envVars = Dict.fromList compare flags.envVars
+                        , envVars = Dict.fromList flags.envVars
                         , homedir = flags.homedir
                         , progName = flags.progName
                         , state = initialReplState
@@ -240,31 +240,31 @@ update msg model =
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetLineNext next) model.next }, sendGetLine index )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
 
                 ( newRealWorld, HPutStr next (Handle fd) content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, WriteString next path content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
 
                 ( newRealWorld, Read next fd ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
 
                 ( newRealWorld, HttpFetch next method urlStr headers ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
 
                 ( newRealWorld, GetArchive next method url ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
 
                 ( newRealWorld, HttpUpload next urlStr headers parts ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
 
                 ( newRealWorld, HFlush next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
 
                 ( newRealWorld, WithFile next path mode ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WithFileNext next) model.next }
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WithFileNext next) model.next }
                     , sendWithFile
                         { index = index
                         , path = path
@@ -285,76 +285,76 @@ update msg model =
                     )
 
                 ( newRealWorld, HFileSize next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWithCreateProcess next createProcess ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
 
                 ( newRealWorld, HClose next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWaitForProcess next ph ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
 
                 ( newRealWorld, ExitWith next code ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ExitWithNext next) model.next }, sendExitWith code )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ExitWithNext next) model.next }, sendExitWith code )
 
                 ( newRealWorld, DirFindExecutable next name ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
 
                 ( newRealWorld, ReplGetInputLine next prompt ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
 
                 ( newRealWorld, DirDoesFileExist next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
 
                 ( newRealWorld, DirCreateDirectoryIfMissing next createParents filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
 
                 ( newRealWorld, LockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
 
                 ( newRealWorld, UnlockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
 
                 ( newRealWorld, DirGetModificationTime next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
 
                 ( newRealWorld, DirDoesDirectoryExist next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
 
                 ( newRealWorld, DirCanonicalizePath next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
 
                 ( newRealWorld, BinaryDecodeFileOrFail next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
 
                 ( newRealWorld, Write next fd content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, DirRemoveFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
 
                 ( newRealWorld, DirRemoveDirectoryRecursive next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
 
                 ( newRealWorld, DirWithCurrentDirectory next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
 
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
                 ( newRealWorld, NewEmptyMVar next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
 
                 ( newRealWorld, ReadMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
 
                 ( newRealWorld, TakeMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
 
                 ( newRealWorld, PutMVar next id value ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert compare index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
 
         GetLineMsg index input ->
             case Dict.get index model.next of

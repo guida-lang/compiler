@@ -27,7 +27,7 @@ type Source
 
 
 type Types
-    = Types (Dict Name Type) (Dict Name Type) (Dict Name Type)
+    = Types (Dict String Name Type) (Dict String Name Type) (Dict String Name Type)
 
 
 type Type
@@ -109,9 +109,9 @@ typesCodec =
         )
         |> Serialize.variant3
             Types
-            (S.assocListDict compare Serialize.string typeCodec)
-            (S.assocListDict compare Serialize.string typeCodec)
-            (S.assocListDict compare Serialize.string typeCodec)
+            (S.assocListDict identity compare Serialize.string typeCodec)
+            (S.assocListDict identity compare Serialize.string typeCodec)
+            (S.assocListDict identity compare Serialize.string typeCodec)
         |> Serialize.finishCustomType
 
 

@@ -49,15 +49,15 @@ decoder toError =
 
 check : String -> Result (List String) License
 check givenCode =
-    if Dict.member givenCode osiApprovedSpdxLicenses then
+    if Dict.member identity givenCode osiApprovedSpdxLicenses then
         Ok (License givenCode)
 
     else
         let
             pairs : List ( String, String )
             pairs =
-                List.map (\code -> ( code, code )) (Dict.keys osiApprovedSpdxLicenses)
-                    ++ Dict.toList osiApprovedSpdxLicenses
+                List.map (\code -> ( code, code )) (Dict.keys compare osiApprovedSpdxLicenses)
+                    ++ Dict.toList compare osiApprovedSpdxLicenses
         in
         Err
             (List.map Tuple.first
@@ -71,9 +71,9 @@ check givenCode =
 -- LIST OF LICENSES
 
 
-osiApprovedSpdxLicenses : Dict String String
+osiApprovedSpdxLicenses : Dict String String String
 osiApprovedSpdxLicenses =
-    Dict.fromList compare
+    Dict.fromList identity
         [ ( "0BSD", "BSD Zero Clause License" )
         , ( "AAL", "Attribution Assurance License" )
         , ( "AFL-1.1", "Academic Free License v1.1" )

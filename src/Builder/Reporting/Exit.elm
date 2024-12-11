@@ -1840,7 +1840,7 @@ type Details
 
 type DetailsBadDep
     = BD_BadDownload Pkg.Name V.Version PackageProblem
-    | BD_BadBuild Pkg.Name V.Version (Dict Pkg.Name V.Version)
+    | BD_BadBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2019,7 +2019,7 @@ toDetailsReport details =
                                 , D.indent 4 <|
                                     D.vcat <|
                                         List.map (\( p, v ) -> D.fromChars <| Pkg.toChars p ++ " " ++ V.toChars v) <|
-                                            Dict.toList fingerprint
+                                            Dict.toList compare fingerprint
                                 , D.reflow <|
                                     "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
                                 ]
@@ -2832,7 +2832,7 @@ detailsBadDepCodec =
                     bdBadBuildEncoder pkg vsn fingerprint
         )
         |> Serialize.variant3 BD_BadDownload Pkg.nameCodec V.versionCodec packageProblemCodec
-        |> Serialize.variant3 BD_BadBuild Pkg.nameCodec V.versionCodec (S.assocListDict Pkg.compareName Pkg.nameCodec V.versionCodec)
+        |> Serialize.variant3 BD_BadBuild Pkg.nameCodec V.versionCodec (S.assocListDict identity Pkg.compareName Pkg.nameCodec V.versionCodec)
         |> Serialize.finishCustomType
 
 

@@ -42,7 +42,7 @@ type Type
     | RigidVar Name
     | RigidSuper Super Name
     | Type IO.Canonical Name (List Type)
-    | Record (Dict Name Type) Extension
+    | Record (Dict String Name Type) Extension
     | Unit
     | Tuple Type Type (Maybe Type)
     | Alias IO.Canonical Name (List ( Name, Type )) Type
@@ -130,9 +130,9 @@ aliasToDoc localizer ctx home name args =
         (List.map (toDoc localizer RT.App << Tuple.second) args)
 
 
-fieldsToDocs : L.Localizer -> Dict Name Type -> List ( D.Doc, D.Doc )
+fieldsToDocs : L.Localizer -> Dict String Name Type -> List ( D.Doc, D.Doc )
 fieldsToDocs localizer fields =
-    Dict.foldr (addField localizer) [] fields
+    Dict.foldr compare (addField localizer) [] fields
 
 
 addField : L.Localizer -> Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
@@ -644,7 +644,7 @@ diffAliasedRecord localizer t1 t2 =
 -- RECORD DIFFS
 
 
-diffRecord : L.Localizer -> Dict Name Type -> Extension -> Dict Name Type -> Extension -> Diff D.Doc
+diffRecord : L.Localizer -> Dict String Name Type -> Extension -> Dict String Name Type -> Extension -> Diff D.Doc
 diffRecord localizer fields1 ext1 fields2 ext2 =
     let
         toUnknownDocs : Name -> Type -> ( D.Doc, D.Doc )
@@ -655,42 +655,43 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
         toOverlapDocs field t1 t2 =
             fmapDiff (Tuple.pair (D.fromName field)) <| toDiff localizer RT.None t1 t2
 
-        left : Dict Name ( D.Doc, D.Doc )
+        left : Dict String Name ( D.Doc, D.Doc )
         left =
             Dict.map toUnknownDocs (Dict.diff fields1 fields2)
 
-        right : Dict Name ( D.Doc, D.Doc )
+        right : Dict String Name ( D.Doc, D.Doc )
         right =
             Dict.map toUnknownDocs (Dict.diff fields2 fields1)
 
         fieldsDiff : Diff (List ( D.Doc, D.Doc ))
         fieldsDiff =
             let
-                fieldsDiffDict : Diff (Dict Name ( D.Doc, D.Doc ))
+                fieldsDiffDict : Diff (Dict String Name ( D.Doc, D.Doc ))
                 fieldsDiffDict =
                     let
-                        both : Dict Name (Diff ( D.Doc, D.Doc ))
+                        both : Dict String Name (Diff ( D.Doc, D.Doc ))
                         both =
-                            Dict.merge (\_ _ acc -> acc)
-                                (\field t1 t2 acc -> Dict.insert compare field (toOverlapDocs field t1 t2) acc)
+                            Dict.merge compare
+                                (\_ _ acc -> acc)
+                                (\field t1 t2 acc -> Dict.insert identity field (toOverlapDocs field t1 t2) acc)
                                 (\_ _ acc -> acc)
                                 fields1
                                 fields2
                                 Dict.empty
 
-                        sequenceA : Dict Name (Diff ( D.Doc, D.Doc )) -> Diff (Dict Name ( D.Doc, D.Doc ))
+                        sequenceA : Dict String Name (Diff ( D.Doc, D.Doc )) -> Diff (Dict String Name ( D.Doc, D.Doc ))
                         sequenceA =
-                            Dict.foldr (\k x acc -> applyDiff acc (fmapDiff (Dict.insert compare k) x)) (pureDiff Dict.empty)
+                            Dict.foldr compare (\k x acc -> applyDiff acc (fmapDiff (Dict.insert identity k) x)) (pureDiff Dict.empty)
                     in
                     if Dict.isEmpty left && Dict.isEmpty right then
                         sequenceA both
 
                     else
-                        liftA2 (Dict.union compare)
+                        liftA2 Dict.union
                             (sequenceA both)
                             (Diff left right (Different Bag.empty))
             in
-            fmapDiff Dict.values fieldsDiffDict
+            fmapDiff (Dict.values compare) fieldsDiffDict
 
         (Diff doc1 doc2 status) =
             fieldsDiff
@@ -704,32 +705,32 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
                     let
                         minView : Maybe ( Name, ( D.Doc, D.Doc ) )
                         minView =
-                            Dict.toList left
+                            Dict.toList compare left
                                 |> List.sortBy Tuple.first
                                 |> List.head
                     in
                     case minView of
                         Just ( f, _ ) ->
-                            Different (Bag.one (FieldTypo f (Dict.keys fields2)))
+                            Different (Bag.one (FieldTypo f (Dict.keys compare fields2)))
 
                         Nothing ->
                             if Dict.isEmpty right then
                                 Similar
 
                             else
-                                Different (Bag.one (FieldsMissing (Dict.keys right)))
+                                Different (Bag.one (FieldsMissing (Dict.keys compare right)))
 
                 ( False, True ) ->
                     let
                         minView : Maybe ( Name, ( D.Doc, D.Doc ) )
                         minView =
-                            Dict.toList left
+                            Dict.toList compare left
                                 |> List.sortBy Tuple.first
                                 |> List.head
                     in
                     case minView of
                         Just ( f, _ ) ->
-                            Different (Bag.one (FieldTypo f (Dict.keys fields2)))
+                            Different (Bag.one (FieldTypo f (Dict.keys compare fields2)))
 
                         Nothing ->
                             Similar
@@ -738,13 +739,13 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
                     let
                         minView : Maybe ( Name, ( D.Doc, D.Doc ) )
                         minView =
-                            Dict.toList right
+                            Dict.toList compare right
                                 |> List.sortBy Tuple.first
                                 |> List.head
                     in
                     case minView of
                         Just ( f, _ ) ->
-                            Different (Bag.one (FieldTypo f (Dict.keys fields1)))
+                            Different (Bag.one (FieldTypo f (Dict.keys compare fields1)))
 
                         Nothing ->
                             Similar
@@ -887,7 +888,7 @@ typeCodec =
             ModuleName.canonicalCodec
             Serialize.string
             (Serialize.list (Serialize.lazy (\() -> typeCodec)))
-        |> Serialize.variant2 Record (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> typeCodec))) extensionCodec
+        |> Serialize.variant2 Record (S.assocListDict identity compare Serialize.string (Serialize.lazy (\() -> typeCodec))) extensionCodec
         |> Serialize.variant0 Unit
         |> Serialize.variant3
             Tuple

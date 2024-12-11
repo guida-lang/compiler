@@ -20,7 +20,7 @@ type alias FResult i w a =
     R.RResult i w Error.Error a
 
 
-createInitialEnv : IO.Canonical -> Dict ModuleName.Raw I.Interface -> List Src.Import -> FResult i w Env.Env
+createInitialEnv : IO.Canonical -> Dict String ModuleName.Raw I.Interface -> List Src.Import -> FResult i w Env.Env
 createInitialEnv home ifaces imports =
     Utils.foldM (addImport ifaces) emptyState (toSafeImports home imports)
         |> R.fmap
@@ -68,7 +68,7 @@ emptyState =
 
 emptyTypes : Env.Exposed Env.Type
 emptyTypes =
-    Dict.fromList compare [ ( "List", Env.Specific ModuleName.list (Env.Union 1 ModuleName.list) ) ]
+    Dict.fromList identity [ ( "List", Env.Specific ModuleName.list (Env.Union 1 ModuleName.list) ) ]
 
 
 
@@ -102,11 +102,11 @@ isNormal (Src.Import (A.At _ name) maybeAlias _) =
 -- ADD IMPORTS
 
 
-addImport : Dict ModuleName.Raw I.Interface -> State -> Src.Import -> FResult i w State
+addImport : Dict String ModuleName.Raw I.Interface -> State -> Src.Import -> FResult i w State
 addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
     let
         (I.Interface pkg defs unions aliases binops) =
-            Utils.find name ifaces
+            Utils.find identity name ifaces
 
         prefix : Name
         prefix =
@@ -116,29 +116,29 @@ addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
         home =
             IO.Canonical pkg name
 
-        rawTypeInfo : Dict Name ( Env.Type, Env.Exposed Env.Ctor )
+        rawTypeInfo : Dict String Name ( Env.Type, Env.Exposed Env.Ctor )
         rawTypeInfo =
-            Dict.union compare
-                (Dict.toList unions
+            Dict.union
+                (Dict.toList compare unions
                     |> List.filterMap (\( k, a ) -> Maybe.map (Tuple.pair k) (unionToType home k a))
-                    |> Dict.fromList compare
+                    |> Dict.fromList identity
                 )
-                (Dict.toList aliases
+                (Dict.toList compare aliases
                     |> List.filterMap (\( k, a ) -> Maybe.map (Tuple.pair k) (aliasToType home k a))
-                    |> Dict.fromList compare
+                    |> Dict.fromList identity
                 )
 
-        vars : Dict Name (Env.Info Can.Annotation)
+        vars : Dict String Name (Env.Info Can.Annotation)
         vars =
             Dict.map (\_ -> Env.Specific home) defs
 
-        types : Dict Name (Env.Info Env.Type)
+        types : Dict String Name (Env.Info Env.Type)
         types =
             Dict.map (\_ -> Env.Specific home << Tuple.first) rawTypeInfo
 
         ctors : Env.Exposed Env.Ctor
         ctors =
-            Dict.foldr (\_ -> addExposed << Tuple.second) Dict.empty rawTypeInfo
+            Dict.foldr compare (\_ -> addExposed << Tuple.second) Dict.empty rawTypeInfo
 
         qvs2 : Env.Qualified Can.Annotation
         qvs2 =
@@ -182,12 +182,12 @@ addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
 
 addExposed : Env.Exposed a -> Env.Exposed a -> Env.Exposed a
 addExposed =
-    Utils.mapUnionWith compare Env.mergeInfo
+    Utils.mapUnionWith identity compare Env.mergeInfo
 
 
 addQualified : Name -> Env.Exposed a -> Env.Qualified a -> Env.Qualified a
 addQualified prefix exposed qualified =
-    Utils.mapInsertWith compare addExposed prefix exposed qualified
+    Utils.mapInsertWith identity addExposed prefix exposed qualified
 
 
 
@@ -202,9 +202,9 @@ unionToType home name union =
 unionToTypeHelp : IO.Canonical -> Name -> Can.Union -> ( Env.Type, Env.Exposed Env.Ctor )
 unionToTypeHelp home name ((Can.Union vars ctors _ _) as union) =
     let
-        addCtor : Can.Ctor -> Dict Name (Env.Info Env.Ctor) -> Dict Name (Env.Info Env.Ctor)
+        addCtor : Can.Ctor -> Dict String Name (Env.Info Env.Ctor) -> Dict String Name (Env.Info Env.Ctor)
         addCtor (Can.Ctor ctor index _ args) dict =
-            Dict.insert compare ctor (Env.Specific home (Env.Ctor home name union index args)) dict
+            Dict.insert identity ctor (Env.Specific home (Env.Ctor home name union index args)) dict
     in
     ( Env.Union (List.length vars) home
     , List.foldl addCtor Dict.empty ctors
@@ -237,7 +237,7 @@ aliasToTypeHelp home name (Can.Alias vars tipe) =
                         (Can.TAlias home name avars (Can.Filled tipe))
                         (Can.fieldsToList fields)
             in
-            Dict.singleton name (Env.Specific home (Env.RecordCtor home vars alias_))
+            Dict.singleton identity name (Env.Specific home (Env.RecordCtor home vars alias_))
 
         _ ->
             Dict.empty
@@ -260,40 +260,40 @@ binopToBinop home op (I.Binop name annotation associativity precedence) =
 addExposedValue :
     IO.Canonical
     -> Env.Exposed Can.Annotation
-    -> Dict Name ( Env.Type, Env.Exposed Env.Ctor )
-    -> Dict Name I.Binop
+    -> Dict String Name ( Env.Type, Env.Exposed Env.Ctor )
+    -> Dict String Name I.Binop
     -> State
     -> Src.Exposed
     -> FResult i w State
 addExposedValue home vars types binops state exposed =
     case exposed of
         Src.Lower (A.At region name) ->
-            case Dict.get name vars of
+            case Dict.get identity name vars of
                 Just info ->
-                    R.ok { state | vars = Utils.mapInsertWith compare Env.mergeInfo name info state.vars }
+                    R.ok { state | vars = Utils.mapInsertWith identity Env.mergeInfo name info state.vars }
 
                 Nothing ->
-                    R.throw (Error.ImportExposingNotFound region home name (Dict.keys vars))
+                    R.throw (Error.ImportExposingNotFound region home name (Dict.keys compare vars))
 
         Src.Upper (A.At region name) privacy ->
             case privacy of
                 Src.Private ->
-                    case Dict.get name types of
+                    case Dict.get identity name types of
                         Just ( tipe, ctors ) ->
                             case tipe of
                                 Env.Union _ _ ->
                                     let
-                                        ts2 : Dict Name (Env.Info Env.Type)
+                                        ts2 : Dict String Name (Env.Info Env.Type)
                                         ts2 =
-                                            Dict.insert compare name (Env.Specific home tipe) state.types
+                                            Dict.insert identity name (Env.Specific home tipe) state.types
                                     in
                                     R.ok { state | types = ts2 }
 
                                 Env.Alias _ _ _ _ ->
                                     let
-                                        ts2 : Dict Name (Env.Info Env.Type)
+                                        ts2 : Dict String Name (Env.Info Env.Type)
                                         ts2 =
-                                            Dict.insert compare name (Env.Specific home tipe) state.types
+                                            Dict.insert identity name (Env.Specific home tipe) state.types
 
                                         cs2 : Env.Exposed Env.Ctor
                                         cs2 =
@@ -307,17 +307,17 @@ addExposedValue home vars types binops state exposed =
                                     R.throw <| Error.ImportCtorByName region name tipe
 
                                 [] ->
-                                    R.throw <| Error.ImportExposingNotFound region home name (Dict.keys types)
+                                    R.throw <| Error.ImportExposingNotFound region home name (Dict.keys compare types)
 
                 Src.Public dotDotRegion ->
-                    case Dict.get name types of
+                    case Dict.get identity name types of
                         Just ( tipe, ctors ) ->
                             case tipe of
                                 Env.Union _ _ ->
                                     let
-                                        ts2 : Dict Name (Env.Info Env.Type)
+                                        ts2 : Dict String Name (Env.Info Env.Type)
                                         ts2 =
-                                            Dict.insert compare name (Env.Specific home tipe) state.types
+                                            Dict.insert identity name (Env.Specific home tipe) state.types
 
                                         cs2 : Env.Exposed Env.Ctor
                                         cs2 =
@@ -329,28 +329,28 @@ addExposedValue home vars types binops state exposed =
                                     R.throw (Error.ImportOpenAlias dotDotRegion name)
 
                         Nothing ->
-                            R.throw (Error.ImportExposingNotFound region home name (Dict.keys types))
+                            R.throw (Error.ImportExposingNotFound region home name (Dict.keys compare types))
 
         Src.Operator region op ->
-            case Dict.get op binops of
+            case Dict.get identity op binops of
                 Just binop ->
                     let
-                        bs2 : Dict Name (Env.Info Env.Binop)
+                        bs2 : Dict String Name (Env.Info Env.Binop)
                         bs2 =
-                            Dict.insert compare op (binopToBinop home op binop) state.binops
+                            Dict.insert identity op (binopToBinop home op binop) state.binops
                     in
                     R.ok { state | binops = bs2 }
 
                 Nothing ->
-                    R.throw (Error.ImportExposingNotFound region home op (Dict.keys binops))
+                    R.throw (Error.ImportExposingNotFound region home op (Dict.keys compare binops))
 
 
-checkForCtorMistake : Name -> Dict Name ( Env.Type, Env.Exposed Env.Ctor ) -> List Name
+checkForCtorMistake : Name -> Dict String Name ( Env.Type, Env.Exposed Env.Ctor ) -> List Name
 checkForCtorMistake givenName types =
     let
-        addMatches : a -> ( b, Dict Name (Env.Info Env.Ctor) ) -> List Name -> List Name
+        addMatches : a -> ( b, Dict String Name (Env.Info Env.Ctor) ) -> List Name -> List Name
         addMatches _ ( _, exposedCtors ) matches =
-            Dict.foldr addMatch matches exposedCtors
+            Dict.foldr compare addMatch matches exposedCtors
 
         addMatch : Name -> Env.Info Env.Ctor -> List Name -> List Name
         addMatch ctorName info matches =
@@ -368,4 +368,4 @@ checkForCtorMistake givenName types =
                     Env.Ambiguous _ _ ->
                         matches
     in
-    Dict.foldr addMatches [] types
+    Dict.foldr compare addMatches [] types

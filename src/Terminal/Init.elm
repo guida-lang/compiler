@@ -96,22 +96,22 @@ init =
                                             IO.pure (Err (Exit.InitSolverProblem exit))
 
                                         Solver.NoSolution ->
-                                            IO.pure (Err (Exit.InitNoSolution (Dict.keys defaults)))
+                                            IO.pure (Err (Exit.InitNoSolution (Dict.keys compare defaults)))
 
                                         Solver.NoOfflineSolution ->
-                                            IO.pure (Err (Exit.InitNoOfflineSolution (Dict.keys defaults)))
+                                            IO.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare defaults)))
 
                                         Solver.SolverOk details ->
                                             let
-                                                solution : Dict Pkg.Name V.Version
+                                                solution : Dict ( String, String ) Pkg.Name V.Version
                                                 solution =
                                                     Dict.map (\_ (Solver.Details vsn _) -> vsn) details
 
-                                                directs : Dict Pkg.Name V.Version
+                                                directs : Dict ( String, String ) Pkg.Name V.Version
                                                 directs =
-                                                    Dict.intersection solution defaults
+                                                    Dict.intersection compare solution defaults
 
-                                                indirects : Dict Pkg.Name V.Version
+                                                indirects : Dict ( String, String ) Pkg.Name V.Version
                                                 indirects =
                                                     Dict.diff solution defaults
                                             in
@@ -128,9 +128,9 @@ init =
             )
 
 
-defaults : Dict Pkg.Name Con.Constraint
+defaults : Dict ( String, String ) Pkg.Name Con.Constraint
 defaults =
-    Dict.fromList Pkg.compareName
+    Dict.fromList identity
         [ ( Pkg.core, Con.anything )
         , ( Pkg.browser, Con.anything )
         , ( Pkg.html, Con.anything )

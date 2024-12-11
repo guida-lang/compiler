@@ -188,13 +188,13 @@ addInput : ( GLS.StorageQualifier, Shader.Type, String ) -> Shader.Types -> Shad
 addInput ( qual, tipe, name ) (Shader.Types attribute uniform varying) =
     case qual of
         GLS.Attribute ->
-            Shader.Types (Dict.insert compare name tipe attribute) uniform varying
+            Shader.Types (Dict.insert identity name tipe attribute) uniform varying
 
         GLS.Uniform ->
-            Shader.Types attribute (Dict.insert compare name tipe uniform) varying
+            Shader.Types attribute (Dict.insert identity name tipe uniform) varying
 
         GLS.Varying ->
-            Shader.Types attribute uniform (Dict.insert compare name tipe varying)
+            Shader.Types attribute uniform (Dict.insert identity name tipe varying)
 
         _ ->
             Crash.crash "Should never happen due to `extractInputs` function"

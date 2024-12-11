@@ -233,7 +233,7 @@ writeDiff oldDocs newDocs =
 
         localizer : L.Localizer
         localizer =
-            L.fromNames (Dict.union compare oldDocs newDocs)
+            L.fromNames (Dict.union oldDocs newDocs)
     in
     Task.io (Help.toStdout (toDoc localizer changes |> D.a (D.fromChars "\n")))
 
@@ -285,7 +285,7 @@ toDoc localizer ((PackageChanges added changed removed) as changes) =
 
             chunks : List Chunk
             chunks =
-                addedChunk ++ removedChunk ++ List.map (changesToChunk localizer) (Dict.toList changed)
+                addedChunk ++ removedChunk ++ List.map (changesToChunk localizer) (Dict.toList compare changed)
         in
         D.vcat (header :: D.fromChars "" :: List.map chunkToDoc chunks)
 
@@ -322,16 +322,16 @@ changesToChunk localizer ( name, (ModuleChanges unions aliases values binops) as
             DD.moduleChangeMagnitude changes
 
         ( unionAdd, unionChange, unionRemove ) =
-            changesToDocTriple (unionToDoc localizer) unions
+            changesToDocTriple compare (unionToDoc localizer) unions
 
         ( aliasAdd, aliasChange, aliasRemove ) =
-            changesToDocTriple (aliasToDoc localizer) aliases
+            changesToDocTriple compare (aliasToDoc localizer) aliases
 
         ( valueAdd, valueChange, valueRemove ) =
-            changesToDocTriple (valueToDoc localizer) values
+            changesToDocTriple compare (valueToDoc localizer) values
 
         ( binopAdd, binopChange, binopRemove ) =
-            changesToDocTriple (binopToDoc localizer) binops
+            changesToDocTriple compare (binopToDoc localizer) binops
     in
     Chunk name magnitude <|
         D.vcat <|
@@ -343,8 +343,8 @@ changesToChunk localizer ( name, (ModuleChanges unions aliases values binops) as
                     ]
 
 
-changesToDocTriple : (k -> v -> D.Doc) -> Changes k v -> ( List D.Doc, List D.Doc, List D.Doc )
-changesToDocTriple entryToDoc (Changes added changed removed) =
+changesToDocTriple : (k -> k -> Order) -> (k -> v -> D.Doc) -> Changes comparable k v -> ( List D.Doc, List D.Doc, List D.Doc )
+changesToDocTriple keyComparison entryToDoc (Changes added changed removed) =
     let
         indented : ( k, v ) -> D.Doc
         indented ( name, value ) =
@@ -358,9 +358,9 @@ changesToDocTriple entryToDoc (Changes added changed removed) =
                 , D.fromChars ""
                 ]
     in
-    ( List.map indented (Dict.toList added)
-    , List.map diffed (Dict.toList changed)
-    , List.map indented (Dict.toList removed)
+    ( List.map indented (Dict.toList keyComparison added)
+    , List.map diffed (Dict.toList keyComparison changed)
+    , List.map indented (Dict.toList keyComparison removed)
     )
 
 

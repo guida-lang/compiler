@@ -339,10 +339,10 @@ checkExpr (A.At region expression) errors =
             checkExpr record errors
 
         Can.Update _ record fields ->
-            checkExpr record <| Dict.foldr (\_ -> checkField) errors fields
+            checkExpr record <| Dict.foldr compare (\_ -> checkField) errors fields
 
         Can.Record fields ->
-            Dict.foldr (\_ -> checkExpr) errors fields
+            Dict.foldr compare (\_ -> checkExpr) errors fields
 
         Can.Unit ->
             errors
@@ -442,7 +442,7 @@ isExhaustive matrix n =
 
             else
                 let
-                    ctors : Dict Name.Name Can.Union
+                    ctors : Dict String Name.Name Can.Union
                     ctors =
                         collectCtors matrix
 
@@ -477,9 +477,9 @@ isExhaustive matrix n =
                         List.concatMap isAltExhaustive altList
 
 
-isMissing : Can.Union -> Dict Name.Name a -> Can.Ctor -> Maybe Pattern
+isMissing : Can.Union -> Dict String Name.Name a -> Can.Ctor -> Maybe Pattern
 isMissing union ctors (Can.Ctor name _ arity _) =
-    if Dict.member name ctors then
+    if Dict.member identity name ctors then
         Nothing
 
     else
@@ -664,7 +664,7 @@ type Complete
 isComplete : List (List Pattern) -> Complete
 isComplete matrix =
     let
-        ctors : Dict Name.Name Can.Union
+        ctors : Dict String Name.Name Can.Union
         ctors =
             collectCtors matrix
 
@@ -691,16 +691,16 @@ isComplete matrix =
 -- COLLECT CTORS
 
 
-collectCtors : List (List Pattern) -> Dict Name.Name Can.Union
+collectCtors : List (List Pattern) -> Dict String Name.Name Can.Union
 collectCtors matrix =
     List.foldl (\row acc -> collectCtorsHelp acc row) Dict.empty matrix
 
 
-collectCtorsHelp : Dict Name.Name Can.Union -> List Pattern -> Dict Name.Name Can.Union
+collectCtorsHelp : Dict String Name.Name Can.Union -> List Pattern -> Dict String Name.Name Can.Union
 collectCtorsHelp ctors row =
     case row of
         (Ctor union name _) :: _ ->
-            Dict.insert compare name union ctors
+            Dict.insert identity name union ctors
 
         _ ->
             ctors

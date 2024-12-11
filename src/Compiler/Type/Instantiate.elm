@@ -16,7 +16,7 @@ import Utils.Main as Utils
 
 
 type alias FreeVars =
-    Dict Name Type
+    Dict String Name Type
 
 
 
@@ -32,7 +32,7 @@ fromSrcType freeVars sourceType =
                 |> IO.apply (fromSrcType freeVars result)
 
         Can.TVar name ->
-            IO.pure (Utils.find name freeVars)
+            IO.pure (Utils.find identity name freeVars)
 
         Can.TType home name args ->
             IO.fmap (AppN home name)
@@ -48,7 +48,7 @@ fromSrcType freeVars sourceType =
                                     fromSrcType freeVars realType
 
                                 Can.Holey realType ->
-                                    fromSrcType (Dict.fromList compare targs) realType
+                                    fromSrcType (Dict.fromList identity targs) realType
                             )
                     )
 
@@ -63,17 +63,17 @@ fromSrcType freeVars sourceType =
 
         Can.TRecord fields maybeExt ->
             IO.pure RecordN
-                |> IO.apply (IO.traverseMap compare (fromSrcFieldType freeVars) fields)
+                |> IO.apply (IO.traverseMap identity compare (fromSrcFieldType freeVars) fields)
                 |> IO.apply
                     (case maybeExt of
                         Nothing ->
                             IO.pure EmptyRecordN
 
                         Just ext ->
-                            IO.pure (Utils.find ext freeVars)
+                            IO.pure (Utils.find identity ext freeVars)
                     )
 
 
-fromSrcFieldType : Dict Name Type -> Can.FieldType -> IO Type
+fromSrcFieldType : Dict String Name Type -> Can.FieldType -> IO Type
 fromSrcFieldType freeVars (Can.FieldType _ tipe) =
     fromSrcType freeVars tipe

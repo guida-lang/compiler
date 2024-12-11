@@ -29,7 +29,7 @@ type alias PResult i w a =
 
 
 type alias Bindings =
-    Dict Name.Name A.Region
+    Dict String Name.Name A.Region
 
 
 

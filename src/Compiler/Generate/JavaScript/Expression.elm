@@ -192,9 +192,9 @@ generate mode expression =
                     , JS.ExprString (generateField mode field)
                     )
 
-                toTranslationObject : EverySet.EverySet Name.Name -> JS.Expr
+                toTranslationObject : EverySet.EverySet String Name.Name -> JS.Expr
                 toTranslationObject fields =
-                    JS.ExprObject (List.map toTranlation (EverySet.toList fields))
+                    JS.ExprObject (List.map toTranlation (EverySet.toList compare fields))
             in
             JsExpr <|
                 JS.ExprObject
@@ -303,14 +303,14 @@ ctorToInt home name index =
 -- RECORDS
 
 
-generateRecord : Mode.Mode -> Dict Name.Name Opt.Expr -> JS.Expr
+generateRecord : Mode.Mode -> Dict String Name.Name Opt.Expr -> JS.Expr
 generateRecord mode fields =
     let
         toPair : ( Name.Name, Opt.Expr ) -> ( JsName.Name, JS.Expr )
         toPair ( field, value ) =
             ( generateField mode field, generateJsExpr mode value )
     in
-    JS.ExprObject (List.map toPair (Dict.toList fields))
+    JS.ExprObject (List.map toPair (Dict.toList compare fields))
 
 
 generateField : Mode.Mode -> Name.Name -> JsName.Name
@@ -320,7 +320,7 @@ generateField mode name =
             JsName.fromLocal name
 
         Mode.Prod fields ->
-            Utils.find name fields
+            Utils.find identity name fields
 
 
 
@@ -370,7 +370,7 @@ positionToJsExpr (A.Position line column) =
 
 generateFunction : List JsName.Name -> Code -> Code
 generateFunction args body =
-    case Dict.get (List.length args) funcHelpers of
+    case Dict.get identity (List.length args) funcHelpers of
         Just helper ->
             JsExpr <|
                 JS.ExprCall helper
@@ -389,9 +389,9 @@ generateFunction args body =
             List.foldr addArg body args
 
 
-funcHelpers : Dict Int JS.Expr
+funcHelpers : Dict Int Int JS.Expr
 funcHelpers =
-    Dict.fromList compare <|
+    Dict.fromList identity <|
         List.map (\n -> ( n, JS.ExprRef (JsName.makeF n) )) (List.range 2 9)
 
 
@@ -440,7 +440,7 @@ generateGlobalCall home name args =
 
 generateNormalCall : JS.Expr -> List JS.Expr -> JS.Expr
 generateNormalCall func args =
-    case Dict.get (List.length args) callHelpers of
+    case Dict.get identity (List.length args) callHelpers of
         Just helper ->
             JS.ExprCall helper (func :: args)
 
@@ -448,9 +448,9 @@ generateNormalCall func args =
             List.foldl (\a f -> JS.ExprCall f [ a ]) func args
 
 
-callHelpers : Dict Int JS.Expr
+callHelpers : Dict Int Int JS.Expr
 callHelpers =
-    Dict.fromList compare <|
+    Dict.fromList identity <|
         List.map (\n -> ( n, JS.ExprRef (JsName.makeA n) )) (List.range 2 9)
 
 

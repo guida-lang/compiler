@@ -121,10 +121,10 @@ hasDebug expression =
             hasDebug r
 
         Opt.Update r fs ->
-            hasDebug r || List.any hasDebug (Dict.values fs)
+            hasDebug r || List.any hasDebug (Dict.values compare fs)
 
         Opt.Record fs ->
-            List.any hasDebug (Dict.values fs)
+            List.any hasDebug (Dict.values compare fs)
 
         Opt.Unit ->
             False

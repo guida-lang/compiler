@@ -95,7 +95,7 @@ toEncoder tipe =
             encode "object"
                 |> Names.bind
                     (\object ->
-                        Names.traverse encodeField (Dict.toList fields)
+                        Names.traverse encodeField (Dict.toList compare fields)
                             |> Names.bind
                                 (\keyValuePairs ->
                                     Names.registerFieldDict fields
@@ -423,7 +423,7 @@ indexAndThen i tipe decoder =
 -- DECODE RECORDS
 
 
-decodeRecord : Dict Name.Name Can.FieldType -> Names.Tracker Opt.Expr
+decodeRecord : Dict String Name.Name Can.FieldType -> Names.Tracker Opt.Expr
 decodeRecord fields =
     let
         toFieldExpr : Name -> b -> Opt.Expr
@@ -436,7 +436,7 @@ decodeRecord fields =
     in
     Names.bind
         (\succeed ->
-            Names.registerFieldDict fields (Dict.toList fields)
+            Names.registerFieldDict fields (Dict.toList compare fields)
                 |> Names.bind
                     (\fieldDecoders ->
                         List.foldl (\fieldDecoder -> Names.bind (\optCall -> fieldAndThen optCall fieldDecoder))

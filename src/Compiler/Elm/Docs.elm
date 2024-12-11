@@ -46,11 +46,11 @@ import Utils.Main as Utils
 
 
 type alias Documentation =
-    Dict Name Module
+    Dict String Name Module
 
 
 type Module
-    = Module Name Comment (Dict Name Union) (Dict Name Alias) (Dict Name Value) (Dict Name Binop)
+    = Module Name Comment (Dict String Name Union) (Dict String Name Alias) (Dict String Name Value) (Dict String Name Binop)
 
 
 type alias Comment =
@@ -79,7 +79,7 @@ type Binop
 
 encode : Documentation -> E.Value
 encode docs =
-    E.list encodeModule (Dict.values docs)
+    E.list encodeModule (Dict.values compare docs)
 
 
 encodeModule : Module -> E.Value
@@ -87,10 +87,10 @@ encodeModule (Module name comment unions aliases values binops) =
     E.object
         [ ( "name", ModuleName.encode name )
         , ( "comment", E.string comment )
-        , ( "unions", E.list encodeUnion (Dict.toList unions) )
-        , ( "aliases", E.list encodeAlias (Dict.toList aliases) )
-        , ( "values", E.list encodeValue (Dict.toList values) )
-        , ( "binops", E.list encodeBinop (Dict.toList binops) )
+        , ( "unions", E.list encodeUnion (Dict.toList compare unions) )
+        , ( "aliases", E.list encodeAlias (Dict.toList compare aliases) )
+        , ( "values", E.list encodeValue (Dict.toList compare values) )
+        , ( "binops", E.list encodeBinop (Dict.toList compare binops) )
         ]
 
 
@@ -107,7 +107,7 @@ decoder =
 
 toDict : List Module -> Documentation
 toDict modules =
-    Dict.fromList compare (List.map toDictHelp modules)
+    Dict.fromList identity (List.map toDictHelp modules)
 
 
 toDictHelp : Module -> ( Name.Name, Module )
@@ -126,9 +126,9 @@ moduleDecoder =
         |> D.apply (D.field "binops" (dictDecoder binop))
 
 
-dictDecoder : D.Decoder Error a -> D.Decoder Error (Dict Name a)
+dictDecoder : D.Decoder Error a -> D.Decoder Error (Dict String Name a)
 dictDecoder entryDecoder =
-    D.fmap (Dict.fromList compare) (D.list (named entryDecoder))
+    D.fmap (Dict.fromList identity) (D.list (named entryDecoder))
 
 
 named : D.Decoder Error a -> D.Decoder Error ( Name.Name, a )
@@ -332,7 +332,7 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
                 Src.YesDocs overview comments ->
                     parseOverview overview
                         |> Result.andThen (checkNames exportDict)
-                        |> Result.andThen (\_ -> checkDefs exportDict overview (Dict.fromList compare comments) modul)
+                        |> Result.andThen (\_ -> checkDefs exportDict overview (Dict.fromList identity comments) modul)
 
 
 
@@ -484,7 +484,7 @@ untilDocs src pos end row col =
 -- CHECK NAMES
 
 
-checkNames : Dict Name (A.Located Can.Export) -> List (A.Located Name) -> Result E.Error ()
+checkNames : Dict String Name (A.Located Can.Export) -> List (A.Located Name) -> Result E.Error ()
 checkNames exports names =
     let
         docs : DocNameRegions
@@ -503,7 +503,7 @@ checkNames exports names =
         loneDoc name regions _ =
             onlyInDocs name regions
     in
-    case Result.run (Dict.merge loneExport checkBoth loneDoc exports docs (Result.ok A.zero)) of
+    case Result.run (Dict.merge compare loneExport checkBoth loneDoc exports docs (Result.ok A.zero)) of
         ( _, Ok _ ) ->
             Ok ()
 
@@ -512,12 +512,12 @@ checkNames exports names =
 
 
 type alias DocNameRegions =
-    Dict Name (OneOrMore.OneOrMore A.Region)
+    Dict String Name (OneOrMore.OneOrMore A.Region)
 
 
 addName : A.Located Name -> DocNameRegions -> DocNameRegions
 addName (A.At region name) dict =
-    Utils.mapInsertWith compare OneOrMore.more name (OneOrMore.one region) dict
+    Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one region) dict
 
 
 isUnique : Name -> OneOrMore.OneOrMore A.Region -> Result.RResult i w E.NameProblem A.Region
@@ -552,7 +552,7 @@ onlyInExports name (A.At region _) =
 -- CHECK DEFS
 
 
-checkDefs : Dict Name (A.Located Can.Export) -> Src.Comment -> Dict Name Src.Comment -> Can.Module -> Result E.Error Module
+checkDefs : Dict String Name (A.Located Can.Export) -> Src.Comment -> Dict String Name Src.Comment -> Can.Module -> Result E.Error Module
 checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases infixes effects) =
     let
         types : Types
@@ -563,12 +563,12 @@ checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases
         info =
             Info comments types unions aliases infixes effects
     in
-    case Result.run (Result.mapTraverseWithKey compare (checkExport info) exportDict) of
+    case Result.run (Result.mapTraverseWithKey identity compare (checkExport info) exportDict) of
         ( _, Err problems ) ->
             Err (E.DefProblems (OneOrMore.destruct NE.Nonempty problems))
 
         ( _, Ok inserters ) ->
-            Ok (Dict.foldr (\_ -> (<|)) (emptyModule name overview) inserters)
+            Ok (Dict.foldr compare (\_ -> (<|)) (emptyModule name overview) inserters)
 
 
 emptyModule : IO.Canonical -> Src.Comment -> Module
@@ -577,7 +577,7 @@ emptyModule (IO.Canonical _ name) (Src.Comment overview) =
 
 
 type Info
-    = Info (Dict Name.Name Src.Comment) (Dict Name.Name (Result A.Region Can.Type)) (Dict Name.Name Can.Union) (Dict Name.Name Can.Alias) (Dict Name.Name Can.Binop) Can.Effects
+    = Info (Dict String Name.Name Src.Comment) (Dict String Name.Name (Result A.Region Can.Type)) (Dict String Name.Name Can.Union) (Dict String Name.Name Can.Alias) (Dict String Name.Name Can.Binop) Can.Effects
 
 
 checkExport : Info -> Name -> A.Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
@@ -597,7 +597,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                                                 mComment
                                                 mUnions
                                                 mAliases
-                                                (Dict.insert compare name (Value comment tipe) mValues)
+                                                (Dict.insert identity name (Value comment tipe) mValues)
                                                 mBinops
                                         )
                                 )
@@ -606,7 +606,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
         Can.ExportBinop ->
             let
                 (Can.Binop_ assoc prec realName) =
-                    Utils.find name iBinops
+                    Utils.find identity name iBinops
             in
             getType realName info
                 |> Result.bind
@@ -622,7 +622,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                                                 mUnions
                                                 mAliases
                                                 mValues
-                                                (Dict.insert compare name (Binop comment tipe assoc prec) mBinops)
+                                                (Dict.insert identity name (Binop comment tipe assoc prec) mBinops)
                                         )
                                 )
                     )
@@ -630,7 +630,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
         Can.ExportAlias ->
             let
                 (Can.Alias tvars tipe) =
-                    Utils.find name iAliases
+                    Utils.find identity name iAliases
             in
             getComment region name info
                 |> Result.bind
@@ -640,7 +640,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                                 Module mName
                                     mComment
                                     mUnions
-                                    (Dict.insert compare name (Alias comment tvars (Extract.fromType tipe)) mAliases)
+                                    (Dict.insert identity name (Alias comment tvars (Extract.fromType tipe)) mAliases)
                                     mValues
                                     mBinops
                             )
@@ -649,7 +649,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
         Can.ExportUnionOpen ->
             let
                 (Can.Union tvars ctors _ _) =
-                    Utils.find name iUnions
+                    Utils.find identity name iUnions
             in
             getComment region name info
                 |> Result.bind
@@ -658,7 +658,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                             (\(Module mName mComment mUnions mAliases mValues mBinops) ->
                                 Module mName
                                     mComment
-                                    (Dict.insert compare name (Union comment tvars (List.map dector ctors)) mUnions)
+                                    (Dict.insert identity name (Union comment tvars (List.map dector ctors)) mUnions)
                                     mAliases
                                     mValues
                                     mBinops
@@ -668,7 +668,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
         Can.ExportUnionClosed ->
             let
                 (Can.Union tvars _ _ _) =
-                    Utils.find name iUnions
+                    Utils.find identity name iUnions
             in
             getComment region name info
                 |> Result.bind
@@ -677,7 +677,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                             (\(Module mName mComment mUnions mAliases mValues mBinops) ->
                                 Module mName
                                     mComment
-                                    (Dict.insert compare name (Union comment tvars []) mUnions)
+                                    (Dict.insert identity name (Union comment tvars []) mUnions)
                                     mAliases
                                     mValues
                                     mBinops
@@ -697,7 +697,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                                                 mComment
                                                 mUnions
                                                 mAliases
-                                                (Dict.insert compare name (Value comment tipe) mValues)
+                                                (Dict.insert identity name (Value comment tipe) mValues)
                                                 mBinops
                                         )
                                 )
@@ -706,7 +706,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
 
 getComment : A.Region -> Name.Name -> Info -> Result.RResult i w E.DefProblem Comment
 getComment region name (Info iComments _ _ _ _ _) =
-    case Dict.get name iComments of
+    case Dict.get identity name iComments of
         Nothing ->
             Result.throw (E.NoComment name region)
 
@@ -716,7 +716,7 @@ getComment region name (Info iComments _ _ _ _ _) =
 
 getType : Name.Name -> Info -> Result.RResult i w E.DefProblem Type.Type
 getType name (Info _ iValues _ _ _ _) =
-    case Utils.find name iValues of
+    case Utils.find identity name iValues of
         Err region ->
             Result.throw (E.NoAnnotation name region)
 
@@ -734,7 +734,7 @@ dector (Can.Ctor name _ _ args) =
 
 
 type alias Types =
-    Dict Name.Name (Result A.Region Can.Type)
+    Dict String Name.Name (Result A.Region Can.Type)
 
 
 gatherTypes : Can.Decls -> Types -> Types
@@ -754,7 +754,7 @@ addDef : Types -> Can.Def -> Types
 addDef types def =
     case def of
         Can.Def (A.At region name) _ _ ->
-            Dict.insert compare name (Err region) types
+            Dict.insert identity name (Err region) types
 
         Can.TypedDef (A.At _ name) _ typedArgs _ resultType ->
             let
@@ -762,7 +762,7 @@ addDef types def =
                 tipe =
                     List.foldr Can.TLambda resultType (List.map Tuple.second typedArgs)
             in
-            Dict.insert compare name (Ok tipe) types
+            Dict.insert identity name (Ok tipe) types
 
 
 
@@ -771,7 +771,7 @@ addDef types def =
 
 jsonCodec : Codec e Documentation
 jsonCodec =
-    S.assocListDict compare Serialize.string moduleCodec
+    S.assocListDict identity compare Serialize.string moduleCodec
 
 
 moduleCodec : Codec e Module
@@ -784,10 +784,10 @@ moduleCodec =
             Module
             Serialize.string
             Serialize.string
-            (S.assocListDict compare Serialize.string unionCodec)
-            (S.assocListDict compare Serialize.string aliasCodec)
-            (S.assocListDict compare Serialize.string valueCodec)
-            (S.assocListDict compare Serialize.string binopCodec)
+            (S.assocListDict identity compare Serialize.string unionCodec)
+            (S.assocListDict identity compare Serialize.string aliasCodec)
+            (S.assocListDict identity compare Serialize.string valueCodec)
+            (S.assocListDict identity compare Serialize.string binopCodec)
         |> Serialize.finishCustomType
 
 

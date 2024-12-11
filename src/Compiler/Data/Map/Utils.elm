@@ -13,20 +13,20 @@ import Utils.Main as Utils
 -- FROM KEYS
 
 
-fromKeys : (comparable -> v) -> List comparable -> Dict comparable v
+fromKeys : (comparable -> v) -> List comparable -> Dict comparable comparable v
 fromKeys toValue keys =
-    Dict.fromList compare (List.map (\k -> ( k, toValue k )) keys)
+    Dict.fromList identity (List.map (\k -> ( k, toValue k )) keys)
 
 
-fromKeysA : (k -> k -> Order) -> (k -> IO v) -> List k -> IO (Dict k v)
-fromKeysA keyComparison toValue keys =
-    IO.fmap (Dict.fromList keyComparison) (Utils.listTraverse (\k -> IO.fmap (Tuple.pair k) (toValue k)) keys)
+fromKeysA : (k -> comparable) -> (k -> IO v) -> List k -> IO (Dict comparable k v)
+fromKeysA toComparable toValue keys =
+    IO.fmap (Dict.fromList toComparable) (Utils.listTraverse (\k -> IO.fmap (Tuple.pair k) (toValue k)) keys)
 
 
 
 -- ANY
 
 
-any : (v -> Bool) -> Dict k v -> Bool
+any : (v -> Bool) -> Dict c k v -> Bool
 any isGood dict =
-    Dict.foldl (\_ v acc -> isGood v || acc) False dict
+    Dict.foldl (\_ _ -> EQ) (\_ v acc -> isGood v || acc) False dict

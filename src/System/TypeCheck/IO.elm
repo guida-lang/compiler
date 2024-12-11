@@ -105,14 +105,15 @@ foldM f b =
     List.foldl (\a -> bind (\acc -> f acc a)) (pure b)
 
 
-traverseMap : (k -> k -> Order) -> (a -> IO b) -> Dict k a -> IO (Dict k b)
-traverseMap keyComparison f =
-    traverseMapWithKey keyComparison (\_ -> f)
+traverseMap : (k -> comparable) -> (k -> k -> Order) -> (a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
+traverseMap toComparable keyComparison f =
+    traverseMapWithKey toComparable keyComparison (\_ -> f)
 
 
-traverseMapWithKey : (k -> k -> Order) -> (k -> a -> IO b) -> Dict k a -> IO (Dict k b)
-traverseMapWithKey keyComparison f =
-    Dict.foldl (\k a -> bind (\c -> fmap (\va -> Dict.insert keyComparison k va c) (f k a)))
+traverseMapWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
+traverseMapWithKey toComparable keyComparison f =
+    Dict.foldl keyComparison
+        (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (f k a)))
         (pure Dict.empty)
 
 
@@ -131,9 +132,9 @@ forM_ list f =
     mapM_ f list
 
 
-foldMDict : (b -> a -> IO b) -> b -> Dict k a -> IO b
-foldMDict f b =
-    Dict.foldl (\_ a -> bind (\acc -> f acc a)) (pure b)
+foldMDict : (k -> k -> Order) -> (b -> a -> IO b) -> b -> Dict c k a -> IO b
+foldMDict keyComparison f b =
+    Dict.foldl keyComparison (\_ a -> bind (\acc -> f acc a)) (pure b)
 
 
 traverseList : (a -> IO b) -> List a -> IO (List b)
@@ -251,7 +252,7 @@ type FlatType
     = App1 Canonical String (List Variable)
     | Fun1 Variable Variable
     | EmptyRecord1
-    | Record1 (Dict String Variable) Variable
+    | Record1 (Dict String String Variable) Variable
     | Unit1
     | Tuple1 Variable Variable (Maybe Variable)
 

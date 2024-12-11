@@ -89,11 +89,11 @@ type Types
     = -- PERF profile Opt.Global representation
       -- current representation needs less allocation
       -- but maybe the lookup is much worse
-      Types (Dict IO.Canonical Types_)
+      Types (Dict (List String) IO.Canonical Types_)
 
 
 type Types_
-    = Types_ (Dict Name.Name Can.Union) (Dict Name.Name Can.Alias)
+    = Types_ (Dict String Name.Name Can.Union) (Dict String Name.Name Can.Alias)
 
 
 mergeMany : List Types -> Types
@@ -108,20 +108,20 @@ mergeMany listOfTypes =
 
 merge : Types -> Types -> Types
 merge (Types types1) (Types types2) =
-    Types (Dict.union ModuleName.compareCanonical types1 types2)
+    Types (Dict.union types1 types2)
 
 
 fromInterface : ModuleName.Raw -> I.Interface -> Types
 fromInterface name (I.Interface pkg _ unions aliases _) =
     Types <|
-        Dict.singleton (IO.Canonical pkg name) <|
+        Dict.singleton ModuleName.toComparableCanonical (IO.Canonical pkg name) <|
             Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
 
 fromDependencyInterface : IO.Canonical -> I.DependencyInterface -> Types
 fromDependencyInterface home di =
     Types
-        (Dict.singleton home <|
+        (Dict.singleton ModuleName.toComparableCanonical home <|
             case di of
                 I.Public (I.Interface _ _ unions aliases _) ->
                     Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
@@ -150,11 +150,11 @@ fromMsg types message =
 extractTransitive : Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
 extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnions) =
     let
-        aliases : EverySet Opt.Global
+        aliases : EverySet (List String) Opt.Global
         aliases =
             EverySet.diff nextAliases seenAliases
 
-        unions : EverySet Opt.Global
+        unions : EverySet (List String) Opt.Global
         unions =
             EverySet.diff nextUnions seenUnions
     in
@@ -166,13 +166,13 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
             ( newDeps, ( resultAlias, resultUnion ) ) =
                 run
                     (pure Tuple.pair
-                        |> apply (traverse (extractAlias types) (EverySet.toList aliases))
-                        |> apply (traverse (extractUnion types) (EverySet.toList unions))
+                        |> apply (traverse (extractAlias types) (EverySet.toList Opt.compareGlobal aliases))
+                        |> apply (traverse (extractUnion types) (EverySet.toList Opt.compareGlobal unions))
                     )
 
             oldDeps : Deps
             oldDeps =
-                Deps (EverySet.union Opt.compareGlobal seenAliases nextAliases) (EverySet.union Opt.compareGlobal seenUnions nextUnions)
+                Deps (EverySet.union seenAliases nextAliases) (EverySet.union seenUnions nextUnions)
 
             ( remainingResultAlias, remainingResultUnion ) =
                 extractTransitive types oldDeps newDeps
@@ -184,9 +184,9 @@ extractAlias : Types -> Opt.Global -> Extractor T.Alias
 extractAlias (Types dict) (Opt.Global home name) =
     let
         (Can.Alias args aliasType) =
-            Utils.find home dict
+            Utils.find ModuleName.toComparableCanonical home dict
                 |> (\(Types_ _ aliasInfo) -> aliasInfo)
-                |> Utils.find name
+                |> Utils.find identity name
     in
     fmap (T.Alias (toPublicName home name) args) (extract aliasType)
 
@@ -203,9 +203,9 @@ extractUnion (Types dict) (Opt.Global home name) =
                 toPublicName home name
 
             (Can.Union vars ctors _ _) =
-                Utils.find home dict
+                Utils.find ModuleName.toComparableCanonical home dict
                     |> (\(Types_ unionInfo _) -> unionInfo)
-                    |> Utils.find name
+                    |> Utils.find identity name
         in
         fmap (T.Union pname vars) (traverse extractCtor ctors)
 
@@ -220,7 +220,7 @@ extractCtor (Can.Ctor ctor _ _ args) =
 
 
 type Deps
-    = Deps (EverySet Opt.Global) (EverySet Opt.Global)
+    = Deps (EverySet (List String) Opt.Global) (EverySet (List String) Opt.Global)
 
 
 noDeps : Deps
@@ -233,11 +233,11 @@ noDeps =
 
 
 type Extractor a
-    = Extractor (EverySet Opt.Global -> EverySet Opt.Global -> EResult a)
+    = Extractor (EverySet (List String) Opt.Global -> EverySet (List String) Opt.Global -> EResult a)
 
 
 type EResult a
-    = EResult (EverySet Opt.Global) (EverySet Opt.Global) a
+    = EResult (EverySet (List String) Opt.Global) (EverySet (List String) Opt.Global) a
 
 
 run : Extractor a -> ( Deps, a )
@@ -251,14 +251,14 @@ addAlias : Opt.Global -> a -> Extractor a
 addAlias alias value =
     Extractor <|
         \aliases unions ->
-            EResult (EverySet.insert Opt.compareGlobal alias aliases) unions value
+            EResult (EverySet.insert Opt.toComparableGlobal alias aliases) unions value
 
 
 addUnion : Opt.Global -> a -> Extractor a
 addUnion union value =
     Extractor <|
         \aliases unions ->
-            EResult aliases (EverySet.insert Opt.compareGlobal union unions) value
+            EResult aliases (EverySet.insert Opt.toComparableGlobal union unions) value
 
 
 fmap : (a -> b) -> Extractor a -> Extractor b
@@ -318,7 +318,7 @@ typesCodec =
         (\typesCodecEncoder (Types types) ->
             typesCodecEncoder types
         )
-        |> Serialize.variant1 Types (S.assocListDict ModuleName.compareCanonical ModuleName.canonicalCodec types_Codec)
+        |> Serialize.variant1 Types (S.assocListDict ModuleName.toComparableCanonical ModuleName.compareCanonical ModuleName.canonicalCodec types_Codec)
         |> Serialize.finishCustomType
 
 
@@ -330,6 +330,6 @@ types_Codec =
         )
         |> Serialize.variant2
             Types_
-            (S.assocListDict compare Serialize.string Can.unionCodec)
-            (S.assocListDict compare Serialize.string Can.aliasCodec)
+            (S.assocListDict identity compare Serialize.string Can.unionCodec)
+            (S.assocListDict identity compare Serialize.string Can.aliasCodec)
         |> Serialize.finishCustomType

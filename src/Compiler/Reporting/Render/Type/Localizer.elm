@@ -25,7 +25,7 @@ import System.TypeCheck.IO as IO
 
 
 type Localizer
-    = Localizer (Dict Name Import)
+    = Localizer (Dict String Name Import)
 
 
 type alias Import =
@@ -36,7 +36,7 @@ type alias Import =
 
 type Exposing
     = All
-    | Only (EverySet Name)
+    | Only (EverySet String Name)
 
 
 empty : Localizer
@@ -55,7 +55,7 @@ toDoc localizer home name =
 
 toChars : Localizer -> IO.Canonical -> Name -> String
 toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
-    case Dict.get home localizer of
+    case Dict.get identity home localizer of
         Nothing ->
             home ++ "." ++ name
 
@@ -65,7 +65,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
                     name
 
                 Only set ->
-                    if EverySet.member name set then
+                    if EverySet.member identity name set then
                         name
 
                     else if name == Name.list && moduleName == ModuleName.list then
@@ -79,7 +79,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
 -- FROM NAMES
 
 
-fromNames : Dict Name a -> Localizer
+fromNames : Dict String Name a -> Localizer
 fromNames names =
     Localizer (Dict.map (\_ _ -> { alias = Nothing, exposing_ = All }) names)
 
@@ -91,7 +91,7 @@ fromNames names =
 fromModule : Src.Module -> Localizer
 fromModule ((Src.Module _ _ _ imports _ _ _ _ _) as modul) =
     Localizer <|
-        Dict.fromList compare <|
+        Dict.fromList identity <|
             (( Src.getName modul, { alias = Nothing, exposing_ = All } ) :: List.map toPair imports)
 
 
@@ -112,14 +112,14 @@ toExposing exposing_ =
             Only (List.foldr addType EverySet.empty exposedList)
 
 
-addType : Src.Exposed -> EverySet Name -> EverySet Name
+addType : Src.Exposed -> EverySet String Name -> EverySet String Name
 addType exposed types =
     case exposed of
         Src.Lower _ ->
             types
 
         Src.Upper (A.At _ name) _ ->
-            EverySet.insert compare name types
+            EverySet.insert identity name types
 
         Src.Operator _ _ ->
             types
@@ -135,7 +135,7 @@ localizerCodec =
         (\localizerCodecEncoder (Localizer localizer) ->
             localizerCodecEncoder localizer
         )
-        |> Serialize.variant1 Localizer (S.assocListDict compare Serialize.string importCodec)
+        |> Serialize.variant1 Localizer (S.assocListDict identity compare Serialize.string importCodec)
         |> Serialize.finishCustomType
 
 
@@ -159,5 +159,5 @@ exposingCodec =
                     onlyEncoder set
         )
         |> Serialize.variant0 All
-        |> Serialize.variant1 Only (S.everySet compare Serialize.string)
+        |> Serialize.variant1 Only (S.everySet identity compare Serialize.string)
         |> Serialize.finishCustomType

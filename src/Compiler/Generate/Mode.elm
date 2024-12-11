@@ -40,18 +40,18 @@ isDebug mode =
 
 
 type alias ShortFieldNames =
-    Dict Name.Name JsName.Name
+    Dict String Name.Name JsName.Name
 
 
 shortenFieldNames : Opt.GlobalGraph -> ShortFieldNames
 shortenFieldNames (Opt.GlobalGraph _ frequencies) =
-    Dict.foldr (\_ -> addToShortNames) Dict.empty <|
-        Dict.foldr addToBuckets Dict.empty frequencies
+    Dict.foldr compare (\_ -> addToShortNames) Dict.empty <|
+        Dict.foldr compare addToBuckets Dict.empty frequencies
 
 
-addToBuckets : Name.Name -> Int -> Dict Int (List Name.Name) -> Dict Int (List Name.Name)
+addToBuckets : Name.Name -> Int -> Dict Int Int (List Name.Name) -> Dict Int Int (List Name.Name)
 addToBuckets field frequency buckets =
-    Utils.mapInsertWith compare (++) frequency [ field ] buckets
+    Utils.mapInsertWith identity (++) frequency [ field ] buckets
 
 
 addToShortNames : List Name.Name -> ShortFieldNames -> ShortFieldNames
@@ -66,4 +66,4 @@ addField field shortNames =
         rename =
             JsName.fromInt (Dict.size shortNames)
     in
-    Dict.insert compare field rename shortNames
+    Dict.insert identity field rename shortNames

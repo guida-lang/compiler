@@ -33,7 +33,7 @@ type alias EResult i w a =
 canonicalize :
     Env.Env
     -> List (A.Located Src.Value)
-    -> Dict Name.Name union
+    -> Dict String Name.Name union
     -> Src.Effects
     -> EResult i w Can.Effects
 canonicalize env values unions effects =
@@ -47,13 +47,13 @@ canonicalize env values unions effects =
                 pairs =
                     R.traverse (canonicalizePort env) ports
             in
-            R.fmap (Can.Ports << Dict.fromList compare) pairs
+            R.fmap (Can.Ports << Dict.fromList identity) pairs
 
         Src.Manager region manager ->
             let
-                dict : Dict Name.Name A.Region
+                dict : Dict String Name.Name A.Region
                 dict =
-                    Dict.fromList compare (List.map toNameRegion values)
+                    Dict.fromList identity (List.map toNameRegion values)
             in
             R.ok Can.Manager
                 |> R.apply (verifyManager region dict "init")
@@ -176,9 +176,9 @@ canonicalizePort env (Src.Port (A.At region portName) tipe) =
 -- VERIFY MANAGER
 
 
-verifyEffectType : A.Located Name.Name -> Dict Name.Name a -> EResult i w Name.Name
+verifyEffectType : A.Located Name.Name -> Dict String Name.Name a -> EResult i w Name.Name
 verifyEffectType (A.At region name) unions =
-    if Dict.member name unions then
+    if Dict.member identity name unions then
         R.ok name
 
     else
@@ -190,9 +190,9 @@ toNameRegion (A.At _ (Src.Value (A.At region name) _ _ _)) =
     ( name, region )
 
 
-verifyManager : A.Region -> Dict Name.Name A.Region -> Name.Name -> EResult i w A.Region
+verifyManager : A.Region -> Dict String Name.Name A.Region -> Name.Name -> EResult i w A.Region
 verifyManager tagRegion values name =
-    case Dict.get name values of
+    case Dict.get identity name values of
         Just region ->
             R.ok region
 
@@ -255,7 +255,8 @@ checkPayload tipe =
             Err ( tipe, Error.ExtendedRecord )
 
         Can.TRecord fields Nothing ->
-            Dict.foldl (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
+            Dict.foldl compare
+                (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
                 (Ok ())
                 fields
 
