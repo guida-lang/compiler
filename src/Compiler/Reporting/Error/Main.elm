@@ -1,7 +1,6 @@
 module Compiler.Reporting.Error.Main exposing
     ( Error(..)
-    , errorDecoder
-    , errorEncoder
+    , errorCodec
     , toReport
     )
 
@@ -14,8 +13,7 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -98,56 +96,21 @@ toReport localizer source err =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        BadType region tipe ->
-            Encode.object
-                [ ( "type", Encode.string "BadType" )
-                , ( "region", A.regionEncoder region )
-                , ( "tipe", Can.typeEncoder tipe )
-                ]
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\badTypeEncoder badCycleEncoder badFlagsEncoder error ->
+            case error of
+                BadType region tipe ->
+                    badTypeEncoder region tipe
 
-        BadCycle region name names ->
-            Encode.object
-                [ ( "type", Encode.string "BadCycle" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "names", Encode.list Encode.string names )
-                ]
+                BadCycle region name names ->
+                    badCycleEncoder region name names
 
-        BadFlags region subType invalidPayload ->
-            Encode.object
-                [ ( "type", Encode.string "BadFlags" )
-                , ( "region", A.regionEncoder region )
-                , ( "subType", Can.typeEncoder subType )
-                , ( "invalidPayload", E.invalidPayloadEncoder invalidPayload )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadType" ->
-                        Decode.map2 BadType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "tipe" Can.typeDecoder)
-
-                    "BadCycle" ->
-                        Decode.map3 BadCycle
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "names" (Decode.list Decode.string))
-
-                    "BadFlags" ->
-                        Decode.map3 BadFlags
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "subType" Can.typeDecoder)
-                            (Decode.field "invalidPayload" E.invalidPayloadDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
+                BadFlags region subType invalidPayload ->
+                    badFlagsEncoder region subType invalidPayload
+        )
+        |> Serialize.variant2 BadType A.regionCodec Can.typeCodec
+        |> Serialize.variant3 BadCycle A.regionCodec Serialize.string (Serialize.list Serialize.string)
+        |> Serialize.variant3 BadFlags A.regionCodec Can.typeCodec E.invalidPayloadCodec
+        |> Serialize.finishCustomType

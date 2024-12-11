@@ -5,8 +5,7 @@ module Builder.BackgroundWriter exposing
     )
 
 import Builder.File as File
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import Utils.Main as Utils
 
@@ -21,31 +20,31 @@ type Scope
 
 withScope : (Scope -> IO a) -> IO a
 withScope callback =
-    Utils.newMVar (Encode.list (\_ -> Encode.null)) []
+    Utils.newMVar (Serialize.list Utils.mVarCodec) []
         |> IO.bind
             (\workList ->
                 callback (Scope workList)
                     |> IO.bind
                         (\result ->
-                            Utils.takeMVar (Decode.list Utils.mVarDecoder) workList
+                            Utils.takeMVar (Serialize.list Utils.mVarCodec) workList
                                 |> IO.bind
                                     (\mvars ->
-                                        Utils.listTraverse_ (Utils.takeMVar (Decode.succeed ())) mvars
+                                        Utils.listTraverse_ (Utils.takeMVar Serialize.unit) mvars
                                             |> IO.fmap (\_ -> result)
                                     )
                         )
             )
 
 
-writeBinary : (a -> Encode.Value) -> Scope -> String -> a -> IO ()
-writeBinary encoder (Scope workList) path value =
+writeBinary : Codec e a -> Scope -> String -> a -> IO ()
+writeBinary codec (Scope workList) path value =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (File.writeBinary encoder path value |> IO.bind (\_ -> Utils.putMVar (\_ -> Encode.object []) mvar ()))
+                Utils.forkIO (File.writeBinary codec path value |> IO.bind (\_ -> Utils.putMVar Serialize.unit mvar ()))
                     |> IO.bind
                         (\_ ->
-                            Utils.takeMVar (Decode.list Utils.mVarDecoder) workList
+                            Utils.takeMVar (Serialize.list Utils.mVarCodec) workList
                                 |> IO.bind
                                     (\oldWork ->
                                         let
@@ -53,7 +52,7 @@ writeBinary encoder (Scope workList) path value =
                                             newWork =
                                                 mvar :: oldWork
                                         in
-                                        Utils.putMVar (Encode.list Utils.mVarEncoder) workList newWork
+                                        Utils.putMVar (Serialize.list Utils.mVarCodec) workList newWork
                                     )
                         )
             )

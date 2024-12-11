@@ -5,8 +5,7 @@ module Builder.File exposing
     , readBinary
     , readUtf8
     , remove
-    , timeDecoder
-    , timeEncoder
+    , timeCodec
     , writeBinary
     , writeBuilder
     , writePackage
@@ -15,8 +14,7 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO(..))
 import Time
 import Utils.Main as Utils exposing (FilePath)
@@ -44,24 +42,24 @@ zeroTime =
 -- BINARY
 
 
-writeBinary : (a -> Encode.Value) -> FilePath -> a -> IO ()
-writeBinary encoder path value =
+writeBinary : Codec e a -> FilePath -> a -> IO ()
+writeBinary codec path value =
     let
         dir : FilePath
         dir =
             Utils.fpDropFileName path
     in
     Utils.dirCreateDirectoryIfMissing True dir
-        |> IO.bind (\_ -> Utils.binaryEncodeFile encoder path value)
+        |> IO.bind (\_ -> Utils.binaryEncodeFile codec path value)
 
 
-readBinary : Decode.Decoder a -> FilePath -> IO (Maybe a)
-readBinary decoder path =
+readBinary : Codec e a -> FilePath -> IO (Maybe a)
+readBinary codec path =
     Utils.dirDoesFileExist path
         |> IO.bind
             (\pathExists ->
                 if pathExists then
-                    Utils.binaryDecodeFileOrFail decoder path
+                    Utils.binaryDecodeFileOrFail codec path
                         |> IO.bind
                             (\result ->
                                 case result of
@@ -188,11 +186,6 @@ remove path =
 -- ENCODERS and DECODERS
 
 
-timeEncoder : Time -> Encode.Value
-timeEncoder (Time posix) =
-    Encode.int (Time.posixToMillis posix)
-
-
-timeDecoder : Decode.Decoder Time
-timeDecoder =
-    Decode.map (Time << Time.millisToPosix) Decode.int
+timeCodec : Codec e Time
+timeCodec =
+    Serialize.int |> Serialize.map (Time << Time.millisToPosix) (\(Time posix) -> Time.posixToMillis posix)

@@ -24,9 +24,8 @@ import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import Serialize
 import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
@@ -207,7 +206,7 @@ buildExposed style root details maybeDocs exposed =
             Maybe.unwrap Build.ignoreDocs Build.writeDocs maybeDocs
     in
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromExposed (Decode.succeed ()) (\_ -> Encode.object []) style root details docsGoal exposed
+        Build.fromExposed Serialize.unit style root details docsGoal exposed
 
 
 buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts

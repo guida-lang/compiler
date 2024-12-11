@@ -7,7 +7,7 @@ module Builder.Build exposing
     , Module(..)
     , ReplArtifacts(..)
     , Root(..)
-    , cachedInterfaceDecoder
+    , cachedInterfaceCodec
     , fromExposed
     , fromPaths
     , fromRepl
@@ -36,7 +36,6 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
@@ -45,11 +44,11 @@ import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Serialize as S
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
 import Utils.Crash exposing (crash)
@@ -111,28 +110,28 @@ addRelative (AbsoluteSrcDir srcDir) path =
 described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 <https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead>
 -}
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
-fork encoder work =
+fork : Codec e a -> IO a -> IO (MVar a)
+fork codec work =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
+                Utils.forkIO (IO.bind (Utils.putMVar codec mvar) work)
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> Encode.Value) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (MVar b))
-forkWithKey toComparable keyComparison encoder func dict =
-    Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork encoder (func k v)) dict
+forkWithKey : (k -> comparable) -> (k -> k -> Order) -> Codec e b -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (MVar b))
+forkWithKey toComparable keyComparison codec func dict =
+    Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork codec (func k v)) dict
 
 
 
 -- FROM EXPOSED
 
 
-fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
-fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
-    Reporting.trackBuild docsDecoder docsEncoder style <|
+fromExposed : Codec (Serialize.Error e) docs -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
+fromExposed docsCodec style root details docsGoal ((NE.Nonempty e es) as exposed) =
+    Reporting.trackBuild docsCodec style <|
         \key ->
             makeEnv key root details
                 |> IO.bind
@@ -149,16 +148,16 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                     docsNeed =
                                                         toDocsNeed docsGoal
                                                 in
-                                                Map.fromKeysA identity (fork statusEncoder << crawlModule env mvar docsNeed) (e :: es)
+                                                Map.fromKeysA identity (fork statusCodec << crawlModule env mvar docsNeed) (e :: es)
                                                     |> IO.bind
                                                         (\roots ->
-                                                            Utils.putMVar statusDictEncoder mvar roots
+                                                            Utils.putMVar statusDictCodec mvar roots
                                                                 |> IO.bind
                                                                     (\_ ->
-                                                                        Utils.dictMapM_ compare (Utils.readMVar statusDecoder) roots
+                                                                        Utils.dictMapM_ compare (Utils.readMVar statusCodec) roots
                                                                             |> IO.bind
                                                                                 (\_ ->
-                                                                                    IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                                                    IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusCodec)) (Utils.readMVar statusDictCodec mvar)
                                                                                         |> IO.bind
                                                                                             (\statuses ->
                                                                                                 -- compile
@@ -173,13 +172,13 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                                                                                     Utils.newEmptyMVar
                                                                                                                         |> IO.bind
                                                                                                                             (\rmvar ->
-                                                                                                                                forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                                                forkWithKey identity compare bResultCodec (checkModule env foreigns rmvar) statuses
                                                                                                                                     |> IO.bind
                                                                                                                                         (\resultMVars ->
-                                                                                                                                            Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
+                                                                                                                                            Utils.putMVar dictRawMVarBResultCodec rmvar resultMVars
                                                                                                                                                 |> IO.bind
                                                                                                                                                     (\_ ->
-                                                                                                                                                        Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
+                                                                                                                                                        Utils.mapTraverse identity compare (Utils.readMVar bResultCodec) resultMVars
                                                                                                                                                             |> IO.bind
                                                                                                                                                                 (\results ->
                                                                                                                                                                     writeDetails root details results
@@ -220,7 +219,7 @@ type alias Dependencies =
 
 fromPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> IO (Result Exit.BuildProblem Artifacts)
 fromPaths style root details paths =
-    Reporting.trackBuild artifactsDecoder artifactsEncoder style <|
+    Reporting.trackBuild artifactsCodec style <|
         \key ->
             makeEnv key root details
                 |> IO.bind
@@ -237,16 +236,16 @@ fromPaths style root details paths =
                                             Details.loadInterfaces root details
                                                 |> IO.bind
                                                     (\dmvar ->
-                                                        Utils.newMVar statusDictEncoder Dict.empty
+                                                        Utils.newMVar statusDictCodec Dict.empty
                                                             |> IO.bind
                                                                 (\smvar ->
-                                                                    Utils.nonEmptyListTraverse (fork rootStatusEncoder << crawlRoot env smvar) lroots
+                                                                    Utils.nonEmptyListTraverse (fork rootStatusCodec << crawlRoot env smvar) lroots
                                                                         |> IO.bind
                                                                             (\srootMVars ->
-                                                                                Utils.nonEmptyListTraverse (Utils.readMVar rootStatusDecoder) srootMVars
+                                                                                Utils.nonEmptyListTraverse (Utils.readMVar rootStatusCodec) srootMVars
                                                                                     |> IO.bind
                                                                                         (\sroots ->
-                                                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder smvar)
+                                                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusCodec)) (Utils.readMVar statusDictCodec smvar)
                                                                                                 |> IO.bind
                                                                                                     (\statuses ->
                                                                                                         checkMidpointAndRoots dmvar statuses sroots
@@ -261,22 +260,22 @@ fromPaths style root details paths =
                                                                                                                             Utils.newEmptyMVar
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvar ->
-                                                                                                                                        forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                                                        forkWithKey identity compare bResultCodec (checkModule env foreigns rmvar) statuses
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\resultsMVars ->
-                                                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultsMVars
+                                                                                                                                                    Utils.putMVar resultDictCodec rmvar resultsMVars
                                                                                                                                                         |> IO.bind
                                                                                                                                                             (\_ ->
-                                                                                                                                                                Utils.nonEmptyListTraverse (fork rootResultEncoder << checkRoot env resultsMVars) sroots
+                                                                                                                                                                Utils.nonEmptyListTraverse (fork rootResultCodec << checkRoot env resultsMVars) sroots
                                                                                                                                                                     |> IO.bind
                                                                                                                                                                         (\rrootMVars ->
-                                                                                                                                                                            Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultsMVars
+                                                                                                                                                                            Utils.mapTraverse identity compare (Utils.readMVar bResultCodec) resultsMVars
                                                                                                                                                                                 |> IO.bind
                                                                                                                                                                                     (\results ->
                                                                                                                                                                                         writeDetails root details results
                                                                                                                                                                                             |> IO.bind
                                                                                                                                                                                                 (\_ ->
-                                                                                                                                                                                                    IO.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultDecoder) rrootMVars)
+                                                                                                                                                                                                    IO.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultCodec) rrootMVars)
                                                                                                                                                                                                 )
                                                                                                                                                                                     )
                                                                                                                                                                         )
@@ -334,9 +333,9 @@ crawlDeps env mvar deps blockedValue =
     let
         crawlNew : ModuleName.Raw -> () -> IO (MVar Status)
         crawlNew name () =
-            fork statusEncoder (crawlModule env mvar (DocsNeed False) name)
+            fork statusCodec (crawlModule env mvar (DocsNeed False) name)
     in
-    Utils.takeMVar statusDictDecoder mvar
+    Utils.takeMVar statusDictCodec mvar
         |> IO.bind
             (\statusDict ->
                 let
@@ -351,10 +350,10 @@ crawlDeps env mvar deps blockedValue =
                 Utils.mapTraverseWithKey identity compare crawlNew newsDict
                     |> IO.bind
                         (\statuses ->
-                            Utils.putMVar statusDictEncoder mvar (Dict.union statuses statusDict)
+                            Utils.putMVar statusDictCodec mvar (Dict.union statuses statusDict)
                                 |> IO.bind
                                     (\_ ->
-                                        Utils.dictMapM_ compare (Utils.readMVar statusDecoder) statuses
+                                        Utils.dictMapM_ compare (Utils.readMVar statusCodec) statuses
                                             |> IO.fmap (\_ -> blockedValue)
                                     )
                         )
@@ -489,7 +488,7 @@ checkModule : Env -> Dependencies -> MVar ResultDict -> ModuleName.Raw -> Status
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
         SCached ((Details.Local path time deps hasMain lastChange lastCompile) as local) ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            Utils.readMVar resultDictCodec resultsMVar
                 |> IO.bind
                     (\results ->
                         checkDeps root results deps lastCompile
@@ -511,7 +510,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                     )
 
                                         DepsSame _ _ ->
-                                            Utils.newMVar cachedInterfaceEncoder Unneeded
+                                            Utils.newMVar cachedInterfaceCodec Unneeded
                                                 |> IO.fmap
                                                     (\mvar ->
                                                         RCached hasMain lastChange mvar
@@ -538,7 +537,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                     )
 
         SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            Utils.readMVar resultDictCodec resultsMVar
                 |> IO.bind
                     (\results ->
                         checkDeps root results deps lastCompile
@@ -620,7 +619,7 @@ checkDepsHelp : FilePath -> ResultDict -> List ModuleName.Raw -> List Dep -> Lis
 checkDepsHelp root results deps new same cached importProblems isBlocked lastDepChange lastCompile =
     case deps of
         dep :: otherDeps ->
-            Utils.readMVar bResultDecoder (Utils.find identity dep results)
+            Utils.readMVar bResultCodec (Utils.find identity dep results)
                 |> IO.bind
                     (\result ->
                         case result of
@@ -712,10 +711,10 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 
 loadInterfaces : FilePath -> List Dep -> List CDep -> IO (Maybe (Dict String ModuleName.Raw I.Interface))
 loadInterfaces root same cached =
-    Utils.listTraverse (fork maybeDepEncoder << loadInterface root) cached
+    Utils.listTraverse (fork maybeDepCodec << loadInterface root) cached
         |> IO.bind
             (\loading ->
-                Utils.listTraverse (Utils.readMVar maybeDepDecoder) loading
+                Utils.listTraverse (Utils.readMVar maybeDepCodec) loading
                     |> IO.bind
                         (\maybeLoaded ->
                             case Utils.sequenceListMaybe maybeLoaded of
@@ -730,29 +729,29 @@ loadInterfaces root same cached =
 
 loadInterface : FilePath -> CDep -> IO (Maybe Dep)
 loadInterface root ( name, ciMvar ) =
-    Utils.takeMVar cachedInterfaceDecoder ciMvar
+    Utils.takeMVar cachedInterfaceCodec ciMvar
         |> IO.bind
             (\cachedInterface ->
                 case cachedInterface of
                     Corrupted ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        Utils.putMVar cachedInterfaceCodec ciMvar cachedInterface
                             |> IO.fmap (\_ -> Nothing)
 
                     Loaded iface ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        Utils.putMVar cachedInterfaceCodec ciMvar cachedInterface
                             |> IO.fmap (\_ -> Just ( name, iface ))
 
                     Unneeded ->
-                        File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                        File.readBinary I.interfaceCodec (Stuff.elmi root name)
                             |> IO.bind
                                 (\maybeIface ->
                                     case maybeIface of
                                         Nothing ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar Corrupted
+                                            Utils.putMVar cachedInterfaceCodec ciMvar Corrupted
                                                 |> IO.fmap (\_ -> Nothing)
 
                                         Just iface ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar (Loaded iface)
+                                            Utils.putMVar cachedInterfaceCodec ciMvar (Loaded iface)
                                                 |> IO.fmap (\_ -> Just ( name, iface ))
                                 )
             )
@@ -766,7 +765,7 @@ checkMidpoint : MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -
 checkMidpoint dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            Utils.readMVar maybeDependenciesCodec dmvar
                 |> IO.fmap
                     (\maybeForeigns ->
                         case maybeForeigns of
@@ -778,7 +777,7 @@ checkMidpoint dmvar statuses =
                     )
 
         Just (NE.Nonempty name names) ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            Utils.readMVar maybeDependenciesCodec dmvar
                 |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
 
 
@@ -788,7 +787,7 @@ checkMidpointAndRoots dmvar statuses sroots =
         Nothing ->
             case checkUniqueRoots statuses sroots of
                 Nothing ->
-                    Utils.readMVar maybeDependenciesDecoder dmvar
+                    Utils.readMVar maybeDependenciesCodec dmvar
                         |> IO.bind
                             (\maybeForeigns ->
                                 case maybeForeigns of
@@ -800,11 +799,11 @@ checkMidpointAndRoots dmvar statuses sroots =
                             )
 
                 Just problem ->
-                    Utils.readMVar maybeDependenciesDecoder dmvar
+                    Utils.readMVar maybeDependenciesCodec dmvar
                         |> IO.fmap (\_ -> Err problem)
 
         Just (NE.Nonempty name names) ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            Utils.readMVar maybeDependenciesCodec dmvar
                 |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
 
 
@@ -980,10 +979,10 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                     elmi =
                                         Stuff.elmi root name
                                 in
-                                File.writeBinary Opt.localGraphEncoder (Stuff.elmo root name) objects
+                                File.writeBinary Opt.localGraphCodec (Stuff.elmo root name) objects
                                     |> IO.bind
                                         (\_ ->
-                                            File.readBinary I.interfaceDecoder elmi
+                                            File.readBinary I.interfaceCodec elmi
                                                 |> IO.bind
                                                     (\maybeOldi ->
                                                         case maybeOldi of
@@ -1002,7 +1001,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                                                             )
 
                                                                 else
-                                                                    File.writeBinary I.interfaceEncoder elmi iface
+                                                                    File.writeBinary I.interfaceCodec elmi iface
                                                                         |> IO.bind
                                                                             (\_ ->
                                                                                 Reporting.report key Reporting.BDone
@@ -1019,7 +1018,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                                                             _ ->
                                                                 -- iface may be lazy still
-                                                                File.writeBinary I.interfaceEncoder elmi iface
+                                                                File.writeBinary I.interfaceCodec elmi iface
                                                                     |> IO.bind
                                                                         (\_ ->
                                                                             Reporting.report key Reporting.BDone
@@ -1059,7 +1058,7 @@ projectTypeToPkg projectType =
 
 writeDetails : FilePath -> Details.Details -> Dict String ModuleName.Raw BResult -> IO ()
 writeDetails root (Details.Details time outline buildID locals foreigns extras) results =
-    File.writeBinary Details.detailsEncoder (Stuff.details root) <|
+    File.writeBinary Details.detailsCodec (Stuff.details root) <|
         Details.Details time outline buildID (Dict.foldr compare addNewLocal locals results) foreigns extras
 
 
@@ -1292,13 +1291,13 @@ fromRepl root details source =
                                         deps =
                                             List.map Src.getImportName imports
                                     in
-                                    Utils.newMVar statusDictEncoder Dict.empty
+                                    Utils.newMVar statusDictCodec Dict.empty
                                         |> IO.bind
                                             (\mvar ->
                                                 crawlDeps env mvar deps ()
                                                     |> IO.bind
                                                         (\_ ->
-                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusCodec)) (Utils.readMVar statusDictCodec mvar)
                                                                 |> IO.bind
                                                                     (\statuses ->
                                                                         checkMidpoint dmvar statuses
@@ -1312,13 +1311,13 @@ fromRepl root details source =
                                                                                             Utils.newEmptyMVar
                                                                                                 |> IO.bind
                                                                                                     (\rmvar ->
-                                                                                                        forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                        forkWithKey identity compare bResultCodec (checkModule env foreigns rmvar) statuses
                                                                                                             |> IO.bind
                                                                                                                 (\resultMVars ->
-                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultMVars
+                                                                                                                    Utils.putMVar resultDictCodec rmvar resultMVars
                                                                                                                         |> IO.bind
                                                                                                                             (\_ ->
-                                                                                                                                Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
+                                                                                                                                Utils.mapTraverse identity compare (Utils.readMVar bResultCodec) resultMVars
                                                                                                                                     |> IO.bind
                                                                                                                                         (\results ->
                                                                                                                                             writeDetails root details results
@@ -1423,10 +1422,10 @@ type RootLocation
 
 findRoots : Env -> NE.Nonempty FilePath -> IO (Result Exit.BuildProjectProblem (NE.Nonempty RootLocation))
 findRoots env paths =
-    Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
+    Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoCodec << getRootInfo env) paths
         |> IO.bind
             (\mvars ->
-                Utils.nonEmptyListTraverse (Utils.readMVar resultBuildProjectProblemRootInfoDecoder) mvars
+                Utils.nonEmptyListTraverse (Utils.readMVar resultBuildProjectProblemRootInfoCodec) mvars
                     |> IO.bind
                         (\einfos ->
                             IO.pure (Result.andThen checkRoots (Utils.sequenceNonemptyListResult einfos))
@@ -1600,13 +1599,13 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
             Utils.newEmptyMVar
                 |> IO.bind
                     (\statusMVar ->
-                        Utils.takeMVar statusDictDecoder mvar
+                        Utils.takeMVar statusDictCodec mvar
                             |> IO.bind
                                 (\statusDict ->
-                                    Utils.putMVar statusDictEncoder mvar (Dict.insert identity name statusMVar statusDict)
+                                    Utils.putMVar statusDictCodec mvar (Dict.insert identity name statusMVar statusDict)
                                         |> IO.bind
                                             (\_ ->
-                                                IO.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule env mvar (DocsNeed False) name)
+                                                IO.bind (Utils.putMVar statusCodec statusMVar) (crawlModule env mvar (DocsNeed False) name)
                                                     |> IO.fmap (\_ -> SInside name)
                                             )
                                 )
@@ -1834,564 +1833,261 @@ addOutside root modules =
 -- ENCODERS and DECODERS
 
 
-dictRawMVarBResultEncoder : Dict String ModuleName.Raw (MVar BResult) -> Encode.Value
-dictRawMVarBResultEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
-
-
-bResultEncoder : BResult -> Encode.Value
-bResultEncoder bResult =
-    case bResult of
-        RNew local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RNew" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs"
-                  , docs
-                        |> Maybe.map Docs.jsonModuleEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
-                ]
-
-        RSame local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RSame" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
-                ]
-
-        RCached main lastChange (MVar ref) ->
-            Encode.object
-                [ ( "type", Encode.string "RCached" )
-                , ( "main", Encode.bool main )
-                , ( "lastChange", Encode.int lastChange )
-                , ( "mvar", Encode.int ref )
-                ]
-
-        RNotFound importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "RNotFound" )
-                , ( "importProblem", Import.problemEncoder importProblem )
-                ]
-
-        RProblem e ->
-            Encode.object
-                [ ( "type", Encode.string "RProblem" )
-                , ( "e", Error.moduleEncoder e )
-                ]
-
-        RBlocked ->
-            Encode.object [ ( "type", Encode.string "RBlocked" ) ]
-
-        RForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "RForeign" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        RKernel ->
-            Encode.object [ ( "type", Encode.string "RKernel" ) ]
-
-
-bResultDecoder : Decode.Decoder BResult
-bResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RNew" ->
-                        Decode.map4 RNew
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
-
-                    "RSame" ->
-                        Decode.map4 RSame
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
-
-                    "RCached" ->
-                        Decode.map3 RCached
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "lastChange" Decode.int)
-                            (Decode.field "mvar" (Decode.map MVar Decode.int))
-
-                    "RNotFound" ->
-                        Decode.map RNotFound
-                            (Decode.field "importProblem" Import.problemDecoder)
-
-                    "RProblem" ->
-                        Decode.map RProblem
-                            (Decode.field "e" Error.moduleDecoder)
-
-                    "RBlocked" ->
-                        Decode.succeed RBlocked
-
-                    "RForeign" ->
-                        Decode.map RForeign
-                            (Decode.field "iface" I.interfaceDecoder)
-
-                    "RKernel" ->
-                        Decode.succeed RKernel
-
-                    _ ->
-                        Decode.fail ("Failed to decode BResult's type: " ++ type_)
-            )
-
-
-statusDictEncoder : StatusDict -> Encode.Value
-statusDictEncoder statusDict =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
-
-
-statusDictDecoder : Decode.Decoder StatusDict
-statusDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
-
-
-statusEncoder : Status -> Encode.Value
-statusEncoder status =
-    case status of
-        SCached local ->
-            Encode.object
-                [ ( "type", Encode.string "SCached" )
-                , ( "local", Details.localEncoder local )
-                ]
-
-        SChanged local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "SChanged" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", Encode.string iface )
-                , ( "objects", Src.moduleEncoder objects )
-                , ( "docs", docsNeedEncoder docs )
-                ]
-
-        SBadImport importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "SBadImport" )
-                , ( "importProblem", Import.problemEncoder importProblem )
-                ]
-
-        SBadSyntax path time source err ->
-            Encode.object
-                [ ( "type", Encode.string "SBadSyntax" )
-                , ( "path", Encode.string path )
-                , ( "time", File.timeEncoder time )
-                , ( "source", Encode.string source )
-                , ( "err", Syntax.errorEncoder err )
-                ]
-
-        SForeign home ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "home", Pkg.nameEncoder home )
-                ]
-
-        SKernel ->
-            Encode.object
-                [ ( "type", Encode.string "SKernel" )
-                ]
-
-
-statusDecoder : Decode.Decoder Status
-statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SCached" ->
-                        Decode.map SCached (Decode.field "local" Details.localDecoder)
-
-                    "SChanged" ->
-                        Decode.map4 SChanged
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" Decode.string)
-                            (Decode.field "objects" Src.moduleDecoder)
-                            (Decode.field "docs" docsNeedDecoder)
-
-                    "SBadImport" ->
-                        Decode.map SBadImport (Decode.field "importProblem" Import.problemDecoder)
-
-                    "SBadSyntax" ->
-                        Decode.map4 SBadSyntax
-                            (Decode.field "path" Decode.string)
-                            (Decode.field "time" File.timeDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "err" Syntax.errorDecoder)
-
-                    "SForeign" ->
-                        Decode.map SForeign (Decode.field "home" Pkg.nameDecoder)
-
-                    "SKernel" ->
-                        Decode.succeed SKernel
-
-                    _ ->
-                        Decode.fail ("Failed to decode Status's type: " ++ type_)
-            )
-
-
-rootStatusEncoder : RootStatus -> Encode.Value
-rootStatusEncoder rootStatus =
-    case rootStatus of
-        SInside name ->
-            Encode.object
-                [ ( "type", Encode.string "SInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        SOutsideOk local source modul ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideOk" )
-                , ( "local", Details.localEncoder local )
-                , ( "source", Encode.string source )
-                , ( "modul", Src.moduleEncoder modul )
-                ]
-
-        SOutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideErr" )
-                , ( "err", Error.moduleEncoder err )
-                ]
-
-
-rootStatusDecoder : Decode.Decoder RootStatus
-rootStatusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SInside" ->
-                        Decode.map SInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "SOutsideOk" ->
-                        Decode.map3 SOutsideOk
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "modul" Src.moduleDecoder)
-
-                    "SOutsideErr" ->
-                        Decode.map SOutsideErr (Decode.field "err" Error.moduleDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootStatus' type: " ++ type_)
-            )
-
-
-resultDictEncoder : ResultDict -> Encode.Value
-resultDictEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
-
-
-resultDictDecoder : Decode.Decoder ResultDict
-resultDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
-
-
-rootResultEncoder : RootResult -> Encode.Value
-rootResultEncoder rootResult =
-    case rootResult of
-        RInside name ->
-            Encode.object
-                [ ( "type", Encode.string "RInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        ROutsideOk name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideOk" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
-                ]
-
-        ROutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideErr" )
-                , ( "err", Error.moduleEncoder err )
-                ]
-
-        ROutsideBlocked ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideBlocked" )
-                ]
-
-
-rootResultDecoder : Decode.Decoder RootResult
-rootResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RInside" ->
-                        Decode.map RInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "ROutsideOk" ->
-                        Decode.map3 ROutsideOk
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
-
-                    "ROutsideErr" ->
-                        Decode.map ROutsideErr (Decode.field "err" Error.moduleDecoder)
-
-                    "ROutsideBlocked" ->
-                        Decode.succeed ROutsideBlocked
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootResult's type: " ++ type_)
-            )
-
-
-maybeDepEncoder : Maybe Dep -> Encode.Value
-maybeDepEncoder =
-    E.maybe depEncoder
-
-
-maybeDepDecoder : Decode.Decoder (Maybe Dep)
-maybeDepDecoder =
-    Decode.maybe depDecoder
-
-
-depEncoder : Dep -> Encode.Value
-depEncoder =
-    E.jsonPair ModuleName.rawEncoder I.interfaceEncoder
-
-
-depDecoder : Decode.Decoder Dep
-depDecoder =
-    D.jsonPair ModuleName.rawDecoder I.interfaceDecoder
-
-
-maybeDependenciesDecoder : Decode.Decoder (Maybe Dependencies)
-maybeDependenciesDecoder =
-    Decode.maybe (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder)
-
-
-resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> Encode.Value
-resultBuildProjectProblemRootInfoEncoder =
-    E.result Exit.buildProjectProblemEncoder rootInfoEncoder
-
-
-resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result Exit.BuildProjectProblem RootInfo)
-resultBuildProjectProblemRootInfoDecoder =
-    D.result Exit.buildProjectProblemDecoder rootInfoDecoder
-
-
-cachedInterfaceEncoder : CachedInterface -> Encode.Value
-cachedInterfaceEncoder cachedInterface =
-    case cachedInterface of
-        Unneeded ->
-            Encode.object
-                [ ( "type", Encode.string "Unneeded" )
-                ]
-
-        Loaded iface ->
-            Encode.object
-                [ ( "type", Encode.string "Loaded" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        Corrupted ->
-            Encode.object
-                [ ( "type", Encode.string "Corrupted" )
-                ]
-
-
-cachedInterfaceDecoder : Decode.Decoder CachedInterface
-cachedInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Unneeded" ->
-                        Decode.succeed Unneeded
-
-                    "Loaded" ->
-                        Decode.map Loaded (Decode.field "iface" I.interfaceDecoder)
-
-                    "Corrupted" ->
-                        Decode.succeed Corrupted
-
-                    _ ->
-                        Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)
-            )
-
-
-docsNeedEncoder : DocsNeed -> Encode.Value
-docsNeedEncoder (DocsNeed isNeeded) =
-    Encode.bool isNeeded
-
-
-docsNeedDecoder : Decode.Decoder DocsNeed
-docsNeedDecoder =
-    Decode.map DocsNeed Decode.bool
-
-
-artifactsEncoder : Artifacts -> Encode.Value
-artifactsEncoder (Artifacts pkg ifaces roots modules) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "pkg", Pkg.nameEncoder pkg )
-        , ( "ifaces", dependenciesEncoder ifaces )
-        , ( "roots", E.nonempty rootEncoder roots )
-        , ( "modules", Encode.list moduleEncoder modules )
-        ]
-
-
-artifactsDecoder : Decode.Decoder Artifacts
-artifactsDecoder =
-    Decode.map4 Artifacts
-        (Decode.field "pkg" Pkg.nameDecoder)
-        (Decode.field "ifaces" dependenciesDecoder)
-        (Decode.field "roots" (D.nonempty rootDecoder))
-        (Decode.field "modules" (Decode.list moduleDecoder))
-
-
-dependenciesEncoder : Dependencies -> Encode.Value
-dependenciesEncoder =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
-
-
-dependenciesDecoder : Decode.Decoder Dependencies
-dependenciesDecoder =
-    D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
-
-
-rootEncoder : Root -> Encode.Value
-rootEncoder root =
-    case root of
-        Inside name ->
-            Encode.object
-                [ ( "type", Encode.string "Inside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        Outside name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Outside" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", I.interfaceEncoder main )
-                , ( "mvar", Opt.localGraphEncoder mvar )
-                ]
-
-
-rootDecoder : Decode.Decoder Root
-rootDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Inside" ->
-                        Decode.map Inside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "Outside" ->
-                        Decode.map3 Outside
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" I.interfaceDecoder)
-                            (Decode.field "mvar" Opt.localGraphDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Root's type: " ++ type_)
-            )
-
-
-moduleEncoder : Module -> Encode.Value
-moduleEncoder modul =
-    case modul of
-        Fresh name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "Fresh" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
-                ]
-
-        Cached name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Cached" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", Encode.bool main )
-                , ( "mvar", Utils.mVarEncoder mvar )
-                ]
-
-
-moduleDecoder : Decode.Decoder Module
-moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Fresh" ->
-                        Decode.map3 Fresh
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
-
-                    "Cached" ->
-                        Decode.map3 Cached
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "mvar" Utils.mVarDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
-            )
-
-
-rootInfoEncoder : RootInfo -> Encode.Value
-rootInfoEncoder (RootInfo absolute relative location) =
-    Encode.object
-        [ ( "type", Encode.string "RootInfo" )
-        , ( "absolute", Encode.string absolute )
-        , ( "relative", Encode.string relative )
-        , ( "location", rootLocationEncoder location )
-        ]
-
-
-rootInfoDecoder : Decode.Decoder RootInfo
-rootInfoDecoder =
-    Decode.map3 RootInfo
-        (Decode.field "absolute" Decode.string)
-        (Decode.field "relative" Decode.string)
-        (Decode.field "location" rootLocationDecoder)
-
-
-rootLocationEncoder : RootLocation -> Encode.Value
-rootLocationEncoder rootLocation =
-    case rootLocation of
-        LInside name ->
-            Encode.object
-                [ ( "type", Encode.string "LInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        LOutside path ->
-            Encode.object
-                [ ( "type", Encode.string "LOutside" )
-                , ( "path", Encode.string path )
-                ]
-
-
-rootLocationDecoder : Decode.Decoder RootLocation
-rootLocationDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LInside" ->
-                        Decode.map LInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "LOutside" ->
-                        Decode.map LOutside (Decode.field "path" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootLocation's type: " ++ type_)
-            )
+dictRawMVarBResultCodec : Codec e (Dict String ModuleName.Raw (MVar BResult))
+dictRawMVarBResultCodec =
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
+
+
+bResultCodec : Codec (Serialize.Error e) BResult
+bResultCodec =
+    Serialize.customType
+        (\rNewEncoder rSameEncoder rCachedEncoder rNotFoundEncoder rProblemEncoder rBlockedEncoder rForeignEncoder rKernelEncoder bResult ->
+            case bResult of
+                RNew local iface objects docs ->
+                    rNewEncoder local iface objects docs
+
+                RSame local iface objects docs ->
+                    rSameEncoder local iface objects docs
+
+                RCached main lastChange mVar ->
+                    rCachedEncoder main lastChange mVar
+
+                RNotFound importProblem ->
+                    rNotFoundEncoder importProblem
+
+                RProblem e ->
+                    rProblemEncoder e
+
+                RBlocked ->
+                    rBlockedEncoder
+
+                RForeign iface ->
+                    rForeignEncoder iface
+
+                RKernel ->
+                    rKernelEncoder
+        )
+        |> Serialize.variant4 RNew
+            Details.localCodec
+            I.interfaceCodec
+            Opt.localGraphCodec
+            (Serialize.maybe Docs.moduleCodec)
+        |> Serialize.variant4 RSame
+            Details.localCodec
+            I.interfaceCodec
+            Opt.localGraphCodec
+            (Serialize.maybe Docs.moduleCodec)
+        |> Serialize.variant3 RCached
+            Serialize.bool
+            Serialize.int
+            (Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref))
+        |> Serialize.variant1 RNotFound Import.problemCodec
+        |> Serialize.variant1 RProblem Error.moduleCodec
+        |> Serialize.variant0 RBlocked
+        |> Serialize.variant1 RForeign I.interfaceCodec
+        |> Serialize.variant0 RKernel
+        |> Serialize.finishCustomType
+
+
+statusDictCodec : Codec e StatusDict
+statusDictCodec =
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
+
+
+statusCodec : Codec e Status
+statusCodec =
+    Serialize.customType
+        (\sCachedEncoder sChangedEncoder sBadImportEncoder sBadSyntaxEncoder sForeignEncoder sKernelEncoder status ->
+            case status of
+                SCached local ->
+                    sCachedEncoder local
+
+                SChanged local iface objects docs ->
+                    sChangedEncoder local iface objects docs
+
+                SBadImport importProblem ->
+                    sBadImportEncoder importProblem
+
+                SBadSyntax path time source err ->
+                    sBadSyntaxEncoder path time source err
+
+                SForeign home ->
+                    sForeignEncoder home
+
+                SKernel ->
+                    sKernelEncoder
+        )
+        |> Serialize.variant1 SCached Details.localCodec
+        |> Serialize.variant4 SChanged Details.localCodec Serialize.string Src.moduleCodec docsNeedCodec
+        |> Serialize.variant1 SBadImport Import.problemCodec
+        |> Serialize.variant4 SBadSyntax Serialize.string File.timeCodec Serialize.string Syntax.errorCodec
+        |> Serialize.variant1 SForeign Pkg.nameCodec
+        |> Serialize.variant0 SKernel
+        |> Serialize.finishCustomType
+
+
+rootStatusCodec : Codec (Serialize.Error e) RootStatus
+rootStatusCodec =
+    Serialize.customType
+        (\sInsideEncoder sOutsideOkEncoder sOutsideErrEncoder rootStatus ->
+            case rootStatus of
+                SInside name ->
+                    sInsideEncoder name
+
+                SOutsideOk local source modul ->
+                    sOutsideOkEncoder local source modul
+
+                SOutsideErr err ->
+                    sOutsideErrEncoder err
+        )
+        |> Serialize.variant1 SInside ModuleName.rawCodec
+        |> Serialize.variant3 SOutsideOk Details.localCodec Serialize.string Src.moduleCodec
+        |> Serialize.variant1 SOutsideErr Error.moduleCodec
+        |> Serialize.finishCustomType
+
+
+resultDictCodec : Codec e ResultDict
+resultDictCodec =
+    S.assocListDict identity compare ModuleName.rawCodec Utils.mVarCodec
+
+
+rootResultCodec : Codec (Serialize.Error e) RootResult
+rootResultCodec =
+    Serialize.customType
+        (\rInsideEncoder rOutsideOkEncoder rOutsideErrEncoder rOutsideBlockedEncoder rootResult ->
+            case rootResult of
+                RInside name ->
+                    rInsideEncoder name
+
+                ROutsideOk name iface objs ->
+                    rOutsideOkEncoder name iface objs
+
+                ROutsideErr err ->
+                    rOutsideErrEncoder err
+
+                ROutsideBlocked ->
+                    rOutsideBlockedEncoder
+        )
+        |> Serialize.variant1 RInside ModuleName.rawCodec
+        |> Serialize.variant3 ROutsideOk ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.variant1 ROutsideErr Error.moduleCodec
+        |> Serialize.variant0 ROutsideBlocked
+        |> Serialize.finishCustomType
+
+
+maybeDepCodec : Codec e (Maybe Dep)
+maybeDepCodec =
+    Serialize.maybe depCodec
+
+
+depCodec : Codec e Dep
+depCodec =
+    Serialize.tuple ModuleName.rawCodec I.interfaceCodec
+
+
+maybeDependenciesCodec : Codec e (Maybe Dependencies)
+maybeDependenciesCodec =
+    Serialize.maybe (S.assocListDict ModuleName.toComparableCanonical ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec)
+
+
+resultBuildProjectProblemRootInfoCodec : Codec (Serialize.Error e) (Result Exit.BuildProjectProblem RootInfo)
+resultBuildProjectProblemRootInfoCodec =
+    Serialize.result Exit.buildProjectProblemCodec rootInfoCodec
+
+
+cachedInterfaceCodec : Codec e CachedInterface
+cachedInterfaceCodec =
+    Serialize.customType
+        (\unneededEncoder loadedEncoder corruptedEncoder cachedInterface ->
+            case cachedInterface of
+                Unneeded ->
+                    unneededEncoder
+
+                Loaded iface ->
+                    loadedEncoder iface
+
+                Corrupted ->
+                    corruptedEncoder
+        )
+        |> Serialize.variant0 Unneeded
+        |> Serialize.variant1 Loaded I.interfaceCodec
+        |> Serialize.variant0 Corrupted
+        |> Serialize.finishCustomType
+
+
+docsNeedCodec : Codec e DocsNeed
+docsNeedCodec =
+    Serialize.bool |> Serialize.map DocsNeed (\(DocsNeed isNeeded) -> isNeeded)
+
+
+artifactsCodec : Codec (Serialize.Error e) Artifacts
+artifactsCodec =
+    Serialize.customType
+        (\artifactsCodecEncoder (Artifacts pkg ifaces roots modules) ->
+            artifactsCodecEncoder pkg ifaces roots modules
+        )
+        |> Serialize.variant4 Artifacts Pkg.nameCodec dependenciesCodec (S.nonempty rootCodec) (Serialize.list moduleCodec)
+        |> Serialize.finishCustomType
+
+
+dependenciesCodec : Codec e Dependencies
+dependenciesCodec =
+    S.assocListDict ModuleName.toComparableCanonical ModuleName.compareCanonical ModuleName.canonicalCodec I.dependencyInterfaceCodec
+
+
+rootCodec : Codec e Root
+rootCodec =
+    Serialize.customType
+        (\insideEncoder outsideEncoder root ->
+            case root of
+                Inside name ->
+                    insideEncoder name
+
+                Outside name main mvar ->
+                    outsideEncoder name main mvar
+        )
+        |> Serialize.variant1 Inside ModuleName.rawCodec
+        |> Serialize.variant3 Outside ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.finishCustomType
+
+
+moduleCodec : Codec e Module
+moduleCodec =
+    Serialize.customType
+        (\freshEncoder cachedEncoder modul ->
+            case modul of
+                Fresh name iface objs ->
+                    freshEncoder name iface objs
+
+                Cached name main mvar ->
+                    cachedEncoder name main mvar
+        )
+        |> Serialize.variant3 Fresh ModuleName.rawCodec I.interfaceCodec Opt.localGraphCodec
+        |> Serialize.variant3 Cached ModuleName.rawCodec Serialize.bool Utils.mVarCodec
+        |> Serialize.finishCustomType
+
+
+rootInfoCodec : Codec e RootInfo
+rootInfoCodec =
+    Serialize.customType
+        (\rootInfoCodecEncoder (RootInfo absolute relative location) ->
+            rootInfoCodecEncoder absolute relative location
+        )
+        |> Serialize.variant3 RootInfo Serialize.string Serialize.string rootLocationCodec
+        |> Serialize.finishCustomType
+
+
+rootLocationCodec : Codec e RootLocation
+rootLocationCodec =
+    Serialize.customType
+        (\lInsideEncoder lOutsideEncoder rootLocation ->
+            case rootLocation of
+                LInside name ->
+                    lInsideEncoder name
+
+                LOutside path ->
+                    lOutsideEncoder path
+        )
+        |> Serialize.variant1 LInside ModuleName.rawCodec
+        |> Serialize.variant1 LOutside Serialize.string
+        |> Serialize.finishCustomType

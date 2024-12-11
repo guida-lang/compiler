@@ -1,7 +1,6 @@
 module Compiler.Parse.Symbol exposing
     ( BadOperator(..)
-    , badOperatorDecoder
-    , badOperatorEncoder
+    , badOperatorCodec
     , binopCharSet
     , operator
     )
@@ -9,8 +8,7 @@ module Compiler.Parse.Symbol exposing
 import Compiler.Data.Name exposing (Name)
 import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -95,46 +93,29 @@ binopCharSet =
 -- ENCODERS and DECODERS
 
 
-badOperatorEncoder : BadOperator -> Encode.Value
-badOperatorEncoder badOperator =
-    case badOperator of
-        BadDot ->
-            Encode.string "BadDot"
+badOperatorCodec : Codec e BadOperator
+badOperatorCodec =
+    Serialize.customType
+        (\badDotEncoder badPipeEncoder badArrowEncoder badEqualsEncoder badHasTypeEncoder badOperator ->
+            case badOperator of
+                BadDot ->
+                    badDotEncoder
 
-        BadPipe ->
-            Encode.string "BadPipe"
+                BadPipe ->
+                    badPipeEncoder
 
-        BadArrow ->
-            Encode.string "BadArrow"
+                BadArrow ->
+                    badArrowEncoder
 
-        BadEquals ->
-            Encode.string "BadEquals"
+                BadEquals ->
+                    badEqualsEncoder
 
-        BadHasType ->
-            Encode.string "BadHasType"
-
-
-badOperatorDecoder : Decode.Decoder BadOperator
-badOperatorDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "BadDot" ->
-                        Decode.succeed BadDot
-
-                    "BadPipe" ->
-                        Decode.succeed BadPipe
-
-                    "BadArrow" ->
-                        Decode.succeed BadArrow
-
-                    "BadEquals" ->
-                        Decode.succeed BadEquals
-
-                    "BadHasType" ->
-                        Decode.succeed BadHasType
-
-                    _ ->
-                        Decode.fail ("Unknown BadOperator: " ++ str)
-            )
+                BadHasType ->
+                    badHasTypeEncoder
+        )
+        |> Serialize.variant0 BadDot
+        |> Serialize.variant0 BadPipe
+        |> Serialize.variant0 BadArrow
+        |> Serialize.variant0 BadEquals
+        |> Serialize.variant0 BadHasType
+        |> Serialize.finishCustomType

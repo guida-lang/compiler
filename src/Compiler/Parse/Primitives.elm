@@ -22,8 +22,7 @@ module Compiler.Parse.Primitives exposing
     , oneOf
     , oneOfWithFallback
     , pure
-    , snippetDecoder
-    , snippetEncoder
+    , snippetCodec
     , specialize
     , unsafeIndex
     , withBacksetIndent
@@ -33,8 +32,7 @@ module Compiler.Parse.Primitives exposing
     )
 
 import Compiler.Reporting.Annotation as A
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 
 
@@ -389,35 +387,26 @@ getCharWidth word =
 -- ENCODERS and DECODERS
 
 
-snippetEncoder : Snippet -> Encode.Value
-snippetEncoder (Snippet { fptr, offset, length, offRow, offCol }) =
-    Encode.object
-        [ ( "type", Encode.string "Snippet" )
-        , ( "fptr", Encode.string fptr )
-        , ( "offset", Encode.int offset )
-        , ( "length", Encode.int length )
-        , ( "offRow", Encode.int offRow )
-        , ( "offCol", Encode.int offCol )
-        ]
-
-
-snippetDecoder : Decode.Decoder Snippet
-snippetDecoder =
-    Decode.map5
-        (\fptr offset length offRow offCol ->
-            Snippet
-                { fptr = fptr
-                , offset = offset
-                , length = length
-                , offRow = offRow
-                , offCol = offCol
-                }
+snippetCodec : Codec e Snippet
+snippetCodec =
+    Serialize.customType
+        (\snippetCodecEncoder (Snippet snippet) ->
+            snippetCodecEncoder snippet
         )
-        (Decode.field "fptr" Decode.string)
-        (Decode.field "offset" Decode.int)
-        (Decode.field "length" Decode.int)
-        (Decode.field "offRow" Decode.int)
-        (Decode.field "offCol" Decode.int)
+        |> Serialize.variant1
+            Snippet
+            (Serialize.record
+                (\fptr offset length offRow offCol ->
+                    { fptr = fptr, offset = offset, length = length, offRow = offRow, offCol = offCol }
+                )
+                |> Serialize.field .fptr Serialize.string
+                |> Serialize.field .offset Serialize.int
+                |> Serialize.field .length Serialize.int
+                |> Serialize.field .offRow Serialize.int
+                |> Serialize.field .offCol Serialize.int
+                |> Serialize.finishRecord
+            )
+        |> Serialize.finishCustomType
 
 
 

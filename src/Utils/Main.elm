@@ -1,6 +1,5 @@
 module Utils.Main exposing
-    ( AsyncException(..)
-    , ChItem
+    ( ChItem
     , Chan
     , FilePath
     , HttpExceptionContent(..)
@@ -57,8 +56,7 @@ module Utils.Main exposing
     , fpTakeDirectory
     , fpTakeExtension
     , fpTakeFileName
-    , httpExceptionContentDecoder
-    , httpExceptionContentEncoder
+    , httpExceptionContentCodec
     , httpHLocation
     , httpResponseHeaders
     , httpResponseStatus
@@ -74,8 +72,7 @@ module Utils.Main exposing
     , listTraverse
     , listTraverse_
     , lockWithFileLock
-    , mVarDecoder
-    , mVarEncoder
+    , mVarCodec
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -93,7 +90,6 @@ module Utils.Main exposing
     , mapUnionWith
     , mapUnions
     , mapUnionsWith
-    , maybeEncoder
     , maybeMapM
     , maybeTraverseTask
     , newChan
@@ -114,8 +110,7 @@ module Utils.Main exposing
     , sequenceDictResult_
     , sequenceListMaybe
     , sequenceNonemptyListResult
-    , someExceptionDecoder
-    , someExceptionEncoder
+    , someExceptionCodec
     , takeMVar
     , unlines
     , unzip3
@@ -127,17 +122,14 @@ import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Dict
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import Serialize exposing (Codec)
 import System.Exit as Exit
 import System.IO as IO exposing (IO(..))
 import Time
@@ -190,16 +182,6 @@ mapFromListWith toComparable f =
             Map.update toComparable k (Maybe.map (flip f a))
         )
         Map.empty
-
-
-maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybeEncoder encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
 
 
 eitherLefts : List (Result e a) -> List e
@@ -885,10 +867,6 @@ type SomeException
     = SomeException
 
 
-type AsyncException
-    = UserInterrupt
-
-
 bracket : IO a -> (a -> IO b) -> (a -> IO c) -> IO c
 bracket before after thing =
     before
@@ -929,22 +907,22 @@ type MVar a
     = MVar Int
 
 
-newMVar : (a -> Encode.Value) -> a -> IO (MVar a)
-newMVar encoder value =
+newMVar : Codec e a -> a -> IO (MVar a)
+newMVar codec value =
     newEmptyMVar
         |> IO.bind
             (\mvar ->
-                putMVar encoder mvar value
+                putMVar codec mvar value
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) =
+readMVar : Codec e a -> MVar a -> IO a
+readMVar codec (MVar ref) =
     IO (\s -> ( s, IO.ReadMVar IO.pure ref ))
         |> IO.fmap
             (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
+                case Serialize.decodeFromJson codec encodedValue of
                     Ok value ->
                         value
 
@@ -953,23 +931,23 @@ readMVar decoder (MVar ref) =
             )
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
-modifyMVar decoder encoder m io =
-    takeMVar decoder m
+modifyMVar : Codec e a -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar codec m io =
+    takeMVar codec m
         |> IO.bind io
         |> IO.bind
             (\( a, b ) ->
-                putMVar encoder m a
+                putMVar codec m a
                     |> IO.fmap (\_ -> b)
             )
 
 
-takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) =
+takeMVar : Codec e a -> MVar a -> IO a
+takeMVar codec (MVar ref) =
     IO (\s -> ( s, IO.TakeMVar IO.pure ref ))
         |> IO.fmap
             (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
+                case Serialize.decodeFromJson codec encodedValue of
                     Ok value ->
                         value
 
@@ -978,9 +956,9 @@ takeMVar decoder (MVar ref) =
             )
 
 
-putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value =
-    IO (\s -> ( s, IO.PutMVar IO.pure ref (encoder value) ))
+putMVar : Codec e a -> MVar a -> a -> IO ()
+putMVar codec (MVar ref) value =
+    IO (\s -> ( s, IO.PutMVar IO.pure ref (Serialize.encodeToJson codec value) ))
 
 
 newEmptyMVar : IO (MVar a)
@@ -1005,15 +983,15 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
-newChan encoder =
+newChan : Codec e (MVar (ChItem a)) -> IO (Chan a)
+newChan codec =
     newEmptyMVar
         |> IO.bind
             (\hole ->
-                newMVar encoder hole
+                newMVar codec hole
                     |> IO.bind
                         (\readVar ->
-                            newMVar encoder hole
+                            newMVar codec hole
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
@@ -1022,11 +1000,11 @@ newChan encoder =
             )
 
 
-readChan : Decode.Decoder a -> Chan a -> IO a
-readChan decoder (Chan readVar _) =
-    modifyMVar mVarDecoder mVarEncoder readVar <|
+readChan : Codec e a -> Chan a -> IO a
+readChan codec (Chan readVar _) =
+    modifyMVar mVarCodec readVar <|
         \read_end ->
-            readMVar (chItemDecoder decoder) read_end
+            readMVar (chItemCodec codec) read_end
                 |> IO.fmap
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
@@ -1035,16 +1013,16 @@ readChan decoder (Chan readVar _) =
                     )
 
 
-writeChan : (a -> Encode.Value) -> Chan a -> a -> IO ()
-writeChan encoder (Chan _ writeVar) val =
+writeChan : Codec e a -> Chan a -> a -> IO ()
+writeChan codec (Chan _ writeVar) val =
     newEmptyMVar
         |> IO.bind
             (\new_hole ->
-                takeMVar mVarDecoder writeVar
+                takeMVar mVarCodec writeVar
                     |> IO.bind
                         (\old_hole ->
-                            putMVar (chItemEncoder encoder) old_hole (ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                            putMVar (chItemCodec codec) old_hole (ChItem val new_hole)
+                                |> IO.bind (\_ -> putMVar mVarCodec writeVar new_hole)
                         )
             )
 
@@ -1062,18 +1040,18 @@ builderHPutBuilder handle str =
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
-binaryDecodeFileOrFail decoder filename =
+binaryDecodeFileOrFail : Codec e a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail codec filename =
     IO (\s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
         |> IO.fmap
-            (Decode.decodeValue decoder
+            (Serialize.decodeFromJson codec
                 >> Result.mapError (\_ -> ( 0, "Could not find file " ++ filename ))
             )
 
 
-binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value =
-    IO (\s -> ( s, IO.Write IO.pure path (encoder value) ))
+binaryEncodeFile : Codec e a -> FilePath -> a -> IO ()
+binaryEncodeFile codec path value =
+    IO (\s -> ( s, IO.Write IO.pure path (Serialize.encodeToJson codec value) ))
 
 
 
@@ -1130,128 +1108,75 @@ replGetInputLineWithInitial prompt ( left, right ) =
 -- ENCODERS and DECODERS
 
 
-mVarDecoder : Decode.Decoder (MVar a)
-mVarDecoder =
-    Decode.map MVar Decode.int
+mVarCodec : Codec e (MVar a)
+mVarCodec =
+    Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref)
 
 
-mVarEncoder : MVar a -> Encode.Value
-mVarEncoder (MVar ref) =
-    Encode.int ref
-
-
-chItemEncoder : (a -> Encode.Value) -> ChItem a -> Encode.Value
-chItemEncoder valueEncoder (ChItem value hole) =
-    Encode.object
-        [ ( "type", Encode.string "ChItem" )
-        , ( "value", valueEncoder value )
-        , ( "hole", mVarEncoder hole )
-        ]
-
-
-chItemDecoder : Decode.Decoder a -> Decode.Decoder (ChItem a)
-chItemDecoder decoder =
-    Decode.map2 ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
-
-
-someExceptionEncoder : SomeException -> Encode.Value
-someExceptionEncoder _ =
-    Encode.object [ ( "type", Encode.string "SomeException" ) ]
-
-
-someExceptionDecoder : Decode.Decoder SomeException
-someExceptionDecoder =
-    Decode.succeed SomeException
-
-
-httpResponseEncoder : HttpResponse body -> Encode.Value
-httpResponseEncoder (HttpResponse httpResponse) =
-    Encode.object
-        [ ( "type", Encode.string "HttpResponse" )
-        , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
-        , ( "responseHeaders", httpResponseHeadersEncoder httpResponse.responseHeaders )
-        ]
-
-
-httpResponseDecoder : Decode.Decoder (HttpResponse body)
-httpResponseDecoder =
-    Decode.map2
-        (\responseStatus responseHeaders ->
-            HttpResponse
-                { responseStatus = responseStatus
-                , responseHeaders = responseHeaders
-                }
+chItemCodec : Codec e a -> Codec e (ChItem a)
+chItemCodec codec =
+    Serialize.customType
+        (\chItemCodecEncoder (ChItem value hole) ->
+            chItemCodecEncoder value hole
         )
-        (Decode.field "responseStatus" httpStatusDecoder)
-        (Decode.field "responseHeaders" httpResponseHeadersDecoder)
+        |> Serialize.variant2 ChItem codec mVarCodec
+        |> Serialize.finishCustomType
 
 
-httpStatusEncoder : HttpStatus -> Encode.Value
-httpStatusEncoder (HttpStatus statusCode statusMessage) =
-    Encode.object
-        [ ( "type", Encode.string "HttpStatus" )
-        , ( "statusCode", Encode.int statusCode )
-        , ( "statusMessage", Encode.string statusMessage )
-        ]
+someExceptionCodec : Codec e SomeException
+someExceptionCodec =
+    Serialize.customType
+        (\someExceptionCodecEncoder SomeException ->
+            someExceptionCodecEncoder
+        )
+        |> Serialize.variant0 SomeException
+        |> Serialize.finishCustomType
 
 
-httpStatusDecoder : Decode.Decoder HttpStatus
-httpStatusDecoder =
-    Decode.map2 HttpStatus
-        (Decode.field "statusCode" Decode.int)
-        (Decode.field "statusMessage" Decode.string)
+httpExceptionContentCodec : Codec e HttpExceptionContent
+httpExceptionContentCodec =
+    Serialize.customType
+        (\statusCodeExceptionEncoder tooManyRedirectsEncoder connectionFailureEncoder value ->
+            case value of
+                StatusCodeException response body ->
+                    statusCodeExceptionEncoder response body
+
+                TooManyRedirects responses ->
+                    tooManyRedirectsEncoder responses
+
+                ConnectionFailure someException ->
+                    connectionFailureEncoder someException
+        )
+        |> Serialize.variant2 StatusCodeException httpResponseCodec Serialize.string
+        |> Serialize.variant1 TooManyRedirects (Serialize.list httpResponseCodec)
+        |> Serialize.variant1 ConnectionFailure someExceptionCodec
+        |> Serialize.finishCustomType
 
 
-httpResponseHeadersEncoder : HttpResponseHeaders -> Encode.Value
-httpResponseHeadersEncoder =
-    Encode.list (E.jsonPair Encode.string Encode.string)
-
-
-httpResponseHeadersDecoder : Decode.Decoder HttpResponseHeaders
-httpResponseHeadersDecoder =
-    Decode.list (D.jsonPair Decode.string Decode.string)
-
-
-httpExceptionContentEncoder : HttpExceptionContent -> Encode.Value
-httpExceptionContentEncoder httpExceptionContent =
-    case httpExceptionContent of
-        StatusCodeException response body ->
-            Encode.object
-                [ ( "type", Encode.string "StatusCodeException" )
-                , ( "response", httpResponseEncoder response )
-                , ( "body", Encode.string body )
-                ]
-
-        TooManyRedirects responses ->
-            Encode.object
-                [ ( "type", Encode.string "TooManyRedirects" )
-                , ( "responses", Encode.list httpResponseEncoder responses )
-                ]
-
-        ConnectionFailure someException ->
-            Encode.object
-                [ ( "type", Encode.string "ConnectionFailure" )
-                , ( "someException", someExceptionEncoder someException )
-                ]
-
-
-httpExceptionContentDecoder : Decode.Decoder HttpExceptionContent
-httpExceptionContentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StatusCodeException" ->
-                        Decode.map2 StatusCodeException
-                            (Decode.field "response" httpResponseDecoder)
-                            (Decode.field "body" Decode.string)
-
-                    "TooManyRedirects" ->
-                        Decode.map TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
-
-                    "ConnectionFailure" ->
-                        Decode.map ConnectionFailure (Decode.field "someException" someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
+httpResponseCodec : Codec e (HttpResponse body)
+httpResponseCodec =
+    Serialize.customType
+        (\httpResponseCodecEncoder (HttpResponse httpResponse) ->
+            httpResponseCodecEncoder httpResponse
+        )
+        |> Serialize.variant1
+            HttpResponse
+            (Serialize.record
+                (\responseStatus responseHeaders ->
+                    { responseStatus = responseStatus, responseHeaders = responseHeaders }
+                )
+                |> Serialize.field .responseStatus httpStatusCodec
+                |> Serialize.field .responseHeaders (Serialize.list (Serialize.tuple Serialize.string Serialize.string))
+                |> Serialize.finishRecord
             )
+        |> Serialize.finishCustomType
+
+
+httpStatusCodec : Codec e HttpStatus
+httpStatusCodec =
+    Serialize.customType
+        (\httpStatusCodecEncoder (HttpStatus statusCode statusMessage) ->
+            httpStatusCodecEncoder statusCode statusMessage
+        )
+        |> Serialize.variant2 HttpStatus Serialize.int Serialize.string
+        |> Serialize.finishCustomType

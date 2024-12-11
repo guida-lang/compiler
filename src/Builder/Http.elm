@@ -5,15 +5,13 @@ module Builder.Http exposing
     , MultiPart
     , Sha
     , accept
-    , errorDecoder
-    , errorEncoder
+    , errorCodec
     , filePart
     , get
     , getArchive
     , getManager
     , jsonPart
-    , managerDecoder
-    , managerEncoder
+    , managerCodec
     , post
     , shaToChars
     , stringPart
@@ -24,8 +22,8 @@ module Builder.Http exposing
 import Basics.Extra exposing (uncurry)
 import Codec.Archive.Zip as Zip
 import Compiler.Elm.Version as V
-import Json.Decode as Decode
 import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO(..))
 import Url.Builder
 import Utils.Main as Utils exposing (SomeException)
@@ -39,23 +37,14 @@ type Manager
     = Manager
 
 
-managerEncoder : Manager -> Encode.Value
-managerEncoder _ =
-    Encode.object [ ( "type", Encode.string "Manager" ) ]
-
-
-managerDecoder : Decode.Decoder Manager
-managerDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Manager" ->
-                        Decode.succeed Manager
-
-                    _ ->
-                        Decode.fail "Failed to decode Http.Manager"
-            )
+managerCodec : Codec e Manager
+managerCodec =
+    Serialize.customType
+        (\managerCodecEncoder Manager ->
+            managerCodecEncoder
+        )
+        |> Serialize.variant0 Manager
+        |> Serialize.finishCustomType
 
 
 getManager : IO Manager
@@ -244,52 +233,21 @@ stringPart name string =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        BadUrl url reason ->
-            Encode.object
-                [ ( "type", Encode.string "BadUrl" )
-                , ( "url", Encode.string url )
-                , ( "reason", Encode.string reason )
-                ]
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\badUrlEncoder badHttpEncoder badMysteryEncoder value ->
+            case value of
+                BadUrl url reason ->
+                    badUrlEncoder url reason
 
-        BadHttp url httpExceptionContent ->
-            Encode.object
-                [ ( "type", Encode.string "BadHttp" )
-                , ( "url", Encode.string url )
-                , ( "httpExceptionContent", Utils.httpExceptionContentEncoder httpExceptionContent )
-                ]
+                BadHttp url httpExceptionContent ->
+                    badHttpEncoder url httpExceptionContent
 
-        BadMystery url someException ->
-            Encode.object
-                [ ( "type", Encode.string "BadMystery" )
-                , ( "url", Encode.string url )
-                , ( "someException", Utils.someExceptionEncoder someException )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadUrl" ->
-                        Decode.map2 BadUrl
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "reason" Decode.string)
-
-                    "BadHttp" ->
-                        Decode.map2 BadHttp
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "httpExceptionContent" Utils.httpExceptionContentDecoder)
-
-                    "BadMystery" ->
-                        Decode.map2 BadMystery
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "someException" Utils.someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
+                BadMystery url someException ->
+                    badMysteryEncoder url someException
+        )
+        |> Serialize.variant2 BadUrl Serialize.string Serialize.string
+        |> Serialize.variant2 BadHttp Serialize.string Utils.httpExceptionContentCodec
+        |> Serialize.variant2 BadMystery Serialize.string Utils.someExceptionCodec
+        |> Serialize.finishCustomType

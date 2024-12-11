@@ -7,104 +7,31 @@ module Compiler.Json.Decode exposing
     , Problem(..)
     , StringProblem(..)
     , apply
-    , assocListDict
     , bind
     , customString
     , dict
-    , everySet
     , failure
     , field
     , fmap
     , fromByteString
     , int
-    , jsonPair
     , list
     , mapError
     , nonEmptyList
-    , nonempty
     , oneOf
-    , oneOrMore
     , pair
     , pairs
     , pure
-    , result
     , string
     )
 
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Json.String as Json
 import Compiler.Parse.Keyword as K
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
 import Utils.Crash exposing (crash)
-
-
-
--- CORE HELPERS
-
-
-assocListDict : (k -> comparable) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict comparable k v)
-assocListDict toComparable keyDecoder valueDecoder =
-    Decode.list (jsonPair keyDecoder valueDecoder)
-        |> Decode.map (Dict.fromList toComparable)
-
-
-jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )
-jsonPair firstDecoder secondDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "a" firstDecoder)
-        (Decode.field "b" secondDecoder)
-
-
-everySet : (a -> comparable) -> Decode.Decoder a -> Decode.Decoder (EverySet comparable a)
-everySet toComparable decoder =
-    Decode.list decoder
-        |> Decode.map (EverySet.fromList toComparable)
-
-
-nonempty : Decode.Decoder a -> Decode.Decoder (NE.Nonempty a)
-nonempty decoder =
-    Decode.list decoder
-        |> Decode.andThen
-            (\values ->
-                case values of
-                    x :: xs ->
-                        Decode.succeed (NE.Nonempty x xs)
-
-                    [] ->
-                        Decode.fail "Empty list when it should have at least one element (non-empty list)!"
-            )
-
-
-oneOrMore : Decode.Decoder a -> Decode.Decoder (OneOrMore a)
-oneOrMore decoder =
-    Decode.oneOf
-        [ Decode.map OneOrMore.one (Decode.field "one" decoder)
-        , Decode.map2 OneOrMore.more
-            (Decode.field "left" (Decode.lazy (\_ -> oneOrMore decoder)))
-            (Decode.field "right" (Decode.lazy (\_ -> oneOrMore decoder)))
-        ]
-
-
-result : Decode.Decoder x -> Decode.Decoder a -> Decode.Decoder (Result x a)
-result errDecoder successDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Err" ->
-                        Decode.map Err (Decode.field "value" errDecoder)
-
-                    "Ok" ->
-                        Decode.map Ok (Decode.field "value" successDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode result's type: " ++ type_)
-            )
 
 
 

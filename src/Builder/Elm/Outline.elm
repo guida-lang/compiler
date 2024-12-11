@@ -9,8 +9,7 @@ module Builder.Elm.Outline exposing
     , defaultSummary
     , flattenExposed
     , read
-    , srcDirDecoder
-    , srcDirEncoder
+    , srcDirCodec
     , write
     )
 
@@ -28,8 +27,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -421,34 +419,17 @@ boundParser bound tooLong =
                 Err (P.PErr P.Consumed row newCol (\_ _ -> tooLong))
 
 
-srcDirEncoder : SrcDir -> Encode.Value
-srcDirEncoder srcDir =
-    case srcDir of
-        AbsoluteSrcDir dir ->
-            Encode.object
-                [ ( "type", Encode.string "AbsoluteSrcDir" )
-                , ( "dir", Encode.string dir )
-                ]
+srcDirCodec : Codec e SrcDir
+srcDirCodec =
+    Serialize.customType
+        (\absoluteSrcDirEncoder relativeSrcDirEncoder srcDir ->
+            case srcDir of
+                AbsoluteSrcDir dir ->
+                    absoluteSrcDirEncoder dir
 
-        RelativeSrcDir dir ->
-            Encode.object
-                [ ( "type", Encode.string "RelativeSrcDir" )
-                , ( "dir", Encode.string dir )
-                ]
-
-
-srcDirDecoder : Decode.Decoder SrcDir
-srcDirDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "AbsoluteSrcDir" ->
-                        Decode.map AbsoluteSrcDir (Decode.field "dir" Decode.string)
-
-                    "RelativeSrcDir" ->
-                        Decode.map RelativeSrcDir (Decode.field "dir" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Failed to decode SrcDir's type: " ++ type_)
-            )
+                RelativeSrcDir dir ->
+                    relativeSrcDirEncoder dir
+        )
+        |> Serialize.variant1 AbsoluteSrcDir Serialize.string
+        |> Serialize.variant1 RelativeSrcDir Serialize.string
+        |> Serialize.finishCustomType
