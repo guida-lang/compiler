@@ -277,7 +277,7 @@ merge :
     -> Dict comparable k b
     -> result
     -> result
-merge keyComparison leftStep bothStep rightStep (D leftDict) (D rightDict) initialResult =
+merge _ leftStep bothStep rightStep (D leftDict) (D rightDict) initialResult =
     Dict.merge
         (\_ ( k, a ) -> leftStep k a)
         (\_ ( k, a ) ( _, b ) -> bothStep k a b)

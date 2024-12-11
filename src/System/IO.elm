@@ -137,6 +137,10 @@ run app =
                     , recvDirCanonicalizePath (\{ index, value } -> DirCanonicalizePathMsg index value)
                     , recvBinaryDecodeFileOrFail (\{ index, value } -> BinaryDecodeFileOrFailMsg index value)
                     , recvWrite WriteMsg
+                    , recvDirRemoveFile DirRemoveFileMsg
+                    , recvDirRemoveDirectoryRecursive DirRemoveDirectoryRecursiveMsg
+                    , recvDirWithCurrentDirectory DirWithCurrentDirectoryMsg
+                    , recvReplGetInputLineWithInitial (\{ index, value } -> ReplGetInputLineWithInitialMsg index value)
                     , recvNewEmptyMVar (\{ index, value } -> NewEmptyMVarMsg index value)
                     , recvReadMVar (\{ index, value } -> ReadMVarMsg index value)
                     , recvPutMVar PutMVarMsg
@@ -212,6 +216,10 @@ type Msg
     | DirCanonicalizePathMsg Int FilePath
     | BinaryDecodeFileOrFailMsg Int Encode.Value
     | WriteMsg Int
+    | DirRemoveFileMsg Int
+    | DirRemoveDirectoryRecursiveMsg Int
+    | DirWithCurrentDirectoryMsg Int
+    | ReplGetInputLineWithInitialMsg Int (Maybe String)
     | NewEmptyMVarMsg Int Int
     | ReadMVarMsg Int Encode.Value
     | PutMVarMsg Int
@@ -575,6 +583,38 @@ update msg model =
                 _ ->
                     crash "WriteMsg"
 
+        DirRemoveFileMsg index ->
+            case Dict.get index model.next of
+                Just (DirRemoveFileNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "DirRemoveFileMsg"
+
+        DirRemoveDirectoryRecursiveMsg index ->
+            case Dict.get index model.next of
+                Just (DirRemoveDirectoryRecursiveNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "DirRemoveDirectoryRecursiveMsg"
+
+        DirWithCurrentDirectoryMsg index ->
+            case Dict.get index model.next of
+                Just (DirWithCurrentDirectoryNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "DirWithCurrentDirectoryMsg"
+
+        ReplGetInputLineWithInitialMsg index value ->
+            case Dict.get index model.next of
+                Just (ReplGetInputLineWithInitialNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReplGetInputLineWithInitialMsg"
+
 
 port sendGetLine : Int -> Cmd msg
 
@@ -744,7 +784,7 @@ port recvDirWithCurrentDirectory : (Int -> msg) -> Sub msg
 port sendReplGetInputLineWithInitial : { index : Int, prompt : String, left : String, right : String } -> Cmd msg
 
 
-port recvReplGetInputLineWithInitial : (Maybe String -> msg) -> Sub msg
+port recvReplGetInputLineWithInitial : ({ index : Int, value : Maybe String } -> msg) -> Sub msg
 
 
 

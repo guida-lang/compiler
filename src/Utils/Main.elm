@@ -127,7 +127,6 @@ import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Version exposing (toComparable)
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
