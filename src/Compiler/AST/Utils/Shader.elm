@@ -4,18 +4,13 @@ module Compiler.AST.Utils.Shader exposing
     , Types(..)
     , fromString
     , sourceCodec
-    , sourceDecoder
-    , sourceEncoder
     , toJsStringBuilder
-    , typesDecoder
-    , typesEncoder
+    , typesCodec
     )
 
 import Compiler.Data.Name exposing (Name)
-import Compiler.Json.Encode as E
-import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Compiler.Serialize as S
+import Data.Map exposing (Dict)
 import Serialize exposing (Codec)
 
 
@@ -101,108 +96,56 @@ escape =
 -- ENCODERS and DECODERS
 
 
-sourceEncoder : Source -> Encode.Value
-sourceEncoder (Source src) =
-    Encode.string src
-
-
-sourceDecoder : Decode.Decoder Source
-sourceDecoder =
-    Decode.map Source Decode.string
-
-
 sourceCodec : Codec e Source
 sourceCodec =
     Serialize.string |> Serialize.map Source (\(Source src) -> src)
 
 
-typesEncoder : Types -> Encode.Value
-typesEncoder (Types attribute uniform varying) =
-    Encode.object
-        [ ( "type", Encode.string "Types" )
-        , ( "attribute", E.assocListDict Encode.string typeEncoder attribute )
-        , ( "uniform", E.assocListDict Encode.string typeEncoder uniform )
-        , ( "varying", E.assocListDict Encode.string typeEncoder varying )
-        ]
+typesCodec : Codec e Types
+typesCodec =
+    Serialize.customType
+        (\typesCodecEncoder (Types attribute uniform varying) ->
+            typesCodecEncoder attribute uniform varying
+        )
+        |> Serialize.variant3
+            Types
+            (S.assocListDict compare Serialize.string typeCodec)
+            (S.assocListDict compare Serialize.string typeCodec)
+            (S.assocListDict compare Serialize.string typeCodec)
+        |> Serialize.finishCustomType
 
 
-typesDecoder : Decode.Decoder Types
-typesDecoder =
-    Decode.map3 Types
-        (Decode.field "attribute" (assocListDict compare Decode.string typeDecoder))
-        (Decode.field "uniform" (assocListDict compare Decode.string typeDecoder))
-        (Decode.field "varying" (assocListDict compare Decode.string typeDecoder))
+typeCodec : Codec e Type
+typeCodec =
+    Serialize.customType
+        (\intEncoder floatEncoder v2Encoder v3Encoder v4Encoder m4Encoder textureEncoder value ->
+            case value of
+                Int ->
+                    intEncoder
 
+                Float ->
+                    floatEncoder
 
-typeEncoder : Type -> Encode.Value
-typeEncoder type_ =
-    case type_ of
-        Int ->
-            Encode.string "Int"
+                V2 ->
+                    v2Encoder
 
-        Float ->
-            Encode.string "Float"
+                V3 ->
+                    v3Encoder
 
-        V2 ->
-            Encode.string "V2"
+                V4 ->
+                    v4Encoder
 
-        V3 ->
-            Encode.string "V3"
+                M4 ->
+                    m4Encoder
 
-        V4 ->
-            Encode.string "V4"
-
-        M4 ->
-            Encode.string "M4"
-
-        Texture ->
-            Encode.string "Texture"
-
-
-typeDecoder : Decode.Decoder Type
-typeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Int" ->
-                        Decode.succeed Int
-
-                    "Float" ->
-                        Decode.succeed Float
-
-                    "V2" ->
-                        Decode.succeed V2
-
-                    "V3" ->
-                        Decode.succeed V3
-
-                    "V4" ->
-                        Decode.succeed V4
-
-                    "M4" ->
-                        Decode.succeed M4
-
-                    "Texture" ->
-                        Decode.succeed Texture
-
-                    _ ->
-                        Decode.fail ("Unknown Type: " ++ str)
-            )
-
-
-
--- COPIED FROM JSON.DECODEX
-
-
-assocListDict : (k -> k -> Order) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict k v)
-assocListDict keyComparison keyDecoder valueDecoder =
-    Decode.list (jsonPair keyDecoder valueDecoder)
-        |> Decode.map (Dict.fromList keyComparison)
-
-
-jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )
-jsonPair firstDecoder secondDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "a" firstDecoder)
-        (Decode.field "b" secondDecoder)
+                Texture ->
+                    textureEncoder
+        )
+        |> Serialize.variant0 Int
+        |> Serialize.variant0 Float
+        |> Serialize.variant0 V2
+        |> Serialize.variant0 V3
+        |> Serialize.variant0 V4
+        |> Serialize.variant0 M4
+        |> Serialize.variant0 Texture
+        |> Serialize.finishCustomType

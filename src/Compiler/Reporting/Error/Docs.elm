@@ -4,15 +4,11 @@ module Compiler.Reporting.Error.Docs exposing
     , NameProblem(..)
     , SyntaxProblem(..)
     , errorCodec
-    , errorDecoder
-    , errorEncoder
     , toReports
     )
 
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (BadOperator)
 import Compiler.Reporting.Annotation as A
@@ -20,8 +16,7 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as E
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Compiler.Serialize as S
 import Serialize exposing (Codec)
 
 
@@ -208,249 +203,113 @@ toDefProblemReport source problem =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        NoDocs region ->
-            Encode.object
-                [ ( "type", Encode.string "NoDocs" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        ImplicitExposing region ->
-            Encode.object
-                [ ( "type", Encode.string "ImplicitExposing" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        SyntaxProblem problem ->
-            Encode.object
-                [ ( "type", Encode.string "SyntaxProblem" )
-                , ( "problem", syntaxProblemEncoder problem )
-                ]
-
-        NameProblems problems ->
-            Encode.object
-                [ ( "type", Encode.string "NameProblems" )
-                , ( "problems", EncodeX.nonempty nameProblemEncoder problems )
-                ]
-
-        DefProblems problems ->
-            Encode.object
-                [ ( "type", Encode.string "DefProblems" )
-                , ( "problems", EncodeX.nonempty defProblemEncoder problems )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoDocs" ->
-                        Decode.map NoDocs (Decode.field "region" A.regionDecoder)
-
-                    "ImplicitExposing" ->
-                        Decode.map ImplicitExposing (Decode.field "region" A.regionDecoder)
-
-                    "SyntaxProblem" ->
-                        Decode.map SyntaxProblem (Decode.field "problem" syntaxProblemDecoder)
-
-                    "NameProblems" ->
-                        Decode.map NameProblems (Decode.field "problems" (DecodeX.nonempty nameProblemDecoder))
-
-                    "DefProblems" ->
-                        Decode.map DefProblems (Decode.field "problems" (DecodeX.nonempty defProblemDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
-
-
-errorCodec : Codec e Error
+errorCodec : Codec (Serialize.Error e) Error
 errorCodec =
-    Debug.todo "errorCodec"
+    Serialize.customType
+        (\noDocsEncoder implicitExposingEncoder syntaxProblemCodecEncoder nameProblemsEncoder defProblemsEncoder value ->
+            case value of
+                NoDocs region ->
+                    noDocsEncoder region
+
+                ImplicitExposing region ->
+                    implicitExposingEncoder region
+
+                SyntaxProblem problem ->
+                    syntaxProblemCodecEncoder problem
+
+                NameProblems problems ->
+                    nameProblemsEncoder problems
+
+                DefProblems problems ->
+                    defProblemsEncoder problems
+        )
+        |> Serialize.variant1 NoDocs A.regionCodec
+        |> Serialize.variant1 ImplicitExposing A.regionCodec
+        |> Serialize.variant1 SyntaxProblem syntaxProblemCodec
+        |> Serialize.variant1 NameProblems (S.nonempty nameProblemCodec)
+        |> Serialize.variant1 DefProblems (S.nonempty defProblemCodec)
+        |> Serialize.finishCustomType
 
 
-syntaxProblemEncoder : SyntaxProblem -> Encode.Value
-syntaxProblemEncoder syntaxProblem =
-    case syntaxProblem of
-        Op row col ->
-            Encode.object
-                [ ( "type", Encode.string "Op" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+spaceCodec : Codec e E.Space
+spaceCodec =
+    Serialize.customType
+        (\hasTabEncoder endlessMultiCommentEncoder value ->
+            case value of
+                E.HasTab ->
+                    hasTabEncoder
 
-        OpBad badOperator row col ->
-            Encode.object
-                [ ( "type", Encode.string "OpBad" )
-                , ( "badOperator", Compiler.Parse.Symbol.badOperatorEncoder badOperator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Space name row col ->
-            Encode.object
-                [ ( "type", Encode.string "Space" )
-                , ( "name", E.spaceEncoder name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Comma row col ->
-            Encode.object
-                [ ( "type", Encode.string "Comma" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        BadEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "BadEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                E.EndlessMultiComment ->
+                    endlessMultiCommentEncoder
+        )
+        |> Serialize.variant0 E.HasTab
+        |> Serialize.variant0 E.EndlessMultiComment
+        |> Serialize.finishCustomType
 
 
-syntaxProblemDecoder : Decode.Decoder SyntaxProblem
-syntaxProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Op" ->
-                        Decode.map2 Op
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+syntaxProblemCodec : Codec e SyntaxProblem
+syntaxProblemCodec =
+    Serialize.customType
+        (\opEncoder opBadEncoder nameEncoder spaceEncoder commaEncoder badEndEncoder value ->
+            case value of
+                Op row col ->
+                    opEncoder row col
 
-                    "OpBad" ->
-                        Decode.map3 OpBad
-                            (Decode.field "badOperator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                OpBad badOperator row col ->
+                    opBadEncoder badOperator row col
 
-                    "Name" ->
-                        Decode.map2 Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                Name row col ->
+                    nameEncoder row col
 
-                    "Space" ->
-                        Decode.map3 Space
-                            (Decode.field "name" E.spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                Space name row col ->
+                    spaceEncoder name row col
 
-                    "Comma" ->
-                        Decode.map2 Comma
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                Comma row col ->
+                    commaEncoder row col
 
-                    "BadEnd" ->
-                        Decode.map2 BadEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode SyntaxProblem's type: " ++ type_)
-            )
+                BadEnd row col ->
+                    badEndEncoder row col
+        )
+        |> Serialize.variant2 Op Serialize.int Serialize.int
+        |> Serialize.variant3 OpBad Compiler.Parse.Symbol.badOperatorCodec Serialize.int Serialize.int
+        |> Serialize.variant2 Name Serialize.int Serialize.int
+        |> Serialize.variant3 Space spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 Comma Serialize.int Serialize.int
+        |> Serialize.variant2 BadEnd Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
-nameProblemEncoder : NameProblem -> Encode.Value
-nameProblemEncoder nameProblem =
-    case nameProblem of
-        NameDuplicate name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "NameDuplicate" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
-                ]
+nameProblemCodec : Codec e NameProblem
+nameProblemCodec =
+    Serialize.customType
+        (\nameDuplicateEncoder nameOnlyInDocsEncoder nameOnlyInExportsEncoder value ->
+            case value of
+                NameDuplicate name r1 r2 ->
+                    nameDuplicateEncoder name r1 r2
 
-        NameOnlyInDocs name region ->
-            Encode.object
-                [ ( "type", Encode.string "NameOnlyInDocs" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
-                ]
+                NameOnlyInDocs name region ->
+                    nameOnlyInDocsEncoder name region
 
-        NameOnlyInExports name region ->
-            Encode.object
-                [ ( "type", Encode.string "NameOnlyInExports" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
-                ]
+                NameOnlyInExports name region ->
+                    nameOnlyInExportsEncoder name region
+        )
+        |> Serialize.variant3 NameDuplicate Serialize.string A.regionCodec A.regionCodec
+        |> Serialize.variant2 NameOnlyInDocs Serialize.string A.regionCodec
+        |> Serialize.variant2 NameOnlyInExports Serialize.string A.regionCodec
+        |> Serialize.finishCustomType
 
 
-nameProblemDecoder : Decode.Decoder NameProblem
-nameProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NameDuplicate" ->
-                        Decode.map3 NameDuplicate
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+defProblemCodec : Codec e DefProblem
+defProblemCodec =
+    Serialize.customType
+        (\noCommentEncoder noAnnotationEncoder value ->
+            case value of
+                NoComment name region ->
+                    noCommentEncoder name region
 
-                    "NameOnlyInDocs" ->
-                        Decode.map2 NameOnlyInDocs
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
-
-                    "NameOnlyInExports" ->
-                        Decode.map2 NameOnlyInExports
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode NameProblem's type: " ++ type_)
-            )
-
-
-defProblemEncoder : DefProblem -> Encode.Value
-defProblemEncoder defProblem =
-    case defProblem of
-        NoComment name region ->
-            Encode.object
-                [ ( "type", Encode.string "NoComment" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        NoAnnotation name region ->
-            Encode.object
-                [ ( "type", Encode.string "NoAnnotation" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
-                ]
-
-
-defProblemDecoder : Decode.Decoder DefProblem
-defProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoComment" ->
-                        Decode.map2 NoComment
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
-
-                    "NoAnnotation" ->
-                        Decode.map2 NoAnnotation
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode DefProblem's type: " ++ type_)
-            )
+                NoAnnotation name region ->
+                    noAnnotationEncoder name region
+        )
+        |> Serialize.variant2 NoComment Serialize.string A.regionCodec
+        |> Serialize.variant2 NoAnnotation Serialize.string A.regionCodec
+        |> Serialize.finishCustomType

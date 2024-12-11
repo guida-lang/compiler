@@ -8,7 +8,6 @@ module Builder.Build exposing
     , ReplArtifacts(..)
     , Root(..)
     , cachedInterfaceCodec
-    , cachedInterfaceDecoder
     , fromExposed
     , fromPaths
     , fromRepl
@@ -49,7 +48,6 @@ import Compiler.Serialize as S
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Json.Decode as Decode
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
@@ -1873,12 +1871,12 @@ bResultCodec =
             Details.localCodec
             I.interfaceCodec
             Opt.localGraphCodec
-            (Serialize.maybe Docs.jsonModuleCodec)
+            (Serialize.maybe Docs.moduleCodec)
         |> Serialize.variant4 RSame
             Details.localCodec
             I.interfaceCodec
             Opt.localGraphCodec
-            (Serialize.maybe Docs.jsonModuleCodec)
+            (Serialize.maybe Docs.moduleCodec)
         |> Serialize.variant3 RCached
             Serialize.bool
             Serialize.int
@@ -1995,26 +1993,6 @@ maybeDependenciesCodec =
 resultBuildProjectProblemRootInfoCodec : Codec (Serialize.Error e) (Result Exit.BuildProjectProblem RootInfo)
 resultBuildProjectProblemRootInfoCodec =
     Serialize.result Exit.buildProjectProblemCodec rootInfoCodec
-
-
-cachedInterfaceDecoder : Decode.Decoder CachedInterface
-cachedInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Unneeded" ->
-                        Decode.succeed Unneeded
-
-                    "Loaded" ->
-                        Decode.map Loaded (Decode.field "iface" I.interfaceDecoder)
-
-                    "Corrupted" ->
-                        Decode.succeed Corrupted
-
-                    _ ->
-                        Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)
-            )
 
 
 cachedInterfaceCodec : Codec e CachedInterface

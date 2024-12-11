@@ -4,22 +4,16 @@ module Compiler.Reporting.Annotation exposing
     , Region(..)
     , at
     , locatedCodec
-    , locatedDecoder
-    , locatedEncoder
     , merge
     , mergeRegions
     , one
     , regionCodec
-    , regionDecoder
-    , regionEncoder
     , toRegion
     , toValue
     , traverse
     , zero
     )
 
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO exposing (IO)
 
@@ -92,22 +86,6 @@ one =
 -- ENCODERS and DECODERS
 
 
-regionEncoder : Region -> Encode.Value
-regionEncoder (Region start end) =
-    Encode.object
-        [ ( "type", Encode.string "Region" )
-        , ( "start", positionEncoder start )
-        , ( "end", positionEncoder end )
-        ]
-
-
-regionDecoder : Decode.Decoder Region
-regionDecoder =
-    Decode.map2 Region
-        (Decode.field "start" positionDecoder)
-        (Decode.field "end" positionDecoder)
-
-
 regionCodec : Codec e Region
 regionCodec =
     Serialize.customType
@@ -116,22 +94,6 @@ regionCodec =
         )
         |> Serialize.variant2 Region positionCodec positionCodec
         |> Serialize.finishCustomType
-
-
-positionEncoder : Position -> Encode.Value
-positionEncoder (Position start end) =
-    Encode.object
-        [ ( "type", Encode.string "Position" )
-        , ( "start", Encode.int start )
-        , ( "end", Encode.int end )
-        ]
-
-
-positionDecoder : Decode.Decoder Position
-positionDecoder =
-    Decode.map2 Position
-        (Decode.field "start" Decode.int)
-        (Decode.field "end" Decode.int)
 
 
 positionCodec : Codec e Position
@@ -144,22 +106,11 @@ positionCodec =
         |> Serialize.finishCustomType
 
 
-locatedEncoder : (a -> Encode.Value) -> Located a -> Encode.Value
-locatedEncoder encoder (At region value) =
-    Encode.object
-        [ ( "type", Encode.string "Located" )
-        , ( "region", regionEncoder region )
-        , ( "value", encoder value )
-        ]
-
-
-locatedDecoder : Decode.Decoder a -> Decode.Decoder (Located a)
-locatedDecoder decoder =
-    Decode.map2 At
-        (Decode.field "region" regionDecoder)
-        (Decode.field "value" (Decode.lazy (\_ -> decoder)))
-
-
 locatedCodec : Codec e a -> Codec e (Located a)
-locatedCodec =
-    Debug.todo "locatedCodec"
+locatedCodec a =
+    Serialize.customType
+        (\atEncoder (At region value) ->
+            atEncoder region value
+        )
+        |> Serialize.variant2 At regionCodec a
+        |> Serialize.finishCustomType

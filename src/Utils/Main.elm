@@ -1266,4 +1266,48 @@ httpExceptionContentDecoder =
 
 httpExceptionContentCodec : Codec e HttpExceptionContent
 httpExceptionContentCodec =
-    Debug.todo "httpExceptionContentCodec"
+    Serialize.customType
+        (\statusCodeExceptionEncoder tooManyRedirectsEncoder connectionFailureEncoder value ->
+            case value of
+                StatusCodeException response body ->
+                    statusCodeExceptionEncoder response body
+
+                TooManyRedirects responses ->
+                    tooManyRedirectsEncoder responses
+
+                ConnectionFailure someException ->
+                    connectionFailureEncoder someException
+        )
+        |> Serialize.variant2 StatusCodeException httpResponseCodec Serialize.string
+        |> Serialize.variant1 TooManyRedirects (Serialize.list httpResponseCodec)
+        |> Serialize.variant1 ConnectionFailure someExceptionCodec
+        |> Serialize.finishCustomType
+
+
+httpResponseCodec : Codec e (HttpResponse body)
+httpResponseCodec =
+    Serialize.customType
+        (\httpResponseCodecEncoder (HttpResponse httpResponse) ->
+            httpResponseCodecEncoder httpResponse
+        )
+        |> Serialize.variant1
+            HttpResponse
+            (Serialize.record
+                (\responseStatus responseHeaders ->
+                    { responseStatus = responseStatus, responseHeaders = responseHeaders }
+                )
+                |> Serialize.field .responseStatus httpStatusCodec
+                |> Serialize.field .responseHeaders (Serialize.list (Serialize.tuple Serialize.string Serialize.string))
+                |> Serialize.finishRecord
+            )
+        |> Serialize.finishCustomType
+
+
+httpStatusCodec : Codec e HttpStatus
+httpStatusCodec =
+    Serialize.customType
+        (\httpStatusCodecEncoder (HttpStatus statusCode statusMessage) ->
+            httpStatusCodecEncoder statusCode statusMessage
+        )
+        |> Serialize.variant2 HttpStatus Serialize.int Serialize.string
+        |> Serialize.finishCustomType

@@ -6,7 +6,7 @@ module Compiler.Serialize exposing
     )
 
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Data.OneOrMore exposing (OneOrMore)
+import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Serialize as S exposing (Codec)
@@ -41,5 +41,16 @@ nonempty codec =
 
 
 oneOrMore : Codec e a -> Codec e (OneOrMore a)
-oneOrMore _ =
-    Debug.todo "oneOrMore"
+oneOrMore codec =
+    S.customType
+        (\oneEncoder moreEncoder value ->
+            case value of
+                OneOrMore.One x ->
+                    oneEncoder x
+
+                OneOrMore.More a b ->
+                    moreEncoder a b
+        )
+        |> S.variant1 OneOrMore.One codec
+        |> S.variant2 OneOrMore.More (S.lazy (\() -> oneOrMore codec)) (S.lazy (\() -> oneOrMore codec))
+        |> S.finishCustomType

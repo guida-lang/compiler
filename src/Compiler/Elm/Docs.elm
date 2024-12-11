@@ -11,11 +11,7 @@ module Compiler.Elm.Docs exposing
     , encode
     , fromModule
     , jsonCodec
-    , jsonDecoder
-    , jsonEncoder
-    , jsonModuleCodec
-    , jsonModuleDecoder
-    , jsonModuleEncoder
+    , moduleCodec
     )
 
 import Basics.Extra exposing (flip)
@@ -38,9 +34,8 @@ import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Docs as E
 import Compiler.Reporting.Result as Result
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 import Utils.Main as Utils
@@ -774,112 +769,67 @@ addDef types def =
 -- ENCODERS and DECODERS
 
 
-jsonEncoder : Documentation -> Encode.Value
-jsonEncoder =
-    E.toJsonValue << encode
-
-
-jsonDecoder : Decode.Decoder Documentation
-jsonDecoder =
-    Decode.map toDict (Decode.list jsonModuleDecoder)
-
-
 jsonCodec : Codec e Documentation
 jsonCodec =
-    Debug.todo "jsonCodec"
+    S.assocListDict compare Serialize.string moduleCodec
 
 
-jsonModuleEncoder : Module -> Encode.Value
-jsonModuleEncoder (Module name comment unions aliases values binops) =
-    Encode.object
-        [ ( "name", Encode.string name )
-        , ( "comment", Encode.string comment )
-        , ( "unions", E.assocListDict Encode.string jsonUnionEncoder unions )
-        , ( "aliases", E.assocListDict Encode.string jsonAliasEncoder aliases )
-        , ( "values", E.assocListDict Encode.string jsonValueEncoder values )
-        , ( "binops", E.assocListDict Encode.string jsonBinopEncoder binops )
-        ]
+moduleCodec : Codec e Module
+moduleCodec =
+    Serialize.customType
+        (\moduleEncoder (Module name comment unions aliases values binops) ->
+            moduleEncoder name comment unions aliases values binops
+        )
+        |> Serialize.variant6
+            Module
+            Serialize.string
+            Serialize.string
+            (S.assocListDict compare Serialize.string unionCodec)
+            (S.assocListDict compare Serialize.string aliasCodec)
+            (S.assocListDict compare Serialize.string valueCodec)
+            (S.assocListDict compare Serialize.string binopCodec)
+        |> Serialize.finishCustomType
 
 
-jsonModuleDecoder : Decode.Decoder Module
-jsonModuleDecoder =
-    Decode.map6 Module
-        (Decode.field "name" Decode.string)
-        (Decode.field "comment" Decode.string)
-        (Decode.field "unions" (D.assocListDict compare Decode.string jsonUnionDecoder))
-        (Decode.field "aliases" (D.assocListDict compare Decode.string jsonAliasDecoder))
-        (Decode.field "values" (D.assocListDict compare Decode.string jsonValueDecoder))
-        (Decode.field "binops" (D.assocListDict compare Decode.string jsonBinopDecoder))
+unionCodec : Codec e Union
+unionCodec =
+    Serialize.customType
+        (\unionEncoder (Union comment args cases) ->
+            unionEncoder comment args cases
+        )
+        |> Serialize.variant3
+            Union
+            Serialize.string
+            (Serialize.list Serialize.string)
+            (Serialize.list (Serialize.tuple Serialize.string (Serialize.list Type.codec)))
+        |> Serialize.finishCustomType
 
 
-jsonModuleCodec : Codec e Module
-jsonModuleCodec =
-    Debug.todo "jsonModuleCodec"
+aliasCodec : Codec e Alias
+aliasCodec =
+    Serialize.customType
+        (\aliasEncoder (Alias comment args type_) ->
+            aliasEncoder comment args type_
+        )
+        |> Serialize.variant3 Alias Serialize.string (Serialize.list Serialize.string) Type.codec
+        |> Serialize.finishCustomType
 
 
-jsonUnionEncoder : Union -> Encode.Value
-jsonUnionEncoder (Union comment args cases) =
-    Encode.object
-        [ ( "comment", Encode.string comment )
-        , ( "args", Encode.list Encode.string args )
-        , ( "cases", Encode.list (E.jsonPair Encode.string (Encode.list Type.jsonEncoder)) cases )
-        ]
+valueCodec : Codec e Value
+valueCodec =
+    Serialize.customType
+        (\valueEncoder (Value comment type_) ->
+            valueEncoder comment type_
+        )
+        |> Serialize.variant2 Value Serialize.string Type.codec
+        |> Serialize.finishCustomType
 
 
-jsonUnionDecoder : Decode.Decoder Union
-jsonUnionDecoder =
-    Decode.map3 Union
-        (Decode.field "comment" Decode.string)
-        (Decode.field "args" (Decode.list Decode.string))
-        (Decode.field "cases" (Decode.list (D.jsonPair Decode.string (Decode.list Type.jsonDecoder))))
-
-
-jsonAliasEncoder : Alias -> Encode.Value
-jsonAliasEncoder (Alias comment args type_) =
-    Encode.object
-        [ ( "comment", Encode.string comment )
-        , ( "args", Encode.list Encode.string args )
-        , ( "type", Type.jsonEncoder type_ )
-        ]
-
-
-jsonAliasDecoder : Decode.Decoder Alias
-jsonAliasDecoder =
-    Decode.map3 Alias
-        (Decode.field "comment" Decode.string)
-        (Decode.field "args" (Decode.list Decode.string))
-        (Decode.field "type" Type.jsonDecoder)
-
-
-jsonValueEncoder : Value -> Encode.Value
-jsonValueEncoder (Value comment type_) =
-    Encode.object
-        [ ( "comment", Encode.string comment )
-        , ( "type", Type.jsonEncoder type_ )
-        ]
-
-
-jsonValueDecoder : Decode.Decoder Value
-jsonValueDecoder =
-    Decode.map2 Value
-        (Decode.field "comment" Decode.string)
-        (Decode.field "type" Type.jsonDecoder)
-
-
-jsonBinopEncoder : Binop -> Encode.Value
-jsonBinopEncoder (Binop comment type_ associativity precedence) =
-    Encode.object
-        [ ( "comment", Encode.string comment )
-        , ( "type", Type.jsonEncoder type_ )
-        , ( "associativity", Binop.associativityEncoder associativity )
-        , ( "precedence", Binop.precedenceEncoder precedence )
-        ]
-
-
-jsonBinopDecoder : Decode.Decoder Binop
-jsonBinopDecoder =
-    Decode.map4 Binop
-        (Decode.field "comment" Decode.string)
-        (Decode.field "type" Type.jsonDecoder)
-        (Decode.field "associativity" Binop.associativityDecoder)
-        (Decode.field "precedence" Binop.precedenceDecoder)
+binopCodec : Codec e Binop
+binopCodec =
+    Serialize.customType
+        (\binopEncoder (Binop comment type_ associativity precedence) ->
+            binopEncoder comment type_ associativity precedence
+        )
+        |> Serialize.variant4 Binop Serialize.string Type.codec Binop.associativityCodec Binop.precedenceCodec
+        |> Serialize.finishCustomType

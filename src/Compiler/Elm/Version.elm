@@ -8,8 +8,6 @@ module Compiler.Elm.Version exposing
     , decoder
     , encode
     , jsonCodec
-    , jsonDecoder
-    , jsonEncoder
     , major
     , max
     , maxVersion
@@ -18,15 +16,11 @@ module Compiler.Elm.Version exposing
     , parser
     , toChars
     , versionCodec
-    , versionDecoder
-    , versionEncoder
     )
 
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 
 
@@ -230,25 +224,6 @@ isDigit word =
 -- ENCODERS and DECODERS
 
 
-jsonEncoder : Version -> Encode.Value
-jsonEncoder version =
-    Encode.string (toChars version)
-
-
-jsonDecoder : Decode.Decoder Version
-jsonDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case P.fromByteString parser Tuple.pair str of
-                    Ok version ->
-                        Decode.succeed version
-
-                    Err _ ->
-                        Decode.fail "failed to parse version"
-            )
-
-
 jsonCodec : Codec e Version
 jsonCodec =
     Serialize.customType
@@ -257,24 +232,6 @@ jsonCodec =
         )
         |> Serialize.variant3 Version Serialize.int Serialize.int Serialize.int
         |> Serialize.finishCustomType
-
-
-versionEncoder : Version -> Encode.Value
-versionEncoder (Version major_ minor patch) =
-    Encode.object
-        [ ( "type", Encode.string "Version" )
-        , ( "major", Encode.int major_ )
-        , ( "minor", Encode.int minor )
-        , ( "patch", Encode.int patch )
-        ]
-
-
-versionDecoder : Decode.Decoder Version
-versionDecoder =
-    Decode.map3 Version
-        (Decode.field "major" Decode.int)
-        (Decode.field "minor" Decode.int)
-        (Decode.field "patch" Decode.int)
 
 
 versionCodec : Codec e Version

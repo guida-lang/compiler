@@ -11,8 +11,6 @@ module Builder.Stuff exposing
     , objects
     , package
     , packageCacheCodec
-    , packageCacheDecoder
-    , packageCacheEncoder
     , prepublishDir
     , registry
     , withRegistryLock
@@ -22,8 +20,6 @@ module Builder.Stuff exposing
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Prelude
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
@@ -200,19 +196,6 @@ getElmHome =
 
 
 -- ENCODERS and DECODERS
-
-
-packageCacheEncoder : PackageCache -> Encode.Value
-packageCacheEncoder (PackageCache dir) =
-    Encode.object
-        [ ( "type", Encode.string "PackageCache" )
-        , ( "dir", Encode.string dir )
-        ]
-
-
-packageCacheDecoder : Decode.Decoder PackageCache
-packageCacheDecoder =
-    Decode.map PackageCache (Decode.field "dir" Decode.string)
 
 
 packageCacheCodec : Codec e PackageCache

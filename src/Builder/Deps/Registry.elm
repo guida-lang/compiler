@@ -7,8 +7,6 @@ module Builder.Deps.Registry exposing
     , latest
     , read
     , registryCodec
-    , registryDecoder
-    , registryEncoder
     , update
     )
 
@@ -21,12 +19,9 @@ import Builder.Stuff as Stuff
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 
@@ -41,21 +36,6 @@ type Registry
 
 type KnownVersions
     = KnownVersions V.Version (List V.Version)
-
-
-knownVersionsDecoder : Decode.Decoder KnownVersions
-knownVersionsDecoder =
-    Decode.map2 KnownVersions
-        (Decode.field "version" V.jsonDecoder)
-        (Decode.field "versions" (Decode.list V.jsonDecoder))
-
-
-knownVersionsEncoder : KnownVersions -> Encode.Value
-knownVersionsEncoder (KnownVersions version versions) =
-    Encode.object
-        [ ( "version", V.jsonEncoder version )
-        , ( "versions", Encode.list V.jsonEncoder versions )
-        ]
 
 
 knownVersionsCodec : Codec e KnownVersions
@@ -260,21 +240,6 @@ post manager path decoder callback =
 
 
 -- ENCODERS and DECODERS
-
-
-registryEncoder : Registry -> Encode.Value
-registryEncoder (Registry size versions) =
-    Encode.object
-        [ ( "size", Encode.int size )
-        , ( "packages", E.assocListDict Pkg.nameEncoder knownVersionsEncoder versions )
-        ]
-
-
-registryDecoder : Decode.Decoder Registry
-registryDecoder =
-    Decode.map2 Registry
-        (Decode.field "size" Decode.int)
-        (Decode.field "packages" (D.assocListDict Pkg.compareName Pkg.nameDecoder knownVersionsDecoder))
 
 
 registryCodec : Codec e Registry

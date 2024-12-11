@@ -4,8 +4,6 @@ module Compiler.Reporting.Render.Type.Localizer exposing
     , fromModule
     , fromNames
     , localizerCodec
-    , localizerDecoder
-    , localizerEncoder
     , toChars
     , toDoc
     )
@@ -13,14 +11,11 @@ module Compiler.Reporting.Render.Type.Localizer exposing
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 
@@ -134,64 +129,35 @@ addType exposed types =
 -- ENCODERS and DECODERS
 
 
-localizerEncoder : Localizer -> Encode.Value
-localizerEncoder (Localizer localizer) =
-    EncodeX.assocListDict Encode.string importEncoder localizer
-
-
-localizerDecoder : Decode.Decoder Localizer
-localizerDecoder =
-    Decode.map Localizer (DecodeX.assocListDict compare Decode.string importDecoder)
-
-
 localizerCodec : Codec e Localizer
 localizerCodec =
-    Debug.todo "localizerCodec"
+    Serialize.customType
+        (\localizerCodecEncoder (Localizer localizer) ->
+            localizerCodecEncoder localizer
+        )
+        |> Serialize.variant1 Localizer (S.assocListDict compare Serialize.string importCodec)
+        |> Serialize.finishCustomType
 
 
-importEncoder : Import -> Encode.Value
-importEncoder import_ =
-    Encode.object
-        [ ( "type", Encode.string "Import" )
-        , ( "alias", EncodeX.maybe Encode.string import_.alias )
-        , ( "exposing", exposingEncoder import_.exposing_ )
-        ]
+importCodec : Codec e Import
+importCodec =
+    Serialize.record Import
+        |> Serialize.field .alias (Serialize.maybe Serialize.string)
+        |> Serialize.field .exposing_ exposingCodec
+        |> Serialize.finishRecord
 
 
-importDecoder : Decode.Decoder Import
-importDecoder =
-    Decode.map2 Import
-        (Decode.field "alias" (Decode.maybe Decode.string))
-        (Decode.field "exposing" exposingDecoder)
+exposingCodec : Codec e Exposing
+exposingCodec =
+    Serialize.customType
+        (\allEncoder onlyEncoder value ->
+            case value of
+                All ->
+                    allEncoder
 
-
-exposingEncoder : Exposing -> Encode.Value
-exposingEncoder exposing_ =
-    case exposing_ of
-        All ->
-            Encode.object
-                [ ( "type", Encode.string "All" )
-                ]
-
-        Only set ->
-            Encode.object
-                [ ( "type", Encode.string "Only" )
-                , ( "set", EncodeX.everySet Encode.string set )
-                ]
-
-
-exposingDecoder : Decode.Decoder Exposing
-exposingDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "All" ->
-                        Decode.succeed All
-
-                    "Only" ->
-                        Decode.map Only (Decode.field "set" (DecodeX.everySet compare Decode.string))
-
-                    _ ->
-                        Decode.fail ("Unknown Exposing's type: " ++ type_)
-            )
+                Only set ->
+                    onlyEncoder set
+        )
+        |> Serialize.variant0 All
+        |> Serialize.variant1 Only (S.everySet compare Serialize.string)
+        |> Serialize.finishCustomType

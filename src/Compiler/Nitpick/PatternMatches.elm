@@ -5,8 +5,6 @@ module Compiler.Nitpick.PatternMatches exposing
     , Pattern(..)
     , check
     , errorCodec
-    , errorDecoder
-    , errorEncoder
     )
 
 {- The algorithm used here comes from "Warnings for Pattern Matching"
@@ -23,8 +21,6 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import List.Extra as List
 import Prelude
 import Serialize exposing (Codec)
@@ -714,170 +710,81 @@ collectCtorsHelp ctors row =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        Incomplete region context unhandled ->
-            Encode.object
-                [ ( "type", Encode.string "Incomplete" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", contextEncoder context )
-                , ( "unhandled", Encode.list patternEncoder unhandled )
-                ]
-
-        Redundant caseRegion patternRegion index ->
-            Encode.object
-                [ ( "type", Encode.string "Redundant" )
-                , ( "caseRegion", A.regionEncoder caseRegion )
-                , ( "patternRegion", A.regionEncoder patternRegion )
-                , ( "index", Encode.int index )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Incomplete" ->
-                        Decode.map3 Incomplete
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" contextDecoder)
-                            (Decode.field "unhandled" (Decode.list patternDecoder))
-
-                    "Redundant" ->
-                        Decode.map3 Redundant
-                            (Decode.field "caseRegion" A.regionDecoder)
-                            (Decode.field "patternRegion" A.regionDecoder)
-                            (Decode.field "index" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Unknown Error's type: " ++ type_)
-            )
-
-
 errorCodec : Codec e Error
 errorCodec =
-    Debug.todo "errorCodec"
+    Serialize.customType
+        (\incompleteEncoder redundantEncoder value ->
+            case value of
+                Incomplete region context unhandled ->
+                    incompleteEncoder region context unhandled
+
+                Redundant caseRegion patternRegion index ->
+                    redundantEncoder caseRegion patternRegion index
+        )
+        |> Serialize.variant3 Incomplete A.regionCodec contextCodec (Serialize.list patternCodec)
+        |> Serialize.variant3 Redundant A.regionCodec A.regionCodec Serialize.int
+        |> Serialize.finishCustomType
 
 
-contextEncoder : Context -> Encode.Value
-contextEncoder context =
-    case context of
-        BadArg ->
-            Encode.string "BadArg"
+contextCodec : Codec e Context
+contextCodec =
+    Serialize.customType
+        (\badArgEncoder badDestructEncoder badCaseEncoder value ->
+            case value of
+                BadArg ->
+                    badArgEncoder
 
-        BadDestruct ->
-            Encode.string "BadDestruct"
+                BadDestruct ->
+                    badDestructEncoder
 
-        BadCase ->
-            Encode.string "BadCase"
-
-
-contextDecoder : Decode.Decoder Context
-contextDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "BadArg" ->
-                        Decode.succeed BadArg
-
-                    "BadDestruct" ->
-                        Decode.succeed BadDestruct
-
-                    "BadCase" ->
-                        Decode.succeed BadCase
-
-                    _ ->
-                        Decode.fail ("Unknown Context: " ++ str)
-            )
+                BadCase ->
+                    badCaseEncoder
+        )
+        |> Serialize.variant0 BadArg
+        |> Serialize.variant0 BadDestruct
+        |> Serialize.variant0 BadCase
+        |> Serialize.finishCustomType
 
 
-patternEncoder : Pattern -> Encode.Value
-patternEncoder pattern =
-    case pattern of
-        Anything ->
-            Encode.object
-                [ ( "type", Encode.string "Anything" )
-                ]
+patternCodec : Codec e Pattern
+patternCodec =
+    Serialize.customType
+        (\anythingEncoder literalCodecEncoder ctorEncoder value ->
+            case value of
+                Anything ->
+                    anythingEncoder
 
-        Literal index ->
-            Encode.object
-                [ ( "type", Encode.string "Literal" )
-                , ( "index", literalEncoder index )
-                ]
+                Literal index ->
+                    literalCodecEncoder index
 
-        Ctor union name args ->
-            Encode.object
-                [ ( "type", Encode.string "Ctor" )
-                , ( "union", Can.unionEncoder union )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list patternEncoder args )
-                ]
-
-
-patternDecoder : Decode.Decoder Pattern
-patternDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Anything" ->
-                        Decode.succeed Anything
-
-                    "Literal" ->
-                        Decode.map Literal (Decode.field "index" literalDecoder)
-
-                    "Ctor" ->
-                        Decode.map3 Ctor
-                            (Decode.field "union" Can.unionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list patternDecoder))
-
-                    _ ->
-                        Decode.fail ("Unknown Pattern's type: " ++ type_)
-            )
+                Ctor union name args ->
+                    ctorEncoder union name args
+        )
+        |> Serialize.variant0 Anything
+        |> Serialize.variant1 Literal literalCodec
+        |> Serialize.variant3
+            Ctor
+            Can.unionCodec
+            Serialize.string
+            (Serialize.list (Serialize.lazy (\() -> patternCodec)))
+        |> Serialize.finishCustomType
 
 
-literalEncoder : Literal -> Encode.Value
-literalEncoder literal =
-    case literal of
-        Chr value ->
-            Encode.object
-                [ ( "type", Encode.string "Chr" )
-                , ( "value", Encode.string value )
-                ]
+literalCodec : Codec e Literal
+literalCodec =
+    Serialize.customType
+        (\chrEncoder strEncoder intEncoder literal ->
+            case literal of
+                Chr value ->
+                    chrEncoder value
 
-        Str value ->
-            Encode.object
-                [ ( "type", Encode.string "Str" )
-                , ( "value", Encode.string value )
-                ]
+                Str value ->
+                    strEncoder value
 
-        Int value ->
-            Encode.object
-                [ ( "type", Encode.string "Int" )
-                , ( "value", Encode.int value )
-                ]
-
-
-literalDecoder : Decode.Decoder Literal
-literalDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Chr" ->
-                        Decode.map Chr (Decode.field "value" Decode.string)
-
-                    "Str" ->
-                        Decode.map Str (Decode.field "value" Decode.string)
-
-                    "Int" ->
-                        Decode.map Int (Decode.field "value" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Unknown Literal's type: " ++ type_)
-            )
+                Int value ->
+                    intEncoder value
+        )
+        |> Serialize.variant1 Chr Serialize.string
+        |> Serialize.variant1 Str Serialize.string
+        |> Serialize.variant1 Int Serialize.int
+        |> Serialize.finishCustomType

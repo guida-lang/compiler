@@ -8,8 +8,6 @@ module Builder.Deps.Solver exposing
     , State
     , addToApp
     , envCodec
-    , envDecoder
-    , envEncoder
     , initEnv
     , verify
     )
@@ -26,8 +24,6 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
@@ -596,25 +592,6 @@ foldM f b =
 -- ENCODERS and DECODERS
 
 
-envEncoder : Env -> Encode.Value
-envEncoder (Env cache manager connection registry) =
-    Encode.object
-        [ ( "cache", Stuff.packageCacheEncoder cache )
-        , ( "manager", Http.managerEncoder manager )
-        , ( "connection", connectionEncoder connection )
-        , ( "registry", Registry.registryEncoder registry )
-        ]
-
-
-envDecoder : Decode.Decoder Env
-envDecoder =
-    Decode.map4 Env
-        (Decode.field "cache" Stuff.packageCacheDecoder)
-        (Decode.field "manager" Http.managerDecoder)
-        (Decode.field "connection" connectionDecoder)
-        (Decode.field "registry" Registry.registryDecoder)
-
-
 envCodec : Codec e Env
 envCodec =
     Serialize.customType
@@ -623,38 +600,6 @@ envCodec =
         )
         |> Serialize.variant4 Env Stuff.packageCacheCodec Http.managerCodec connectionCodec Registry.registryCodec
         |> Serialize.finishCustomType
-
-
-connectionEncoder : Connection -> Encode.Value
-connectionEncoder connection =
-    case connection of
-        Online manager ->
-            Encode.object
-                [ ( "type", Encode.string "Online" )
-                , ( "manager", Http.managerEncoder manager )
-                ]
-
-        Offline ->
-            Encode.object
-                [ ( "type", Encode.string "Offline" )
-                ]
-
-
-connectionDecoder : Decode.Decoder Connection
-connectionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Online" ->
-                        Decode.map Online (Decode.field "manager" Http.managerDecoder)
-
-                    "Offline" ->
-                        Decode.succeed Offline
-
-                    _ ->
-                        Decode.fail ("Failed to decode Connection's type: " ++ type_)
-            )
 
 
 connectionCodec : Codec e Connection

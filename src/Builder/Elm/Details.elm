@@ -8,13 +8,10 @@ module Builder.Elm.Details exposing
     , Status
     , ValidOutline(..)
     , detailsCodec
-    , detailsEncoder
     , load
     , loadInterfaces
     , loadObjects
     , localCodec
-    , localDecoder
-    , localEncoder
     , verifyInstall
     )
 
@@ -50,8 +47,6 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
@@ -1087,19 +1082,6 @@ endpointDecoder =
 -- ENCODERS and DECODERS
 
 
-detailsEncoder : Details -> Encode.Value
-detailsEncoder (Details oldTime outline buildID locals foreigns extras) =
-    Encode.object
-        [ ( "type", Encode.string "Details" )
-        , ( "oldTime", File.timeEncoder oldTime )
-        , ( "outline", validOutlineEncoder outline )
-        , ( "buildID", Encode.int buildID )
-        , ( "locals", E.assocListDict ModuleName.rawEncoder localEncoder locals )
-        , ( "foreigns", E.assocListDict ModuleName.rawEncoder foreignEncoder foreigns )
-        , ( "extras", extrasEncoder extras )
-        ]
-
-
 detailsCodec : Codec (Serialize.Error e) Details
 detailsCodec =
     Serialize.customType
@@ -1114,11 +1096,6 @@ detailsCodec =
             (S.assocListDict compare ModuleName.rawCodec foreignCodec)
             extrasCodec
         |> Serialize.finishCustomType
-
-
-interfacesEncoder : Interfaces -> Encode.Value
-interfacesEncoder =
-    E.assocListDict ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
 
 
 interfacesCodec : Codec e Interfaces
@@ -1217,7 +1194,7 @@ dResultCodec =
                 RKernelForeign ->
                     rKernelForeignEncoder
         )
-        |> Serialize.variant3 RLocal I.interfaceCodec Opt.localGraphCodec (Serialize.maybe Docs.jsonModuleCodec)
+        |> Serialize.variant3 RLocal I.interfaceCodec Opt.localGraphCodec (Serialize.maybe Docs.moduleCodec)
         |> Serialize.variant1 RForeign I.interfaceCodec
         |> Serialize.variant1 RKernelLocal (Serialize.list Kernel.chunkCodec)
         |> Serialize.variant0 RKernelForeign
@@ -1229,30 +1206,6 @@ statusDictCodec =
     S.assocListDict compare ModuleName.rawCodec Utils.mVarCodec
 
 
-localEncoder : Local -> Encode.Value
-localEncoder (Local path time deps hasMain lastChange lastCompile) =
-    Encode.object
-        [ ( "type", Encode.string "Local" )
-        , ( "path", Encode.string path )
-        , ( "time", File.timeEncoder time )
-        , ( "deps", Encode.list ModuleName.rawEncoder deps )
-        , ( "hasMain", Encode.bool hasMain )
-        , ( "lastChange", Encode.int lastChange )
-        , ( "lastCompile", Encode.int lastCompile )
-        ]
-
-
-localDecoder : Decode.Decoder Local
-localDecoder =
-    Decode.map6 Local
-        (Decode.field "path" Decode.string)
-        (Decode.field "time" File.timeDecoder)
-        (Decode.field "deps" (Decode.list ModuleName.rawDecoder))
-        (Decode.field "hasMain" Decode.bool)
-        (Decode.field "lastChange" Decode.int)
-        (Decode.field "lastCompile" Decode.int)
-
-
 localCodec : Codec e Local
 localCodec =
     Serialize.customType
@@ -1261,24 +1214,6 @@ localCodec =
         )
         |> Serialize.variant6 Local Serialize.string File.timeCodec (Serialize.list ModuleName.rawCodec) Serialize.bool Serialize.int Serialize.int
         |> Serialize.finishCustomType
-
-
-validOutlineEncoder : ValidOutline -> Encode.Value
-validOutlineEncoder validOutline =
-    case validOutline of
-        ValidApp srcDirs ->
-            Encode.object
-                [ ( "type", Encode.string "ValidApp" )
-                , ( "srcDirs", E.nonempty Outline.srcDirEncoder srcDirs )
-                ]
-
-        ValidPkg pkg exposedList exactDeps ->
-            Encode.object
-                [ ( "type", Encode.string "ValidPkg" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "exposedList", Encode.list ModuleName.rawEncoder exposedList )
-                , ( "exactDeps", E.assocListDict Pkg.nameEncoder V.versionEncoder exactDeps )
-                ]
 
 
 validOutlineCodec : Codec (Serialize.Error e) ValidOutline
@@ -1297,15 +1232,6 @@ validOutlineCodec =
         |> Serialize.finishCustomType
 
 
-foreignEncoder : Foreign -> Encode.Value
-foreignEncoder (Foreign dep deps) =
-    Encode.object
-        [ ( "type", Encode.string "Foreign" )
-        , ( "dep", Pkg.nameEncoder dep )
-        , ( "deps", Encode.list Pkg.nameEncoder deps )
-        ]
-
-
 foreignCodec : Codec e Foreign
 foreignCodec =
     Serialize.customType
@@ -1314,22 +1240,6 @@ foreignCodec =
         )
         |> Serialize.variant2 Foreign Pkg.nameCodec (Serialize.list Pkg.nameCodec)
         |> Serialize.finishCustomType
-
-
-extrasEncoder : Extras -> Encode.Value
-extrasEncoder extras =
-    case extras of
-        ArtifactsCached ->
-            Encode.object
-                [ ( "type", Encode.string "ArtifactsCached" )
-                ]
-
-        ArtifactsFresh ifaces objs ->
-            Encode.object
-                [ ( "type", Encode.string "ArtifactsFresh" )
-                , ( "ifaces", interfacesEncoder ifaces )
-                , ( "objs", Opt.globalGraphEncoder objs )
-                ]
 
 
 extrasCodec : Codec e Extras

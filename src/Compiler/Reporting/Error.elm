@@ -1,10 +1,7 @@
 module Compiler.Reporting.Error exposing
     ( Error(..)
     , Module
-    , jsonToJson
     , moduleCodec
-    , moduleDecoder
-    , moduleEncoder
     , toDoc
     , toJson
     )
@@ -13,7 +10,6 @@ import Builder.File as File
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as E
 import Compiler.Nitpick.PatternMatches as P
 import Compiler.Reporting.Annotation as A
@@ -29,8 +25,6 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
 import Compiler.Serialize as S
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import Time
 import Utils.Main as Utils
@@ -242,32 +236,6 @@ encodeRegion (A.Region (A.Position sr sc) (A.Position er ec)) =
 -- ENCODERS and DECODERS
 
 
-jsonToJson : Module -> Encode.Value
-jsonToJson =
-    E.toJsonValue << toJson
-
-
-moduleEncoder : Module -> Encode.Value
-moduleEncoder modul =
-    Encode.object
-        [ ( "name", ModuleName.rawEncoder modul.name )
-        , ( "absolutePath", Encode.string modul.absolutePath )
-        , ( "modificationTime", File.timeEncoder modul.modificationTime )
-        , ( "source", Encode.string modul.source )
-        , ( "error", errorEncoder modul.error )
-        ]
-
-
-moduleDecoder : Decode.Decoder Module
-moduleDecoder =
-    Decode.map5 Module
-        (Decode.field "name" ModuleName.rawDecoder)
-        (Decode.field "absolutePath" Decode.string)
-        (Decode.field "modificationTime" File.timeDecoder)
-        (Decode.field "source" Decode.string)
-        (Decode.field "error" errorDecoder)
-
-
 moduleCodec : Codec (Serialize.Error e) Module
 moduleCodec =
     Serialize.record Module
@@ -277,90 +245,6 @@ moduleCodec =
         |> Serialize.field .source Serialize.string
         |> Serialize.field .error errorCodec
         |> Serialize.finishRecord
-
-
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        BadSyntax syntaxError ->
-            Encode.object
-                [ ( "type", Encode.string "BadSyntax" )
-                , ( "syntaxError", Syntax.errorEncoder syntaxError )
-                ]
-
-        BadImports errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadImports" )
-                , ( "errs", E.nonempty Import.errorEncoder errs )
-                ]
-
-        BadNames errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadNames" )
-                , ( "errs", E.oneOrMore Canonicalize.errorEncoder errs )
-                ]
-
-        BadTypes localizer errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadTypes" )
-                , ( "localizer", L.localizerEncoder localizer )
-                , ( "errs", E.nonempty Type.errorEncoder errs )
-                ]
-
-        BadMains localizer errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadMains" )
-                , ( "localizer", L.localizerEncoder localizer )
-                , ( "errs", E.oneOrMore Main.errorEncoder errs )
-                ]
-
-        BadPatterns errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadPatterns" )
-                , ( "errs", E.nonempty P.errorEncoder errs )
-                ]
-
-        BadDocs docsErr ->
-            Encode.object
-                [ ( "type", Encode.string "BadDocs" )
-                , ( "docsErr", Docs.errorEncoder docsErr )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadSyntax" ->
-                        Decode.map BadSyntax (Decode.field "syntaxError" Syntax.errorDecoder)
-
-                    "BadImports" ->
-                        Decode.map BadImports (Decode.field "errs" (DecodeX.nonempty Import.errorDecoder))
-
-                    "BadNames" ->
-                        Decode.map BadNames (Decode.field "errs" (DecodeX.oneOrMore Canonicalize.errorDecoder))
-
-                    "BadTypes" ->
-                        Decode.map2 BadTypes
-                            (Decode.field "localizer" L.localizerDecoder)
-                            (Decode.field "errs" (DecodeX.nonempty Type.errorDecoder))
-
-                    "BadMains" ->
-                        Decode.map2 BadMains
-                            (Decode.field "localizer" L.localizerDecoder)
-                            (Decode.field "errs" (DecodeX.oneOrMore Main.errorDecoder))
-
-                    "BadPatterns" ->
-                        Decode.map BadPatterns (Decode.field "errs" (DecodeX.nonempty P.errorDecoder))
-
-                    "BadDocs" ->
-                        Decode.map BadDocs (Decode.field "docsErr" Docs.errorDecoder)
-
-                    _ ->
-                        Decode.fail ("Unknown Path's type: " ++ type_)
-            )
 
 
 errorCodec : Codec (Serialize.Error e) Error

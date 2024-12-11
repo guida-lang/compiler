@@ -24,6 +24,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
 import List.Extra as List
+import Serialize
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
@@ -514,7 +515,7 @@ register manager pkg vsn docs commitHash sha =
         Http.upload manager
             url
             [ Http.filePart "elm.json" "elm.json"
-            , Http.jsonPart "docs.json" "docs.json" (Docs.jsonEncoder docs)
+            , Http.jsonPart "docs.json" "docs.json" (Serialize.encodeToJson Docs.jsonCodec docs)
             , Http.filePart "README.md" "README.md"
             , Http.stringPart "github-hash" (Http.shaToChars sha)
             ]

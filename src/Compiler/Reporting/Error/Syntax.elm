@@ -31,10 +31,6 @@ module Compiler.Reporting.Error.Syntax exposing
     , Type(..)
     , TypeAlias(..)
     , errorCodec
-    , errorDecoder
-    , errorEncoder
-    , spaceDecoder
-    , spaceEncoder
     , toReport
     , toSpaceReport
     )
@@ -48,9 +44,6 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Hex
-import Json.Decode as Decode
-import Json.Encode as Encode
-import Pretty exposing (space)
 import Serialize exposing (Codec)
 
 
@@ -7865,96 +7858,6 @@ toTTupleReport source context tuple startRow startCol =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        ModuleNameUnspecified name ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleNameUnspecified" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        ModuleNameMismatch expectedName actualName ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleNameMismatch" )
-                , ( "expectedName", ModuleName.rawEncoder expectedName )
-                , ( "actualName", A.locatedEncoder ModuleName.rawEncoder actualName )
-                ]
-
-        UnexpectedPort region ->
-            Encode.object
-                [ ( "type", Encode.string "UnexpectedPort" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        NoPorts region ->
-            Encode.object
-                [ ( "type", Encode.string "NoPorts" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        NoPortsInPackage name ->
-            Encode.object
-                [ ( "type", Encode.string "NoPortsInPackage" )
-                , ( "name", A.locatedEncoder Encode.string name )
-                ]
-
-        NoPortModulesInPackage region ->
-            Encode.object
-                [ ( "type", Encode.string "NoPortModulesInPackage" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        NoEffectsOutsideKernel region ->
-            Encode.object
-                [ ( "type", Encode.string "NoEffectsOutsideKernel" )
-                , ( "region", A.regionEncoder region )
-                ]
-
-        ParseError modul ->
-            Encode.object
-                [ ( "type", Encode.string "ParseError" )
-                , ( "modul", moduleEncoder modul )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ModuleNameUnspecified" ->
-                        Decode.map ModuleNameUnspecified (Decode.field "name" ModuleName.rawDecoder)
-
-                    "ModuleNameMismatch" ->
-                        Decode.map2 ModuleNameMismatch
-                            (Decode.field "expectedName" ModuleName.rawDecoder)
-                            (Decode.field "actualName" (A.locatedDecoder ModuleName.rawDecoder))
-
-                    "UnexpectedPort" ->
-                        Decode.map UnexpectedPort (Decode.field "region" A.regionDecoder)
-
-                    "NoPorts" ->
-                        Decode.map NoPorts (Decode.field "region" A.regionDecoder)
-
-                    "NoPortsInPackage" ->
-                        Decode.map NoPortsInPackage (Decode.field "name" (A.locatedDecoder Decode.string))
-
-                    "NoPortModulesInPackage" ->
-                        Decode.map NoPortModulesInPackage (Decode.field "region" A.regionDecoder)
-
-                    "NoEffectsOutsideKernel" ->
-                        Decode.map NoEffectsOutsideKernel (Decode.field "region" A.regionDecoder)
-
-                    "ParseError" ->
-                        Decode.map ParseError (Decode.field "modul" moduleDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
-
-
 errorCodec : Codec e Error
 errorCodec =
     Serialize.customType
@@ -7995,33 +7898,6 @@ errorCodec =
         |> Serialize.finishCustomType
 
 
-spaceEncoder : Space -> Encode.Value
-spaceEncoder space =
-    case space of
-        HasTab ->
-            Encode.string "HasTab"
-
-        EndlessMultiComment ->
-            Encode.string "EndlessMultiComment"
-
-
-spaceDecoder : Decode.Decoder Space
-spaceDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "HasTab" ->
-                        Decode.succeed HasTab
-
-                    "EndlessMultiComment" ->
-                        Decode.succeed EndlessMultiComment
-
-                    _ ->
-                        Decode.fail ("Unknown Space: " ++ str)
-            )
-
-
 spaceCodec : Codec e Space
 spaceCodec =
     Serialize.customType
@@ -8036,295 +7912,6 @@ spaceCodec =
         |> Serialize.variant0 HasTab
         |> Serialize.variant0 EndlessMultiComment
         |> Serialize.finishCustomType
-
-
-moduleEncoder : Module -> Encode.Value
-moduleEncoder modul =
-    case modul of
-        ModuleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ModuleBadEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleBadEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ModuleProblem row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleProblem" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ModuleName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ModuleExposing exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleExposing" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortModuleProblem row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleProblem" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortModuleName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortModuleExposing exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleExposing" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Effect row col ->
-            Encode.object
-                [ ( "type", Encode.string "Effect" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        FreshLine row col ->
-            Encode.object
-                [ ( "type", Encode.string "FreshLine" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportAs row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportAs" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportExposing row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportExposing" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportExposingList exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportExposingList" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportIndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportIndentAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ImportIndentExposingList row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentExposingList" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Infix row col ->
-            Encode.object
-                [ ( "type", Encode.string "Infix" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Declarations decl row col ->
-            Encode.object
-                [ ( "type", Encode.string "Declarations" )
-                , ( "decl", declEncoder decl )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-moduleDecoder : Decode.Decoder Module
-moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ModuleSpace" ->
-                        Decode.map3 ModuleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ModuleBadEnd" ->
-                        Decode.map2 ModuleBadEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ModuleProblem" ->
-                        Decode.map2 ModuleProblem
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ModuleName" ->
-                        Decode.map2 ModuleName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ModuleExposing" ->
-                        Decode.map3 ModuleExposing
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortModuleProblem" ->
-                        Decode.map2 PortModuleProblem
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortModuleName" ->
-                        Decode.map2 PortModuleName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortModuleExposing" ->
-                        Decode.map3 PortModuleExposing
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Effect" ->
-                        Decode.map2 Effect
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FreshLine" ->
-                        Decode.map2 FreshLine
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportStart" ->
-                        Decode.map2 ImportStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportName" ->
-                        Decode.map2 ImportName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportAs" ->
-                        Decode.map2 ImportAs
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportAlias" ->
-                        Decode.map2 ImportAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportExposing" ->
-                        Decode.map2 ImportExposing
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportExposingList" ->
-                        Decode.map3 ImportExposingList
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportEnd" ->
-                        Decode.map2 ImportEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportIndentName" ->
-                        Decode.map2 ImportIndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportIndentAlias" ->
-                        Decode.map2 ImportIndentAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ImportIndentExposingList" ->
-                        Decode.map2 ImportIndentExposingList
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Infix" ->
-                        Decode.map2 Infix
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Declarations" ->
-                        Decode.map3 Declarations
-                            (Decode.field "decl" declDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
-            )
 
 
 moduleCodec : Codec e Module
@@ -8423,145 +8010,6 @@ moduleCodec =
         |> Serialize.finishCustomType
 
 
-exposingEncoder : Exposing -> Encode.Value
-exposingEncoder exposing_ =
-    case exposing_ of
-        ExposingSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingValue row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingValue" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingOperator row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperator" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingOperatorReserved op row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperatorReserved" )
-                , ( "op", Compiler.Parse.Symbol.badOperatorEncoder op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingOperatorRightParen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperatorRightParen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingTypePrivacy row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingTypePrivacy" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ExposingIndentValue row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingIndentValue" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-exposingDecoder : Decode.Decoder Exposing
-exposingDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ExposingSpace" ->
-                        Decode.map3 ExposingSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingStart" ->
-                        Decode.map2 ExposingStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingValue" ->
-                        Decode.map2 ExposingValue
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingOperator" ->
-                        Decode.map2 ExposingOperator
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingOperatorReserved" ->
-                        Decode.map3 ExposingOperatorReserved
-                            (Decode.field "op" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingOperatorRightParen" ->
-                        Decode.map2 ExposingOperatorRightParen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingTypePrivacy" ->
-                        Decode.map2 ExposingTypePrivacy
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingEnd" ->
-                        Decode.map2 ExposingEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingIndentEnd" ->
-                        Decode.map2 ExposingIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ExposingIndentValue" ->
-                        Decode.map2 ExposingIndentValue
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Exposing's type: " ++ type_)
-            )
-
-
 exposingCodec : Codec e Exposing
 exposingCodec =
     Serialize.customType
@@ -8610,103 +8058,6 @@ exposingCodec =
         |> Serialize.finishCustomType
 
 
-declEncoder : Decl -> Encode.Value
-declEncoder decl =
-    case decl of
-        DeclStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Port port_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Port" )
-                , ( "port", portEncoder port_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclType declType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclType" )
-                , ( "declType", declTypeEncoder declType )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDef name declDef row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDef" )
-                , ( "name", Encode.string name )
-                , ( "declDef", declDefEncoder declDef )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclFreshLineAfterDocComment row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclFreshLineAfterDocComment" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-declDecoder : Decode.Decoder Decl
-declDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DeclStart" ->
-                        Decode.map2 DeclStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclSpace" ->
-                        Decode.map3 DeclSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Port" ->
-                        Decode.map3 Port
-                            (Decode.field "port" portDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclType" ->
-                        Decode.map3 DeclType
-                            (Decode.field "declType" declTypeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDef" ->
-                        Decode.map4 DeclDef
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "declDef" declDefDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclFreshLineAfterDocComment" ->
-                        Decode.map2 DeclFreshLineAfterDocComment
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Decl's type: " ++ type_)
-            )
-
-
 declCodec : Codec e Decl
 declCodec =
     Serialize.customType
@@ -8739,343 +8090,68 @@ declCodec =
         |> Serialize.finishCustomType
 
 
-portEncoder : Port -> Encode.Value
-portEncoder port_ =
-    case port_ of
-        PortSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortIndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortIndentColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PortIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-portDecoder : Decode.Decoder Port
-portDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PortSpace" ->
-                        Decode.map3 PortSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortName" ->
-                        Decode.map2 PortName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortColon" ->
-                        Decode.map2 PortColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortType" ->
-                        Decode.map3 PortType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortIndentName" ->
-                        Decode.map2 PortIndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortIndentColon" ->
-                        Decode.map2 PortIndentColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PortIndentType" ->
-                        Decode.map2 PortIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Port's type: " ++ type_)
-            )
-
-
 portCodec : Codec e Port
 portCodec =
-    Debug.todo "portCodec"
+    Serialize.customType
+        (\portSpaceEncoder portNameEncoder portColonEncoder portTypeEncoder portIndentNameEncoder portIndentColonEncoder portIndentTypeEncoder value ->
+            case value of
+                PortSpace space row col ->
+                    portSpaceEncoder space row col
 
+                PortName row col ->
+                    portNameEncoder row col
 
-declTypeEncoder : DeclType -> Encode.Value
-declTypeEncoder declType =
-    case declType of
-        DT_Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PortColon row col ->
+                    portColonEncoder row col
 
-        DT_Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PortType tipe row col ->
+                    portTypeEncoder tipe row col
 
-        DT_Alias typeAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Alias" )
-                , ( "typeAlias", typeAliasEncoder typeAlias )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PortIndentName row col ->
+                    portIndentNameEncoder row col
 
-        DT_Union customType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Union" )
-                , ( "customType", customTypeEncoder customType )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PortIndentColon row col ->
+                    portIndentColonEncoder row col
 
-        DT_IndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_IndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-declTypeDecoder : Decode.Decoder DeclType
-declTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DT_Space" ->
-                        Decode.map3 DT_Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DT_Name" ->
-                        Decode.map2 DT_Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DT_Alias" ->
-                        Decode.map3 DT_Alias
-                            (Decode.field "typeAlias" typeAliasDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DT_Union" ->
-                        Decode.map3 DT_Union
-                            (Decode.field "customType" customTypeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DT_IndentName" ->
-                        Decode.map2 DT_IndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode DeclType's type: " ++ type_)
-            )
+                PortIndentType row col ->
+                    portIndentTypeEncoder row col
+        )
+        |> Serialize.variant3 PortSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PortName Serialize.int Serialize.int
+        |> Serialize.variant2 PortColon Serialize.int Serialize.int
+        |> Serialize.variant3 PortType typeCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PortIndentName Serialize.int Serialize.int
+        |> Serialize.variant2 PortIndentColon Serialize.int Serialize.int
+        |> Serialize.variant2 PortIndentType Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 declTypeCodec : Codec e DeclType
 declTypeCodec =
-    Debug.todo "declTypeCodec"
+    Serialize.customType
+        (\dT_SpaceEncoder dT_NameEncoder dT_AliasEncoder dT_UnionEncoder dT_IndentNameEncoder value ->
+            case value of
+                DT_Space space row col ->
+                    dT_SpaceEncoder space row col
 
+                DT_Name row col ->
+                    dT_NameEncoder row col
 
-declDefEncoder : DeclDef -> Encode.Value
-declDefEncoder declDef =
-    case declDef of
-        DeclDefSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                DT_Alias typeAlias row col ->
+                    dT_AliasEncoder typeAlias row col
 
-        DeclDefEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                DT_Union customType row col ->
+                    dT_UnionEncoder customType row col
 
-        DeclDefType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefNameRepeat row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefNameRepeat" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefNameMatch name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefNameMatch" )
-                , ( "name", Encode.string name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DeclDefIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-declDefDecoder : Decode.Decoder DeclDef
-declDefDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DeclDefSpace" ->
-                        Decode.map3 DeclDefSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefEquals" ->
-                        Decode.map2 DeclDefEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefType" ->
-                        Decode.map3 DeclDefType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefArg" ->
-                        Decode.map3 DeclDefArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefBody" ->
-                        Decode.map3 DeclDefBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefNameRepeat" ->
-                        Decode.map2 DeclDefNameRepeat
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefNameMatch" ->
-                        Decode.map3 DeclDefNameMatch
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefIndentType" ->
-                        Decode.map2 DeclDefIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefIndentEquals" ->
-                        Decode.map2 DeclDefIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DeclDefIndentBody" ->
-                        Decode.map2 DeclDefIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode DeclDef's type: " ++ type_)
-            )
+                DT_IndentName row col ->
+                    dT_IndentNameEncoder row col
+        )
+        |> Serialize.variant3 DT_Space spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DT_Name Serialize.int Serialize.int
+        |> Serialize.variant3 DT_Alias typeAliasCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DT_Union customTypeCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DT_IndentName Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 declDefCodec : Codec e DeclDef
@@ -9126,559 +8202,92 @@ declDefCodec =
         |> Serialize.finishCustomType
 
 
-typeEncoder : Type -> Encode.Value
-typeEncoder type_ =
-    case type_ of
-        TRecord record row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecord" )
-                , ( "record", tRecordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTuple" )
-                , ( "tuple", tTupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "TStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TIndentStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "TIndentStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-typeDecoder : Decode.Decoder Type
-typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TRecord" ->
-                        Decode.map3 TRecord
-                            (Decode.field "record" tRecordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTuple" ->
-                        Decode.map3 TTuple
-                            (Decode.field "tuple" tTupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TStart" ->
-                        Decode.map2 TStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TSpace" ->
-                        Decode.map3 TSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TIndentStart" ->
-                        Decode.map2 TIndentStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Type's type: " ++ type_)
-            )
-
-
 typeCodec : Codec e Type
 typeCodec =
-    Debug.todo "typeCodec"
+    Serialize.customType
+        (\tRecordCodecEncoder tTupleCodecEncoder tStartEncoder tSpaceEncoder tIndentStartEncoder value ->
+            case value of
+                TRecord record row col ->
+                    tRecordCodecEncoder record row col
 
+                TTuple tuple row col ->
+                    tTupleCodecEncoder tuple row col
 
-patternEncoder : Pattern -> Encode.Value
-patternEncoder pattern =
-    case pattern of
-        PRecord record row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecord" )
-                , ( "record", pRecordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TStart row col ->
+                    tStartEncoder row col
 
-        PTuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTuple" )
-                , ( "tuple", pTupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TSpace space row col ->
+                    tSpaceEncoder space row col
 
-        PList list row col ->
-            Encode.object
-                [ ( "type", Encode.string "PList" )
-                , ( "list", pListEncoder list )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "PStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PChar char row col ->
-            Encode.object
-                [ ( "type", Encode.string "PChar" )
-                , ( "char", charEncoder char )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PString string row col ->
-            Encode.object
-                [ ( "type", Encode.string "PString" )
-                , ( "string", stringEncoder string )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PNumber number row col ->
-            Encode.object
-                [ ( "type", Encode.string "PNumber" )
-                , ( "number", numberEncoder number )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PFloat width row col ->
-            Encode.object
-                [ ( "type", Encode.string "PFloat" )
-                , ( "width", Encode.int width )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "PAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PWildcardNotVar name width row col ->
-            Encode.object
-                [ ( "type", Encode.string "PWildcardNotVar" )
-                , ( "name", Encode.string name )
-                , ( "width", Encode.int width )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PIndentStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "PIndentStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PIndentAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "PIndentAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-patternDecoder : Decode.Decoder Pattern
-patternDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecord" ->
-                        Decode.map3 PRecord
-                            (Decode.field "record" pRecordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTuple" ->
-                        Decode.map3 PTuple
-                            (Decode.field "tuple" pTupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PList" ->
-                        Decode.map3 PList
-                            (Decode.field "list" pListDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PStart" ->
-                        Decode.map2 PStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PChar" ->
-                        Decode.map3 PChar
-                            (Decode.field "char" charDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PString" ->
-                        Decode.map3 PString
-                            (Decode.field "string" stringDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PNumber" ->
-                        Decode.map3 PNumber
-                            (Decode.field "number" numberDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PFloat" ->
-                        Decode.map3 PFloat
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PAlias" ->
-                        Decode.map2 PAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PWildcardNotVar" ->
-                        Decode.map4 PWildcardNotVar
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PSpace" ->
-                        Decode.map3 PSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PIndentStart" ->
-                        Decode.map2 PIndentStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PIndentAlias" ->
-                        Decode.map2 PIndentAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Pattern's type: " ++ type_)
-            )
+                TIndentStart row col ->
+                    tIndentStartEncoder row col
+        )
+        |> Serialize.variant3 TRecord tRecordCodec Serialize.int Serialize.int
+        |> Serialize.variant3 TTuple (Serialize.lazy (\() -> tTupleCodec)) Serialize.int Serialize.int
+        |> Serialize.variant2 TStart Serialize.int Serialize.int
+        |> Serialize.variant3 TSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 TIndentStart Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 patternCodec : Codec e Pattern
 patternCodec =
-    Debug.todo "patternCodec"
+    Serialize.customType
+        (\pRecordCodecEncoder pTupleCodecEncoder pListCodecEncoder pStartEncoder pCharEncoder pStringEncoder pNumberEncoder pFloatEncoder pAliasEncoder pWildcardNotVarEncoder pSpaceEncoder pIndentStartEncoder pIndentAliasEncoder value ->
+            case value of
+                PRecord record row col ->
+                    pRecordCodecEncoder record row col
 
+                PTuple tuple row col ->
+                    pTupleCodecEncoder tuple row col
 
-exprEncoder : Expr -> Encode.Value
-exprEncoder expr =
-    case expr of
-        Let let_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Let" )
-                , ( "let", letEncoder let_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PList list row col ->
+                    pListCodecEncoder list row col
 
-        Case case_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                , ( "case", caseEncoder case_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PStart row col ->
+                    pStartEncoder row col
 
-        If if_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                , ( "if", ifEncoder if_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PChar char row col ->
+                    pCharEncoder char row col
 
-        List list row col ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                , ( "list", listEncoder list )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PString string row col ->
+                    pStringEncoder string row col
 
-        Record record row col ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "record", recordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PNumber number row col ->
+                    pNumberEncoder number row col
 
-        Tuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "tuple", tupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PFloat width row col ->
+                    pFloatEncoder width row col
 
-        Func func row col ->
-            Encode.object
-                [ ( "type", Encode.string "Func" )
-                , ( "func", funcEncoder func )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PAlias row col ->
+                    pAliasEncoder row col
 
-        Dot row col ->
-            Encode.object
-                [ ( "type", Encode.string "Dot" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PWildcardNotVar name width row col ->
+                    pWildcardNotVarEncoder name width row col
 
-        Access row col ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PSpace space row col ->
+                    pSpaceEncoder space row col
 
-        OperatorRight op row col ->
-            Encode.object
-                [ ( "type", Encode.string "OperatorRight" )
-                , ( "op", Encode.string op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                PIndentStart row col ->
+                    pIndentStartEncoder row col
 
-        OperatorReserved operator row col ->
-            Encode.object
-                [ ( "type", Encode.string "OperatorReserved" )
-                , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Start row col ->
-            Encode.object
-                [ ( "type", Encode.string "Start" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Char char row col ->
-            Encode.object
-                [ ( "type", Encode.string "Char" )
-                , ( "char", charEncoder char )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        String_ string row col ->
-            Encode.object
-                [ ( "type", Encode.string "String" )
-                , ( "string", stringEncoder string )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Number number row col ->
-            Encode.object
-                [ ( "type", Encode.string "Number" )
-                , ( "number", numberEncoder number )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        EndlessShader row col ->
-            Encode.object
-                [ ( "type", Encode.string "EndlessShader" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        ShaderProblem problem row col ->
-            Encode.object
-                [ ( "type", Encode.string "ShaderProblem" )
-                , ( "problem", Encode.string problem )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        IndentOperatorRight op row col ->
-            Encode.object
-                [ ( "type", Encode.string "IndentOperatorRight" )
-                , ( "op", Encode.string op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-exprDecoder : Decode.Decoder Expr
-exprDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Let" ->
-                        Decode.map3 Let
-                            (Decode.field "let" letDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Case" ->
-                        Decode.map3 Case
-                            (Decode.field "case" caseDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "If" ->
-                        Decode.map3 If
-                            (Decode.field "if" ifDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "List" ->
-                        Decode.map3 List
-                            (Decode.field "list" listDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Record" ->
-                        Decode.map3 Record
-                            (Decode.field "record" recordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Tuple" ->
-                        Decode.map3 Tuple
-                            (Decode.field "tuple" tupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Func" ->
-                        Decode.map3 Func
-                            (Decode.field "func" funcDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Dot" ->
-                        Decode.map2 Dot
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Access" ->
-                        Decode.map2 Access
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "OperatorRight" ->
-                        Decode.map3 OperatorRight
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "OperatorReserved" ->
-                        Decode.map3 OperatorReserved
-                            (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Start" ->
-                        Decode.map2 Start
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Char" ->
-                        Decode.map3 Char
-                            (Decode.field "char" charDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "String" ->
-                        Decode.map3 String_
-                            (Decode.field "string" stringDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Number" ->
-                        Decode.map3 Number
-                            (Decode.field "number" numberDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "Space" ->
-                        Decode.map3 Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "EndlessShader" ->
-                        Decode.map2 EndlessShader
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ShaderProblem" ->
-                        Decode.map3 ShaderProblem
-                            (Decode.field "problem" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IndentOperatorRight" ->
-                        Decode.map3 IndentOperatorRight
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Expr's type: " ++ type_)
-            )
+                PIndentAlias row col ->
+                    pIndentAliasEncoder row col
+        )
+        |> Serialize.variant3 PRecord pRecordCodec Serialize.int Serialize.int
+        |> Serialize.variant3 PTuple (Serialize.lazy (\() -> pTupleCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 PList pListCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PStart Serialize.int Serialize.int
+        |> Serialize.variant3 PChar charCodec Serialize.int Serialize.int
+        |> Serialize.variant3 PString string_Codec Serialize.int Serialize.int
+        |> Serialize.variant3 PNumber numberCodec Serialize.int Serialize.int
+        |> Serialize.variant3 PFloat Serialize.int Serialize.int Serialize.int
+        |> Serialize.variant2 PAlias Serialize.int Serialize.int
+        |> Serialize.variant4 PWildcardNotVar Serialize.string Serialize.int Serialize.int Serialize.int
+        |> Serialize.variant3 PSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PIndentStart Serialize.int Serialize.int
+        |> Serialize.variant2 PIndentAlias Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 exprCodec : Codec e Expr
@@ -9743,20 +8352,20 @@ exprCodec =
                 IndentOperatorRight op row col ->
                     indentOperatorRightEncoder op row col
         )
-        |> Serialize.variant3 Let letCodec Serialize.int Serialize.int
+        |> Serialize.variant3 Let (Serialize.lazy (\() -> letCodec)) Serialize.int Serialize.int
         |> Serialize.variant3 Case caseCodec Serialize.int Serialize.int
-        |> Serialize.variant3 If ifCodec Serialize.int Serialize.int
-        |> Serialize.variant3 List listCodec Serialize.int Serialize.int
-        |> Serialize.variant3 Record recordCodec Serialize.int Serialize.int
-        |> Serialize.variant3 Tuple tupleCodec Serialize.int Serialize.int
-        |> Serialize.variant3 Func funcCodec Serialize.int Serialize.int
+        |> Serialize.variant3 If (Serialize.lazy (\() -> ifCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 List (Serialize.lazy (\() -> listCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 Record (Serialize.lazy (\() -> recordCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 Tuple (Serialize.lazy (\() -> tupleCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 Func (Serialize.lazy (\() -> funcCodec)) Serialize.int Serialize.int
         |> Serialize.variant2 Dot Serialize.int Serialize.int
         |> Serialize.variant2 Access Serialize.int Serialize.int
         |> Serialize.variant3 OperatorRight Serialize.string Serialize.int Serialize.int
         |> Serialize.variant3 OperatorReserved Compiler.Parse.Symbol.badOperatorCodec Serialize.int Serialize.int
         |> Serialize.variant2 Start Serialize.int Serialize.int
         |> Serialize.variant3 Char charCodec Serialize.int Serialize.int
-        |> Serialize.variant3 String_ stringCodec Serialize.int Serialize.int
+        |> Serialize.variant3 String_ string_Codec Serialize.int Serialize.int
         |> Serialize.variant3 Number numberCodec Serialize.int Serialize.int
         |> Serialize.variant3 Space spaceCodec Serialize.int Serialize.int
         |> Serialize.variant2 EndlessShader Serialize.int Serialize.int
@@ -9765,2235 +8374,773 @@ exprCodec =
         |> Serialize.finishCustomType
 
 
-letEncoder : Let -> Encode.Value
-letEncoder let_ =
-    case let_ of
-        LetSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetIn row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIn" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetDefAlignment int row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDefAlignment" )
-                , ( "int", Encode.int int )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetDefName row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDefName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetDef name def row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDef" )
-                , ( "name", Encode.string name )
-                , ( "def", defEncoder def )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetDestruct destruct row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDestruct" )
-                , ( "destruct", destructEncoder destruct )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetIndentDef row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentDef" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetIndentIn row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentIn" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        LetIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-letDecoder : Decode.Decoder Let
-letDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LetSpace" ->
-                        Decode.map3 LetSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetIn" ->
-                        Decode.map2 LetIn
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetDefAlignment" ->
-                        Decode.map3 LetDefAlignment
-                            (Decode.field "int" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetDefName" ->
-                        Decode.map2 LetDefName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetDef" ->
-                        Decode.map4 LetDef
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "def" defDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetDestruct" ->
-                        Decode.map3 LetDestruct
-                            (Decode.field "destruct" destructDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetBody" ->
-                        Decode.map3 LetBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetIndentDef" ->
-                        Decode.map2 LetIndentDef
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetIndentIn" ->
-                        Decode.map2 LetIndentIn
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "LetIndentBody" ->
-                        Decode.map2 LetIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Let's type: " ++ type_)
-            )
-
-
 letCodec : Codec e Let
 letCodec =
-    Debug.todo "letCodec"
+    Serialize.customType
+        (\letSpaceEncoder letInEncoder letDefAlignmentEncoder letDefNameEncoder letDefEncoder letDestructEncoder letBodyEncoder letIndentDefEncoder letIndentInEncoder letIndentBodyEncoder value ->
+            case value of
+                LetSpace space row col ->
+                    letSpaceEncoder space row col
 
+                LetIn row col ->
+                    letInEncoder row col
 
-caseEncoder : Case -> Encode.Value
-caseEncoder case_ =
-    case case_ of
-        CaseSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetDefAlignment int row col ->
+                    letDefAlignmentEncoder int row col
 
-        CaseOf row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseOf" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetDefName row col ->
+                    letDefNameEncoder row col
 
-        CasePattern pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "CasePattern" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetDef name def row col ->
+                    letDefEncoder name def row col
 
-        CaseArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetDestruct destruct row col ->
+                    letDestructEncoder destruct row col
 
-        CaseExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetBody expr row col ->
+                    letBodyEncoder expr row col
 
-        CaseBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetIndentDef row col ->
+                    letIndentDefEncoder row col
 
-        CaseIndentOf row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentOf" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                LetIndentIn row col ->
+                    letIndentInEncoder row col
 
-        CaseIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CaseIndentPattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentPattern" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CaseIndentArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CaseIndentBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CasePatternAlignment indent row col ->
-            Encode.object
-                [ ( "type", Encode.string "CasePatternAlignment" )
-                , ( "indent", Encode.int indent )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-caseDecoder : Decode.Decoder Case
-caseDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CaseSpace" ->
-                        Decode.map3 CaseSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseOf" ->
-                        Decode.map2 CaseOf
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CasePattern" ->
-                        Decode.map3 CasePattern
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseArrow" ->
-                        Decode.map2 CaseArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseExpr" ->
-                        Decode.map3 CaseExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseBranch" ->
-                        Decode.map3 CaseBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseIndentOf" ->
-                        Decode.map2 CaseIndentOf
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseIndentExpr" ->
-                        Decode.map2 CaseIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseIndentPattern" ->
-                        Decode.map2 CaseIndentPattern
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseIndentArrow" ->
-                        Decode.map2 CaseIndentArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CaseIndentBranch" ->
-                        Decode.map2 CaseIndentBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CasePatternAlignment" ->
-                        Decode.map3 CasePatternAlignment
-                            (Decode.field "indent" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Case's type: " ++ type_)
-            )
+                LetIndentBody row col ->
+                    letIndentBodyEncoder row col
+        )
+        |> Serialize.variant3 LetSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 LetIn Serialize.int Serialize.int
+        |> Serialize.variant3 LetDefAlignment Serialize.int Serialize.int Serialize.int
+        |> Serialize.variant2 LetDefName Serialize.int Serialize.int
+        |> Serialize.variant4 LetDef Serialize.string defCodec Serialize.int Serialize.int
+        |> Serialize.variant3 LetDestruct destructCodec Serialize.int Serialize.int
+        |> Serialize.variant3 LetBody exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 LetIndentDef Serialize.int Serialize.int
+        |> Serialize.variant2 LetIndentIn Serialize.int Serialize.int
+        |> Serialize.variant2 LetIndentBody Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 caseCodec : Codec e Case
 caseCodec =
-    Debug.todo "caseCodec"
+    Serialize.customType
+        (\caseSpaceEncoder caseOfEncoder casePatternEncoder caseArrowEncoder caseExprEncoder caseBranchEncoder caseIndentOfEncoder caseIndentExprEncoder caseIndentPatternEncoder caseIndentArrowEncoder caseIndentBranchEncoder casePatternAlignmentEncoder value ->
+            case value of
+                CaseSpace space row col ->
+                    caseSpaceEncoder space row col
 
+                CaseOf row col ->
+                    caseOfEncoder row col
 
-ifEncoder : If -> Encode.Value
-ifEncoder if_ =
-    case if_ of
-        IfSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CasePattern pattern row col ->
+                    casePatternEncoder pattern row col
 
-        IfThen row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfThen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseArrow row col ->
+                    caseArrowEncoder row col
 
-        IfElse row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElse" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseExpr expr row col ->
+                    caseExprEncoder expr row col
 
-        IfElseBranchStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElseBranchStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseBranch expr row col ->
+                    caseBranchEncoder expr row col
 
-        IfCondition expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfCondition" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseIndentOf row col ->
+                    caseIndentOfEncoder row col
 
-        IfThenBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfThenBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseIndentExpr row col ->
+                    caseIndentExprEncoder row col
 
-        IfElseBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElseBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseIndentPattern row col ->
+                    caseIndentPatternEncoder row col
 
-        IfIndentCondition row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentCondition" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseIndentArrow row col ->
+                    caseIndentArrowEncoder row col
 
-        IfIndentThen row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentThen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                CaseIndentBranch row col ->
+                    caseIndentBranchEncoder row col
 
-        IfIndentThenBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentThenBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        IfIndentElseBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentElseBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        IfIndentElse row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentElse" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-ifDecoder : Decode.Decoder If
-ifDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "IfSpace" ->
-                        Decode.map3 IfSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfThen" ->
-                        Decode.map2 IfThen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfElse" ->
-                        Decode.map2 IfElse
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfElseBranchStart" ->
-                        Decode.map2 IfElseBranchStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfCondition" ->
-                        Decode.map3 IfCondition
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfThenBranch" ->
-                        Decode.map3 IfThenBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfElseBranch" ->
-                        Decode.map3 IfElseBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfIndentCondition" ->
-                        Decode.map2 IfIndentCondition
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfIndentThen" ->
-                        Decode.map2 IfIndentThen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfIndentThenBranch" ->
-                        Decode.map2 IfIndentThenBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfIndentElseBranch" ->
-                        Decode.map2 IfIndentElseBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "IfIndentElse" ->
-                        Decode.map2 IfIndentElse
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode If's type: " ++ type_)
-            )
+                CasePatternAlignment indent row col ->
+                    casePatternAlignmentEncoder indent row col
+        )
+        |> Serialize.variant3 CaseSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 CaseOf Serialize.int Serialize.int
+        |> Serialize.variant3 CasePattern patternCodec Serialize.int Serialize.int
+        |> Serialize.variant2 CaseArrow Serialize.int Serialize.int
+        |> Serialize.variant3 CaseExpr (Serialize.lazy (\() -> exprCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 CaseBranch (Serialize.lazy (\() -> exprCodec)) Serialize.int Serialize.int
+        |> Serialize.variant2 CaseIndentOf Serialize.int Serialize.int
+        |> Serialize.variant2 CaseIndentExpr Serialize.int Serialize.int
+        |> Serialize.variant2 CaseIndentPattern Serialize.int Serialize.int
+        |> Serialize.variant2 CaseIndentArrow Serialize.int Serialize.int
+        |> Serialize.variant2 CaseIndentBranch Serialize.int Serialize.int
+        |> Serialize.variant3 CasePatternAlignment Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 ifCodec : Codec e If
 ifCodec =
-    Debug.todo "ifCodec"
+    Serialize.customType
+        (\ifSpaceEncoder ifThenEncoder ifElseEncoder ifElseBranchStartEncoder ifConditionEncoder ifThenBranchEncoder ifElseBranchEncoder ifIndentConditionEncoder ifIndentThenEncoder ifIndentThenBranchEncoder ifIndentElseBranchEncoder ifIndentElseEncoder value ->
+            case value of
+                IfSpace space row col ->
+                    ifSpaceEncoder space row col
 
+                IfThen row col ->
+                    ifThenEncoder row col
 
-listEncoder : List_ -> Encode.Value
-listEncoder list_ =
-    case list_ of
-        ListSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfElse row col ->
+                    ifElseEncoder row col
 
-        ListOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfElseBranchStart row col ->
+                    ifElseBranchStartEncoder row col
 
-        ListExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfCondition expr row col ->
+                    ifConditionEncoder expr row col
 
-        ListEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfThenBranch expr row col ->
+                    ifThenBranchEncoder expr row col
 
-        ListIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfElseBranch expr row col ->
+                    ifElseBranchEncoder expr row col
 
-        ListIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfIndentCondition row col ->
+                    ifIndentConditionEncoder row col
 
-        ListIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                IfIndentThen row col ->
+                    ifIndentThenEncoder row col
 
+                IfIndentThenBranch row col ->
+                    ifIndentThenBranchEncoder row col
 
-listDecoder : Decode.Decoder List_
-listDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ListSpace" ->
-                        Decode.map3 ListSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                IfIndentElseBranch row col ->
+                    ifIndentElseBranchEncoder row col
 
-                    "ListOpen" ->
-                        Decode.map2 ListOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ListExpr" ->
-                        Decode.map3 ListExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ListEnd" ->
-                        Decode.map2 ListEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ListIndentOpen" ->
-                        Decode.map2 ListIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ListIndentEnd" ->
-                        Decode.map2 ListIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "ListIndentExpr" ->
-                        Decode.map2 ListIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode List's type: " ++ type_)
-            )
+                IfIndentElse row col ->
+                    ifIndentElseEncoder row col
+        )
+        |> Serialize.variant3 IfSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 IfThen Serialize.int Serialize.int
+        |> Serialize.variant2 IfElse Serialize.int Serialize.int
+        |> Serialize.variant2 IfElseBranchStart Serialize.int Serialize.int
+        |> Serialize.variant3 IfCondition exprCodec Serialize.int Serialize.int
+        |> Serialize.variant3 IfThenBranch exprCodec Serialize.int Serialize.int
+        |> Serialize.variant3 IfElseBranch exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 IfIndentCondition Serialize.int Serialize.int
+        |> Serialize.variant2 IfIndentThen Serialize.int Serialize.int
+        |> Serialize.variant2 IfIndentThenBranch Serialize.int Serialize.int
+        |> Serialize.variant2 IfIndentElseBranch Serialize.int Serialize.int
+        |> Serialize.variant2 IfIndentElse Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 listCodec : Codec e List_
 listCodec =
-    Debug.todo "listCodec"
+    Serialize.customType
+        (\listSpaceEncoder listOpenEncoder listExprEncoder listEndEncoder listIndentOpenEncoder listIndentEndEncoder listIndentExprEncoder value ->
+            case value of
+                ListSpace space row col ->
+                    listSpaceEncoder space row col
 
+                ListOpen row col ->
+                    listOpenEncoder row col
 
-recordEncoder : Record -> Encode.Value
-recordEncoder record =
-    case record of
-        RecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                ListExpr expr row col ->
+                    listExprEncoder expr row col
 
-        RecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                ListEnd row col ->
+                    listEndEncoder row col
 
-        RecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                ListIndentOpen row col ->
+                    listIndentOpenEncoder row col
 
-        RecordEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                ListIndentEnd row col ->
+                    listIndentEndEncoder row col
 
-        RecordExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        RecordIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-recordDecoder : Decode.Decoder Record
-recordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RecordOpen" ->
-                        Decode.map2 RecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordEnd" ->
-                        Decode.map2 RecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordField" ->
-                        Decode.map2 RecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordEquals" ->
-                        Decode.map2 RecordEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordExpr" ->
-                        Decode.map3 RecordExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordSpace" ->
-                        Decode.map3 RecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordIndentOpen" ->
-                        Decode.map2 RecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordIndentEnd" ->
-                        Decode.map2 RecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordIndentField" ->
-                        Decode.map2 RecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordIndentEquals" ->
-                        Decode.map2 RecordIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "RecordIndentExpr" ->
-                        Decode.map2 RecordIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Record's type: " ++ type_)
-            )
+                ListIndentExpr row col ->
+                    listIndentExprEncoder row col
+        )
+        |> Serialize.variant3 ListSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ListOpen Serialize.int Serialize.int
+        |> Serialize.variant3 ListExpr exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 ListEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ListIndentOpen Serialize.int Serialize.int
+        |> Serialize.variant2 ListIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 ListIndentExpr Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 recordCodec : Codec e Record
 recordCodec =
-    Debug.todo "recordCodec"
+    Serialize.customType
+        (\recordOpenEncoder recordEndEncoder recordFieldEncoder recordEqualsEncoder recordExprEncoder recordSpaceEncoder recordIndentOpenEncoder recordIndentEndEncoder recordIndentFieldEncoder recordIndentEqualsEncoder recordIndentExprEncoder value ->
+            case value of
+                RecordOpen row col ->
+                    recordOpenEncoder row col
 
+                RecordEnd row col ->
+                    recordEndEncoder row col
 
-tupleEncoder : Tuple -> Encode.Value
-tupleEncoder tuple =
-    case tuple of
-        TupleExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordField row col ->
+                    recordFieldEncoder row col
 
-        TupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordEquals row col ->
+                    recordEqualsEncoder row col
 
-        TupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordExpr expr row col ->
+                    recordExprEncoder expr row col
 
-        TupleOperatorClose row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleOperatorClose" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordSpace space row col ->
+                    recordSpaceEncoder space row col
 
-        TupleOperatorReserved operator row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleOperatorReserved" )
-                , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordIndentOpen row col ->
+                    recordIndentOpenEncoder row col
 
-        TupleIndentExpr1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentExpr1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordIndentEnd row col ->
+                    recordIndentEndEncoder row col
 
-        TupleIndentExprN row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentExprN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordIndentField row col ->
+                    recordIndentFieldEncoder row col
 
-        TupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                RecordIndentEquals row col ->
+                    recordIndentEqualsEncoder row col
 
-
-tupleDecoder : Decode.Decoder Tuple
-tupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TupleExpr" ->
-                        Decode.map3 TupleExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleSpace" ->
-                        Decode.map3 TupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleEnd" ->
-                        Decode.map2 TupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleOperatorClose" ->
-                        Decode.map2 TupleOperatorClose
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleOperatorReserved" ->
-                        Decode.map3 TupleOperatorReserved
-                            (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleIndentExpr1" ->
-                        Decode.map2 TupleIndentExpr1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleIndentExprN" ->
-                        Decode.map2 TupleIndentExprN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TupleIndentEnd" ->
-                        Decode.map2 TupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Tuple's type: " ++ type_)
-            )
+                RecordIndentExpr row col ->
+                    recordIndentExprEncoder row col
+        )
+        |> Serialize.variant2 RecordOpen Serialize.int Serialize.int
+        |> Serialize.variant2 RecordEnd Serialize.int Serialize.int
+        |> Serialize.variant2 RecordField Serialize.int Serialize.int
+        |> Serialize.variant2 RecordEquals Serialize.int Serialize.int
+        |> Serialize.variant3 RecordExpr exprCodec Serialize.int Serialize.int
+        |> Serialize.variant3 RecordSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 RecordIndentOpen Serialize.int Serialize.int
+        |> Serialize.variant2 RecordIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 RecordIndentField Serialize.int Serialize.int
+        |> Serialize.variant2 RecordIndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 RecordIndentExpr Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 tupleCodec : Codec e Tuple
 tupleCodec =
-    Debug.todo "tupleCodec"
+    Serialize.customType
+        (\tupleExprEncoder tupleSpaceEncoder tupleEndEncoder tupleOperatorCloseEncoder tupleOperatorReservedEncoder tupleIndentExpr1Encoder tupleIndentExprNEncoder tupleIndentEndEncoder value ->
+            case value of
+                TupleExpr expr row col ->
+                    tupleExprEncoder expr row col
 
+                TupleSpace space row col ->
+                    tupleSpaceEncoder space row col
 
-funcEncoder : Func -> Encode.Value
-funcEncoder func =
-    case func of
-        FuncSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TupleEnd row col ->
+                    tupleEndEncoder row col
 
-        FuncArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TupleOperatorClose row col ->
+                    tupleOperatorCloseEncoder row col
 
-        FuncBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TupleOperatorReserved operator row col ->
+                    tupleOperatorReservedEncoder operator row col
 
-        FuncArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TupleIndentExpr1 row col ->
+                    tupleIndentExpr1Encoder row col
 
-        FuncIndentArg row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentArg" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
+                TupleIndentExprN row col ->
+                    tupleIndentExprNEncoder row col
 
-        FuncIndentArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        FuncIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-funcDecoder : Decode.Decoder Func
-funcDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FuncSpace" ->
-                        Decode.map3 FuncSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncArg" ->
-                        Decode.map3 FuncArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncBody" ->
-                        Decode.map3 FuncBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncArrow" ->
-                        Decode.map2 FuncArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncIndentArg" ->
-                        Decode.map2 FuncIndentArg
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncIndentArrow" ->
-                        Decode.map2 FuncIndentArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "FuncIndentBody" ->
-                        Decode.map2 FuncIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Func's type: " ++ type_)
-            )
+                TupleIndentEnd row col ->
+                    tupleIndentEndEncoder row col
+        )
+        |> Serialize.variant3 TupleExpr exprCodec Serialize.int Serialize.int
+        |> Serialize.variant3 TupleSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 TupleEnd Serialize.int Serialize.int
+        |> Serialize.variant2 TupleOperatorClose Serialize.int Serialize.int
+        |> Serialize.variant3 TupleOperatorReserved Compiler.Parse.Symbol.badOperatorCodec Serialize.int Serialize.int
+        |> Serialize.variant2 TupleIndentExpr1 Serialize.int Serialize.int
+        |> Serialize.variant2 TupleIndentExprN Serialize.int Serialize.int
+        |> Serialize.variant2 TupleIndentEnd Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 funcCodec : Codec e Func
 funcCodec =
-    Debug.todo "funcCodec"
+    Serialize.customType
+        (\funcSpaceEncoder funcArgEncoder funcBodyEncoder funcArrowEncoder funcIndentArgEncoder funcIndentArrowEncoder funcIndentBodyEncoder value ->
+            case value of
+                FuncSpace space row col ->
+                    funcSpaceEncoder space row col
 
+                FuncArg pattern row col ->
+                    funcArgEncoder pattern row col
 
-charEncoder : Char -> Encode.Value
-charEncoder char =
-    case char of
-        CharEndless ->
-            Encode.object
-                [ ( "type", Encode.string "CharEndless" )
-                ]
+                FuncBody expr row col ->
+                    funcBodyEncoder expr row col
 
-        CharEscape escape ->
-            Encode.object
-                [ ( "type", Encode.string "CharEscape" )
-                , ( "escape", escapeEncoder escape )
-                ]
+                FuncArrow row col ->
+                    funcArrowEncoder row col
 
-        CharNotString width ->
-            Encode.object
-                [ ( "type", Encode.string "CharNotString" )
-                , ( "width", Encode.int width )
-                ]
+                FuncIndentArg row col ->
+                    funcIndentArgEncoder row col
 
+                FuncIndentArrow row col ->
+                    funcIndentArrowEncoder row col
 
-charDecoder : Decode.Decoder Char
-charDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CharEndless" ->
-                        Decode.succeed CharEndless
-
-                    "CharEscape" ->
-                        Decode.map CharEscape (Decode.field "escape" escapeDecoder)
-
-                    "CharNotString" ->
-                        Decode.map CharNotString (Decode.field "width" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Char's type: " ++ type_)
-            )
+                FuncIndentBody row col ->
+                    funcIndentBodyEncoder row col
+        )
+        |> Serialize.variant3 FuncSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant3 FuncArg patternCodec Serialize.int Serialize.int
+        |> Serialize.variant3 FuncBody exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 FuncArrow Serialize.int Serialize.int
+        |> Serialize.variant2 FuncIndentArg Serialize.int Serialize.int
+        |> Serialize.variant2 FuncIndentArrow Serialize.int Serialize.int
+        |> Serialize.variant2 FuncIndentBody Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
 charCodec : Codec e Char
 charCodec =
-    Debug.todo "charCodec"
+    Serialize.customType
+        (\charEndlessEncoder charEscapeEncoder charNotStringEncoder value ->
+            case value of
+                CharEndless ->
+                    charEndlessEncoder
+
+                CharEscape escape ->
+                    charEscapeEncoder escape
+
+                CharNotString width ->
+                    charNotStringEncoder width
+        )
+        |> Serialize.variant0 CharEndless
+        |> Serialize.variant1 CharEscape escapeCodec
+        |> Serialize.variant1 CharNotString Serialize.int
+        |> Serialize.finishCustomType
 
 
-stringEncoder : String_ -> Encode.Value
-stringEncoder string_ =
-    case string_ of
-        StringEndless_Single ->
-            Encode.object
-                [ ( "type", Encode.string "StringEndless_Single" ) ]
+string_Codec : Codec e String_
+string_Codec =
+    Serialize.customType
+        (\stringEndless_SingleEncoder stringEndless_MultiEncoder stringEscapeEncoder value ->
+            case value of
+                StringEndless_Single ->
+                    stringEndless_SingleEncoder
 
-        StringEndless_Multi ->
-            Encode.object
-                [ ( "type", Encode.string "StringEndless_Multi" ) ]
+                StringEndless_Multi ->
+                    stringEndless_MultiEncoder
 
-        StringEscape escape ->
-            Encode.object
-                [ ( "type", Encode.string "StringEscape" )
-                , ( "escape", escapeEncoder escape )
-                ]
-
-
-stringDecoder : Decode.Decoder String_
-stringDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StringEndless_Single" ->
-                        Decode.succeed StringEndless_Single
-
-                    "StringEndless_Multi" ->
-                        Decode.succeed StringEndless_Multi
-
-                    "StringEscape" ->
-                        Decode.map StringEscape (Decode.field "escape" escapeDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode String's type: " ++ type_)
-            )
-
-
-stringCodec : Codec e String_
-stringCodec =
-    Debug.todo "stringCodec"
-
-
-numberEncoder : Number -> Encode.Value
-numberEncoder number =
-    case number of
-        NumberEnd ->
-            Encode.object
-                [ ( "type", Encode.string "NumberEnd" )
-                ]
-
-        NumberDot n ->
-            Encode.object
-                [ ( "type", Encode.string "NumberDot" )
-                , ( "n", Encode.int n )
-                ]
-
-        NumberHexDigit ->
-            Encode.object
-                [ ( "type", Encode.string "NumberHexDigit" )
-                ]
-
-        NumberNoLeadingZero ->
-            Encode.object
-                [ ( "type", Encode.string "NumberNoLeadingZero" )
-                ]
-
-
-numberDecoder : Decode.Decoder Number
-numberDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NumberEnd" ->
-                        Decode.succeed NumberEnd
-
-                    "NumberDot" ->
-                        Decode.map NumberDot (Decode.field "n" Decode.int)
-
-                    "NumberHexDigit" ->
-                        Decode.succeed NumberHexDigit
-
-                    "NumberNoLeadingZero" ->
-                        Decode.succeed NumberNoLeadingZero
-
-                    _ ->
-                        Decode.fail ("Failed to decode Number's type: " ++ type_)
-            )
+                StringEscape escape ->
+                    stringEscapeEncoder escape
+        )
+        |> Serialize.variant0 StringEndless_Single
+        |> Serialize.variant0 StringEndless_Multi
+        |> Serialize.variant1 StringEscape escapeCodec
+        |> Serialize.finishCustomType
 
 
 numberCodec : Codec e Number
 numberCodec =
-    Debug.todo "numberCodec"
-
-
-escapeEncoder : Escape -> Encode.Value
-escapeEncoder escape =
-    case escape of
-        EscapeUnknown ->
-            Encode.object
-                [ ( "type", Encode.string "EscapeUnknown" )
-                ]
-
-        BadUnicodeFormat width ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeFormat" )
-                , ( "width", Encode.int width )
-                ]
-
-        BadUnicodeCode width ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeCode" )
-                , ( "width", Encode.int width )
-                ]
-
-        BadUnicodeLength width numDigits badCode ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeLength" )
-                , ( "width", Encode.int width )
-                , ( "numDigits", Encode.int numDigits )
-                , ( "badCode", Encode.int badCode )
-                ]
-
-
-escapeDecoder : Decode.Decoder Escape
-escapeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "EscapeUnknown" ->
-                        Decode.succeed EscapeUnknown
-
-                    "BadUnicodeFormat" ->
-                        Decode.map BadUnicodeFormat (Decode.field "width" Decode.int)
-
-                    "BadUnicodeCode" ->
-                        Decode.map BadUnicodeCode (Decode.field "width" Decode.int)
-
-                    "BadUnicodeLength" ->
-                        Decode.map3 BadUnicodeLength
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "numDigits" Decode.int)
-                            (Decode.field "badCode" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Escape's type: " ++ type_)
-            )
-
-
-defEncoder : Def -> Encode.Value
-defEncoder def =
-    case def of
-        DefSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefNameRepeat row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefNameRepeat" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefNameMatch name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefNameMatch" )
-                , ( "name", Encode.string name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DefAlignment indent row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefAlignment" )
-                , ( "indent", Encode.int indent )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-defDecoder : Decode.Decoder Def
-defDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DefSpace" ->
-                        Decode.map3 DefSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefType" ->
-                        Decode.map3 DefType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefNameRepeat" ->
-                        Decode.map2 DefNameRepeat
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefNameMatch" ->
-                        Decode.map3 DefNameMatch
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefArg" ->
-                        Decode.map3 DefArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefEquals" ->
-                        Decode.map2 DefEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefBody" ->
-                        Decode.map3 DefBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefIndentEquals" ->
-                        Decode.map2 DefIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefIndentType" ->
-                        Decode.map2 DefIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefIndentBody" ->
-                        Decode.map2 DefIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DefAlignment" ->
-                        Decode.map3 DefAlignment
-                            (Decode.field "indent" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Def's type: " ++ type_)
-            )
-
-
-destructEncoder : Destruct -> Encode.Value
-destructEncoder destruct =
-    case destruct of
-        DestructSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DestructPattern pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructPattern" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DestructEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DestructBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DestructIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        DestructIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-destructDecoder : Decode.Decoder Destruct
-destructDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DestructSpace" ->
-                        Decode.map3 DestructSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DestructPattern" ->
-                        Decode.map3 DestructPattern
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DestructEquals" ->
-                        Decode.map2 DestructEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DestructBody" ->
-                        Decode.map3 DestructBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DestructIndentEquals" ->
-                        Decode.map2 DestructIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "DestructIndentBody" ->
-                        Decode.map2 DestructIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Destruct's type: " ++ type_)
-            )
-
-
-pRecordEncoder : PRecord -> Encode.Value
-pRecordEncoder pRecord =
-    case pRecord of
-        PRecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PRecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-pRecordDecoder : Decode.Decoder PRecord
-pRecordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecordOpen" ->
-                        Decode.map2 PRecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordEnd" ->
-                        Decode.map2 PRecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordField" ->
-                        Decode.map2 PRecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordSpace" ->
-                        Decode.map3 PRecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordIndentOpen" ->
-                        Decode.map2 PRecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordIndentEnd" ->
-                        Decode.map2 PRecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PRecordIndentField" ->
-                        Decode.map2 PRecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode PRecord's type: " ++ type_)
-            )
-
-
-pTupleEncoder : PTuple -> Encode.Value
-pTupleEncoder pTuple =
-    case pTuple of
-        PTupleOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleExpr pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleExpr" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleIndentExpr1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentExpr1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PTupleIndentExprN row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentExprN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-pTupleDecoder : Decode.Decoder PTuple
-pTupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PTupleOpen" ->
-                        Decode.map2 PTupleOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleEnd" ->
-                        Decode.map2 PTupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleExpr" ->
-                        Decode.map3 PTupleExpr
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleSpace" ->
-                        Decode.map3 PTupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleIndentEnd" ->
-                        Decode.map2 PTupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleIndentExpr1" ->
-                        Decode.map2 PTupleIndentExpr1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PTupleIndentExprN" ->
-                        Decode.map2 PTupleIndentExprN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode PTuple's type: " ++ type_)
-            )
-
-
-pListEncoder : PList -> Encode.Value
-pListEncoder pList =
-    case pList of
-        PListOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListExpr pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListExpr" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        PListIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-pListDecoder : Decode.Decoder PList
-pListDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PListOpen" ->
-                        Decode.map2 PListOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListEnd" ->
-                        Decode.map2 PListEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListExpr" ->
-                        Decode.map3 PListExpr
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListSpace" ->
-                        Decode.map3 PListSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListIndentOpen" ->
-                        Decode.map2 PListIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListIndentEnd" ->
-                        Decode.map2 PListIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "PListIndentExpr" ->
-                        Decode.map2 PListIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode PList's type: " ++ type_)
-            )
-
-
-tRecordEncoder : TRecord -> Encode.Value
-tRecordEncoder tRecord =
-    case tRecord of
-        TRecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordIndentColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TRecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-tRecordDecoder : Decode.Decoder TRecord
-tRecordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TRecordOpen" ->
-                        Decode.map2 TRecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordEnd" ->
-                        Decode.map2 TRecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordField" ->
-                        Decode.map2 TRecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordColon" ->
-                        Decode.map2 TRecordColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordType" ->
-                        Decode.map3 TRecordType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordSpace" ->
-                        Decode.map3 TRecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordIndentOpen" ->
-                        Decode.map2 TRecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordIndentField" ->
-                        Decode.map2 TRecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordIndentColon" ->
-                        Decode.map2 TRecordIndentColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordIndentType" ->
-                        Decode.map2 TRecordIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TRecordIndentEnd" ->
-                        Decode.map2 TRecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode TRecord's type: " ++ type_)
-            )
-
-
-tTupleEncoder : TTuple -> Encode.Value
-tTupleEncoder tTuple =
-    case tTuple of
-        TTupleOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleIndentType1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentType1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleIndentTypeN row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentTypeN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        TTupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-tTupleDecoder : Decode.Decoder TTuple
-tTupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TTupleOpen" ->
-                        Decode.map2 TTupleOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleEnd" ->
-                        Decode.map2 TTupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleType" ->
-                        Decode.map3 TTupleType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleSpace" ->
-                        Decode.map3 TTupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleIndentType1" ->
-                        Decode.map2 TTupleIndentType1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleIndentTypeN" ->
-                        Decode.map2 TTupleIndentTypeN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "TTupleIndentEnd" ->
-                        Decode.map2 TTupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode TTuple's type: " ++ type_)
-            )
-
-
-customTypeEncoder : CustomType -> Encode.Value
-customTypeEncoder customType =
-    case customType of
-        CT_Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_Equals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Equals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_Bar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Bar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_Variant row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Variant" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_VariantArg tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_VariantArg" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_IndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_IndentBar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentBar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_IndentAfterBar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentAfterBar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        CT_IndentAfterEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentAfterEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-customTypeDecoder : Decode.Decoder CustomType
-customTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CT_Space" ->
-                        Decode.map3 CT_Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_Name" ->
-                        Decode.map2 CT_Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_Equals" ->
-                        Decode.map2 CT_Equals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_Bar" ->
-                        Decode.map2 CT_Bar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_Variant" ->
-                        Decode.map2 CT_Variant
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_VariantArg" ->
-                        Decode.map3 CT_VariantArg
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_IndentEquals" ->
-                        Decode.map2 CT_IndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_IndentBar" ->
-                        Decode.map2 CT_IndentBar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_IndentAfterBar" ->
-                        Decode.map2 CT_IndentAfterBar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "CT_IndentAfterEquals" ->
-                        Decode.map2 CT_IndentAfterEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode CustomType's type: " ++ type_)
-            )
-
-
-typeAliasEncoder : TypeAlias -> Encode.Value
-typeAliasEncoder typeAlias =
-    case typeAlias of
-        AliasSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        AliasName row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        AliasEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        AliasBody tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasBody" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        AliasIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-        AliasIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
-                ]
-
-
-typeAliasDecoder : Decode.Decoder TypeAlias
-typeAliasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "AliasSpace" ->
-                        Decode.map3 AliasSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "AliasName" ->
-                        Decode.map2 AliasName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "AliasEquals" ->
-                        Decode.map2 AliasEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "AliasBody" ->
-                        Decode.map3 AliasBody
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "AliasIndentEquals" ->
-                        Decode.map2 AliasIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    "AliasIndentBody" ->
-                        Decode.map2 AliasIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
-
-                    _ ->
-                        Decode.fail ("Failed to decode TypeAlias's type: " ++ type_)
-            )
+    Serialize.customType
+        (\numberEndEncoder numberDotEncoder numberHexDigitEncoder numberNoLeadingZeroEncoder value ->
+            case value of
+                NumberEnd ->
+                    numberEndEncoder
+
+                NumberDot n ->
+                    numberDotEncoder n
+
+                NumberHexDigit ->
+                    numberHexDigitEncoder
+
+                NumberNoLeadingZero ->
+                    numberNoLeadingZeroEncoder
+        )
+        |> Serialize.variant0 NumberEnd
+        |> Serialize.variant1 NumberDot Serialize.int
+        |> Serialize.variant0 NumberHexDigit
+        |> Serialize.variant0 NumberNoLeadingZero
+        |> Serialize.finishCustomType
+
+
+escapeCodec : Codec e Escape
+escapeCodec =
+    Serialize.customType
+        (\escapeUnknownEncoder badUnicodeFormatEncoder badUnicodeCodeEncoder badUnicodeLengthEncoder value ->
+            case value of
+                EscapeUnknown ->
+                    escapeUnknownEncoder
+
+                BadUnicodeFormat width ->
+                    badUnicodeFormatEncoder width
+
+                BadUnicodeCode width ->
+                    badUnicodeCodeEncoder width
+
+                BadUnicodeLength width numDigits badCode ->
+                    badUnicodeLengthEncoder width numDigits badCode
+        )
+        |> Serialize.variant0 EscapeUnknown
+        |> Serialize.variant1 BadUnicodeFormat Serialize.int
+        |> Serialize.variant1 BadUnicodeCode Serialize.int
+        |> Serialize.variant3 BadUnicodeLength Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+defCodec : Codec e Def
+defCodec =
+    Serialize.customType
+        (\defSpaceEncoder defTypeEncoder defNameRepeatEncoder defNameMatchEncoder defArgEncoder defEqualsEncoder defBodyEncoder defIndentEqualsEncoder defIndentTypeEncoder defIndentBodyEncoder defAlignmentEncoder value ->
+            case value of
+                DefSpace space row col ->
+                    defSpaceEncoder space row col
+
+                DefType tipe row col ->
+                    defTypeEncoder tipe row col
+
+                DefNameRepeat row col ->
+                    defNameRepeatEncoder row col
+
+                DefNameMatch name row col ->
+                    defNameMatchEncoder name row col
+
+                DefArg pattern row col ->
+                    defArgEncoder pattern row col
+
+                DefEquals row col ->
+                    defEqualsEncoder row col
+
+                DefBody expr row col ->
+                    defBodyEncoder expr row col
+
+                DefIndentEquals row col ->
+                    defIndentEqualsEncoder row col
+
+                DefIndentType row col ->
+                    defIndentTypeEncoder row col
+
+                DefIndentBody row col ->
+                    defIndentBodyEncoder row col
+
+                DefAlignment indent row col ->
+                    defAlignmentEncoder indent row col
+        )
+        |> Serialize.variant3 DefSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DefType typeCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DefNameRepeat Serialize.int Serialize.int
+        |> Serialize.variant3 DefNameMatch Serialize.string Serialize.int Serialize.int
+        |> Serialize.variant3 DefArg patternCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DefEquals Serialize.int Serialize.int
+        |> Serialize.variant3 DefBody exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DefIndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 DefIndentType Serialize.int Serialize.int
+        |> Serialize.variant2 DefIndentBody Serialize.int Serialize.int
+        |> Serialize.variant3 DefAlignment Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+destructCodec : Codec e Destruct
+destructCodec =
+    Serialize.customType
+        (\destructSpaceEncoder destructPatternEncoder destructEqualsEncoder destructBodyEncoder destructIndentEqualsEncoder destructIndentBodyEncoder value ->
+            case value of
+                DestructSpace space row col ->
+                    destructSpaceEncoder space row col
+
+                DestructPattern pattern row col ->
+                    destructPatternEncoder pattern row col
+
+                DestructEquals row col ->
+                    destructEqualsEncoder row col
+
+                DestructBody expr row col ->
+                    destructBodyEncoder expr row col
+
+                DestructIndentEquals row col ->
+                    destructIndentEqualsEncoder row col
+
+                DestructIndentBody row col ->
+                    destructIndentBodyEncoder row col
+        )
+        |> Serialize.variant3 DestructSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant3 DestructPattern patternCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DestructEquals Serialize.int Serialize.int
+        |> Serialize.variant3 DestructBody exprCodec Serialize.int Serialize.int
+        |> Serialize.variant2 DestructIndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 DestructIndentBody Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+pRecordCodec : Codec e PRecord
+pRecordCodec =
+    Serialize.customType
+        (\pRecordOpenEncoder pRecordEndEncoder pRecordFieldEncoder pRecordSpaceEncoder pRecordIndentOpenEncoder pRecordIndentEndEncoder pRecordIndentFieldEncoder value ->
+            case value of
+                PRecordOpen row col ->
+                    pRecordOpenEncoder row col
+
+                PRecordEnd row col ->
+                    pRecordEndEncoder row col
+
+                PRecordField row col ->
+                    pRecordFieldEncoder row col
+
+                PRecordSpace space row col ->
+                    pRecordSpaceEncoder space row col
+
+                PRecordIndentOpen row col ->
+                    pRecordIndentOpenEncoder row col
+
+                PRecordIndentEnd row col ->
+                    pRecordIndentEndEncoder row col
+
+                PRecordIndentField row col ->
+                    pRecordIndentFieldEncoder row col
+        )
+        |> Serialize.variant2 PRecordOpen Serialize.int Serialize.int
+        |> Serialize.variant2 PRecordEnd Serialize.int Serialize.int
+        |> Serialize.variant2 PRecordField Serialize.int Serialize.int
+        |> Serialize.variant3 PRecordSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PRecordIndentOpen Serialize.int Serialize.int
+        |> Serialize.variant2 PRecordIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 PRecordIndentField Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+pTupleCodec : Codec e PTuple
+pTupleCodec =
+    Serialize.customType
+        (\pTupleOpenEncoder pTupleEndEncoder pTupleExprEncoder pTupleSpaceEncoder pTupleIndentEndEncoder pTupleIndentExpr1Encoder pTupleIndentExprNEncoder value ->
+            case value of
+                PTupleOpen row col ->
+                    pTupleOpenEncoder row col
+
+                PTupleEnd row col ->
+                    pTupleEndEncoder row col
+
+                PTupleExpr pattern row col ->
+                    pTupleExprEncoder pattern row col
+
+                PTupleSpace space row col ->
+                    pTupleSpaceEncoder space row col
+
+                PTupleIndentEnd row col ->
+                    pTupleIndentEndEncoder row col
+
+                PTupleIndentExpr1 row col ->
+                    pTupleIndentExpr1Encoder row col
+
+                PTupleIndentExprN row col ->
+                    pTupleIndentExprNEncoder row col
+        )
+        |> Serialize.variant2 PTupleOpen Serialize.int Serialize.int
+        |> Serialize.variant2 PTupleEnd Serialize.int Serialize.int
+        |> Serialize.variant3 PTupleExpr patternCodec Serialize.int Serialize.int
+        |> Serialize.variant3 PTupleSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PTupleIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 PTupleIndentExpr1 Serialize.int Serialize.int
+        |> Serialize.variant2 PTupleIndentExprN Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+pListCodec : Codec e PList
+pListCodec =
+    Serialize.customType
+        (\pListOpenEncoder pListEndEncoder pListExprEncoder pListSpaceEncoder pListIndentOpenEncoder pListIndentEndEncoder pListIndentExprEncoder value ->
+            case value of
+                PListOpen row col ->
+                    pListOpenEncoder row col
+
+                PListEnd row col ->
+                    pListEndEncoder row col
+
+                PListExpr pattern row col ->
+                    pListExprEncoder pattern row col
+
+                PListSpace space row col ->
+                    pListSpaceEncoder space row col
+
+                PListIndentOpen row col ->
+                    pListIndentOpenEncoder row col
+
+                PListIndentEnd row col ->
+                    pListIndentEndEncoder row col
+
+                PListIndentExpr row col ->
+                    pListIndentExprEncoder row col
+        )
+        |> Serialize.variant2 PListOpen Serialize.int Serialize.int
+        |> Serialize.variant2 PListEnd Serialize.int Serialize.int
+        |> Serialize.variant3 PListExpr (Serialize.lazy (\() -> patternCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 PListSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 PListIndentOpen Serialize.int Serialize.int
+        |> Serialize.variant2 PListIndentEnd Serialize.int Serialize.int
+        |> Serialize.variant2 PListIndentExpr Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+tRecordCodec : Codec e TRecord
+tRecordCodec =
+    Serialize.customType
+        (\tRecordOpenEncoder tRecordEndEncoder tRecordFieldEncoder tRecordColonEncoder tRecordTypeEncoder tRecordSpaceEncoder tRecordIndentOpenEncoder tRecordIndentFieldEncoder tRecordIndentColonEncoder tRecordIndentTypeEncoder tRecordIndentEndEncoder value ->
+            case value of
+                TRecordOpen row col ->
+                    tRecordOpenEncoder row col
+
+                TRecordEnd row col ->
+                    tRecordEndEncoder row col
+
+                TRecordField row col ->
+                    tRecordFieldEncoder row col
+
+                TRecordColon row col ->
+                    tRecordColonEncoder row col
+
+                TRecordType tipe row col ->
+                    tRecordTypeEncoder tipe row col
+
+                TRecordSpace space row col ->
+                    tRecordSpaceEncoder space row col
+
+                TRecordIndentOpen row col ->
+                    tRecordIndentOpenEncoder row col
+
+                TRecordIndentField row col ->
+                    tRecordIndentFieldEncoder row col
+
+                TRecordIndentColon row col ->
+                    tRecordIndentColonEncoder row col
+
+                TRecordIndentType row col ->
+                    tRecordIndentTypeEncoder row col
+
+                TRecordIndentEnd row col ->
+                    tRecordIndentEndEncoder row col
+        )
+        |> Serialize.variant2 TRecordOpen Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordEnd Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordField Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordColon Serialize.int Serialize.int
+        |> Serialize.variant3 TRecordType (Serialize.lazy (\() -> typeCodec)) Serialize.int Serialize.int
+        |> Serialize.variant3 TRecordSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordIndentOpen Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordIndentField Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordIndentColon Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordIndentType Serialize.int Serialize.int
+        |> Serialize.variant2 TRecordIndentEnd Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+tTupleCodec : Codec e TTuple
+tTupleCodec =
+    Serialize.customType
+        (\tTupleOpenEncoder tTupleEndEncoder tTupleTypeEncoder tTupleSpaceEncoder tTupleIndentType1Encoder tTupleIndentTypeNEncoder tTupleIndentEndEncoder value ->
+            case value of
+                TTupleOpen row col ->
+                    tTupleOpenEncoder row col
+
+                TTupleEnd row col ->
+                    tTupleEndEncoder row col
+
+                TTupleType tipe row col ->
+                    tTupleTypeEncoder tipe row col
+
+                TTupleSpace space row col ->
+                    tTupleSpaceEncoder space row col
+
+                TTupleIndentType1 row col ->
+                    tTupleIndentType1Encoder row col
+
+                TTupleIndentTypeN row col ->
+                    tTupleIndentTypeNEncoder row col
+
+                TTupleIndentEnd row col ->
+                    tTupleIndentEndEncoder row col
+        )
+        |> Serialize.variant2 TTupleOpen Serialize.int Serialize.int
+        |> Serialize.variant2 TTupleEnd Serialize.int Serialize.int
+        |> Serialize.variant3 TTupleType typeCodec Serialize.int Serialize.int
+        |> Serialize.variant3 TTupleSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 TTupleIndentType1 Serialize.int Serialize.int
+        |> Serialize.variant2 TTupleIndentTypeN Serialize.int Serialize.int
+        |> Serialize.variant2 TTupleIndentEnd Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+customTypeCodec : Codec e CustomType
+customTypeCodec =
+    Serialize.customType
+        (\cT_SpaceEncoder cT_NameEncoder cT_EqualsEncoder cT_BarEncoder cT_VariantEncoder cT_VariantArgEncoder cT_IndentEqualsEncoder cT_IndentBarEncoder cT_IndentAfterBarEncoder cT_IndentAfterEqualsEncoder value ->
+            case value of
+                CT_Space space row col ->
+                    cT_SpaceEncoder space row col
+
+                CT_Name row col ->
+                    cT_NameEncoder row col
+
+                CT_Equals row col ->
+                    cT_EqualsEncoder row col
+
+                CT_Bar row col ->
+                    cT_BarEncoder row col
+
+                CT_Variant row col ->
+                    cT_VariantEncoder row col
+
+                CT_VariantArg tipe row col ->
+                    cT_VariantArgEncoder tipe row col
+
+                CT_IndentEquals row col ->
+                    cT_IndentEqualsEncoder row col
+
+                CT_IndentBar row col ->
+                    cT_IndentBarEncoder row col
+
+                CT_IndentAfterBar row col ->
+                    cT_IndentAfterBarEncoder row col
+
+                CT_IndentAfterEquals row col ->
+                    cT_IndentAfterEqualsEncoder row col
+        )
+        |> Serialize.variant3 CT_Space spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 CT_Name Serialize.int Serialize.int
+        |> Serialize.variant2 CT_Equals Serialize.int Serialize.int
+        |> Serialize.variant2 CT_Bar Serialize.int Serialize.int
+        |> Serialize.variant2 CT_Variant Serialize.int Serialize.int
+        |> Serialize.variant3 CT_VariantArg typeCodec Serialize.int Serialize.int
+        |> Serialize.variant2 CT_IndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 CT_IndentBar Serialize.int Serialize.int
+        |> Serialize.variant2 CT_IndentAfterBar Serialize.int Serialize.int
+        |> Serialize.variant2 CT_IndentAfterEquals Serialize.int Serialize.int
+        |> Serialize.finishCustomType
+
+
+typeAliasCodec : Codec e TypeAlias
+typeAliasCodec =
+    Serialize.customType
+        (\aliasSpaceEncoder aliasNameEncoder aliasEqualsEncoder aliasBodyEncoder aliasIndentEqualsEncoder aliasIndentBodyEncoder value ->
+            case value of
+                AliasSpace space row col ->
+                    aliasSpaceEncoder space row col
+
+                AliasName row col ->
+                    aliasNameEncoder row col
+
+                AliasEquals row col ->
+                    aliasEqualsEncoder row col
+
+                AliasBody tipe row col ->
+                    aliasBodyEncoder tipe row col
+
+                AliasIndentEquals row col ->
+                    aliasIndentEqualsEncoder row col
+
+                AliasIndentBody row col ->
+                    aliasIndentBodyEncoder row col
+        )
+        |> Serialize.variant3 AliasSpace spaceCodec Serialize.int Serialize.int
+        |> Serialize.variant2 AliasName Serialize.int Serialize.int
+        |> Serialize.variant2 AliasEquals Serialize.int Serialize.int
+        |> Serialize.variant3 AliasBody typeCodec Serialize.int Serialize.int
+        |> Serialize.variant2 AliasIndentEquals Serialize.int Serialize.int
+        |> Serialize.variant2 AliasIndentBody Serialize.int Serialize.int
+        |> Serialize.finishCustomType

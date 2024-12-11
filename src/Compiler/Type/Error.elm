@@ -12,23 +12,20 @@ module Compiler.Type.Error exposing
     , iteratedDealias
     , toComparison
     , toDoc
-    , typeDecoder
-    , typeEncoder
+    , typeCodec
     )
 
 import Compiler.Data.Bag as Bag
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 
 
@@ -833,232 +830,118 @@ extToStatus ext1 ext2 =
 -- ENCODERS and DECODERS
 
 
-typeEncoder : Type -> Encode.Value
-typeEncoder type_ =
-    case type_ of
-        Lambda x y zs ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                , ( "x", typeEncoder x )
-                , ( "y", typeEncoder y )
-                , ( "zs", Encode.list typeEncoder zs )
-                ]
+typeCodec : Codec e Type
+typeCodec =
+    Serialize.customType
+        (\lambdaEncoder infiniteEncoder errorCodecEncoder flexVarEncoder flexSuperEncoder rigidVarEncoder rigidSuperEncoder typeCodecEncoder recordEncoder unitEncoder tupleEncoder aliasEncoder value ->
+            case value of
+                Lambda x y zs ->
+                    lambdaEncoder x y zs
 
-        Infinite ->
-            Encode.object
-                [ ( "type", Encode.string "Infinite" )
-                ]
+                Infinite ->
+                    infiniteEncoder
 
-        Error ->
-            Encode.object
-                [ ( "type", Encode.string "Error" )
-                ]
+                Error ->
+                    errorCodecEncoder
 
-        FlexVar name ->
-            Encode.object
-                [ ( "type", Encode.string "FlexVar" )
-                , ( "name", Encode.string name )
-                ]
+                FlexVar name ->
+                    flexVarEncoder name
 
-        FlexSuper s x ->
-            Encode.object
-                [ ( "type", Encode.string "FlexSuper" )
-                , ( "s", superEncoder s )
-                , ( "x", Encode.string x )
-                ]
+                FlexSuper s x ->
+                    flexSuperEncoder s x
 
-        RigidVar name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidVar" )
-                , ( "name", Encode.string name )
-                ]
+                RigidVar name ->
+                    rigidVarEncoder name
 
-        RigidSuper s x ->
-            Encode.object
-                [ ( "type", Encode.string "RigidSuper" )
-                , ( "s", superEncoder s )
-                , ( "x", Encode.string x )
-                ]
+                RigidSuper s x ->
+                    rigidSuperEncoder s x
 
-        Type home name args ->
-            Encode.object
-                [ ( "type", Encode.string "Type" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list typeEncoder args )
-                ]
+                Type home name args ->
+                    typeCodecEncoder home name args
 
-        Record msgType decoder ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "msgType", EncodeX.assocListDict Encode.string typeEncoder msgType )
-                , ( "decoder", extensionEncoder decoder )
-                ]
+                Record msgType decoder ->
+                    recordEncoder msgType decoder
 
-        Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
+                Unit ->
+                    unitEncoder
 
-        Tuple a b maybeC ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "a", typeEncoder a )
-                , ( "b", typeEncoder b )
-                , ( "maybeC", EncodeX.maybe typeEncoder maybeC )
-                ]
+                Tuple a b maybeC ->
+                    tupleEncoder a b maybeC
 
-        Alias home name args tipe ->
-            Encode.object
-                [ ( "type", Encode.string "Alias" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list (EncodeX.jsonPair Encode.string typeEncoder) args )
-                , ( "tipe", typeEncoder tipe )
-                ]
+                Alias home name args tipe ->
+                    aliasEncoder home name args tipe
+        )
+        |> Serialize.variant3
+            Lambda
+            (Serialize.lazy (\() -> typeCodec))
+            (Serialize.lazy (\() -> typeCodec))
+            (Serialize.list (Serialize.lazy (\() -> typeCodec)))
+        |> Serialize.variant0 Infinite
+        |> Serialize.variant0 Error
+        |> Serialize.variant1 FlexVar Serialize.string
+        |> Serialize.variant2 FlexSuper superCodec Serialize.string
+        |> Serialize.variant1 RigidVar Serialize.string
+        |> Serialize.variant2 RigidSuper superCodec Serialize.string
+        |> Serialize.variant3
+            Type
+            ModuleName.canonicalCodec
+            Serialize.string
+            (Serialize.list (Serialize.lazy (\() -> typeCodec)))
+        |> Serialize.variant2 Record (S.assocListDict compare Serialize.string (Serialize.lazy (\() -> typeCodec))) extensionCodec
+        |> Serialize.variant0 Unit
+        |> Serialize.variant3
+            Tuple
+            (Serialize.lazy (\() -> typeCodec))
+            (Serialize.lazy (\() -> typeCodec))
+            (Serialize.maybe (Serialize.lazy (\() -> typeCodec)))
+        |> Serialize.variant4
+            Alias
+            ModuleName.canonicalCodec
+            Serialize.string
+            (Serialize.list (Serialize.tuple Serialize.string (Serialize.lazy (\() -> typeCodec))))
+            (Serialize.lazy (\() -> typeCodec))
+        |> Serialize.finishCustomType
 
 
-typeDecoder : Decode.Decoder Type
-typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Lambda" ->
-                        Decode.map3 Lambda
-                            (Decode.field "x" typeDecoder)
-                            (Decode.field "y" typeDecoder)
-                            (Decode.field "zs" (Decode.list typeDecoder))
+superCodec : Codec e Super
+superCodec =
+    Serialize.customType
+        (\numberEncoder comparableEncoder appendableEncoder compAppendEncoder value ->
+            case value of
+                Number ->
+                    numberEncoder
 
-                    "Infinite" ->
-                        Decode.succeed Infinite
+                Comparable ->
+                    comparableEncoder
 
-                    "Error" ->
-                        Decode.succeed Error
+                Appendable ->
+                    appendableEncoder
 
-                    "FlexVar" ->
-                        Decode.map FlexVar (Decode.field "name" Decode.string)
-
-                    "FlexSuper" ->
-                        Decode.map2 FlexSuper
-                            (Decode.field "s" superDecoder)
-                            (Decode.field "x" Decode.string)
-
-                    "RigidVar" ->
-                        Decode.map RigidVar (Decode.field "name" Decode.string)
-
-                    "RigidSuper" ->
-                        Decode.map2 RigidSuper
-                            (Decode.field "s" superDecoder)
-                            (Decode.field "x" Decode.string)
-
-                    "Type" ->
-                        Decode.map3 Type
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list typeDecoder))
-
-                    "Record" ->
-                        Decode.map2 Record
-                            (Decode.field "msgType" (DecodeX.assocListDict compare Decode.string typeDecoder))
-                            (Decode.field "decoder" extensionDecoder)
-
-                    "Unit" ->
-                        Decode.succeed Unit
-
-                    "Tuple" ->
-                        Decode.map3 Tuple
-                            (Decode.field "a" typeDecoder)
-                            (Decode.field "b" typeDecoder)
-                            (Decode.field "maybeC" (Decode.maybe typeDecoder))
-
-                    "Alias" ->
-                        Decode.map4 Alias
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list (DecodeX.jsonPair Decode.string typeDecoder)))
-                            (Decode.field "tipe" typeDecoder)
-
-                    _ ->
-                        Decode.fail ("Unknown Type's type: " ++ type_)
-            )
+                CompAppend ->
+                    compAppendEncoder
+        )
+        |> Serialize.variant0 Number
+        |> Serialize.variant0 Comparable
+        |> Serialize.variant0 Appendable
+        |> Serialize.variant0 CompAppend
+        |> Serialize.finishCustomType
 
 
-superEncoder : Super -> Encode.Value
-superEncoder super =
-    case super of
-        Number ->
-            Encode.string "Number"
+extensionCodec : Codec e Extension
+extensionCodec =
+    Serialize.customType
+        (\closedEncoder flexOpenEncoder rigidOpenEncoder value ->
+            case value of
+                Closed ->
+                    closedEncoder
 
-        Comparable ->
-            Encode.string "Comparable"
+                FlexOpen x ->
+                    flexOpenEncoder x
 
-        Appendable ->
-            Encode.string "Appendable"
-
-        CompAppend ->
-            Encode.string "CompAppend"
-
-
-superDecoder : Decode.Decoder Super
-superDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Number" ->
-                        Decode.succeed Number
-
-                    "Comparable" ->
-                        Decode.succeed Comparable
-
-                    "Appendable" ->
-                        Decode.succeed Appendable
-
-                    "CompAppend" ->
-                        Decode.succeed CompAppend
-
-                    _ ->
-                        Decode.fail ("Unknown Super: " ++ str)
-            )
-
-
-extensionEncoder : Extension -> Encode.Value
-extensionEncoder extension =
-    case extension of
-        Closed ->
-            Encode.object
-                [ ( "type", Encode.string "Closed" )
-                ]
-
-        FlexOpen x ->
-            Encode.object
-                [ ( "type", Encode.string "FlexOpen" )
-                , ( "x", Encode.string x )
-                ]
-
-        RigidOpen x ->
-            Encode.object
-                [ ( "type", Encode.string "RigidOpen" )
-                , ( "x", Encode.string x )
-                ]
-
-
-extensionDecoder : Decode.Decoder Extension
-extensionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Closed" ->
-                        Decode.succeed Closed
-
-                    "FlexOpen" ->
-                        Decode.map FlexOpen (Decode.field "x" Decode.string)
-
-                    "RigidOpen" ->
-                        Decode.map RigidOpen (Decode.field "x" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Unknown Extension's type: " ++ type_)
-            )
+                RigidOpen x ->
+                    rigidOpenEncoder x
+        )
+        |> Serialize.variant0 Closed
+        |> Serialize.variant1 FlexOpen Serialize.string
+        |> Serialize.variant1 RigidOpen Serialize.string
+        |> Serialize.finishCustomType

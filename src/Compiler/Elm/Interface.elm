@@ -5,14 +5,10 @@ module Compiler.Elm.Interface exposing
     , Interface(..)
     , Union(..)
     , dependencyInterfaceCodec
-    , dependencyInterfaceDecoder
-    , dependencyInterfaceEncoder
     , extractAlias
     , extractUnion
     , fromModule
     , interfaceCodec
-    , interfaceDecoder
-    , interfaceEncoder
     , private
     , privatize
     , public
@@ -24,13 +20,9 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Annotation as A
 import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
@@ -211,28 +203,6 @@ privatize di =
 -- ENCODERS and DECODERS
 
 
-interfaceEncoder : Interface -> Encode.Value
-interfaceEncoder (Interface home values unions aliases binops) =
-    Encode.object
-        [ ( "type", Encode.string "Interface" )
-        , ( "home", Pkg.nameEncoder home )
-        , ( "values", E.assocListDict Encode.string Can.annotationEncoder values )
-        , ( "unions", E.assocListDict Encode.string unionEncoder unions )
-        , ( "aliases", E.assocListDict Encode.string aliasEncoder aliases )
-        , ( "binops", E.assocListDict Encode.string binopEncoder binops )
-        ]
-
-
-interfaceDecoder : Decode.Decoder Interface
-interfaceDecoder =
-    Decode.map5 Interface
-        (Decode.field "home" Pkg.nameDecoder)
-        (Decode.field "values" (D.assocListDict compare Decode.string Can.annotationDecoder))
-        (Decode.field "unions" (D.assocListDict compare Decode.string unionDecoder))
-        (Decode.field "aliases" (D.assocListDict compare Decode.string aliasDecoder))
-        (Decode.field "binops" (D.assocListDict compare Decode.string binopDecoder))
-
-
 interfaceCodec : Codec e Interface
 interfaceCodec =
     Serialize.customType
@@ -246,51 +216,6 @@ interfaceCodec =
             (S.assocListDict compare Serialize.string aliasCodec)
             (S.assocListDict compare Serialize.string binopCodec)
         |> Serialize.finishCustomType
-
-
-unionEncoder : Union -> Encode.Value
-unionEncoder union_ =
-    case union_ of
-        OpenUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "OpenUnion" )
-                , ( "union", Can.unionEncoder union )
-                ]
-
-        ClosedUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "ClosedUnion" )
-                , ( "union", Can.unionEncoder union )
-                ]
-
-        PrivateUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "ClosedUnion" )
-                , ( "union", Can.unionEncoder union )
-                ]
-
-
-unionDecoder : Decode.Decoder Union
-unionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "OpenUnion" ->
-                        Decode.map OpenUnion
-                            (Decode.field "union" Can.unionDecoder)
-
-                    "ClosedUnion" ->
-                        Decode.map ClosedUnion
-                            (Decode.field "union" Can.unionDecoder)
-
-                    "PrivateUnion" ->
-                        Decode.map ClosedUnion
-                            (Decode.field "union" Can.unionDecoder)
-
-                    _ ->
-                        Decode.fail ("Unknown Union's type: " ++ type_)
-            )
 
 
 unionCodec : Codec e Union
@@ -313,41 +238,6 @@ unionCodec =
         |> Serialize.finishCustomType
 
 
-aliasEncoder : Alias -> Encode.Value
-aliasEncoder aliasValue =
-    case aliasValue of
-        PublicAlias alias_ ->
-            Encode.object
-                [ ( "type", Encode.string "PublicAlias" )
-                , ( "alias", Can.aliasEncoder alias_ )
-                ]
-
-        PrivateAlias alias_ ->
-            Encode.object
-                [ ( "type", Encode.string "PrivateAlias" )
-                , ( "alias", Can.aliasEncoder alias_ )
-                ]
-
-
-aliasDecoder : Decode.Decoder Alias
-aliasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PublicAlias" ->
-                        Decode.map PublicAlias
-                            (Decode.field "alias" Can.aliasDecoder)
-
-                    "PrivateAlias" ->
-                        Decode.map PrivateAlias
-                            (Decode.field "alias" Can.aliasDecoder)
-
-                    _ ->
-                        Decode.fail ("Unknown Alias' type: " ++ type_)
-            )
-
-
 aliasCodec : Codec e Alias
 aliasCodec =
     Serialize.customType
@@ -364,26 +254,6 @@ aliasCodec =
         |> Serialize.finishCustomType
 
 
-binopEncoder : Binop -> Encode.Value
-binopEncoder (Binop name annotation associativity precedence) =
-    Encode.object
-        [ ( "type", Encode.string "Binop" )
-        , ( "name", Encode.string name )
-        , ( "annotation", Can.annotationEncoder annotation )
-        , ( "associativity", Binop.associativityEncoder associativity )
-        , ( "precedence", Binop.precedenceEncoder precedence )
-        ]
-
-
-binopDecoder : Decode.Decoder Binop
-binopDecoder =
-    Decode.map4 Binop
-        (Decode.field "name" Decode.string)
-        (Decode.field "annotation" Can.annotationDecoder)
-        (Decode.field "associativity" Binop.associativityDecoder)
-        (Decode.field "precedence" Binop.precedenceDecoder)
-
-
 binopCodec : Codec e Binop
 binopCodec =
     Serialize.customType
@@ -392,44 +262,6 @@ binopCodec =
         )
         |> Serialize.variant4 Binop Serialize.string Can.annotationCodec Binop.associativityCodec Binop.precedenceCodec
         |> Serialize.finishCustomType
-
-
-dependencyInterfaceEncoder : DependencyInterface -> Encode.Value
-dependencyInterfaceEncoder dependencyInterface =
-    case dependencyInterface of
-        Public i ->
-            Encode.object
-                [ ( "type", Encode.string "Public" )
-                , ( "i", interfaceEncoder i )
-                ]
-
-        Private pkg unions aliases ->
-            Encode.object
-                [ ( "type", Encode.string "Private" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "unions", E.assocListDict Encode.string Can.unionEncoder unions )
-                , ( "aliases", E.assocListDict Encode.string Can.aliasEncoder aliases )
-                ]
-
-
-dependencyInterfaceDecoder : Decode.Decoder DependencyInterface
-dependencyInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Public" ->
-                        Decode.map Public (Decode.field "i" interfaceDecoder)
-
-                    "Private" ->
-                        Decode.map3 Private
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "unions" (D.assocListDict compare Decode.string Can.unionDecoder))
-                            (Decode.field "aliases" (D.assocListDict compare Decode.string Can.aliasDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode DependencyInterface's type: " ++ type_)
-            )
 
 
 dependencyInterfaceCodec : Codec e DependencyInterface

@@ -3,8 +3,6 @@ module Compiler.Elm.ModuleName exposing
     , array
     , basics
     , canonicalCodec
-    , canonicalDecoder
-    , canonicalEncoder
     , char
     , cmd
     , compareCanonical
@@ -19,8 +17,6 @@ module Compiler.Elm.ModuleName exposing
     , maybe
     , platform
     , rawCodec
-    , rawDecoder
-    , rawEncoder
     , result
     , string
     , sub
@@ -42,8 +38,6 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.TypeCheck.IO exposing (Canonical(..))
 
@@ -317,21 +311,6 @@ matrix4 =
 -- ENCODERS and DECODERS
 
 
-canonicalEncoder : Canonical -> Encode.Value
-canonicalEncoder (Canonical pkgName name) =
-    Encode.object
-        [ ( "pkgName", Pkg.nameEncoder pkgName )
-        , ( "name", Encode.string name )
-        ]
-
-
-canonicalDecoder : Decode.Decoder Canonical
-canonicalDecoder =
-    Decode.map2 Canonical
-        (Decode.field "pkgName" Pkg.nameDecoder)
-        (Decode.field "name" Decode.string)
-
-
 canonicalCodec : Codec e Canonical
 canonicalCodec =
     Serialize.customType
@@ -340,16 +319,6 @@ canonicalCodec =
         )
         |> Serialize.variant2 Canonical Pkg.nameCodec Serialize.string
         |> Serialize.finishCustomType
-
-
-rawEncoder : Raw -> Encode.Value
-rawEncoder =
-    Encode.string
-
-
-rawDecoder : Decode.Decoder Raw
-rawDecoder =
-    Decode.string
 
 
 rawCodec : Codec e Raw

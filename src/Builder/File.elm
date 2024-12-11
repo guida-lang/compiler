@@ -6,8 +6,6 @@ module Builder.File exposing
     , readUtf8
     , remove
     , timeCodec
-    , timeDecoder
-    , timeEncoder
     , writeBinary
     , writeBuilder
     , writePackage
@@ -16,8 +14,6 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Serialize exposing (Codec)
 import System.IO as IO exposing (IO(..))
 import Time
@@ -188,16 +184,6 @@ remove path =
 
 
 -- ENCODERS and DECODERS
-
-
-timeEncoder : Time -> Encode.Value
-timeEncoder (Time posix) =
-    Encode.int (Time.posixToMillis posix)
-
-
-timeDecoder : Decode.Decoder Time
-timeDecoder =
-    Decode.map (Time << Time.millisToPosix) Decode.int
 
 
 timeCodec : Codec e Time
