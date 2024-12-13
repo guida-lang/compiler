@@ -48,7 +48,7 @@ proc cmd args =
 withCreateProcess : CreateProcess -> (Maybe IO.Handle -> Maybe IO.Handle -> Maybe IO.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
 withCreateProcess createProcess f =
     IO
-        (\s ->
+        (\_ s ->
             ( s
             , IO.ProcWithCreateProcess IO.pure
                 (Encode.object
@@ -115,7 +115,7 @@ withCreateProcess createProcess f =
 
 waitForProcess : ProcessHandle -> IO Exit.ExitCode
 waitForProcess (ProcessHandle ph) =
-    IO (\s -> ( s, IO.ProcWaitForProcess IO.pure ph ))
+    IO (\_ s -> ( s, IO.ProcWaitForProcess IO.pure ph ))
         |> IO.fmap
             (\exitCode ->
                 case exitCode of

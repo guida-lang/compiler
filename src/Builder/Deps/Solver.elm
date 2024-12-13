@@ -447,6 +447,10 @@ initEnv =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
+                let
+                    _ =
+                        Debug.log "mvar1" mvar
+                in
                 Utils.forkIO (IO.bind (Utils.putMVar Http.managerEncoder mvar) Http.getManager)
                     |> IO.bind
                         (\_ ->

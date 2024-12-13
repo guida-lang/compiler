@@ -11,6 +11,7 @@ port module System.IO exposing
     , hPutStr, hPutStrLn
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
+    , RealWorldMVar, MVarSubscriber(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -72,8 +73,14 @@ port module System.IO exposing
 
 @docs ReplState, initialReplState
 
+
+# MVars
+
+@docs RealWorldMVar, MVarSubscriber
+
 -}
 
+import Array exposing (Array)
 import Codec.Archive.Zip as Zip
 import Dict exposing (Dict)
 import Json.Encode as Encode
@@ -99,14 +106,13 @@ run app =
         { init =
             \flags ->
                 update (PureMsg 0 app)
-                    { realWorld =
-                        { args = flags.args
-                        , currentDirectory = flags.currentDirectory
-                        , envVars = Dict.fromList flags.envVars
-                        , homedir = flags.homedir
-                        , progName = flags.progName
-                        , state = initialReplState
-                        }
+                    { args = flags.args
+                    , currentDirectory = flags.currentDirectory
+                    , envVars = Dict.fromList flags.envVars
+                    , homedir = flags.homedir
+                    , progName = flags.progName
+                    , state = initialReplState
+                    , mVars = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -141,17 +147,12 @@ run app =
                     , recvDirRemoveDirectoryRecursive DirRemoveDirectoryRecursiveMsg
                     , recvDirWithCurrentDirectory DirWithCurrentDirectoryMsg
                     , recvReplGetInputLineWithInitial (\{ index, value } -> ReplGetInputLineWithInitialMsg index value)
-                    , recvNewEmptyMVar (\{ index, value } -> NewEmptyMVarMsg index value)
-                    , recvReadMVar (\{ index, value } -> ReadMVarMsg index value)
-                    , recvPutMVar PutMVarMsg
                     ]
         }
 
 
 type alias Model =
-    { realWorld : RealWorld
-    , next : Dict Int Next
-    }
+    RealWorld
 
 
 type Next
@@ -184,7 +185,6 @@ type Next
     | DirRemoveDirectoryRecursiveNext (() -> IO ())
     | DirWithCurrentDirectoryNext (() -> IO ())
     | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
-    | NewEmptyMVarNext (Int -> IO ())
     | ReadMVarNext (Encode.Value -> IO ())
     | TakeMVarNext (Encode.Value -> IO ())
     | PutMVarNext (() -> IO ())
@@ -220,18 +220,21 @@ type Msg
     | DirRemoveDirectoryRecursiveMsg Int
     | DirWithCurrentDirectoryMsg Int
     | ReplGetInputLineWithInitialMsg Int (Maybe String)
-    | NewEmptyMVarMsg Int Int
     | ReadMVarMsg Int Encode.Value
     | PutMVarMsg Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        _ =
+            Debug.log "next" model.next
+    in
     case msg of
         PureMsg index (IO fn) ->
-            case fn model.realWorld of
+            case fn index model of
                 ( newRealWorld, Pure () ) ->
-                    ( { model | realWorld = newRealWorld }
+                    ( newRealWorld
                     , if index == 0 then
                         sendExitWith 0
 
@@ -242,37 +245,37 @@ update msg model =
                 ( newRealWorld, ForkIO next forkIO ) ->
                     let
                         ( updatedModel, updatedCmd ) =
-                            update (PureMsg index (next ())) { model | realWorld = newRealWorld }
+                            update (PureMsg index (next ())) newRealWorld
                     in
                     update (PureMsg (Dict.size model.next) forkIO) updatedModel
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
+                    ( { newRealWorld | next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
 
                 ( newRealWorld, HPutStr next (Handle fd) content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
+                    ( { newRealWorld | next = Dict.insert index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, WriteString next path content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
+                    ( { newRealWorld | next = Dict.insert index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
 
                 ( newRealWorld, Read next fd ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
+                    ( { newRealWorld | next = Dict.insert index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
 
                 ( newRealWorld, HttpFetch next method urlStr headers ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
+                    ( { newRealWorld | next = Dict.insert index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
 
                 ( newRealWorld, GetArchive next method url ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
+                    ( { newRealWorld | next = Dict.insert index (GetArchiveNext next) model.next }, sendGetArchive { index = index, method = method, url = url } )
 
                 ( newRealWorld, HttpUpload next urlStr headers parts ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
+                    ( { newRealWorld | next = Dict.insert index (HttpUploadNext next) model.next }, sendHttpUpload { index = index, urlStr = urlStr, headers = headers, parts = parts } )
 
                 ( newRealWorld, HFlush next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
+                    ( { newRealWorld | next = Dict.insert index (HFlushNext next) model.next }, sendHFlush { index = index, fd = fd } )
 
                 ( newRealWorld, WithFile next path mode ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WithFileNext next) model.next }
+                    ( { newRealWorld | next = Dict.insert index (WithFileNext next) model.next }
                     , sendWithFile
                         { index = index
                         , path = path
@@ -293,76 +296,103 @@ update msg model =
                     )
 
                 ( newRealWorld, HFileSize next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
+                    ( { newRealWorld | next = Dict.insert index (HFileSizeNext next) model.next }, sendHFileSize { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWithCreateProcess next createProcess ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
+                    ( { newRealWorld | next = Dict.insert index (ProcWithCreateProcessNext next) model.next }, sendProcWithCreateProcess { index = index, createProcess = createProcess } )
 
                 ( newRealWorld, HClose next (Handle fd) ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
+                    ( { newRealWorld | next = Dict.insert index (HCloseNext next) model.next }, sendHClose { index = index, fd = fd } )
 
                 ( newRealWorld, ProcWaitForProcess next ph ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
+                    ( { newRealWorld | next = Dict.insert index (ProcWaitForProcessNext next) model.next }, sendProcWaitForProcess { index = index, ph = ph } )
 
                 ( newRealWorld, ExitWith next code ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ExitWithNext next) model.next }, sendExitWith code )
+                    ( { newRealWorld | next = Dict.insert index (ExitWithNext next) model.next }, sendExitWith code )
 
                 ( newRealWorld, DirFindExecutable next name ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
+                    ( { newRealWorld | next = Dict.insert index (DirFindExecutableNext next) model.next }, sendDirFindExecutable { index = index, name = name } )
 
                 ( newRealWorld, ReplGetInputLine next prompt ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
+                    ( { newRealWorld | next = Dict.insert index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
 
                 ( newRealWorld, DirDoesFileExist next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
+                    let
+                        _ =
+                            Debug.log "DirDoesFileExist" ( index, filename )
+                    in
+                    ( { newRealWorld | next = Dict.insert index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
 
                 ( newRealWorld, DirCreateDirectoryIfMissing next createParents filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
+                    ( { newRealWorld | next = Dict.insert index (DirCreateDirectoryIfMissingNext next) model.next }, sendDirCreateDirectoryIfMissing { index = index, createParents = createParents, filename = filename } )
 
                 ( newRealWorld, LockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (LockFileNext next) model.next }, sendLockFile { index = index, path = path } )
 
                 ( newRealWorld, UnlockFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (UnlockFileNext next) model.next }, sendUnlockFile { index = index, path = path } )
 
                 ( newRealWorld, DirGetModificationTime next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
+                    ( { newRealWorld | next = Dict.insert index (DirGetModificationTimeNext next) model.next }, sendDirGetModificationTime { index = index, filename = filename } )
 
                 ( newRealWorld, DirDoesDirectoryExist next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (DirDoesDirectoryExistNext next) model.next }, sendDirDoesDirectoryExist { index = index, path = path } )
 
                 ( newRealWorld, DirCanonicalizePath next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
 
                 ( newRealWorld, BinaryDecodeFileOrFail next filename ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
+                    ( { newRealWorld | next = Dict.insert index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
 
                 ( newRealWorld, Write next fd content ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
+                    ( { newRealWorld | next = Dict.insert index (WriteNext next) model.next }, sendWrite { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, DirRemoveFile next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (DirRemoveFileNext next) model.next }, sendDirRemoveFile { index = index, path = path } )
 
                 ( newRealWorld, DirRemoveDirectoryRecursive next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (DirRemoveDirectoryRecursiveNext next) model.next }, sendDirRemoveDirectoryRecursive { index = index, path = path } )
 
                 ( newRealWorld, DirWithCurrentDirectory next path ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
+                    ( { newRealWorld | next = Dict.insert index (DirWithCurrentDirectoryNext next) model.next }, sendDirWithCurrentDirectory { index = index, path = path } )
 
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
+                    ( { newRealWorld | next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
-                ( newRealWorld, NewEmptyMVar next ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (NewEmptyMVarNext next) model.next }, sendNewEmptyMVar index )
+                ( newRealWorld, ReadMVar next ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
 
-                ( newRealWorld, ReadMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadMVarNext next) model.next }, sendReadMVar { index = index, id = id } )
+                ( newRealWorld, TakeMVarWaiting next ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }, Cmd.none )
 
-                ( newRealWorld, TakeMVar next id ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (TakeMVarNext next) model.next }, sendTakeMVar { index = index, id = id } )
+                ( newRealWorld, TakeMVarTaken next value maybePutIndex ) ->
+                    let
+                        ( updatedModel, updatedCmd ) =
+                            update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }
+                    in
+                    case Debug.log "maybePutIndex" maybePutIndex of
+                        Just putIndex ->
+                            update (PutMVarMsg (Debug.log "putIndex" putIndex)) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, updatedCmd ])
 
-                ( newRealWorld, PutMVar next id value ) ->
-                    ( { model | realWorld = newRealWorld, next = Dict.insert index (PutMVarNext next) model.next }, sendPutMVar { index = index, id = id, value = value } )
+                        Nothing ->
+                            ( updatedModel, updatedCmd )
+
+                ( newRealWorld, PutMVarWaiting next ) ->
+                    ( { newRealWorld | next = Dict.insert (Debug.log "INDEX1" index) (PutMVarNext next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVarDone next readSubscriberIds maybeTakeIndex value ) ->
+                    let
+                        _ =
+                            Debug.log "readSubscriberIds maybeTakeIndex" ( readSubscriberIds, maybeTakeIndex )
+                    in
+                    List.foldr
+                        (\readSubscriberId ( accModel, accCmd ) ->
+                            update (ReadMVarMsg (Debug.log "readSubscriberId" readSubscriberId) value) accModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, accCmd ])
+                        )
+                        (update (PutMVarMsg index) { newRealWorld | next = Dict.insert (Debug.log "INDEX2" index) (PutMVarNext next) model.next })
+                        readSubscriberIds
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -468,14 +498,6 @@ update msg model =
                 _ ->
                     crash "ProcWaitForProcessMsg"
 
-        NewEmptyMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (NewEmptyMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "NewEmptyMVarMsg"
-
         DirFindExecutableMsg index value ->
             case Dict.get index model.next of
                 Just (DirFindExecutableNext fn) ->
@@ -505,8 +527,8 @@ update msg model =
                 Just (DirDoesFileExistNext fn) ->
                     update (PureMsg index (fn value)) model
 
-                _ ->
-                    crash "DirDoesFileExistMsg"
+                nextFn ->
+                    crash ("DirDoesFileExistMsg " ++ String.fromInt index ++ " - " ++ Debug.toString nextFn)
 
         DirCreateDirectoryIfMissingMsg index ->
             case Dict.get index model.next of
@@ -788,36 +810,11 @@ port recvReplGetInputLineWithInitial : ({ index : Int, value : Maybe String } ->
 
 
 
--- MVARS
-
-
-port sendNewEmptyMVar : Int -> Cmd msg
-
-
-port recvNewEmptyMVar : ({ index : Int, value : Int } -> msg) -> Sub msg
-
-
-port sendReadMVar : { index : Int, id : Int } -> Cmd msg
-
-
-port recvReadMVar : ({ index : Int, value : Encode.Value } -> msg) -> Sub msg
-
-
-port sendTakeMVar : { index : Int, id : Int } -> Cmd msg
-
-
-port sendPutMVar : { index : Int, id : Int, value : Encode.Value } -> Cmd msg
-
-
-port recvPutMVar : (Int -> msg) -> Sub msg
-
-
-
 -- The IO monad
 
 
 type IO a
-    = IO (RealWorld -> ( RealWorld, ION a ))
+    = IO (Int -> RealWorld -> ( RealWorld, ION a ))
 
 
 type ION a
@@ -837,19 +834,20 @@ type ION a
     | HClose (() -> IO a) Handle
     | ProcWaitForProcess (Int -> IO a) Int
     | ExitWith (a -> IO a) Int
-    | NewEmptyMVar (Int -> IO a)
     | DirFindExecutable (Maybe FilePath -> IO a) FilePath
     | ReplGetInputLine (Maybe String -> IO a) String
-    | PutMVar (() -> IO a) Int Encode.Value
+    | PutMVarWaiting (() -> IO a)
+    | PutMVarDone (() -> IO a) (List Int) (Maybe Int) Encode.Value
     | DirDoesFileExist (Bool -> IO a) FilePath
     | DirCreateDirectoryIfMissing (() -> IO a) Bool FilePath
     | LockFile (() -> IO a) FilePath
     | UnlockFile (() -> IO a) FilePath
     | DirGetModificationTime (Int -> IO a) FilePath
-    | TakeMVar (Encode.Value -> IO a) Int
+    | TakeMVarWaiting (Encode.Value -> IO a)
+    | TakeMVarTaken (Encode.Value -> IO a) Encode.Value (Maybe Int)
     | DirDoesDirectoryExist (Bool -> IO a) FilePath
     | DirCanonicalizePath (String -> IO a) FilePath
-    | ReadMVar (Encode.Value -> IO a) Int
+    | ReadMVar (Encode.Value -> IO a)
     | BinaryDecodeFileOrFail (Encode.Value -> IO a) FilePath
     | Write (() -> IO a) FilePath Encode.Value
     | DirRemoveFile (() -> IO a) FilePath
@@ -865,12 +863,26 @@ type alias RealWorld =
     , homedir : FilePath
     , progName : String
     , state : ReplState
+    , mVars : Array RealWorldMVar
+    , next : Dict Int Next
     }
+
+
+type alias RealWorldMVar =
+    { subscribers : List MVarSubscriber
+    , value : Maybe Encode.Value
+    }
+
+
+type MVarSubscriber
+    = ReadSubscriber Int
+    | TakeSubscriber Int
+    | PutSubscriber Int Encode.Value
 
 
 pure : a -> IO a
 pure x =
-    IO (\s -> ( s, Pure x ))
+    IO (\_ s -> ( s, Pure x ))
 
 
 apply : IO a -> IO (a -> b) -> IO b
@@ -886,10 +898,10 @@ fmap fn ma =
 bind : (a -> IO b) -> IO a -> IO b
 bind f (IO ma) =
     IO
-        (\s0 ->
-            case ma s0 of
+        (\index s0 ->
+            case ma index s0 of
                 ( s1, Pure a ) ->
-                    unIO (f a) s1
+                    unIO (f a) index s1
 
                 ( s1, ForkIO next forkIO ) ->
                     ( s1, ForkIO (\() -> bind f (next ())) forkIO )
@@ -981,21 +993,24 @@ bind f (IO ma) =
                 ( s1, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( s1, ReplGetInputLineWithInitial (\value -> bind f (next value)) prompt left right )
 
-                ( s1, NewEmptyMVar next ) ->
-                    ( s1, NewEmptyMVar (\value -> bind f (next value)) )
+                ( s1, ReadMVar next ) ->
+                    ( s1, ReadMVar (\value -> bind f (next value)) )
 
-                ( s1, ReadMVar next path ) ->
-                    ( s1, ReadMVar (\value -> bind f (next value)) path )
+                ( s1, TakeMVarWaiting next ) ->
+                    ( s1, TakeMVarWaiting (\value -> bind f (next value)) )
 
-                ( s1, TakeMVar next path ) ->
-                    ( s1, TakeMVar (\value -> bind f (next value)) path )
+                ( s1, TakeMVarTaken next takenValue maybePutIndex ) ->
+                    ( s1, TakeMVarTaken (\value -> bind f (next value)) takenValue maybePutIndex )
 
-                ( s1, PutMVar next id value ) ->
-                    ( s1, PutMVar (\() -> bind f (next ())) id value )
+                ( s1, PutMVarWaiting next ) ->
+                    ( s1, PutMVarWaiting (\() -> bind f (next ())) )
+
+                ( s1, PutMVarDone next readSubscriberIds maybeTakeIndex value ) ->
+                    ( s1, PutMVarDone (\() -> bind f (next ())) readSubscriberIds maybeTakeIndex value )
         )
 
 
-unIO : IO a -> (RealWorld -> ( RealWorld, ION a ))
+unIO : IO a -> (Int -> RealWorld -> ( RealWorld, ION a ))
 unIO (IO a) =
     a
 
@@ -1032,7 +1047,7 @@ stderr =
 
 withFile : String -> IOMode -> (Handle -> IO a) -> IO a
 withFile path mode callback =
-    IO (\s -> ( s, WithFile pure path mode ))
+    IO (\_ s -> ( s, WithFile pure path mode ))
         |> bind (Handle >> callback)
 
 
@@ -1049,7 +1064,7 @@ type IOMode
 
 hClose : Handle -> IO ()
 hClose handle =
-    IO (\s -> ( s, HClose pure handle ))
+    IO (\_ s -> ( s, HClose pure handle ))
 
 
 
@@ -1058,7 +1073,7 @@ hClose handle =
 
 hFileSize : Handle -> IO Int
 hFileSize handle =
-    IO (\s -> ( s, HFileSize pure handle ))
+    IO (\_ s -> ( s, HFileSize pure handle ))
 
 
 
@@ -1067,7 +1082,7 @@ hFileSize handle =
 
 hFlush : Handle -> IO ()
 hFlush handle =
-    IO (\s -> ( s, HFlush pure handle ))
+    IO (\_ s -> ( s, HFlush pure handle ))
 
 
 
@@ -1085,7 +1100,7 @@ hIsTerminalDevice _ =
 
 hPutStr : Handle -> String -> IO ()
 hPutStr handle content =
-    IO (\s -> ( s, HPutStr pure handle content ))
+    IO (\_ s -> ( s, HPutStr pure handle content ))
 
 
 hPutStrLn : Handle -> String -> IO ()
@@ -1109,7 +1124,7 @@ putStrLn s =
 
 getLine : IO String
 getLine =
-    IO (\s -> ( s, GetLine pure ))
+    IO (\_ s -> ( s, GetLine pure ))
 
 
 
