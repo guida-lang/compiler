@@ -12,7 +12,7 @@ const crypto = require("node:crypto");
 const AdmZip = require("adm-zip");
 const which = require("which");
 const tmp = require("tmp");
-const { Elm } = require("./guida.js");
+const { Elm } = require("./guida.min.js");
 const FormData = require("form-data");
 
 const rl = readline.createInterface({

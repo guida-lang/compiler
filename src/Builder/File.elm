@@ -57,7 +57,7 @@ writeBinary encoder path value =
 
 readBinary : Decode.Decoder a -> FilePath -> IO (Maybe a)
 readBinary decoder path =
-    Utils.dirDoesFileExist (Debug.log "path1" path)
+    Utils.dirDoesFileExist path
         |> IO.bind
             (\pathExists ->
                 if pathExists then
@@ -164,7 +164,7 @@ writeEntry destination root entry =
 
 exists : FilePath -> IO Bool
 exists path =
-    Utils.dirDoesFileExist (Debug.log "path2" path)
+    Utils.dirDoesFileExist path
 
 
 
@@ -173,7 +173,7 @@ exists path =
 
 remove : FilePath -> IO ()
 remove path =
-    Utils.dirDoesFileExist (Debug.log "path3" path)
+    Utils.dirDoesFileExist path
         |> IO.bind
             (\exists_ ->
                 if exists_ then

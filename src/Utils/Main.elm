@@ -140,7 +140,7 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
 import System.Exit as Exit
-import System.IO as IO exposing (IO(..), MVarSubscriber(..))
+import System.IO as IO exposing (IO(..))
 import Time
 import Utils.Crash exposing (crash)
 
@@ -935,10 +935,6 @@ newMVar encoder value =
     newEmptyMVar
         |> IO.bind
             (\mvar ->
-                let
-                    _ =
-                        Debug.log "mvar2" mvar
-                in
                 putMVar encoder mvar value
                     |> IO.fmap (\_ -> mvar)
             )
@@ -952,11 +948,11 @@ readMVar decoder (MVar ref) =
                 Just mVar ->
                     case mVar.value of
                         Just value ->
-                            ( s, IO.Pure value )
+                            ( s, IO.ReadMVarDone IO.pure value )
 
                         Nothing ->
                             ( { s | mVars = Array.set ref { mVar | subscribers = IO.ReadSubscriber index :: mVar.subscribers } s.mVars }
-                            , IO.ReadMVar IO.pure
+                            , IO.ReadMVarWaiting IO.pure
                             )
 
                 Nothing ->
@@ -1002,7 +998,7 @@ takeMVar decoder (MVar ref) =
                                             ( Nothing, subscribers, Nothing )
                             in
                             ( { s | mVars = Array.set ref { mVar | subscribers = newSubscribers, value = newValue } s.mVars }
-                            , IO.TakeMVarTaken IO.pure value maybePutIndex
+                            , IO.TakeMVarDone IO.pure value maybePutIndex
                             )
 
                         Nothing ->
@@ -1033,7 +1029,7 @@ putMVar encoder (MVar ref) value =
                     case mVar.value of
                         Just _ ->
                             ( { s | mVars = Array.set ref { mVar | subscribers = IO.PutSubscriber index (encoder value) :: mVar.subscribers } s.mVars }
-                            , Debug.log "PutMVarWaiting" (IO.PutMVarWaiting IO.pure)
+                            , IO.PutMVarWaiting IO.pure
                             )
 
                         Nothing ->
@@ -1070,15 +1066,11 @@ putMVar encoder (MVar ref) value =
                                         (IO.TakeSubscriber takeIndex) :: remainingSubscribers ->
                                             ( Nothing, Just takeIndex, remainingSubscribers )
 
-                                        all ->
-                                            let
-                                                _ =
-                                                    Debug.log "ALL!!!" all
-                                            in
+                                        _ ->
                                             ( Just encodedValue, Nothing, nonReadSubscribers )
                             in
                             ( { s | mVars = Array.set ref { mVar | subscribers = subscribers, value = newValue } s.mVars }
-                            , Debug.log "PutMVarDone" (IO.PutMVarDone IO.pure readSubscriberIds maybeTakeIndex encodedValue)
+                            , IO.PutMVarDone IO.pure readSubscriberIds maybeTakeIndex encodedValue
                             )
 
                 _ ->
@@ -1090,10 +1082,6 @@ newEmptyMVar : IO (MVar a)
 newEmptyMVar =
     IO
         (\_ s ->
-            let
-                _ =
-                    Debug.log "newEmptyMVar" (Array.length s.mVars)
-            in
             ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
             , IO.Pure (MVar (Array.length s.mVars))
             )

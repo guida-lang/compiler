@@ -226,10 +226,6 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    let
-        _ =
-            Debug.log "next" model.next
-    in
     case msg of
         PureMsg index (IO fn) ->
             case fn index model of
@@ -317,10 +313,6 @@ update msg model =
                     ( { newRealWorld | next = Dict.insert index (ReplGetInputLineNext next) model.next }, sendReplGetInputLine { index = index, prompt = prompt } )
 
                 ( newRealWorld, DirDoesFileExist next filename ) ->
-                    let
-                        _ =
-                            Debug.log "DirDoesFileExist" ( index, filename )
-                    in
                     ( { newRealWorld | next = Dict.insert index (DirDoesFileExistNext next) model.next }, sendDirDoesFileExist { index = index, filename = filename } )
 
                 ( newRealWorld, DirCreateDirectoryIfMissing next createParents filename ) ->
@@ -359,39 +351,38 @@ update msg model =
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( { newRealWorld | next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
-                ( newRealWorld, ReadMVar next ) ->
+                ( newRealWorld, ReadMVarWaiting next ) ->
                     ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
+
+                ( newRealWorld, ReadMVarDone next value ) ->
+                    update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }
 
                 ( newRealWorld, TakeMVarWaiting next ) ->
                     ( { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }, Cmd.none )
 
-                ( newRealWorld, TakeMVarTaken next value maybePutIndex ) ->
+                ( newRealWorld, TakeMVarDone next value maybePutIndex ) ->
                     let
                         ( updatedModel, updatedCmd ) =
                             update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }
                     in
-                    case Debug.log "maybePutIndex" maybePutIndex of
+                    case maybePutIndex of
                         Just putIndex ->
-                            update (PutMVarMsg (Debug.log "putIndex" putIndex)) updatedModel
+                            update (PutMVarMsg putIndex) updatedModel
                                 |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, updatedCmd ])
 
                         Nothing ->
                             ( updatedModel, updatedCmd )
 
                 ( newRealWorld, PutMVarWaiting next ) ->
-                    ( { newRealWorld | next = Dict.insert (Debug.log "INDEX1" index) (PutMVarNext next) model.next }, Cmd.none )
+                    ( { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }, Cmd.none )
 
                 ( newRealWorld, PutMVarDone next readSubscriberIds maybeTakeIndex value ) ->
-                    let
-                        _ =
-                            Debug.log "readSubscriberIds maybeTakeIndex" ( readSubscriberIds, maybeTakeIndex )
-                    in
                     List.foldr
                         (\readSubscriberId ( accModel, accCmd ) ->
-                            update (ReadMVarMsg (Debug.log "readSubscriberId" readSubscriberId) value) accModel
+                            update (ReadMVarMsg readSubscriberId value) accModel
                                 |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, accCmd ])
                         )
-                        (update (PutMVarMsg index) { newRealWorld | next = Dict.insert (Debug.log "INDEX2" index) (PutMVarNext next) model.next })
+                        (update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next })
                         readSubscriberIds
 
         GetLineMsg index input ->
@@ -527,8 +518,8 @@ update msg model =
                 Just (DirDoesFileExistNext fn) ->
                     update (PureMsg index (fn value)) model
 
-                nextFn ->
-                    crash ("DirDoesFileExistMsg " ++ String.fromInt index ++ " - " ++ Debug.toString nextFn)
+                _ ->
+                    crash "DirDoesFileExistMsg"
 
         DirCreateDirectoryIfMissingMsg index ->
             case Dict.get index model.next of
@@ -836,24 +827,25 @@ type ION a
     | ExitWith (a -> IO a) Int
     | DirFindExecutable (Maybe FilePath -> IO a) FilePath
     | ReplGetInputLine (Maybe String -> IO a) String
-    | PutMVarWaiting (() -> IO a)
-    | PutMVarDone (() -> IO a) (List Int) (Maybe Int) Encode.Value
     | DirDoesFileExist (Bool -> IO a) FilePath
     | DirCreateDirectoryIfMissing (() -> IO a) Bool FilePath
     | LockFile (() -> IO a) FilePath
     | UnlockFile (() -> IO a) FilePath
     | DirGetModificationTime (Int -> IO a) FilePath
-    | TakeMVarWaiting (Encode.Value -> IO a)
-    | TakeMVarTaken (Encode.Value -> IO a) Encode.Value (Maybe Int)
     | DirDoesDirectoryExist (Bool -> IO a) FilePath
     | DirCanonicalizePath (String -> IO a) FilePath
-    | ReadMVar (Encode.Value -> IO a)
     | BinaryDecodeFileOrFail (Encode.Value -> IO a) FilePath
     | Write (() -> IO a) FilePath Encode.Value
     | DirRemoveFile (() -> IO a) FilePath
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
     | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
+    | ReadMVarWaiting (Encode.Value -> IO a)
+    | ReadMVarDone (Encode.Value -> IO a) Encode.Value
+    | TakeMVarWaiting (Encode.Value -> IO a)
+    | TakeMVarDone (Encode.Value -> IO a) Encode.Value (Maybe Int)
+    | PutMVarWaiting (() -> IO a)
+    | PutMVarDone (() -> IO a) (List Int) (Maybe Int) Encode.Value
 
 
 type alias RealWorld =
@@ -993,14 +985,17 @@ bind f (IO ma) =
                 ( s1, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( s1, ReplGetInputLineWithInitial (\value -> bind f (next value)) prompt left right )
 
-                ( s1, ReadMVar next ) ->
-                    ( s1, ReadMVar (\value -> bind f (next value)) )
+                ( s1, ReadMVarWaiting next ) ->
+                    ( s1, ReadMVarWaiting (\value -> bind f (next value)) )
+
+                ( s1, ReadMVarDone next readValue ) ->
+                    ( s1, ReadMVarDone (\value -> bind f (next value)) readValue )
 
                 ( s1, TakeMVarWaiting next ) ->
                     ( s1, TakeMVarWaiting (\value -> bind f (next value)) )
 
-                ( s1, TakeMVarTaken next takenValue maybePutIndex ) ->
-                    ( s1, TakeMVarTaken (\value -> bind f (next value)) takenValue maybePutIndex )
+                ( s1, TakeMVarDone next takenValue maybePutIndex ) ->
+                    ( s1, TakeMVarDone (\value -> bind f (next value)) takenValue maybePutIndex )
 
                 ( s1, PutMVarWaiting next ) ->
                     ( s1, PutMVarWaiting (\() -> bind f (next ())) )
