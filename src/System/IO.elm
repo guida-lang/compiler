@@ -505,14 +505,6 @@ update msg model =
                 _ ->
                     crash "ReplGetInputLineMsg"
 
-        PutMVarMsg index ->
-            case Dict.get index model.next of
-                Just (PutMVarNext fn) ->
-                    update (PureMsg index (fn ())) model
-
-                _ ->
-                    crash "PutMVarMsg"
-
         DirDoesFileExistMsg index value ->
             case Dict.get index model.next of
                 Just (DirDoesFileExistNext fn) ->
@@ -569,17 +561,6 @@ update msg model =
                 _ ->
                     crash "DirCanonicalizePathMsg"
 
-        ReadMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (ReadMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                Just (TakeMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "ReadMVarMsg"
-
         BinaryDecodeFileOrFailMsg index value ->
             case Dict.get index model.next of
                 Just (BinaryDecodeFileOrFailNext fn) ->
@@ -627,6 +608,25 @@ update msg model =
 
                 _ ->
                     crash "ReplGetInputLineWithInitialMsg"
+
+        ReadMVarMsg index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg"
+
+        PutMVarMsg index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg"
 
 
 port sendGetLine : Int -> Cmd msg
