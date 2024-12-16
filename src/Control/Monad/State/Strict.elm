@@ -64,10 +64,10 @@ pure value =
 
 get : StateT s IO.ReplState
 get =
-    IO (\s -> ( s, IO.Pure s.state ))
+    IO (\_ s -> ( s, IO.Pure s.state ))
         |> liftIO
 
 
 put : IO.ReplState -> IO ()
 put state =
-    IO (\s -> ( { s | state = state }, IO.Pure () ))
+    IO (\_ s -> ( { s | state = state }, IO.Pure () ))

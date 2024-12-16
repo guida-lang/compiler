@@ -221,7 +221,7 @@ writeUgly path value =
 -}
 fileWriteBuilder : String -> String -> IO ()
 fileWriteBuilder path value =
-    IO (\s -> ( s, IO.WriteString IO.pure path value ))
+    IO (\_ s -> ( s, IO.WriteString IO.pure path value ))
 
 
 

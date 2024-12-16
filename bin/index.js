@@ -21,7 +21,6 @@ const rl = readline.createInterface({
 });
 
 let nextCounter = 0;
-const mVars = {};
 const lockedFiles = {};
 const processes = {};
 
@@ -352,68 +351,4 @@ app.ports.sendReplGetInputLineWithInitial.subscribe(function ({ index, prompt, l
   rl.question(prompt + left + right, (value) => {
     app.ports.recvReplGetInputLineWithInitial.send({ index, value });
   });
-});
-
-// MVARS
-
-app.ports.sendNewEmptyMVar.subscribe(function (index) {
-  nextCounter += 1;
-  mVars[nextCounter] = { subscribers: [], value: undefined };
-  app.ports.recvNewEmptyMVar.send({ index, value: nextCounter });
-});
-
-app.ports.sendReadMVar.subscribe(function ({ index, id }) {
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].subscribers.push({ index, action: "read" });
-  } else {
-    app.ports.recvReadMVar.send({ index, value: mVars[id].value });
-  }
-});
-
-app.ports.sendTakeMVar.subscribe(function ({ index, id }) {
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].subscribers.push({ index, action: "take" });
-  } else {
-    const value = mVars[id].value;
-    mVars[id].value = undefined;
-
-    if (
-      mVars[id].subscribers.length > 0 &&
-      mVars[id].subscribers[0].action === "put"
-    ) {
-      const subscriber = mVars[id].subscribers.shift();
-      mVars[id].value = subscriber.value;
-      app.ports.recvPutMVar.send(subscriber.index);
-    }
-
-    app.ports.recvReadMVar.send({ index, value });
-  }
-});
-
-app.ports.sendPutMVar.subscribe(function ({ index, id, value }) {
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].value = value;
-
-    mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
-      if (subscriber.action === "read") {
-        app.ports.recvReadMVar.send({ index: subscriber.index, value });
-      }
-
-      return subscriber.action !== "read";
-    });
-
-    const subscriber = mVars[id].subscribers.shift();
-
-    if (subscriber) {
-      app.ports.recvReadMVar.send({ index: subscriber.index, value });
-
-      if (subscriber.action === "take") {
-        mVars[id].value = undefined;
-      }
-    }
-
-    app.ports.recvPutMVar.send(index);
-  } else {
-    mVars[id].subscribers.push({ index, action: "put", value });
-  }
 });
