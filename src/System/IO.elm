@@ -185,6 +185,7 @@ type Next
     | DirRemoveDirectoryRecursiveNext (() -> IO ())
     | DirWithCurrentDirectoryNext (() -> IO ())
     | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
+    | NewEmptyMVarNext (Int -> IO ())
     | ReadMVarNext (Encode.Value -> IO ())
     | TakeMVarNext (Encode.Value -> IO ())
     | PutMVarNext (() -> IO ())
@@ -220,6 +221,7 @@ type Msg
     | DirRemoveDirectoryRecursiveMsg Int
     | DirWithCurrentDirectoryMsg Int
     | ReplGetInputLineWithInitialMsg Int (Maybe String)
+    | NewEmptyMVarMsg Int Int
     | ReadMVarMsg Int Encode.Value
     | PutMVarMsg Int
 
@@ -244,7 +246,7 @@ update msg model =
                             update (PureMsg index (next ())) newRealWorld
                     in
                     update (PureMsg (Dict.size model.next) forkIO) updatedModel
-                        |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
+                        |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, updatedCmd ])
 
                 ( newRealWorld, GetLine next ) ->
                     ( { newRealWorld | next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
@@ -350,6 +352,9 @@ update msg model =
 
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( { newRealWorld | next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
+
+                ( newRealWorld, NewEmptyMVar next value ) ->
+                    update (NewEmptyMVarMsg index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext next) model.next }
 
                 ( newRealWorld, ReadMVarWaiting next ) ->
                     ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
@@ -609,6 +614,14 @@ update msg model =
                 _ ->
                     crash "ReplGetInputLineWithInitialMsg"
 
+        NewEmptyMVarMsg index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg"
+
         ReadMVarMsg index value ->
             case Dict.get index model.next of
                 Just (ReadMVarNext fn) ->
@@ -840,6 +853,7 @@ type ION a
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
     | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
+    | NewEmptyMVar (Int -> IO a) Int
     | ReadMVarWaiting (Encode.Value -> IO a)
     | ReadMVarDone (Encode.Value -> IO a) Encode.Value
     | TakeMVarWaiting (Encode.Value -> IO a)
@@ -984,6 +998,9 @@ bind f (IO ma) =
 
                 ( s1, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( s1, ReplGetInputLineWithInitial (\value -> bind f (next value)) prompt left right )
+
+                ( s1, NewEmptyMVar next newValue ) ->
+                    ( s1, NewEmptyMVar (\value -> bind f (next value)) newValue )
 
                 ( s1, ReadMVarWaiting next ) ->
                     ( s1, ReadMVarWaiting (\value -> bind f (next value)) )

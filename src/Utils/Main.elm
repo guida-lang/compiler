@@ -951,7 +951,7 @@ readMVar decoder (MVar ref) =
                             ( s, IO.ReadMVarDone IO.pure value )
 
                         Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = IO.ReadSubscriber index :: mVar.subscribers } s.mVars }
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadSubscriber index ] } s.mVars }
                             , IO.ReadMVarWaiting IO.pure
                             )
 
@@ -1002,7 +1002,7 @@ takeMVar decoder (MVar ref) =
                             )
 
                         Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = IO.TakeSubscriber index :: mVar.subscribers } s.mVars }
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber index ] } s.mVars }
                             , IO.TakeMVarWaiting IO.pure
                             )
 
@@ -1028,7 +1028,7 @@ putMVar encoder (MVar ref) value =
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = IO.PutSubscriber index (encoder value) :: mVar.subscribers } s.mVars }
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index (encoder value) ] } s.mVars }
                             , IO.PutMVarWaiting IO.pure
                             )
 
@@ -1083,9 +1083,10 @@ newEmptyMVar =
     IO
         (\_ s ->
             ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
-            , IO.Pure (MVar (Array.length s.mVars))
+            , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
             )
         )
+        |> IO.fmap MVar
 
 
 
