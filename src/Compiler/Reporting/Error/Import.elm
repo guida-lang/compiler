@@ -21,6 +21,7 @@ import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 
 
 
@@ -28,14 +29,14 @@ import Json.Encode as Encode
 
 
 type Error
-    = Error A.CRA_Region ModuleName.CEMN_Raw (EverySet String ModuleName.CEMN_Raw) Problem
+    = Error T.CRA_Region T.CEMN_Raw (EverySet String T.CEMN_Raw) Problem
 
 
 type Problem
     = NotFound
-    | Ambiguous String (List String) Pkg.CEP_Name (List Pkg.CEP_Name)
+    | Ambiguous String (List String) T.CEP_Name (List T.CEP_Name)
     | AmbiguousLocal String String (List String)
-    | AmbiguousForeign Pkg.CEP_Name Pkg.CEP_Name (List Pkg.CEP_Name)
+    | AmbiguousForeign T.CEP_Name T.CEP_Name (List T.CEP_Name)
 
 
 
@@ -176,7 +177,7 @@ toReport source (Error region name unimportedModules problem) =
                     )
 
 
-toSuggestions : ModuleName.CEMN_Raw -> EverySet String ModuleName.CEMN_Raw -> List ModuleName.CEMN_Raw
+toSuggestions : T.CEMN_Raw -> EverySet String T.CEMN_Raw -> List T.CEMN_Raw
 toSuggestions name unimportedModules =
     List.take 4 <|
         Suggest.sort name identity (EverySet.toList compare unimportedModules)

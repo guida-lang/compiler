@@ -25,6 +25,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
 import System.IO as IO exposing (IO)
+import Types as T
 import Utils.Main as Utils
 
 
@@ -66,17 +67,17 @@ compilerVersion =
 -- ELMI and ELMO
 
 
-elmi : String -> ModuleName.CEMN_Raw -> String
+elmi : String -> T.CEMN_Raw -> String
 elmi root name =
     toArtifactPath root name "elmi"
 
 
-elmo : String -> ModuleName.CEMN_Raw -> String
+elmo : String -> T.CEMN_Raw -> String
 elmo root name =
     toArtifactPath root name "elmo"
 
 
-toArtifactPath : String -> ModuleName.CEMN_Raw -> String -> String
+toArtifactPath : String -> T.CEMN_Raw -> String -> String
 toArtifactPath root name ext =
     Utils.fpForwardSlash (stuff root) (Utils.fpAddExtension (ModuleName.toHyphenPath name) ext)
 
@@ -153,7 +154,7 @@ registry (PackageCache dir) =
     Utils.fpForwardSlash dir "registry.json"
 
 
-package : PackageCache -> Pkg.CEP_Name -> V.Version -> String
+package : PackageCache -> T.CEP_Name -> V.Version -> String
 package (PackageCache dir) name version =
     Utils.fpForwardSlash dir (Utils.fpForwardSlash (Pkg.toString name) (V.toChars version))
 

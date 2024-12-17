@@ -26,6 +26,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import Prelude
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -37,7 +38,7 @@ import Utils.Main as Utils
 type Pattern
     = Anything
     | Literal Literal
-    | Ctor Can.CASTC_Union Name.CDN_Name (List Pattern)
+    | Ctor T.CASTC_Union T.CDN_Name (List Pattern)
 
 
 type Literal
@@ -51,7 +52,7 @@ type Literal
 
 
 simplify : Can.Pattern -> Pattern
-simplify (A.CRA_At _ pattern) =
+simplify (T.CRA_At _ pattern) =
     case pattern of
         Can.PAnything ->
             Anything
@@ -118,76 +119,76 @@ nil =
 -- BUILT-IN UNIONS
 
 
-unit : Can.CASTC_Union
+unit : T.CASTC_Union
 unit =
     let
-        ctor : Can.CASTC_Ctor
+        ctor : T.CASTC_Ctor
         ctor =
-            Can.CASTC_Ctor unitName Index.first 0 []
+            T.CASTC_Ctor unitName Index.first 0 []
     in
-    Can.CASTC_Union [] [ ctor ] 1 Can.CASTC_Normal
+    T.CASTC_Union [] [ ctor ] 1 T.CASTC_Normal
 
 
-pair : Can.CASTC_Union
+pair : T.CASTC_Union
 pair =
     let
-        ctor : Can.CASTC_Ctor
+        ctor : T.CASTC_Ctor
         ctor =
-            Can.CASTC_Ctor pairName Index.first 2 [ Can.CASTC_TVar "a", Can.CASTC_TVar "b" ]
+            T.CASTC_Ctor pairName Index.first 2 [ T.CASTC_TVar "a", T.CASTC_TVar "b" ]
     in
-    Can.CASTC_Union [ "a", "b" ] [ ctor ] 1 Can.CASTC_Normal
+    T.CASTC_Union [ "a", "b" ] [ ctor ] 1 T.CASTC_Normal
 
 
-triple : Can.CASTC_Union
+triple : T.CASTC_Union
 triple =
     let
-        ctor : Can.CASTC_Ctor
+        ctor : T.CASTC_Ctor
         ctor =
-            Can.CASTC_Ctor tripleName Index.first 3 [ Can.CASTC_TVar "a", Can.CASTC_TVar "b", Can.CASTC_TVar "c" ]
+            T.CASTC_Ctor tripleName Index.first 3 [ T.CASTC_TVar "a", T.CASTC_TVar "b", T.CASTC_TVar "c" ]
     in
-    Can.CASTC_Union [ "a", "b", "c" ] [ ctor ] 1 Can.CASTC_Normal
+    T.CASTC_Union [ "a", "b", "c" ] [ ctor ] 1 T.CASTC_Normal
 
 
-list : Can.CASTC_Union
+list : T.CASTC_Union
 list =
     let
-        nilCtor : Can.CASTC_Ctor
+        nilCtor : T.CASTC_Ctor
         nilCtor =
-            Can.CASTC_Ctor nilName Index.first 0 []
+            T.CASTC_Ctor nilName Index.first 0 []
 
-        consCtor : Can.CASTC_Ctor
+        consCtor : T.CASTC_Ctor
         consCtor =
-            Can.CASTC_Ctor consName
+            T.CASTC_Ctor consName
                 Index.second
                 2
-                [ Can.CASTC_TVar "a"
-                , Can.CASTC_TType ModuleName.list Name.list [ Can.CASTC_TVar "a" ]
+                [ T.CASTC_TVar "a"
+                , T.CASTC_TType ModuleName.list Name.list [ T.CASTC_TVar "a" ]
                 ]
     in
-    Can.CASTC_Union [ "a" ] [ nilCtor, consCtor ] 2 Can.CASTC_Normal
+    T.CASTC_Union [ "a" ] [ nilCtor, consCtor ] 2 T.CASTC_Normal
 
 
-unitName : Name.CDN_Name
+unitName : T.CDN_Name
 unitName =
     "#0"
 
 
-pairName : Name.CDN_Name
+pairName : T.CDN_Name
 pairName =
     "#2"
 
 
-tripleName : Name.CDN_Name
+tripleName : T.CDN_Name
 tripleName =
     "#3"
 
 
-consName : Name.CDN_Name
+consName : T.CDN_Name
 consName =
     "::"
 
 
-nilName : Name.CDN_Name
+nilName : T.CDN_Name
 nilName =
     "[]"
 
@@ -197,8 +198,8 @@ nilName =
 
 
 type Error
-    = Incomplete A.CRA_Region Context (List Pattern)
-    | Redundant A.CRA_Region A.CRA_Region Int
+    = Incomplete T.CRA_Region Context (List Pattern)
+    | Redundant T.CRA_Region T.CRA_Region Int
 
 
 type Context
@@ -253,12 +254,12 @@ checkDef def errors =
 
 
 checkArg : Can.Pattern -> List Error -> List Error
-checkArg ((A.CRA_At region _) as pattern) errors =
+checkArg ((T.CRA_At region _) as pattern) errors =
     checkPatterns region BadArg [ pattern ] errors
 
 
 checkTypedArg : ( Can.Pattern, tipe ) -> List Error -> List Error
-checkTypedArg ( (A.CRA_At region _) as pattern, _ ) errors =
+checkTypedArg ( (T.CRA_At region _) as pattern, _ ) errors =
     checkPatterns region BadArg [ pattern ] errors
 
 
@@ -267,7 +268,7 @@ checkTypedArg ( (A.CRA_At region _) as pattern, _ ) errors =
 
 
 checkExpr : Can.Expr -> List Error -> List Error
-checkExpr (A.CRA_At region expression) errors =
+checkExpr (T.CRA_At region expression) errors =
     case expression of
         Can.VarLocal _ ->
             errors
@@ -327,7 +328,7 @@ checkExpr (A.CRA_At region expression) errors =
         Can.LetRec defs body ->
             List.foldr checkDef (checkExpr body errors) defs
 
-        Can.LetDestruct ((A.CRA_At reg _) as pattern) expr body ->
+        Can.LetDestruct ((T.CRA_At reg _) as pattern) expr body ->
             checkPatterns reg BadDestruct [ pattern ] <|
                 checkExpr expr (checkExpr body errors)
 
@@ -387,7 +388,7 @@ checkIfBranch ( condition, branch ) errs =
 -- CHECK CASE EXPRESSION
 
 
-checkCases : A.CRA_Region -> List Can.CaseBranch -> List Error -> List Error
+checkCases : T.CRA_Region -> List Can.CaseBranch -> List Error -> List Error
 checkCases region branches errors =
     let
         ( patterns, newErrors ) =
@@ -407,7 +408,7 @@ checkCaseBranch (Can.CaseBranch pattern expr) ( patterns, errors ) =
 -- CHECK PATTERNS
 
 
-checkPatterns : A.CRA_Region -> Context -> List Can.Pattern -> List Error -> List Error
+checkPatterns : T.CRA_Region -> Context -> List Can.Pattern -> List Error -> List Error
 checkPatterns region context patterns errors =
     case toNonRedundantRows region patterns of
         Err err ->
@@ -444,7 +445,7 @@ isExhaustive matrix n =
 
             else
                 let
-                    ctors : Dict String Name.CDN_Name Can.CASTC_Union
+                    ctors : Dict String T.CDN_Name T.CASTC_Union
                     ctors =
                         collectCtors matrix
 
@@ -458,7 +459,7 @@ isExhaustive matrix n =
 
                 else
                     let
-                        ((Can.CASTC_Union _ altList numAlts _) as alts) =
+                        ((T.CASTC_Union _ altList numAlts _) as alts) =
                             Tuple.second (Utils.mapFindMin ctors)
                     in
                     if numSeen < numAlts then
@@ -468,8 +469,8 @@ isExhaustive matrix n =
 
                     else
                         let
-                            isAltExhaustive : Can.CASTC_Ctor -> List (List Pattern)
-                            isAltExhaustive (Can.CASTC_Ctor name _ arity _) =
+                            isAltExhaustive : T.CASTC_Ctor -> List (List Pattern)
+                            isAltExhaustive (T.CASTC_Ctor name _ arity _) =
                                 List.map (recoverCtor alts name arity)
                                     (isExhaustive
                                         (List.filterMap (specializeRowByCtor name arity) matrix)
@@ -479,8 +480,8 @@ isExhaustive matrix n =
                         List.concatMap isAltExhaustive altList
 
 
-isMissing : Can.CASTC_Union -> Dict String Name.CDN_Name a -> Can.CASTC_Ctor -> Maybe Pattern
-isMissing union ctors (Can.CASTC_Ctor name _ arity _) =
+isMissing : T.CASTC_Union -> Dict String T.CDN_Name a -> T.CASTC_Ctor -> Maybe Pattern
+isMissing union ctors (T.CASTC_Ctor name _ arity _) =
     if Dict.member identity name ctors then
         Nothing
 
@@ -488,7 +489,7 @@ isMissing union ctors (Can.CASTC_Ctor name _ arity _) =
         Just (Ctor union name (List.repeat arity Anything))
 
 
-recoverCtor : Can.CASTC_Union -> Name.CDN_Name -> Int -> List Pattern -> List Pattern
+recoverCtor : T.CASTC_Union -> T.CDN_Name -> Int -> List Pattern -> List Pattern
 recoverCtor union name arity patterns =
     let
         ( args, rest ) =
@@ -503,20 +504,20 @@ recoverCtor union name arity patterns =
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toNonRedundantRows : A.CRA_Region -> List Can.Pattern -> Result Error (List (List Pattern))
+toNonRedundantRows : T.CRA_Region -> List Can.Pattern -> Result Error (List (List Pattern))
 toNonRedundantRows region patterns =
     toSimplifiedUsefulRows region [] patterns
 
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toSimplifiedUsefulRows : A.CRA_Region -> List (List Pattern) -> List Can.Pattern -> Result Error (List (List Pattern))
+toSimplifiedUsefulRows : T.CRA_Region -> List (List Pattern) -> List Can.Pattern -> Result Error (List (List Pattern))
 toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
     case uncheckedPatterns of
         [] ->
             Ok checkedRows
 
-        ((A.CRA_At region _) as pattern) :: rest ->
+        ((T.CRA_At region _) as pattern) :: rest ->
             let
                 nextRow : List Pattern
                 nextRow =
@@ -569,8 +570,8 @@ isUseful matrix vector =
                                     -- of those. But what if some of those Ctors have subpatterns
                                     -- that make them less general? If so, this actually is useful!
                                     let
-                                        isUsefulAlt : Can.CASTC_Ctor -> Bool
-                                        isUsefulAlt (Can.CASTC_Ctor name _ arity _) =
+                                        isUsefulAlt : T.CASTC_Ctor -> Bool
+                                        isUsefulAlt (T.CASTC_Ctor name _ arity _) =
                                             isUseful
                                                 (List.filterMap (specializeRowByCtor name arity) matrix)
                                                 (List.repeat arity Anything ++ patterns)
@@ -588,7 +589,7 @@ isUseful matrix vector =
 -- INVARIANT: (length row == N) ==> (length result == arity + N - 1)
 
 
-specializeRowByCtor : Name.CDN_Name -> Int -> List Pattern -> Maybe (List Pattern)
+specializeRowByCtor : T.CDN_Name -> Int -> List Pattern -> Maybe (List Pattern)
 specializeRowByCtor ctorName arity row =
     case row of
         (Ctor _ name args) :: patterns ->
@@ -659,14 +660,14 @@ specializeRowByAnything row =
 
 
 type Complete
-    = Yes (List Can.CASTC_Ctor)
+    = Yes (List T.CASTC_Ctor)
     | No
 
 
 isComplete : List (List Pattern) -> Complete
 isComplete matrix =
     let
-        ctors : Dict String Name.CDN_Name Can.CASTC_Union
+        ctors : Dict String T.CDN_Name T.CASTC_Union
         ctors =
             collectCtors matrix
 
@@ -679,7 +680,7 @@ isComplete matrix =
 
     else
         let
-            (Can.CASTC_Union _ alts numAlts _) =
+            (T.CASTC_Union _ alts numAlts _) =
                 Tuple.second (Utils.mapFindMin ctors)
         in
         if numSeen == numAlts then
@@ -693,12 +694,12 @@ isComplete matrix =
 -- COLLECT CTORS
 
 
-collectCtors : List (List Pattern) -> Dict String Name.CDN_Name Can.CASTC_Union
+collectCtors : List (List Pattern) -> Dict String T.CDN_Name T.CASTC_Union
 collectCtors matrix =
     List.foldl (\row acc -> collectCtorsHelp acc row) Dict.empty matrix
 
 
-collectCtorsHelp : Dict String Name.CDN_Name Can.CASTC_Union -> List Pattern -> Dict String Name.CDN_Name Can.CASTC_Union
+collectCtorsHelp : Dict String T.CDN_Name T.CASTC_Union -> List Pattern -> Dict String T.CDN_Name T.CASTC_Union
 collectCtorsHelp ctors row =
     case row of
         (Ctor union name _) :: _ ->

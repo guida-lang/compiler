@@ -1,27 +1,5 @@
 module Compiler.AST.Source exposing
-    ( CASTS_Alias(..)
-    , CASTS_Comment(..)
-    , CASTS_Def(..)
-    , CASTS_Docs(..)
-    , CASTS_Effects(..)
-    , CASTS_Exposed(..)
-    , CASTS_Exposing(..)
-    , CASTS_Expr
-    , CASTS_Expr_(..)
-    , CASTS_Import(..)
-    , CASTS_Infix(..)
-    , CASTS_Manager(..)
-    , CASTS_Module(..)
-    , CASTS_Pattern
-    , CASTS_Pattern_(..)
-    , CASTS_Port(..)
-    , CASTS_Privacy(..)
-    , CASTS_Type
-    , CASTS_Type_(..)
-    , CASTS_Union(..)
-    , CASTS_Value(..)
-    , CASTS_VarType(..)
-    , getImportName
+    ( getImportName
     , getName
     , moduleDecoder
     , moduleEncoder
@@ -31,222 +9,65 @@ module Compiler.AST.Source exposing
 
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Annotation as A
 import Json.Decode as Decode
 import Json.Encode as Encode
-
-
-
--- EXPRESSIONS
-
-
-type alias CASTS_Expr =
-    A.CRA_Located CASTS_Expr_
-
-
-type CASTS_Expr_
-    = CASTS_Chr String
-    | CASTS_Str String
-    | CASTS_Int Int
-    | CASTS_Float Float
-    | CASTS_Var CASTS_VarType CDN_Name
-    | CASTS_VarQual CASTS_VarType CDN_Name CDN_Name
-    | CASTS_List (List CASTS_Expr)
-    | CASTS_Op CDN_Name
-    | CASTS_Negate CASTS_Expr
-    | CASTS_Binops (List ( CASTS_Expr, A.CRA_Located CDN_Name )) CASTS_Expr
-    | CASTS_Lambda (List CASTS_Pattern) CASTS_Expr
-    | CASTS_Call CASTS_Expr (List CASTS_Expr)
-    | CASTS_If (List ( CASTS_Expr, CASTS_Expr )) CASTS_Expr
-    | CASTS_Let (List (A.CRA_Located CASTS_Def)) CASTS_Expr
-    | CASTS_Case CASTS_Expr (List ( CASTS_Pattern, CASTS_Expr ))
-    | CASTS_Accessor CDN_Name
-    | CASTS_Access CASTS_Expr (A.CRA_Located CDN_Name)
-    | CASTS_Update (A.CRA_Located CDN_Name) (List ( A.CRA_Located CDN_Name, CASTS_Expr ))
-    | CASTS_Record (List ( A.CRA_Located CDN_Name, CASTS_Expr ))
-    | CASTS_Unit
-    | CASTS_Tuple CASTS_Expr CASTS_Expr (List CASTS_Expr)
-    | CASTS_Shader Shader.CASTUS_Source Shader.CASTUS_Types
-
-
-type CASTS_VarType
-    = CASTS_LowVar
-    | CASTS_CapVar
-
-
-
--- DEFINITIONS
-
-
-type CASTS_Def
-    = CASTS_Define (A.CRA_Located CDN_Name) (List CASTS_Pattern) CASTS_Expr (Maybe CASTS_Type)
-    | CASTS_Destruct CASTS_Pattern CASTS_Expr
-
-
-
--- PATTERN
-
-
-type alias CASTS_Pattern =
-    A.CRA_Located CASTS_Pattern_
-
-
-type CASTS_Pattern_
-    = CASTS_PAnything
-    | CASTS_PVar CDN_Name
-    | CASTS_PRecord (List (A.CRA_Located CDN_Name))
-    | CASTS_PAlias CASTS_Pattern (A.CRA_Located CDN_Name)
-    | CASTS_PUnit
-    | CASTS_PTuple CASTS_Pattern CASTS_Pattern (List CASTS_Pattern)
-    | CASTS_PCtor A.CRA_Region CDN_Name (List CASTS_Pattern)
-    | CASTS_PCtorQual A.CRA_Region CDN_Name CDN_Name (List CASTS_Pattern)
-    | CASTS_PList (List CASTS_Pattern)
-    | CASTS_PCons CASTS_Pattern CASTS_Pattern
-    | CASTS_PChr String
-    | CASTS_PStr String
-    | CASTS_PInt Int
-
-
-
--- TYPE
-
-
-type alias CASTS_Type =
-    A.CRA_Located CASTS_Type_
-
-
-type CASTS_Type_
-    = CASTS_TLambda CASTS_Type CASTS_Type
-    | CASTS_TVar CDN_Name
-    | CASTS_TType A.CRA_Region CDN_Name (List CASTS_Type)
-    | CASTS_TTypeQual A.CRA_Region CDN_Name CDN_Name (List CASTS_Type)
-    | CASTS_TRecord (List ( A.CRA_Located CDN_Name, CASTS_Type )) (Maybe (A.CRA_Located CDN_Name))
-    | CASTS_TUnit
-    | CASTS_TTuple CASTS_Type CASTS_Type (List CASTS_Type)
+import Types as T
 
 
 
 -- MODULE
 
 
-type CASTS_Module
-    = CASTS_Module (Maybe (A.CRA_Located CDN_Name)) (A.CRA_Located CASTS_Exposing) CASTS_Docs (List CASTS_Import) (List (A.CRA_Located CASTS_Value)) (List (A.CRA_Located CASTS_Union)) (List (A.CRA_Located CASTS_Alias)) (List (A.CRA_Located CASTS_Infix)) CASTS_Effects
-
-
-getName : CASTS_Module -> CDN_Name
-getName (CASTS_Module maybeName _ _ _ _ _ _ _ _) =
+getName : T.CASTS_Module -> T.CDN_Name
+getName (T.CASTS_Module maybeName _ _ _ _ _ _ _ _) =
     case maybeName of
-        Just (A.CRA_At _ name) ->
+        Just (T.CRA_At _ name) ->
             name
 
         Nothing ->
             Name.mainModule
 
 
-getImportName : CASTS_Import -> CDN_Name
-getImportName (CASTS_Import (A.CRA_At _ name) _ _) =
+getImportName : T.CASTS_Import -> T.CDN_Name
+getImportName (T.CASTS_Import (T.CRA_At _ name) _ _) =
     name
-
-
-type CASTS_Import
-    = CASTS_Import (A.CRA_Located CDN_Name) (Maybe Name.CDN_Name) CASTS_Exposing
-
-
-type CASTS_Value
-    = CASTS_Value (A.CRA_Located CDN_Name) (List CASTS_Pattern) CASTS_Expr (Maybe CASTS_Type)
-
-
-type CASTS_Union
-    = CASTS_Union (A.CRA_Located CDN_Name) (List (A.CRA_Located CDN_Name)) (List ( A.CRA_Located CDN_Name, List CASTS_Type ))
-
-
-type CASTS_Alias
-    = CASTS_Alias (A.CRA_Located CDN_Name) (List (A.CRA_Located CDN_Name)) CASTS_Type
-
-
-type CASTS_Infix
-    = CASTS_Infix CDN_Name Binop.CASTU_Associativity Binop.CASTU_Precedence CDN_Name
-
-
-type CASTS_Port
-    = CASTS_Port (A.CRA_Located CDN_Name) CASTS_Type
-
-
-type CASTS_Effects
-    = CASTS_NoEffects
-    | CASTS_Ports (List CASTS_Port)
-    | CASTS_Manager A.CRA_Region CASTS_Manager
-
-
-type CASTS_Manager
-    = CASTS_Cmd (A.CRA_Located CDN_Name)
-    | CASTS_Sub (A.CRA_Located CDN_Name)
-    | CASTS_Fx (A.CRA_Located CDN_Name) (A.CRA_Located CDN_Name)
-
-
-type CASTS_Docs
-    = CASTS_NoDocs A.CRA_Region
-    | CASTS_YesDocs CASTS_Comment (List ( CDN_Name, CASTS_Comment ))
-
-
-type CASTS_Comment
-    = CASTS_Comment P.Snippet
-
-
-
--- EXPOSING
-
-
-type CASTS_Exposing
-    = CASTS_Open
-    | CASTS_Explicit (List CASTS_Exposed)
-
-
-type CASTS_Exposed
-    = CASTS_Lower (A.CRA_Located CDN_Name)
-    | CASTS_Upper (A.CRA_Located CDN_Name) CASTS_Privacy
-    | CASTS_Operator A.CRA_Region CDN_Name
-
-
-type CASTS_Privacy
-    = CASTS_Public A.CRA_Region
-    | CASTS_Private
 
 
 
 -- ENCODERS and DECODERS
 
 
-typeEncoder : CASTS_Type -> Encode.Value
+typeEncoder : T.CASTS_Type -> Encode.Value
 typeEncoder =
     A.locatedEncoder internalTypeEncoder
 
 
-typeDecoder : Decode.Decoder CASTS_Type
+typeDecoder : Decode.Decoder T.CASTS_Type
 typeDecoder =
     A.locatedDecoder internalTypeDecoder
 
 
-internalTypeEncoder : CASTS_Type_ -> Encode.Value
+internalTypeEncoder : T.CASTS_Type_ -> Encode.Value
 internalTypeEncoder type_ =
     case type_ of
-        CASTS_TLambda arg result ->
+        T.CASTS_TLambda arg result ->
             Encode.object
                 [ ( "type", Encode.string "TLambda" )
                 , ( "arg", typeEncoder arg )
                 , ( "result", typeEncoder result )
                 ]
 
-        CASTS_TVar name ->
+        T.CASTS_TVar name ->
             Encode.object
                 [ ( "type", Encode.string "TVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        CASTS_TType region name args ->
+        T.CASTS_TType region name args ->
             Encode.object
                 [ ( "type", Encode.string "TType" )
                 , ( "region", A.regionEncoder region )
@@ -254,7 +75,7 @@ internalTypeEncoder type_ =
                 , ( "args", Encode.list typeEncoder args )
                 ]
 
-        CASTS_TTypeQual region home name args ->
+        T.CASTS_TTypeQual region home name args ->
             Encode.object
                 [ ( "type", Encode.string "TTypeQual" )
                 , ( "region", A.regionEncoder region )
@@ -263,19 +84,19 @@ internalTypeEncoder type_ =
                 , ( "args", Encode.list typeEncoder args )
                 ]
 
-        CASTS_TRecord fields ext ->
+        T.CASTS_TRecord fields ext ->
             Encode.object
                 [ ( "type", Encode.string "TRecord" )
                 , ( "fields", Encode.list (E.jsonPair (A.locatedEncoder Encode.string) typeEncoder) fields )
                 , ( "ext", E.maybe (A.locatedEncoder Encode.string) ext )
                 ]
 
-        CASTS_TUnit ->
+        T.CASTS_TUnit ->
             Encode.object
                 [ ( "type", Encode.string "TUnit" )
                 ]
 
-        CASTS_TTuple a b cs ->
+        T.CASTS_TTuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "TTuple" )
                 , ( "a", typeEncoder a )
@@ -284,35 +105,35 @@ internalTypeEncoder type_ =
                 ]
 
 
-internalTypeDecoder : Decode.Decoder CASTS_Type_
+internalTypeDecoder : Decode.Decoder T.CASTS_Type_
 internalTypeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TLambda" ->
-                        Decode.map2 CASTS_TLambda
+                        Decode.map2 T.CASTS_TLambda
                             (Decode.field "arg" typeDecoder)
                             (Decode.field "result" typeDecoder)
 
                     "TVar" ->
-                        Decode.map CASTS_TVar (Decode.field "name" Decode.string)
+                        Decode.map T.CASTS_TVar (Decode.field "name" Decode.string)
 
                     "TType" ->
-                        Decode.map3 CASTS_TType
+                        Decode.map3 T.CASTS_TType
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list typeDecoder))
 
                     "TTypeQual" ->
-                        Decode.map4 CASTS_TTypeQual
+                        Decode.map4 T.CASTS_TTypeQual
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list typeDecoder))
 
                     "TRecord" ->
-                        Decode.map2 CASTS_TRecord
+                        Decode.map2 T.CASTS_TRecord
                             (Decode.field "fields"
                                 (Decode.list
                                     (Decode.map2 Tuple.pair
@@ -324,10 +145,10 @@ internalTypeDecoder =
                             (Decode.field "ext" (Decode.maybe (A.locatedDecoder Decode.string)))
 
                     "TUnit" ->
-                        Decode.succeed CASTS_TUnit
+                        Decode.succeed T.CASTS_TUnit
 
                     "TTuple" ->
-                        Decode.map3 CASTS_TTuple
+                        Decode.map3 T.CASTS_TTuple
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
                             (Decode.field "cs" (Decode.list typeDecoder))
@@ -337,8 +158,8 @@ internalTypeDecoder =
             )
 
 
-moduleEncoder : CASTS_Module -> Encode.Value
-moduleEncoder (CASTS_Module maybeName exports docs imports values unions aliases binops effects) =
+moduleEncoder : T.CASTS_Module -> Encode.Value
+moduleEncoder (T.CASTS_Module maybeName exports docs imports values unions aliases binops effects) =
     Encode.object
         [ ( "type", Encode.string "Module" )
         , ( "maybeName", E.maybe (A.locatedEncoder Encode.string) maybeName )
@@ -353,9 +174,9 @@ moduleEncoder (CASTS_Module maybeName exports docs imports values unions aliases
         ]
 
 
-moduleDecoder : Decode.Decoder CASTS_Module
+moduleDecoder : Decode.Decoder T.CASTS_Module
 moduleDecoder =
-    Decode.map8 (\( maybeName, exports ) -> CASTS_Module maybeName exports)
+    Decode.map8 (\( maybeName, exports ) -> T.CASTS_Module maybeName exports)
         (Decode.map2 Tuple.pair
             (Decode.field "maybeName" (Decode.maybe (A.locatedDecoder Decode.string)))
             (Decode.field "exports" (A.locatedDecoder exposingDecoder))
@@ -369,48 +190,48 @@ moduleDecoder =
         (Decode.field "effects" effectsDecoder)
 
 
-exposingEncoder : CASTS_Exposing -> Encode.Value
+exposingEncoder : T.CASTS_Exposing -> Encode.Value
 exposingEncoder exposing_ =
     case exposing_ of
-        CASTS_Open ->
+        T.CASTS_Open ->
             Encode.object
                 [ ( "type", Encode.string "Open" )
                 ]
 
-        CASTS_Explicit exposedList ->
+        T.CASTS_Explicit exposedList ->
             Encode.object
                 [ ( "type", Encode.string "Explicit" )
                 , ( "exposedList", Encode.list exposedEncoder exposedList )
                 ]
 
 
-exposingDecoder : Decode.Decoder CASTS_Exposing
+exposingDecoder : Decode.Decoder T.CASTS_Exposing
 exposingDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Open" ->
-                        Decode.succeed CASTS_Open
+                        Decode.succeed T.CASTS_Open
 
                     "Explicit" ->
-                        Decode.map CASTS_Explicit (Decode.field "exposedList" (Decode.list exposedDecoder))
+                        Decode.map T.CASTS_Explicit (Decode.field "exposedList" (Decode.list exposedDecoder))
 
                     _ ->
                         Decode.fail ("Failed to decode Exposing's type: " ++ type_)
             )
 
 
-docsEncoder : CASTS_Docs -> Encode.Value
+docsEncoder : T.CASTS_Docs -> Encode.Value
 docsEncoder docs =
     case docs of
-        CASTS_NoDocs region ->
+        T.CASTS_NoDocs region ->
             Encode.object
                 [ ( "type", Encode.string "NoDocs" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CASTS_YesDocs overview comments ->
+        T.CASTS_YesDocs overview comments ->
             Encode.object
                 [ ( "type", Encode.string "YesDocs" )
                 , ( "overview", commentEncoder overview )
@@ -418,17 +239,17 @@ docsEncoder docs =
                 ]
 
 
-docsDecoder : Decode.Decoder CASTS_Docs
+docsDecoder : Decode.Decoder T.CASTS_Docs
 docsDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NoDocs" ->
-                        Decode.map CASTS_NoDocs (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CASTS_NoDocs (Decode.field "region" A.regionDecoder)
 
                     "YesDocs" ->
-                        Decode.map2 CASTS_YesDocs
+                        Decode.map2 T.CASTS_YesDocs
                             (Decode.field "overview" commentDecoder)
                             (Decode.field "comments"
                                 (Decode.list
@@ -444,8 +265,8 @@ docsDecoder =
             )
 
 
-importEncoder : CASTS_Import -> Encode.Value
-importEncoder (CASTS_Import importName maybeAlias exposing_) =
+importEncoder : T.CASTS_Import -> Encode.Value
+importEncoder (T.CASTS_Import importName maybeAlias exposing_) =
     Encode.object
         [ ( "type", Encode.string "Import" )
         , ( "importName", A.locatedEncoder Encode.string importName )
@@ -454,16 +275,16 @@ importEncoder (CASTS_Import importName maybeAlias exposing_) =
         ]
 
 
-importDecoder : Decode.Decoder CASTS_Import
+importDecoder : Decode.Decoder T.CASTS_Import
 importDecoder =
-    Decode.map3 CASTS_Import
+    Decode.map3 T.CASTS_Import
         (Decode.field "importName" (A.locatedDecoder Decode.string))
         (Decode.field "maybeAlias" (Decode.maybe Decode.string))
         (Decode.field "exposing" exposingDecoder)
 
 
-valueEncoder : CASTS_Value -> Encode.Value
-valueEncoder (CASTS_Value name srcArgs body maybeType) =
+valueEncoder : T.CASTS_Value -> Encode.Value
+valueEncoder (T.CASTS_Value name srcArgs body maybeType) =
     Encode.object
         [ ( "type", Encode.string "Value" )
         , ( "name", A.locatedEncoder Encode.string name )
@@ -473,17 +294,17 @@ valueEncoder (CASTS_Value name srcArgs body maybeType) =
         ]
 
 
-valueDecoder : Decode.Decoder CASTS_Value
+valueDecoder : Decode.Decoder T.CASTS_Value
 valueDecoder =
-    Decode.map4 CASTS_Value
+    Decode.map4 T.CASTS_Value
         (Decode.field "name" (A.locatedDecoder Decode.string))
         (Decode.field "srcArgs" (Decode.list patternDecoder))
         (Decode.field "body" exprDecoder)
         (Decode.field "maybeType" (Decode.maybe typeDecoder))
 
 
-unionEncoder : CASTS_Union -> Encode.Value
-unionEncoder (CASTS_Union name args constructors) =
+unionEncoder : T.CASTS_Union -> Encode.Value
+unionEncoder (T.CASTS_Union name args constructors) =
     Encode.object
         [ ( "type", Encode.string "Union" )
         , ( "name", A.locatedEncoder Encode.string name )
@@ -492,9 +313,9 @@ unionEncoder (CASTS_Union name args constructors) =
         ]
 
 
-unionDecoder : Decode.Decoder CASTS_Union
+unionDecoder : Decode.Decoder T.CASTS_Union
 unionDecoder =
-    Decode.map3 CASTS_Union
+    Decode.map3 T.CASTS_Union
         (Decode.field "name" (A.locatedDecoder Decode.string))
         (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
         (Decode.field "constructors"
@@ -507,8 +328,8 @@ unionDecoder =
         )
 
 
-aliasEncoder : CASTS_Alias -> Encode.Value
-aliasEncoder (CASTS_Alias name args tipe) =
+aliasEncoder : T.CASTS_Alias -> Encode.Value
+aliasEncoder (T.CASTS_Alias name args tipe) =
     Encode.object
         [ ( "type", Encode.string "Alias" )
         , ( "name", A.locatedEncoder Encode.string name )
@@ -517,16 +338,16 @@ aliasEncoder (CASTS_Alias name args tipe) =
         ]
 
 
-aliasDecoder : Decode.Decoder CASTS_Alias
+aliasDecoder : Decode.Decoder T.CASTS_Alias
 aliasDecoder =
-    Decode.map3 CASTS_Alias
+    Decode.map3 T.CASTS_Alias
         (Decode.field "name" (A.locatedDecoder Decode.string))
         (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
         (Decode.field "tipe" typeDecoder)
 
 
-infixEncoder : CASTS_Infix -> Encode.Value
-infixEncoder (CASTS_Infix op associativity precedence name) =
+infixEncoder : T.CASTS_Infix -> Encode.Value
+infixEncoder (T.CASTS_Infix op associativity precedence name) =
     Encode.object
         [ ( "type", Encode.string "Infix" )
         , ( "op", Encode.string op )
@@ -536,30 +357,30 @@ infixEncoder (CASTS_Infix op associativity precedence name) =
         ]
 
 
-infixDecoder : Decode.Decoder CASTS_Infix
+infixDecoder : Decode.Decoder T.CASTS_Infix
 infixDecoder =
-    Decode.map4 CASTS_Infix
+    Decode.map4 T.CASTS_Infix
         (Decode.field "op" Decode.string)
         (Decode.field "associativity" Binop.associativityDecoder)
         (Decode.field "precedence" Binop.precedenceDecoder)
         (Decode.field "name" Decode.string)
 
 
-effectsEncoder : CASTS_Effects -> Encode.Value
+effectsEncoder : T.CASTS_Effects -> Encode.Value
 effectsEncoder effects =
     case effects of
-        CASTS_NoEffects ->
+        T.CASTS_NoEffects ->
             Encode.object
                 [ ( "type", Encode.string "NoEffects" )
                 ]
 
-        CASTS_Ports ports ->
+        T.CASTS_Ports ports ->
             Encode.object
                 [ ( "type", Encode.string "Ports" )
                 , ( "ports", Encode.list portEncoder ports )
                 ]
 
-        CASTS_Manager region manager ->
+        T.CASTS_Manager region manager ->
             Encode.object
                 [ ( "type", Encode.string "Manager" )
                 , ( "region", A.regionEncoder region )
@@ -567,20 +388,20 @@ effectsEncoder effects =
                 ]
 
 
-effectsDecoder : Decode.Decoder CASTS_Effects
+effectsDecoder : Decode.Decoder T.CASTS_Effects
 effectsDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NoEffects" ->
-                        Decode.succeed CASTS_NoEffects
+                        Decode.succeed T.CASTS_NoEffects
 
                     "Ports" ->
-                        Decode.map CASTS_Ports (Decode.field "ports" (Decode.list portDecoder))
+                        Decode.map T.CASTS_Ports (Decode.field "ports" (Decode.list portDecoder))
 
                     "Manager" ->
-                        Decode.map2 CASTS_Manager
+                        Decode.map2 T.CASTS_Manager
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "manager" managerDecoder)
 
@@ -589,18 +410,18 @@ effectsDecoder =
             )
 
 
-commentEncoder : CASTS_Comment -> Encode.Value
-commentEncoder (CASTS_Comment snippet) =
+commentEncoder : T.CASTS_Comment -> Encode.Value
+commentEncoder (T.CASTS_Comment snippet) =
     P.snippetEncoder snippet
 
 
-commentDecoder : Decode.Decoder CASTS_Comment
+commentDecoder : Decode.Decoder T.CASTS_Comment
 commentDecoder =
-    Decode.map CASTS_Comment P.snippetDecoder
+    Decode.map T.CASTS_Comment P.snippetDecoder
 
 
-portEncoder : CASTS_Port -> Encode.Value
-portEncoder (CASTS_Port name tipe) =
+portEncoder : T.CASTS_Port -> Encode.Value
+portEncoder (T.CASTS_Port name tipe) =
     Encode.object
         [ ( "type", Encode.string "Port" )
         , ( "name", A.locatedEncoder Encode.string name )
@@ -608,29 +429,29 @@ portEncoder (CASTS_Port name tipe) =
         ]
 
 
-portDecoder : Decode.Decoder CASTS_Port
+portDecoder : Decode.Decoder T.CASTS_Port
 portDecoder =
-    Decode.map2 CASTS_Port
+    Decode.map2 T.CASTS_Port
         (Decode.field "name" (A.locatedDecoder Decode.string))
         (Decode.field "tipe" typeDecoder)
 
 
-managerEncoder : CASTS_Manager -> Encode.Value
+managerEncoder : T.CASTS_Manager -> Encode.Value
 managerEncoder manager =
     case manager of
-        CASTS_Cmd cmdType ->
+        T.CASTS_Cmd cmdType ->
             Encode.object
                 [ ( "type", Encode.string "Cmd" )
                 , ( "cmdType", A.locatedEncoder Encode.string cmdType )
                 ]
 
-        CASTS_Sub subType ->
+        T.CASTS_Sub subType ->
             Encode.object
                 [ ( "type", Encode.string "Sub" )
                 , ( "subType", A.locatedEncoder Encode.string subType )
                 ]
 
-        CASTS_Fx cmdType subType ->
+        T.CASTS_Fx cmdType subType ->
             Encode.object
                 [ ( "type", Encode.string "Fx" )
                 , ( "cmdType", A.locatedEncoder Encode.string cmdType )
@@ -638,20 +459,20 @@ managerEncoder manager =
                 ]
 
 
-managerDecoder : Decode.Decoder CASTS_Manager
+managerDecoder : Decode.Decoder T.CASTS_Manager
 managerDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Cmd" ->
-                        Decode.map CASTS_Cmd (Decode.field "cmdType" (A.locatedDecoder Decode.string))
+                        Decode.map T.CASTS_Cmd (Decode.field "cmdType" (A.locatedDecoder Decode.string))
 
                     "Sub" ->
-                        Decode.map CASTS_Sub (Decode.field "subType" (A.locatedDecoder Decode.string))
+                        Decode.map T.CASTS_Sub (Decode.field "subType" (A.locatedDecoder Decode.string))
 
                     "Fx" ->
-                        Decode.map2 CASTS_Fx
+                        Decode.map2 T.CASTS_Fx
                             (Decode.field "cmdType" (A.locatedDecoder Decode.string))
                             (Decode.field "subType" (A.locatedDecoder Decode.string))
 
@@ -660,23 +481,23 @@ managerDecoder =
             )
 
 
-exposedEncoder : CASTS_Exposed -> Encode.Value
+exposedEncoder : T.CASTS_Exposed -> Encode.Value
 exposedEncoder exposed =
     case exposed of
-        CASTS_Lower name ->
+        T.CASTS_Lower name ->
             Encode.object
                 [ ( "type", Encode.string "Lower" )
                 , ( "name", A.locatedEncoder Encode.string name )
                 ]
 
-        CASTS_Upper name dotDotRegion ->
+        T.CASTS_Upper name dotDotRegion ->
             Encode.object
                 [ ( "type", Encode.string "Upper" )
                 , ( "name", A.locatedEncoder Encode.string name )
                 , ( "dotDotRegion", privacyEncoder dotDotRegion )
                 ]
 
-        CASTS_Operator region name ->
+        T.CASTS_Operator region name ->
             Encode.object
                 [ ( "type", Encode.string "Operator" )
                 , ( "region", A.regionEncoder region )
@@ -684,22 +505,22 @@ exposedEncoder exposed =
                 ]
 
 
-exposedDecoder : Decode.Decoder CASTS_Exposed
+exposedDecoder : Decode.Decoder T.CASTS_Exposed
 exposedDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Lower" ->
-                        Decode.map CASTS_Lower (Decode.field "name" (A.locatedDecoder Decode.string))
+                        Decode.map T.CASTS_Lower (Decode.field "name" (A.locatedDecoder Decode.string))
 
                     "Upper" ->
-                        Decode.map2 CASTS_Upper
+                        Decode.map2 T.CASTS_Upper
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "dotDotRegion" privacyDecoder)
 
                     "Operator" ->
-                        Decode.map2 CASTS_Operator
+                        Decode.map2 T.CASTS_Operator
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
@@ -708,81 +529,81 @@ exposedDecoder =
             )
 
 
-privacyEncoder : CASTS_Privacy -> Encode.Value
+privacyEncoder : T.CASTS_Privacy -> Encode.Value
 privacyEncoder privacy =
     case privacy of
-        CASTS_Public region ->
+        T.CASTS_Public region ->
             Encode.object
                 [ ( "type", Encode.string "Public" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CASTS_Private ->
+        T.CASTS_Private ->
             Encode.object
                 [ ( "type", Encode.string "Private" )
                 ]
 
 
-privacyDecoder : Decode.Decoder CASTS_Privacy
+privacyDecoder : Decode.Decoder T.CASTS_Privacy
 privacyDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Public" ->
-                        Decode.map CASTS_Public (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CASTS_Public (Decode.field "region" A.regionDecoder)
 
                     "Private" ->
-                        Decode.succeed CASTS_Private
+                        Decode.succeed T.CASTS_Private
 
                     _ ->
                         Decode.fail ("Failed to decode Privacy's type: " ++ type_)
             )
 
 
-patternEncoder : CASTS_Pattern -> Encode.Value
+patternEncoder : T.CASTS_Pattern -> Encode.Value
 patternEncoder =
     A.locatedEncoder pattern_Encoder
 
 
-patternDecoder : Decode.Decoder CASTS_Pattern
+patternDecoder : Decode.Decoder T.CASTS_Pattern
 patternDecoder =
     A.locatedDecoder pattern_Decoder
 
 
-pattern_Encoder : CASTS_Pattern_ -> Encode.Value
+pattern_Encoder : T.CASTS_Pattern_ -> Encode.Value
 pattern_Encoder pattern_ =
     case pattern_ of
-        CASTS_PAnything ->
+        T.CASTS_PAnything ->
             Encode.object
                 [ ( "type", Encode.string "PAnything" )
                 ]
 
-        CASTS_PVar name ->
+        T.CASTS_PVar name ->
             Encode.object
                 [ ( "type", Encode.string "PVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        CASTS_PRecord fields ->
+        T.CASTS_PRecord fields ->
             Encode.object
                 [ ( "type", Encode.string "PRecord" )
                 , ( "fields", Encode.list (A.locatedEncoder Encode.string) fields )
                 ]
 
-        CASTS_PAlias aliasPattern name ->
+        T.CASTS_PAlias aliasPattern name ->
             Encode.object
                 [ ( "type", Encode.string "PAlias" )
                 , ( "aliasPattern", patternEncoder aliasPattern )
                 , ( "name", A.locatedEncoder Encode.string name )
                 ]
 
-        CASTS_PUnit ->
+        T.CASTS_PUnit ->
             Encode.object
                 [ ( "type", Encode.string "PUnit" )
                 ]
 
-        CASTS_PTuple a b cs ->
+        T.CASTS_PTuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 , ( "a", patternEncoder a )
@@ -790,7 +611,7 @@ pattern_Encoder pattern_ =
                 , ( "cs", Encode.list patternEncoder cs )
                 ]
 
-        CASTS_PCtor nameRegion name patterns ->
+        T.CASTS_PCtor nameRegion name patterns ->
             Encode.object
                 [ ( "type", Encode.string "PCtor" )
                 , ( "nameRegion", A.regionEncoder nameRegion )
@@ -798,7 +619,7 @@ pattern_Encoder pattern_ =
                 , ( "patterns", Encode.list patternEncoder patterns )
                 ]
 
-        CASTS_PCtorQual nameRegion home name patterns ->
+        T.CASTS_PCtorQual nameRegion home name patterns ->
             Encode.object
                 [ ( "type", Encode.string "PCtorQual" )
                 , ( "nameRegion", A.regionEncoder nameRegion )
@@ -807,147 +628,147 @@ pattern_Encoder pattern_ =
                 , ( "patterns", Encode.list patternEncoder patterns )
                 ]
 
-        CASTS_PList patterns ->
+        T.CASTS_PList patterns ->
             Encode.object
                 [ ( "type", Encode.string "PList" )
                 , ( "patterns", Encode.list patternEncoder patterns )
                 ]
 
-        CASTS_PCons hd tl ->
+        T.CASTS_PCons hd tl ->
             Encode.object
                 [ ( "type", Encode.string "PCons" )
                 , ( "hd", patternEncoder hd )
                 , ( "tl", patternEncoder tl )
                 ]
 
-        CASTS_PChr chr ->
+        T.CASTS_PChr chr ->
             Encode.object
                 [ ( "type", Encode.string "PChr" )
                 , ( "chr", Encode.string chr )
                 ]
 
-        CASTS_PStr str ->
+        T.CASTS_PStr str ->
             Encode.object
                 [ ( "type", Encode.string "PStr" )
                 , ( "str", Encode.string str )
                 ]
 
-        CASTS_PInt int ->
+        T.CASTS_PInt int ->
             Encode.object
                 [ ( "type", Encode.string "PInt" )
                 , ( "int", Encode.int int )
                 ]
 
 
-pattern_Decoder : Decode.Decoder CASTS_Pattern_
+pattern_Decoder : Decode.Decoder T.CASTS_Pattern_
 pattern_Decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PAnything" ->
-                        Decode.succeed CASTS_PAnything
+                        Decode.succeed T.CASTS_PAnything
 
                     "PVar" ->
-                        Decode.map CASTS_PVar (Decode.field "name" Decode.string)
+                        Decode.map T.CASTS_PVar (Decode.field "name" Decode.string)
 
                     "PRecord" ->
-                        Decode.map CASTS_PRecord (Decode.field "fields" (Decode.list (A.locatedDecoder Decode.string)))
+                        Decode.map T.CASTS_PRecord (Decode.field "fields" (Decode.list (A.locatedDecoder Decode.string)))
 
                     "PAlias" ->
-                        Decode.map2 CASTS_PAlias
+                        Decode.map2 T.CASTS_PAlias
                             (Decode.field "aliasPattern" patternDecoder)
                             (Decode.field "name" (A.locatedDecoder Decode.string))
 
                     "PUnit" ->
-                        Decode.succeed CASTS_PUnit
+                        Decode.succeed T.CASTS_PUnit
 
                     "PTuple" ->
-                        Decode.map3 CASTS_PTuple
+                        Decode.map3 T.CASTS_PTuple
                             (Decode.field "a" patternDecoder)
                             (Decode.field "b" patternDecoder)
                             (Decode.field "cs" (Decode.list patternDecoder))
 
                     "PCtor" ->
-                        Decode.map3 CASTS_PCtor
+                        Decode.map3 T.CASTS_PCtor
                             (Decode.field "nameRegion" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "patterns" (Decode.list patternDecoder))
 
                     "PCtorQual" ->
-                        Decode.map4 CASTS_PCtorQual
+                        Decode.map4 T.CASTS_PCtorQual
                             (Decode.field "nameRegion" A.regionDecoder)
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
                             (Decode.field "patterns" (Decode.list patternDecoder))
 
                     "PList" ->
-                        Decode.map CASTS_PList (Decode.field "patterns" (Decode.list patternDecoder))
+                        Decode.map T.CASTS_PList (Decode.field "patterns" (Decode.list patternDecoder))
 
                     "PCons" ->
-                        Decode.map2 CASTS_PCons
+                        Decode.map2 T.CASTS_PCons
                             (Decode.field "hd" patternDecoder)
                             (Decode.field "tl" patternDecoder)
 
                     "PChr" ->
-                        Decode.map CASTS_PChr (Decode.field "chr" Decode.string)
+                        Decode.map T.CASTS_PChr (Decode.field "chr" Decode.string)
 
                     "PStr" ->
-                        Decode.map CASTS_PStr (Decode.field "str" Decode.string)
+                        Decode.map T.CASTS_PStr (Decode.field "str" Decode.string)
 
                     "PInt" ->
-                        Decode.map CASTS_PInt (Decode.field "int" Decode.int)
+                        Decode.map T.CASTS_PInt (Decode.field "int" Decode.int)
 
                     _ ->
                         Decode.fail ("Failed to decode Pattern_'s type: " ++ type_)
             )
 
 
-exprEncoder : CASTS_Expr -> Encode.Value
+exprEncoder : T.CASTS_Expr -> Encode.Value
 exprEncoder =
     A.locatedEncoder expr_Encoder
 
 
-exprDecoder : Decode.Decoder CASTS_Expr
+exprDecoder : Decode.Decoder T.CASTS_Expr
 exprDecoder =
     A.locatedDecoder expr_Decoder
 
 
-expr_Encoder : CASTS_Expr_ -> Encode.Value
+expr_Encoder : T.CASTS_Expr_ -> Encode.Value
 expr_Encoder expr_ =
     case expr_ of
-        CASTS_Chr char ->
+        T.CASTS_Chr char ->
             Encode.object
                 [ ( "type", Encode.string "Chr" )
                 , ( "char", Encode.string char )
                 ]
 
-        CASTS_Str string ->
+        T.CASTS_Str string ->
             Encode.object
                 [ ( "type", Encode.string "Str" )
                 , ( "string", Encode.string string )
                 ]
 
-        CASTS_Int int ->
+        T.CASTS_Int int ->
             Encode.object
                 [ ( "type", Encode.string "Int" )
                 , ( "int", Encode.int int )
                 ]
 
-        CASTS_Float float ->
+        T.CASTS_Float float ->
             Encode.object
                 [ ( "type", Encode.string "Float" )
                 , ( "float", Encode.float float )
                 ]
 
-        CASTS_Var varType name ->
+        T.CASTS_Var varType name ->
             Encode.object
                 [ ( "type", Encode.string "Var" )
                 , ( "varType", varTypeEncoder varType )
                 , ( "name", Encode.string name )
                 ]
 
-        CASTS_VarQual varType prefix name ->
+        T.CASTS_VarQual varType prefix name ->
             Encode.object
                 [ ( "type", Encode.string "VarQual" )
                 , ( "varType", varTypeEncoder varType )
@@ -955,98 +776,98 @@ expr_Encoder expr_ =
                 , ( "name", Encode.string name )
                 ]
 
-        CASTS_List list ->
+        T.CASTS_List list ->
             Encode.object
                 [ ( "type", Encode.string "List" )
                 , ( "list", Encode.list exprEncoder list )
                 ]
 
-        CASTS_Op op ->
+        T.CASTS_Op op ->
             Encode.object
                 [ ( "type", Encode.string "Op" )
                 , ( "op", Encode.string op )
                 ]
 
-        CASTS_Negate expr ->
+        T.CASTS_Negate expr ->
             Encode.object
                 [ ( "type", Encode.string "Negate" )
                 , ( "expr", exprEncoder expr )
                 ]
 
-        CASTS_Binops ops final ->
+        T.CASTS_Binops ops final ->
             Encode.object
                 [ ( "type", Encode.string "Binops" )
                 , ( "ops", Encode.list (E.jsonPair exprEncoder (A.locatedEncoder Encode.string)) ops )
                 , ( "final", exprEncoder final )
                 ]
 
-        CASTS_Lambda srcArgs body ->
+        T.CASTS_Lambda srcArgs body ->
             Encode.object
                 [ ( "type", Encode.string "Lambda" )
                 , ( "srcArgs", Encode.list patternEncoder srcArgs )
                 , ( "body", exprEncoder body )
                 ]
 
-        CASTS_Call func args ->
+        T.CASTS_Call func args ->
             Encode.object
                 [ ( "type", Encode.string "Call" )
                 , ( "func", exprEncoder func )
                 , ( "args", Encode.list exprEncoder args )
                 ]
 
-        CASTS_If branches finally ->
+        T.CASTS_If branches finally ->
             Encode.object
                 [ ( "type", Encode.string "If" )
                 , ( "branches", Encode.list (E.jsonPair exprEncoder exprEncoder) branches )
                 , ( "finally", exprEncoder finally )
                 ]
 
-        CASTS_Let defs expr ->
+        T.CASTS_Let defs expr ->
             Encode.object
                 [ ( "type", Encode.string "Let" )
                 , ( "defs", Encode.list (A.locatedEncoder defEncoder) defs )
                 , ( "expr", exprEncoder expr )
                 ]
 
-        CASTS_Case expr branches ->
+        T.CASTS_Case expr branches ->
             Encode.object
                 [ ( "type", Encode.string "Case" )
                 , ( "expr", exprEncoder expr )
                 , ( "branches", Encode.list (E.jsonPair patternEncoder exprEncoder) branches )
                 ]
 
-        CASTS_Accessor field ->
+        T.CASTS_Accessor field ->
             Encode.object
                 [ ( "type", Encode.string "Accessor" )
                 , ( "field", Encode.string field )
                 ]
 
-        CASTS_Access record field ->
+        T.CASTS_Access record field ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "record", exprEncoder record )
                 , ( "field", A.locatedEncoder Encode.string field )
                 ]
 
-        CASTS_Update name fields ->
+        T.CASTS_Update name fields ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
                 , ( "name", A.locatedEncoder Encode.string name )
                 , ( "fields", Encode.list (E.jsonPair (A.locatedEncoder Encode.string) exprEncoder) fields )
                 ]
 
-        CASTS_Record fields ->
+        T.CASTS_Record fields ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 , ( "fields", Encode.list (E.jsonPair (A.locatedEncoder Encode.string) exprEncoder) fields )
                 ]
 
-        CASTS_Unit ->
+        T.CASTS_Unit ->
             Encode.object
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        CASTS_Tuple a b cs ->
+        T.CASTS_Tuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", exprEncoder a )
@@ -1054,7 +875,7 @@ expr_Encoder expr_ =
                 , ( "cs", Encode.list exprEncoder cs )
                 ]
 
-        CASTS_Shader src tipe ->
+        T.CASTS_Shader src tipe ->
             Encode.object
                 [ ( "type", Encode.string "Shader" )
                 , ( "src", Shader.sourceEncoder src )
@@ -1062,46 +883,46 @@ expr_Encoder expr_ =
                 ]
 
 
-expr_Decoder : Decode.Decoder CASTS_Expr_
+expr_Decoder : Decode.Decoder T.CASTS_Expr_
 expr_Decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Chr" ->
-                        Decode.map CASTS_Chr (Decode.field "char" Decode.string)
+                        Decode.map T.CASTS_Chr (Decode.field "char" Decode.string)
 
                     "Str" ->
-                        Decode.map CASTS_Str (Decode.field "string" Decode.string)
+                        Decode.map T.CASTS_Str (Decode.field "string" Decode.string)
 
                     "Int" ->
-                        Decode.map CASTS_Int (Decode.field "int" Decode.int)
+                        Decode.map T.CASTS_Int (Decode.field "int" Decode.int)
 
                     "Float" ->
-                        Decode.map CASTS_Float (Decode.field "float" Decode.float)
+                        Decode.map T.CASTS_Float (Decode.field "float" Decode.float)
 
                     "Var" ->
-                        Decode.map2 CASTS_Var
+                        Decode.map2 T.CASTS_Var
                             (Decode.field "varType" varTypeDecoder)
                             (Decode.field "name" Decode.string)
 
                     "VarQual" ->
-                        Decode.map3 CASTS_VarQual
+                        Decode.map3 T.CASTS_VarQual
                             (Decode.field "varType" varTypeDecoder)
                             (Decode.field "prefix" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "List" ->
-                        Decode.map CASTS_List (Decode.field "list" (Decode.list exprDecoder))
+                        Decode.map T.CASTS_List (Decode.field "list" (Decode.list exprDecoder))
 
                     "Op" ->
-                        Decode.map CASTS_Op (Decode.field "op" Decode.string)
+                        Decode.map T.CASTS_Op (Decode.field "op" Decode.string)
 
                     "Negate" ->
-                        Decode.map CASTS_Negate (Decode.field "expr" exprDecoder)
+                        Decode.map T.CASTS_Negate (Decode.field "expr" exprDecoder)
 
                     "Binops" ->
-                        Decode.map2 CASTS_Binops
+                        Decode.map2 T.CASTS_Binops
                             (Decode.field "ops"
                                 (Decode.list
                                     (Decode.map2 Tuple.pair
@@ -1113,17 +934,17 @@ expr_Decoder =
                             (Decode.field "final" exprDecoder)
 
                     "Lambda" ->
-                        Decode.map2 CASTS_Lambda
+                        Decode.map2 T.CASTS_Lambda
                             (Decode.field "srcArgs" (Decode.list patternDecoder))
                             (Decode.field "body" exprDecoder)
 
                     "Call" ->
-                        Decode.map2 CASTS_Call
+                        Decode.map2 T.CASTS_Call
                             (Decode.field "func" exprDecoder)
                             (Decode.field "args" (Decode.list exprDecoder))
 
                     "If" ->
-                        Decode.map2 CASTS_If
+                        Decode.map2 T.CASTS_If
                             (Decode.field "branches"
                                 (Decode.list
                                     (Decode.map2 Tuple.pair
@@ -1135,12 +956,12 @@ expr_Decoder =
                             (Decode.field "finally" exprDecoder)
 
                     "Let" ->
-                        Decode.map2 CASTS_Let
+                        Decode.map2 T.CASTS_Let
                             (Decode.field "defs" (Decode.list (A.locatedDecoder defDecoder)))
                             (Decode.field "expr" exprDecoder)
 
                     "Case" ->
-                        Decode.map2 CASTS_Case
+                        Decode.map2 T.CASTS_Case
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "branches"
                                 (Decode.list
@@ -1152,15 +973,15 @@ expr_Decoder =
                             )
 
                     "Accessor" ->
-                        Decode.map CASTS_Accessor (Decode.field "field" Decode.string)
+                        Decode.map T.CASTS_Accessor (Decode.field "field" Decode.string)
 
                     "Access" ->
-                        Decode.map2 CASTS_Access
+                        Decode.map2 T.CASTS_Access
                             (Decode.field "record" exprDecoder)
                             (Decode.field "field" (A.locatedDecoder Decode.string))
 
                     "Update" ->
-                        Decode.map2 CASTS_Update
+                        Decode.map2 T.CASTS_Update
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "fields"
                                 (Decode.list
@@ -1172,7 +993,7 @@ expr_Decoder =
                             )
 
                     "Record" ->
-                        Decode.map CASTS_Record
+                        Decode.map T.CASTS_Record
                             (Decode.field "fields"
                                 (Decode.list
                                     (Decode.map2 Tuple.pair
@@ -1183,16 +1004,16 @@ expr_Decoder =
                             )
 
                     "Unit" ->
-                        Decode.succeed CASTS_Unit
+                        Decode.succeed T.CASTS_Unit
 
                     "Tuple" ->
-                        Decode.map3 CASTS_Tuple
+                        Decode.map3 T.CASTS_Tuple
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
                             (Decode.field "cs" (Decode.list exprDecoder))
 
                     "Shader" ->
-                        Decode.map2 CASTS_Shader
+                        Decode.map2 T.CASTS_Shader
                             (Decode.field "src" Shader.sourceDecoder)
                             (Decode.field "tipe" Shader.typesDecoder)
 
@@ -1201,37 +1022,37 @@ expr_Decoder =
             )
 
 
-varTypeEncoder : CASTS_VarType -> Encode.Value
+varTypeEncoder : T.CASTS_VarType -> Encode.Value
 varTypeEncoder varType =
     case varType of
-        CASTS_LowVar ->
+        T.CASTS_LowVar ->
             Encode.string "LowVar"
 
-        CASTS_CapVar ->
+        T.CASTS_CapVar ->
             Encode.string "CapVar"
 
 
-varTypeDecoder : Decode.Decoder CASTS_VarType
+varTypeDecoder : Decode.Decoder T.CASTS_VarType
 varTypeDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "LowVar" ->
-                        Decode.succeed CASTS_LowVar
+                        Decode.succeed T.CASTS_LowVar
 
                     "CapVar" ->
-                        Decode.succeed CASTS_CapVar
+                        Decode.succeed T.CASTS_CapVar
 
                     _ ->
                         Decode.fail ("Unknown VarType: " ++ str)
             )
 
 
-defEncoder : CASTS_Def -> Encode.Value
+defEncoder : T.CASTS_Def -> Encode.Value
 defEncoder def =
     case def of
-        CASTS_Define name srcArgs body maybeType ->
+        T.CASTS_Define name srcArgs body maybeType ->
             Encode.object
                 [ ( "type", Encode.string "Define" )
                 , ( "name", A.locatedEncoder Encode.string name )
@@ -1240,7 +1061,7 @@ defEncoder def =
                 , ( "maybeType", E.maybe typeEncoder maybeType )
                 ]
 
-        CASTS_Destruct pattern body ->
+        T.CASTS_Destruct pattern body ->
             Encode.object
                 [ ( "type", Encode.string "Destruct" )
                 , ( "pattern", patternEncoder pattern )
@@ -1248,21 +1069,21 @@ defEncoder def =
                 ]
 
 
-defDecoder : Decode.Decoder CASTS_Def
+defDecoder : Decode.Decoder T.CASTS_Def
 defDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Define" ->
-                        Decode.map4 CASTS_Define
+                        Decode.map4 T.CASTS_Define
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "srcArgs" (Decode.list patternDecoder))
                             (Decode.field "body" exprDecoder)
                             (Decode.field "maybeType" (Decode.maybe typeDecoder))
 
                     "Destruct" ->
-                        Decode.map2 CASTS_Destruct
+                        Decode.map2 T.CASTS_Destruct
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "body" exprDecoder)
 

@@ -27,6 +27,7 @@ import List.Extra as List
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
+import Types as T
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -290,7 +291,7 @@ getGit =
 -- VERIFY GITHUB TAG
 
 
-verifyTag : Git -> Http.Manager -> Pkg.CEP_Name -> V.Version -> Task.Task Exit.Publish String
+verifyTag : Git -> Http.Manager -> T.CEP_Name -> V.Version -> Task.Task Exit.Publish String
 verifyTag (Git run_) manager pkg vsn =
     reportTagCheck vsn
         -- https://stackoverflow.com/questions/1064499/how-to-list-all-git-tags
@@ -319,7 +320,7 @@ verifyTag (Git run_) manager pkg vsn =
         )
 
 
-toTagUrl : Pkg.CEP_Name -> V.Version -> String
+toTagUrl : T.CEP_Name -> V.Version -> String
 toTagUrl pkg vsn =
     "https://api.github.com/repos/" ++ Pkg.toUrl pkg ++ "/git/refs/tags/" ++ V.toChars vsn
 
@@ -354,7 +355,7 @@ verifyNoChanges (Git run_) commitHash vsn =
 -- VERIFY THAT ZIP BUILDS / COMPUTE HASH
 
 
-verifyZip : Env -> Pkg.CEP_Name -> V.Version -> Task.Task Exit.Publish Http.Sha
+verifyZip : Env -> T.CEP_Name -> V.Version -> Task.Task Exit.Publish Http.Sha
 verifyZip (Env root _ manager _ _) pkg vsn =
     withPrepublishDir root <|
         \prepublishDir ->
@@ -383,7 +384,7 @@ verifyZip (Env root _ manager _ _) pkg vsn =
                     )
 
 
-toZipUrl : Pkg.CEP_Name -> V.Version -> String
+toZipUrl : T.CEP_Name -> V.Version -> String
 toZipUrl pkg vsn =
     "https://github.com/" ++ Pkg.toUrl pkg ++ "/zipball/" ++ V.toChars vsn ++ "/"
 
@@ -441,7 +442,7 @@ type GoodVersion
     | GoodBump V.Version M.Magnitude
 
 
-verifyVersion : Env -> Pkg.CEP_Name -> V.Version -> Docs.Documentation -> Maybe Registry.KnownVersions -> Task.Task Exit.Publish ()
+verifyVersion : Env -> T.CEP_Name -> V.Version -> Docs.Documentation -> Maybe Registry.KnownVersions -> Task.Task Exit.Publish ()
 verifyVersion env pkg vsn newDocs publishedVersions =
     reportSemverCheck vsn <|
         case publishedVersions of
@@ -460,7 +461,7 @@ verifyVersion env pkg vsn newDocs publishedVersions =
                     verifyBump env pkg vsn newDocs knownVersions
 
 
-verifyBump : Env -> Pkg.CEP_Name -> V.Version -> Docs.Documentation -> Registry.KnownVersions -> IO (Result Exit.Publish GoodVersion)
+verifyBump : Env -> T.CEP_Name -> V.Version -> Docs.Documentation -> Registry.KnownVersions -> IO (Result Exit.Publish GoodVersion)
 verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
@@ -499,7 +500,7 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
 -- REGISTER PACKAGES
 
 
-register : Http.Manager -> Pkg.CEP_Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
+register : Http.Manager -> T.CEP_Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
 register manager pkg vsn docs commitHash sha =
     let
         url : String
@@ -524,7 +525,7 @@ register manager pkg vsn docs commitHash sha =
 -- REPORTING
 
 
-reportPublishStart : Pkg.CEP_Name -> V.Version -> Maybe Registry.KnownVersions -> Task.Task x ()
+reportPublishStart : T.CEP_Name -> V.Version -> Maybe Registry.KnownVersions -> Task.Task x ()
 reportPublishStart pkg vsn maybeKnownVersions =
     Task.io <|
         case maybeKnownVersions of

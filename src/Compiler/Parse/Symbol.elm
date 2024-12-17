@@ -6,11 +6,11 @@ module Compiler.Parse.Symbol exposing
     , operator
     )
 
-import Compiler.Data.Name exposing (CDN_Name)
-import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
+import Compiler.Parse.Primitives as P exposing (Parser)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 
 
 
@@ -25,7 +25,7 @@ type BadOperator
     | BadHasType
 
 
-operator : (Row -> Col -> x) -> (BadOperator -> Row -> Col -> x) -> Parser x CDN_Name
+operator : (T.CPP_Row -> T.CPP_Col -> x) -> (BadOperator -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x T.CDN_Name
 operator toExpectation toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -56,7 +56,7 @@ operator toExpectation toError =
 
                     op ->
                         let
-                            newCol : Col
+                            newCol : T.CPP_Col
                             newCol =
                                 col + (newPos - pos)
 

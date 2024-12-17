@@ -31,6 +31,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Types as T
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -44,16 +45,16 @@ type Outline
 
 
 type AppOutline
-    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) Pkg.CEP_Name V.Version) (Dict ( String, String ) Pkg.CEP_Name V.Version) (Dict ( String, String ) Pkg.CEP_Name V.Version) (Dict ( String, String ) Pkg.CEP_Name V.Version)
+    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version)
 
 
 type PkgOutline
-    = PkgOutline Pkg.CEP_Name String Licenses.License V.Version Exposed (Dict ( String, String ) Pkg.CEP_Name Con.Constraint) (Dict ( String, String ) Pkg.CEP_Name Con.Constraint) Con.Constraint
+    = PkgOutline T.CEP_Name String Licenses.License V.Version Exposed (Dict ( String, String ) T.CEP_Name Con.Constraint) (Dict ( String, String ) T.CEP_Name Con.Constraint) Con.Constraint
 
 
 type Exposed
-    = ExposedList (List ModuleName.CEMN_Raw)
-    | ExposedDict (List ( String, List ModuleName.CEMN_Raw ))
+    = ExposedList (List T.CEMN_Raw)
+    | ExposedDict (List ( String, List T.CEMN_Raw ))
 
 
 type SrcDir
@@ -74,7 +75,7 @@ defaultSummary =
 -- HELPERS
 
 
-flattenExposed : Exposed -> List ModuleName.CEMN_Raw
+flattenExposed : Exposed -> List T.CEMN_Raw
 flattenExposed exposed =
     case exposed of
         ExposedList names ->
@@ -143,12 +144,12 @@ encodeExposed exposed =
             E.object (List.map (Tuple.mapSecond (E.list encodeModule)) chunks)
 
 
-encodeModule : ModuleName.CEMN_Raw -> E.Value
+encodeModule : T.CEMN_Raw -> E.Value
 encodeModule name =
     E.name name
 
 
-encodeDeps : (a -> E.Value) -> Dict ( String, String ) Pkg.CEP_Name a -> E.Value
+encodeDeps : (a -> E.Value) -> Dict ( String, String ) T.CEP_Name a -> E.Value
 encodeDeps encodeValue deps =
     E.dict Pkg.compareName Pkg.toJsonString encodeValue deps
 
@@ -332,7 +333,7 @@ pkgDecoder =
 -- JSON DECODE HELPERS
 
 
-nameDecoder : Decoder Pkg.CEP_Name
+nameDecoder : Decoder T.CEP_Name
 nameDecoder =
     D.mapError (Basics.uncurry Exit.OP_BadPkgName) Pkg.decoder
 
@@ -354,7 +355,7 @@ constraintDecoder =
     D.mapError Exit.OP_BadConstraint Con.decoder
 
 
-depsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.CEP_Name a)
+depsDecoder : Decoder a -> Decoder (Dict ( String, String ) T.CEP_Name a)
 depsDecoder valueDecoder =
     D.dict identity (Pkg.keyDecoder Exit.OP_BadDependencyName) valueDecoder
 
@@ -385,7 +386,7 @@ exposedDecoder =
         ]
 
 
-moduleDecoder : Decoder ModuleName.CEMN_Raw
+moduleDecoder : Decoder T.CEMN_Raw
 moduleDecoder =
     D.mapError (Basics.uncurry Exit.OP_BadModuleName) ModuleName.decoder
 
@@ -410,7 +411,7 @@ boundParser bound tooLong =
                 len =
                     end - pos
 
-                newCol : P.Col
+                newCol : T.CPP_Col
                 newCol =
                     col + len
             in

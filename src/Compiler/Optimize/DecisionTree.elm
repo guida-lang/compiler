@@ -22,14 +22,12 @@ module Compiler.Optimize.DecisionTree exposing
 
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Reporting.Annotation as A
 import Data.Set as EverySet
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Prelude
-import System.TypeCheck.IO as IO
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -68,7 +66,7 @@ type DecisionTree
 
 
 type Test
-    = IsCtor IO.CEMN_Canonical Name.CDN_Name Index.CDI_ZeroBased Int Can.CASTC_CtorOpts
+    = IsCtor T.CEMN_Canonical T.CDN_Name T.CDI_ZeroBased Int T.CASTC_CtorOpts
     | IsCons
     | IsNil
     | IsTuple
@@ -79,7 +77,7 @@ type Test
 
 
 type Path
-    = Index Index.CDI_ZeroBased Path
+    = Index T.CDI_ZeroBased Path
     | Unbox Path
     | Empty
 
@@ -171,7 +169,7 @@ flattenPatterns (Branch goal pathPatterns) =
 
 
 flatten : ( Path, Can.Pattern ) -> List ( Path, Can.Pattern ) -> List ( Path, Can.Pattern )
-flatten (( path, A.CRA_At region pattern ) as pathPattern) otherPathPatterns =
+flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
     case pattern of
         Can.PVar _ ->
             pathPattern :: otherPathPatterns
@@ -181,7 +179,7 @@ flatten (( path, A.CRA_At region pattern ) as pathPattern) otherPathPatterns =
 
         Can.PCtor { union, args } ->
             let
-                (Can.CASTC_Union _ _ numAlts _) =
+                (T.CASTC_Union _ _ numAlts _) =
                     union
             in
             if numAlts == 1 then
@@ -210,7 +208,7 @@ flatten (( path, A.CRA_At region pattern ) as pathPattern) otherPathPatterns =
 
         Can.PAlias realPattern alias ->
             flatten ( path, realPattern ) <|
-                ( path, A.CRA_At region (Can.PVar alias) )
+                ( path, T.CRA_At region (Can.PVar alias) )
                     :: otherPathPatterns
 
         Can.PRecord _ ->
@@ -322,11 +320,11 @@ testAtPath : Path -> Branch -> Maybe Test
 testAtPath selectedPath (Branch _ pathPatterns) =
     Utils.listLookup selectedPath pathPatterns
         |> Maybe.andThen
-            (\(A.CRA_At _ pattern) ->
+            (\(T.CRA_At _ pattern) ->
                 case pattern of
                     Can.PCtor { home, union, name, index } ->
                         let
-                            (Can.CASTC_Union _ _ numAlts opts) =
+                            (T.CASTC_Union _ _ numAlts opts) =
                                 union
                         in
                         Just (IsCtor home name index numAlts opts)
@@ -390,7 +388,7 @@ edgesFor path branches test =
 toRelevantBranch : Test -> Path -> Branch -> Maybe Branch
 toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
     case extract path pathPatterns of
-        Found start (A.CRA_At region pattern) end ->
+        Found start (T.CRA_At region pattern) end ->
             case pattern of
                 Can.PCtor { union, name, args } ->
                     case test of
@@ -401,7 +399,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                                         case List.map dearg args of
                                             (arg :: []) as args_ ->
                                                 let
-                                                    (Can.CASTC_Union _ _ numAlts _) =
+                                                    (T.CASTC_Union _ _ numAlts _) =
                                                         union
                                                 in
                                                 if numAlts == 1 then
@@ -432,9 +430,9 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                     case test of
                         IsCons ->
                             let
-                                tl_ : A.CRA_Located Can.Pattern_
+                                tl_ : T.CRA_Located Can.Pattern_
                                 tl_ =
-                                    A.CRA_At region (Can.PList tl)
+                                    T.CRA_At region (Can.PList tl)
                             in
                             Just (Branch goal (start ++ subPositions path [ hd, tl_ ] ++ end))
 
@@ -570,7 +568,7 @@ isIrrelevantTo selectedPath (Branch _ pathPatterns) =
 
 
 needsTests : Can.Pattern -> Bool
-needsTests (A.CRA_At _ pattern) =
+needsTests (T.CRA_At _ pattern) =
     case pattern of
         Can.PVar _ ->
             False

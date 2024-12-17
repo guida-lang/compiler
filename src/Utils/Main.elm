@@ -8,7 +8,6 @@ module Utils.Main exposing
     , HttpResponseHeaders
     , HttpStatus(..)
     , LockSharedExclusive(..)
-    , MVar(..)
     , ReplCompletion(..)
     , ReplCompletionFunc
     , ReplInputT
@@ -142,6 +141,7 @@ import Prelude
 import System.Exit as Exit
 import System.IO as IO exposing (IO(..))
 import Time
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -306,7 +306,7 @@ foldM f b =
     List.foldl (\a -> R.bind (\acc -> f acc a)) (R.ok b)
 
 
-indexedZipWithA : (Index.CDI_ZeroBased -> a -> b -> R.RResult info warnings error c) -> List a -> List b -> R.RResult info warnings error (Index.VerifiedList c)
+indexedZipWithA : (T.CDI_ZeroBased -> a -> b -> R.RResult info warnings error c) -> List a -> List b -> R.RResult info warnings error (Index.VerifiedList c)
 indexedZipWithA func listX listY =
     case Index.indexedZipWith func listX listY of
         Index.LengthMatch xs ->
@@ -926,11 +926,7 @@ forkIO ioArg =
 -- Control.Concurrent.MVar
 
 
-type MVar a
-    = MVar Int
-
-
-newMVar : (a -> Encode.Value) -> a -> IO (MVar a)
+newMVar : (a -> Encode.Value) -> a -> IO (T.MVar a)
 newMVar encoder value =
     newEmptyMVar
         |> IO.bind
@@ -940,8 +936,8 @@ newMVar encoder value =
             )
 
 
-readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) =
+readMVar : Decode.Decoder a -> T.MVar a -> IO a
+readMVar decoder (T.MVar ref) =
     IO
         (\index s ->
             case Array.get ref s.mVars of
@@ -969,7 +965,7 @@ readMVar decoder (MVar ref) =
             )
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> T.MVar a -> (a -> IO ( a, b )) -> IO b
 modifyMVar decoder encoder m io =
     takeMVar decoder m
         |> IO.bind io
@@ -980,8 +976,8 @@ modifyMVar decoder encoder m io =
             )
 
 
-takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) =
+takeMVar : Decode.Decoder a -> T.MVar a -> IO a
+takeMVar decoder (T.MVar ref) =
     IO
         (\index s ->
             case Array.get ref s.mVars of
@@ -1018,8 +1014,8 @@ takeMVar decoder (MVar ref) =
             )
 
 
-putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value =
+putMVar : (a -> Encode.Value) -> T.MVar a -> a -> IO ()
+putMVar encoder (T.MVar ref) value =
     IO
         (\index s ->
             case Array.get ref s.mVars of
@@ -1054,7 +1050,7 @@ putMVar encoder (MVar ref) value =
         )
 
 
-newEmptyMVar : IO (MVar a)
+newEmptyMVar : IO (T.MVar a)
 newEmptyMVar =
     IO
         (\_ s ->
@@ -1062,7 +1058,7 @@ newEmptyMVar =
             , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
             )
         )
-        |> IO.fmap MVar
+        |> IO.fmap T.MVar
 
 
 
@@ -1070,18 +1066,18 @@ newEmptyMVar =
 
 
 type Chan a
-    = Chan (MVar (Stream a)) (MVar (Stream a))
+    = Chan (T.MVar (Stream a)) (T.MVar (Stream a))
 
 
 type alias Stream a =
-    MVar (ChItem a)
+    T.MVar (ChItem a)
 
 
 type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
+newChan : (T.MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
 newChan encoder =
     newEmptyMVar
         |> IO.bind
@@ -1206,13 +1202,13 @@ replGetInputLineWithInitial prompt ( left, right ) =
 -- ENCODERS and DECODERS
 
 
-mVarDecoder : Decode.Decoder (MVar a)
+mVarDecoder : Decode.Decoder (T.MVar a)
 mVarDecoder =
-    Decode.map MVar Decode.int
+    Decode.map T.MVar Decode.int
 
 
-mVarEncoder : MVar a -> Encode.Value
-mVarEncoder (MVar ref) =
+mVarEncoder : T.MVar a -> Encode.Value
+mVarEncoder (T.MVar ref) =
     Encode.int ref
 
 

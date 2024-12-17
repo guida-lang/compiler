@@ -28,6 +28,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -47,11 +48,11 @@ type InnerSolver a
 
 
 type State
-    = State Stuff.PackageCache Connection Registry.Registry (Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.CEP_Name, V.Version ) Constraints)
+    = State Stuff.PackageCache Connection Registry.Registry (Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, V.Version ) Constraints)
 
 
 type Constraints
-    = Constraints C.Constraint (Dict ( String, String ) Pkg.CEP_Name C.Constraint)
+    = Constraints C.Constraint (Dict ( String, String ) T.CEP_Name C.Constraint)
 
 
 type Connection
@@ -75,10 +76,10 @@ type SolverResult a
 
 
 type Details
-    = Details V.Version (Dict ( String, String ) Pkg.CEP_Name C.Constraint)
+    = Details V.Version (Dict ( String, String ) T.CEP_Name C.Constraint)
 
 
-verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) Pkg.CEP_Name C.Constraint -> IO (SolverResult (Dict ( String, String ) Pkg.CEP_Name Details))
+verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) T.CEP_Name C.Constraint -> IO (SolverResult (Dict ( String, String ) T.CEP_Name Details))
 verify cache connection registry constraints =
     Stuff.withRegistryLock cache <|
         case try constraints of
@@ -98,7 +99,7 @@ verify cache connection registry constraints =
                         )
 
 
-addDeps : State -> Pkg.CEP_Name -> V.Version -> Details
+addDeps : State -> T.CEP_Name -> V.Version -> Details
 addDeps (State _ _ _ constraints) name vsn =
     case Dict.get (Tuple.mapSecond V.toComparable) ( name, vsn ) constraints of
         Just (Constraints _ deps) ->
@@ -123,26 +124,26 @@ noSolution connection =
 
 
 type AppSolution
-    = AppSolution (Dict ( String, String ) Pkg.CEP_Name V.Version) (Dict ( String, String ) Pkg.CEP_Name V.Version) Outline.AppOutline
+    = AppSolution (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) Outline.AppOutline
 
 
-addToApp : Stuff.PackageCache -> Connection -> Registry.Registry -> Pkg.CEP_Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
+addToApp : Stuff.PackageCache -> Connection -> Registry.Registry -> T.CEP_Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
 addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect testDirect testIndirect) as outline) =
     Stuff.withRegistryLock cache <|
         let
-            allIndirects : Dict ( String, String ) Pkg.CEP_Name V.Version
+            allIndirects : Dict ( String, String ) T.CEP_Name V.Version
             allIndirects =
                 Dict.union indirect testIndirect
 
-            allDirects : Dict ( String, String ) Pkg.CEP_Name V.Version
+            allDirects : Dict ( String, String ) T.CEP_Name V.Version
             allDirects =
                 Dict.union direct testDirect
 
-            allDeps : Dict ( String, String ) Pkg.CEP_Name V.Version
+            allDeps : Dict ( String, String ) T.CEP_Name V.Version
             allDeps =
                 Dict.union allDirects allIndirects
 
-            attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.CEP_Name a -> Solver (Dict ( String, String ) Pkg.CEP_Name V.Version)
+            attempt : (a -> C.Constraint) -> Dict ( String, String ) T.CEP_Name a -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
             attempt toConstraint deps =
                 try (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
         in
@@ -171,29 +172,29 @@ addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect 
                         )
 
 
-toApp : State -> Pkg.CEP_Name -> Outline.AppOutline -> Dict ( String, String ) Pkg.CEP_Name V.Version -> Dict ( String, String ) Pkg.CEP_Name V.Version -> AppSolution
+toApp : State -> T.CEP_Name -> Outline.AppOutline -> Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name V.Version -> AppSolution
 toApp (State _ _ _ constraints) pkg (Outline.AppOutline elm srcDirs direct _ testDirect _) old new =
     let
-        d : Dict ( String, String ) Pkg.CEP_Name V.Version
+        d : Dict ( String, String ) T.CEP_Name V.Version
         d =
             Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
 
-        i : Dict ( String, String ) Pkg.CEP_Name V.Version
+        i : Dict ( String, String ) T.CEP_Name V.Version
         i =
             Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
 
-        td : Dict ( String, String ) Pkg.CEP_Name V.Version
+        td : Dict ( String, String ) T.CEP_Name V.Version
         td =
             Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
 
-        ti : Dict ( String, String ) Pkg.CEP_Name V.Version
+        ti : Dict ( String, String ) T.CEP_Name V.Version
         ti =
             Dict.diff new (Utils.mapUnions [ d, i, td ])
     in
     AppSolution old new (Outline.AppOutline elm srcDirs d i td ti)
 
 
-getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.CEP_Name, V.Version ) Constraints -> Dict ( String, String ) Pkg.CEP_Name V.Version -> List ( Pkg.CEP_Name, V.Version ) -> Dict ( String, String ) Pkg.CEP_Name V.Version -> Dict ( String, String ) Pkg.CEP_Name V.Version
+getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, V.Version ) Constraints -> Dict ( String, String ) T.CEP_Name V.Version -> List ( T.CEP_Name, V.Version ) -> Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name V.Version
 getTransitive constraints solution unvisited visited =
     case unvisited of
         [] ->
@@ -208,11 +209,11 @@ getTransitive constraints solution unvisited visited =
                     (Constraints _ newDeps) =
                         Utils.find (Tuple.mapSecond V.toComparable) info constraints
 
-                    newUnvisited : List ( Pkg.CEP_Name, V.Version )
+                    newUnvisited : List ( T.CEP_Name, V.Version )
                     newUnvisited =
                         Dict.toList compare (Dict.intersection Pkg.compareName solution (Dict.diff newDeps visited))
 
-                    newVisited : Dict ( String, String ) Pkg.CEP_Name V.Version
+                    newVisited : Dict ( String, String ) T.CEP_Name V.Version
                     newVisited =
                         Dict.insert identity pkg vsn visited
                 in
@@ -224,7 +225,7 @@ getTransitive constraints solution unvisited visited =
 -- TRY
 
 
-try : Dict ( String, String ) Pkg.CEP_Name C.Constraint -> Solver (Dict ( String, String ) Pkg.CEP_Name V.Version)
+try : Dict ( String, String ) T.CEP_Name C.Constraint -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
 try constraints =
     exploreGoals (Goals constraints Dict.empty)
 
@@ -234,13 +235,13 @@ try constraints =
 
 
 type Goals
-    = Goals (Dict ( String, String ) Pkg.CEP_Name C.Constraint) (Dict ( String, String ) Pkg.CEP_Name V.Version)
+    = Goals (Dict ( String, String ) T.CEP_Name C.Constraint) (Dict ( String, String ) T.CEP_Name V.Version)
 
 
-exploreGoals : Goals -> Solver (Dict ( String, String ) Pkg.CEP_Name V.Version)
+exploreGoals : Goals -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
 exploreGoals (Goals pending solved) =
     let
-        compare : ( Pkg.CEP_Name, C.Constraint ) -> Pkg.CEP_Name
+        compare : ( T.CEP_Name, C.Constraint ) -> T.CEP_Name
         compare =
             Tuple.first
     in
@@ -263,7 +264,7 @@ exploreGoals (Goals pending solved) =
                 |> bind (\goals2 -> exploreGoals goals2)
 
 
-addVersion : Goals -> Pkg.CEP_Name -> V.Version -> Solver Goals
+addVersion : Goals -> T.CEP_Name -> V.Version -> Solver Goals
 addVersion (Goals pending solved) name version =
     getConstraints name version
         |> bind
@@ -280,7 +281,7 @@ addVersion (Goals pending solved) name version =
             )
 
 
-addConstraint : Dict ( String, String ) Pkg.CEP_Name V.Version -> Dict ( String, String ) Pkg.CEP_Name C.Constraint -> ( Pkg.CEP_Name, C.Constraint ) -> Solver (Dict ( String, String ) Pkg.CEP_Name C.Constraint)
+addConstraint : Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name C.Constraint -> ( T.CEP_Name, C.Constraint ) -> Solver (Dict ( String, String ) T.CEP_Name C.Constraint)
 addConstraint solved unsolved ( name, newConstraint ) =
     case Dict.get identity name solved of
         Just version ->
@@ -312,7 +313,7 @@ addConstraint solved unsolved ( name, newConstraint ) =
 -- GET RELEVANT VERSIONS
 
 
-getRelevantVersions : Pkg.CEP_Name -> C.Constraint -> Solver ( V.Version, List V.Version )
+getRelevantVersions : T.CEP_Name -> C.Constraint -> Solver ( V.Version, List V.Version )
 getRelevantVersions name constraint =
     Solver <|
         \((State _ _ registry _) as state) ->
@@ -333,12 +334,12 @@ getRelevantVersions name constraint =
 -- GET CONSTRAINTS
 
 
-getConstraints : Pkg.CEP_Name -> V.Version -> Solver Constraints
+getConstraints : T.CEP_Name -> V.Version -> Solver Constraints
 getConstraints pkg vsn =
     Solver <|
         \((State cache connection registry cDict) as state) ->
             let
-                key : ( Pkg.CEP_Name, V.Version )
+                key : ( T.CEP_Name, V.Version )
                 key =
                     ( pkg, vsn )
             in

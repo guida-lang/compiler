@@ -15,7 +15,6 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as E
 import Compiler.Nitpick.PatternMatches as P
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Canonicalize as Canonicalize
 import Compiler.Reporting.Error.Docs as Docs
@@ -30,6 +29,7 @@ import Compiler.Reporting.Report as Report
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Time
+import Types as T
 import Utils.Main as Utils
 
 
@@ -38,7 +38,7 @@ import Utils.Main as Utils
 
 
 type alias Module =
-    { name : ModuleName.CEMN_Raw
+    { name : T.CEMN_Raw
     , absolutePath : String
     , modificationTime : File.Time
     , source : String
@@ -127,7 +127,7 @@ toDocHelp root module1 modules =
 toSeparator : Module -> Module -> D.Doc
 toSeparator beforeModule afterModule =
     let
-        before : ModuleName.CEMN_Raw
+        before : T.CEMN_Raw
         before =
             beforeModule.name ++ "  ↑    "
 
@@ -217,8 +217,8 @@ reportToJson (Report.Report title region _ message) =
         ]
 
 
-encodeRegion : A.CRA_Region -> E.Value
-encodeRegion (A.CRA_Region (A.CRA_Position sr sc) (A.CRA_Position er ec)) =
+encodeRegion : T.CRA_Region -> E.Value
+encodeRegion (T.CRA_Region (T.CRA_Position sr sc) (T.CRA_Position er ec)) =
     E.object
         [ ( "start"
           , E.object

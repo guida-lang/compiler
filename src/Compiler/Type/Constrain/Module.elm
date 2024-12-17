@@ -1,7 +1,7 @@
 module Compiler.Type.Constrain.Module exposing (constrain)
 
 import Compiler.AST.Canonical as Can
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
@@ -10,6 +10,7 @@ import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..), mkFlexVar, nameToRigid)
 import Data.Map as Dict exposing (Dict)
 import System.TypeCheck.IO as IO exposing (IO)
+import Types as T
 
 
 
@@ -65,7 +66,7 @@ constrainDecls decls finalConstraint =
 -- PORT HELPERS
 
 
-letPort : CDN_Name -> Can.Port -> IO Constraint -> IO Constraint
+letPort : T.CDN_Name -> Can.Port -> IO Constraint -> IO Constraint
 letPort name port_ makeConstraint =
     case port_ of
         Can.Incoming { freeVars, func } ->
@@ -76,9 +77,9 @@ letPort name port_ makeConstraint =
                             |> IO.bind
                                 (\tipe ->
                                     let
-                                        header : Dict String CDN_Name (A.CRA_Located Type)
+                                        header : Dict String T.CDN_Name (T.CRA_Located Type)
                                         header =
-                                            Dict.singleton identity name (A.CRA_At A.zero tipe)
+                                            Dict.singleton identity name (T.CRA_At A.zero tipe)
                                     in
                                     IO.fmap (CLet (Dict.values compare vars) [] header CTrue) makeConstraint
                                 )
@@ -92,9 +93,9 @@ letPort name port_ makeConstraint =
                             |> IO.bind
                                 (\tipe ->
                                     let
-                                        header : Dict String CDN_Name (A.CRA_Located Type)
+                                        header : Dict String T.CDN_Name (T.CRA_Located Type)
                                         header =
-                                            Dict.singleton identity name (A.CRA_At A.zero tipe)
+                                            Dict.singleton identity name (T.CRA_At A.zero tipe)
                                     in
                                     IO.fmap (CLet (Dict.values compare vars) [] header CTrue) makeConstraint
                                 )
@@ -105,7 +106,7 @@ letPort name port_ makeConstraint =
 -- EFFECT MANAGER HELPERS
 
 
-letCmd : IO.CEMN_Canonical -> CDN_Name -> Constraint -> IO Constraint
+letCmd : T.CEMN_Canonical -> T.CDN_Name -> Constraint -> IO Constraint
 letCmd home tipe constraint =
     mkFlexVar
         |> IO.fmap
@@ -119,15 +120,15 @@ letCmd home tipe constraint =
                     cmdType =
                         FunN (AppN home tipe [ msg ]) (AppN ModuleName.cmd Name.cmd [ msg ])
 
-                    header : Dict String CDN_Name (A.CRA_Located Type)
+                    header : Dict String T.CDN_Name (T.CRA_Located Type)
                     header =
-                        Dict.singleton identity "command" (A.CRA_At A.zero cmdType)
+                        Dict.singleton identity "command" (T.CRA_At A.zero cmdType)
                 in
                 CLet [ msgVar ] [] header CTrue constraint
             )
 
 
-letSub : IO.CEMN_Canonical -> CDN_Name -> Constraint -> IO Constraint
+letSub : T.CEMN_Canonical -> T.CDN_Name -> Constraint -> IO Constraint
 letSub home tipe constraint =
     mkFlexVar
         |> IO.fmap
@@ -141,15 +142,15 @@ letSub home tipe constraint =
                     subType =
                         FunN (AppN home tipe [ msg ]) (AppN ModuleName.sub Name.sub [ msg ])
 
-                    header : Dict String CDN_Name (A.CRA_Located Type)
+                    header : Dict String T.CDN_Name (T.CRA_Located Type)
                     header =
-                        Dict.singleton identity "subscription" (A.CRA_At A.zero subType)
+                        Dict.singleton identity "subscription" (T.CRA_At A.zero subType)
                 in
                 CLet [ msgVar ] [] header CTrue constraint
             )
 
 
-constrainEffects : IO.CEMN_Canonical -> A.CRA_Region -> A.CRA_Region -> A.CRA_Region -> Can.Manager -> IO Constraint
+constrainEffects : T.CEMN_Canonical -> T.CRA_Region -> T.CRA_Region -> T.CRA_Region -> Can.Manager -> IO Constraint
 constrainEffects home r0 r1 r2 manager =
     mkFlexVar
         |> IO.bind
@@ -249,7 +250,7 @@ constrainEffects home r0 r1 r2 manager =
             )
 
 
-effectList : IO.CEMN_Canonical -> CDN_Name -> Type -> Type
+effectList : T.CEMN_Canonical -> T.CDN_Name -> Type -> Type
 effectList home name msg =
     AppN ModuleName.list Name.list [ AppN home name [ msg ] ]
 
@@ -264,7 +265,7 @@ router msg self =
     AppN ModuleName.platform Name.router [ msg, self ]
 
 
-checkMap : CDN_Name -> IO.CEMN_Canonical -> CDN_Name -> Constraint -> IO Constraint
+checkMap : T.CDN_Name -> T.CEMN_Canonical -> T.CDN_Name -> Constraint -> IO Constraint
 checkMap name home tipe constraint =
     mkFlexVar
         |> IO.bind
@@ -286,6 +287,6 @@ checkMap name home tipe constraint =
             )
 
 
-toMapType : IO.CEMN_Canonical -> CDN_Name -> Type -> Type -> Type
+toMapType : T.CEMN_Canonical -> T.CDN_Name -> Type -> Type -> Type
 toMapType home tipe a b =
     Type.funType (Type.funType a b) (Type.funType (AppN home tipe [ a ]) (AppN home tipe [ b ]))

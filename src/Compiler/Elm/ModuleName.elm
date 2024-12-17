@@ -1,6 +1,5 @@
 module Compiler.Elm.ModuleName exposing
-    ( CEMN_Raw
-    , array
+    ( array
     , basics
     , canonicalDecoder
     , canonicalEncoder
@@ -35,7 +34,7 @@ module Compiler.Elm.ModuleName exposing
     , webgl
     )
 
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.Package as Pkg
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
@@ -43,23 +42,19 @@ import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.TypeCheck.IO exposing (CEMN_Canonical(..))
+import Types as T
 
 
 
 -- RAW
 
 
-type alias CEMN_Raw =
-    CDN_Name
-
-
-toChars : CEMN_Raw -> List Char
+toChars : T.CEMN_Raw -> List Char
 toChars =
     Name.toChars
 
 
-toFilePath : CEMN_Raw -> String
+toFilePath : T.CEMN_Raw -> String
 toFilePath name =
     String.map
         (\c ->
@@ -73,7 +68,7 @@ toFilePath name =
         name
 
 
-toHyphenPath : CEMN_Raw -> String
+toHyphenPath : T.CEMN_Raw -> String
 toHyphenPath name =
     String.map
         (\c ->
@@ -90,12 +85,12 @@ toHyphenPath name =
 -- JSON
 
 
-encode : CEMN_Raw -> E.Value
+encode : T.CEMN_Raw -> E.Value
 encode =
     E.string
 
 
-decoder : D.Decoder ( Int, Int ) CEMN_Raw
+decoder : D.Decoder ( Int, Int ) T.CEMN_Raw
 decoder =
     D.customString parser Tuple.pair
 
@@ -104,7 +99,7 @@ decoder =
 -- PARSER
 
 
-parser : P.Parser ( Int, Int ) CEMN_Raw
+parser : P.Parser ( Int, Int ) T.CEMN_Raw
 parser =
     P.Parser
         (\(P.State src pos end indent row col) ->
@@ -172,8 +167,8 @@ chompInner src pos end col =
 -- INSTANCES
 
 
-compareCanonical : CEMN_Canonical -> CEMN_Canonical -> Order
-compareCanonical (CEMN_Canonical pkg1 name1) (CEMN_Canonical pkg2 name2) =
+compareCanonical : T.CEMN_Canonical -> T.CEMN_Canonical -> Order
+compareCanonical (T.CEMN_Canonical pkg1 name1) (T.CEMN_Canonical pkg2 name2) =
     case compare name1 name2 of
         LT ->
             LT
@@ -185,8 +180,8 @@ compareCanonical (CEMN_Canonical pkg1 name1) (CEMN_Canonical pkg2 name2) =
             GT
 
 
-toComparableCanonical : CEMN_Canonical -> List String
-toComparableCanonical (CEMN_Canonical ( author, project ) name) =
+toComparableCanonical : T.CEMN_Canonical -> List String
+toComparableCanonical (T.CEMN_Canonical ( author, project ) name) =
     [ author, project, name ]
 
 
@@ -194,152 +189,152 @@ toComparableCanonical (CEMN_Canonical ( author, project ) name) =
 -- CORE
 
 
-basics : CEMN_Canonical
+basics : T.CEMN_Canonical
 basics =
-    CEMN_Canonical Pkg.core Name.basics
+    T.CEMN_Canonical Pkg.core Name.basics
 
 
-char : CEMN_Canonical
+char : T.CEMN_Canonical
 char =
-    CEMN_Canonical Pkg.core Name.char
+    T.CEMN_Canonical Pkg.core Name.char
 
 
-string : CEMN_Canonical
+string : T.CEMN_Canonical
 string =
-    CEMN_Canonical Pkg.core Name.string
+    T.CEMN_Canonical Pkg.core Name.string
 
 
-maybe : CEMN_Canonical
+maybe : T.CEMN_Canonical
 maybe =
-    CEMN_Canonical Pkg.core Name.maybe
+    T.CEMN_Canonical Pkg.core Name.maybe
 
 
-result : CEMN_Canonical
+result : T.CEMN_Canonical
 result =
-    CEMN_Canonical Pkg.core Name.result
+    T.CEMN_Canonical Pkg.core Name.result
 
 
-list : CEMN_Canonical
+list : T.CEMN_Canonical
 list =
-    CEMN_Canonical Pkg.core Name.list
+    T.CEMN_Canonical Pkg.core Name.list
 
 
-array : CEMN_Canonical
+array : T.CEMN_Canonical
 array =
-    CEMN_Canonical Pkg.core Name.array
+    T.CEMN_Canonical Pkg.core Name.array
 
 
-dict : CEMN_Canonical
+dict : T.CEMN_Canonical
 dict =
-    CEMN_Canonical Pkg.core Name.dict
+    T.CEMN_Canonical Pkg.core Name.dict
 
 
-tuple : CEMN_Canonical
+tuple : T.CEMN_Canonical
 tuple =
-    CEMN_Canonical Pkg.core Name.tuple
+    T.CEMN_Canonical Pkg.core Name.tuple
 
 
-platform : CEMN_Canonical
+platform : T.CEMN_Canonical
 platform =
-    CEMN_Canonical Pkg.core Name.platform
+    T.CEMN_Canonical Pkg.core Name.platform
 
 
-cmd : CEMN_Canonical
+cmd : T.CEMN_Canonical
 cmd =
-    CEMN_Canonical Pkg.core "Platform.Cmd"
+    T.CEMN_Canonical Pkg.core "Platform.Cmd"
 
 
-sub : CEMN_Canonical
+sub : T.CEMN_Canonical
 sub =
-    CEMN_Canonical Pkg.core "Platform.Sub"
+    T.CEMN_Canonical Pkg.core "Platform.Sub"
 
 
-debug : CEMN_Canonical
+debug : T.CEMN_Canonical
 debug =
-    CEMN_Canonical Pkg.core Name.debug
+    T.CEMN_Canonical Pkg.core Name.debug
 
 
 
 -- HTML
 
 
-virtualDom : CEMN_Canonical
+virtualDom : T.CEMN_Canonical
 virtualDom =
-    CEMN_Canonical Pkg.virtualDom Name.virtualDom
+    T.CEMN_Canonical Pkg.virtualDom Name.virtualDom
 
 
 
 -- JSON
 
 
-jsonDecode : CEMN_Canonical
+jsonDecode : T.CEMN_Canonical
 jsonDecode =
-    CEMN_Canonical Pkg.json "Json.Decode"
+    T.CEMN_Canonical Pkg.json "Json.Decode"
 
 
-jsonEncode : CEMN_Canonical
+jsonEncode : T.CEMN_Canonical
 jsonEncode =
-    CEMN_Canonical Pkg.json "Json.Encode"
+    T.CEMN_Canonical Pkg.json "Json.Encode"
 
 
 
 -- WEBGL
 
 
-webgl : CEMN_Canonical
+webgl : T.CEMN_Canonical
 webgl =
-    CEMN_Canonical Pkg.webgl "WebGL"
+    T.CEMN_Canonical Pkg.webgl "WebGL"
 
 
-texture : CEMN_Canonical
+texture : T.CEMN_Canonical
 texture =
-    CEMN_Canonical Pkg.webgl "WebGL.Texture"
+    T.CEMN_Canonical Pkg.webgl "WebGL.Texture"
 
 
-vector2 : CEMN_Canonical
+vector2 : T.CEMN_Canonical
 vector2 =
-    CEMN_Canonical Pkg.linearAlgebra "Math.Vector2"
+    T.CEMN_Canonical Pkg.linearAlgebra "Math.Vector2"
 
 
-vector3 : CEMN_Canonical
+vector3 : T.CEMN_Canonical
 vector3 =
-    CEMN_Canonical Pkg.linearAlgebra "Math.Vector3"
+    T.CEMN_Canonical Pkg.linearAlgebra "Math.Vector3"
 
 
-vector4 : CEMN_Canonical
+vector4 : T.CEMN_Canonical
 vector4 =
-    CEMN_Canonical Pkg.linearAlgebra "Math.Vector4"
+    T.CEMN_Canonical Pkg.linearAlgebra "Math.Vector4"
 
 
-matrix4 : CEMN_Canonical
+matrix4 : T.CEMN_Canonical
 matrix4 =
-    CEMN_Canonical Pkg.linearAlgebra "Math.Matrix4"
+    T.CEMN_Canonical Pkg.linearAlgebra "Math.Matrix4"
 
 
 
 -- ENCODERS and DECODERS
 
 
-canonicalEncoder : CEMN_Canonical -> Encode.Value
-canonicalEncoder (CEMN_Canonical pkgName name) =
+canonicalEncoder : T.CEMN_Canonical -> Encode.Value
+canonicalEncoder (T.CEMN_Canonical pkgName name) =
     Encode.object
         [ ( "pkgName", Pkg.nameEncoder pkgName )
         , ( "name", Encode.string name )
         ]
 
 
-canonicalDecoder : Decode.Decoder CEMN_Canonical
+canonicalDecoder : Decode.Decoder T.CEMN_Canonical
 canonicalDecoder =
-    Decode.map2 CEMN_Canonical
+    Decode.map2 T.CEMN_Canonical
         (Decode.field "pkgName" Pkg.nameDecoder)
         (Decode.field "name" Decode.string)
 
 
-rawEncoder : CEMN_Raw -> Encode.Value
+rawEncoder : T.CEMN_Raw -> Encode.Value
 rawEncoder =
     Encode.string
 
 
-rawDecoder : Decode.Decoder CEMN_Raw
+rawDecoder : Decode.Decoder T.CEMN_Raw
 rawDecoder =
     Decode.string

@@ -16,7 +16,6 @@ module Compiler.Reporting.Error.Canonicalize exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as DecodeX
@@ -31,7 +30,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.TypeCheck.IO as IO
+import Types as T
 
 
 
@@ -39,44 +38,44 @@ import System.TypeCheck.IO as IO
 
 
 type Error
-    = AnnotationTooShort A.CRA_Region CDN_Name Index.CDI_ZeroBased Int
-    | AmbiguousVar A.CRA_Region (Maybe CDN_Name) CDN_Name IO.CEMN_Canonical (OneOrMore IO.CEMN_Canonical)
-    | AmbiguousType A.CRA_Region (Maybe CDN_Name) CDN_Name IO.CEMN_Canonical (OneOrMore IO.CEMN_Canonical)
-    | AmbiguousVariant A.CRA_Region (Maybe CDN_Name) CDN_Name IO.CEMN_Canonical (OneOrMore IO.CEMN_Canonical)
-    | AmbiguousBinop A.CRA_Region CDN_Name IO.CEMN_Canonical (OneOrMore IO.CEMN_Canonical)
-    | BadArity A.CRA_Region BadArityContext CDN_Name Int Int
-    | Binop A.CRA_Region CDN_Name CDN_Name
-    | DuplicateDecl CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateType CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateCtor CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateBinop CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateField CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateAliasArg CDN_Name CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicateUnionArg CDN_Name CDN_Name A.CRA_Region A.CRA_Region
-    | DuplicatePattern DuplicatePatternContext CDN_Name A.CRA_Region A.CRA_Region
-    | EffectNotFound A.CRA_Region CDN_Name
-    | EffectFunctionNotFound A.CRA_Region CDN_Name
-    | ExportDuplicate CDN_Name A.CRA_Region A.CRA_Region
-    | ExportNotFound A.CRA_Region VarKind CDN_Name (List CDN_Name)
-    | ExportOpenAlias A.CRA_Region CDN_Name
-    | ImportCtorByName A.CRA_Region CDN_Name CDN_Name
-    | ImportNotFound A.CRA_Region CDN_Name (List IO.CEMN_Canonical)
-    | ImportOpenAlias A.CRA_Region CDN_Name
-    | ImportExposingNotFound A.CRA_Region IO.CEMN_Canonical CDN_Name (List CDN_Name)
-    | NotFoundVar A.CRA_Region (Maybe CDN_Name) CDN_Name PossibleNames
-    | NotFoundType A.CRA_Region (Maybe CDN_Name) CDN_Name PossibleNames
-    | NotFoundVariant A.CRA_Region (Maybe CDN_Name) CDN_Name PossibleNames
-    | NotFoundBinop A.CRA_Region CDN_Name (EverySet String CDN_Name)
-    | PatternHasRecordCtor A.CRA_Region CDN_Name
-    | PortPayloadInvalid A.CRA_Region CDN_Name Can.CASTC_Type InvalidPayload
-    | PortTypeInvalid A.CRA_Region CDN_Name PortProblem
-    | RecursiveAlias A.CRA_Region CDN_Name (List CDN_Name) Src.CASTS_Type (List CDN_Name)
-    | RecursiveDecl A.CRA_Region CDN_Name (List CDN_Name)
-    | RecursiveLet (A.CRA_Located CDN_Name) (List CDN_Name)
-    | Shadowing CDN_Name A.CRA_Region A.CRA_Region
-    | TupleLargerThanThree A.CRA_Region
-    | TypeVarsUnboundInUnion A.CRA_Region CDN_Name (List CDN_Name) ( CDN_Name, A.CRA_Region ) (List ( CDN_Name, A.CRA_Region ))
-    | TypeVarsMessedUpInAlias A.CRA_Region CDN_Name (List CDN_Name) (List ( CDN_Name, A.CRA_Region )) (List ( CDN_Name, A.CRA_Region ))
+    = AnnotationTooShort T.CRA_Region T.CDN_Name T.CDI_ZeroBased Int
+    | AmbiguousVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | AmbiguousType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | AmbiguousVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | AmbiguousBinop T.CRA_Region T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | BadArity T.CRA_Region BadArityContext T.CDN_Name Int Int
+    | Binop T.CRA_Region T.CDN_Name T.CDN_Name
+    | DuplicateDecl T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateType T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateCtor T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateBinop T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateField T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateAliasArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicateUnionArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
+    | DuplicatePattern DuplicatePatternContext T.CDN_Name T.CRA_Region T.CRA_Region
+    | EffectNotFound T.CRA_Region T.CDN_Name
+    | EffectFunctionNotFound T.CRA_Region T.CDN_Name
+    | ExportDuplicate T.CDN_Name T.CRA_Region T.CRA_Region
+    | ExportNotFound T.CRA_Region VarKind T.CDN_Name (List T.CDN_Name)
+    | ExportOpenAlias T.CRA_Region T.CDN_Name
+    | ImportCtorByName T.CRA_Region T.CDN_Name T.CDN_Name
+    | ImportNotFound T.CRA_Region T.CDN_Name (List T.CEMN_Canonical)
+    | ImportOpenAlias T.CRA_Region T.CDN_Name
+    | ImportExposingNotFound T.CRA_Region T.CEMN_Canonical T.CDN_Name (List T.CDN_Name)
+    | NotFoundVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
+    | NotFoundType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
+    | NotFoundVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
+    | NotFoundBinop T.CRA_Region T.CDN_Name (EverySet String T.CDN_Name)
+    | PatternHasRecordCtor T.CRA_Region T.CDN_Name
+    | PortPayloadInvalid T.CRA_Region T.CDN_Name T.CASTC_Type InvalidPayload
+    | PortTypeInvalid T.CRA_Region T.CDN_Name PortProblem
+    | RecursiveAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) T.CASTS_Type (List T.CDN_Name)
+    | RecursiveDecl T.CRA_Region T.CDN_Name (List T.CDN_Name)
+    | RecursiveLet (T.CRA_Located T.CDN_Name) (List T.CDN_Name)
+    | Shadowing T.CDN_Name T.CRA_Region T.CRA_Region
+    | TupleLargerThanThree T.CRA_Region
+    | TypeVarsUnboundInUnion T.CRA_Region T.CDN_Name (List T.CDN_Name) ( T.CDN_Name, T.CRA_Region ) (List ( T.CDN_Name, T.CRA_Region ))
+    | TypeVarsMessedUpInAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) (List ( T.CDN_Name, T.CRA_Region )) (List ( T.CDN_Name, T.CRA_Region ))
 
 
 type BadArityContext
@@ -86,7 +85,7 @@ type BadArityContext
 
 type DuplicatePatternContext
     = DPLambdaArgs
-    | DPFuncArgs CDN_Name
+    | DPFuncArgs T.CDN_Name
     | DPCaseBranch
     | DPLetBinding
     | DPDestruct
@@ -95,8 +94,8 @@ type DuplicatePatternContext
 type InvalidPayload
     = ExtendedRecord
     | Function
-    | TypeVariable CDN_Name
-    | UnsupportedType CDN_Name
+    | TypeVariable T.CDN_Name
+    | UnsupportedType T.CDN_Name
 
 
 type PortProblem
@@ -108,8 +107,8 @@ type PortProblem
 
 
 type alias PossibleNames =
-    { locals : EverySet String CDN_Name
-    , quals : Dict String CDN_Name (EverySet String CDN_Name)
+    { locals : EverySet String T.CDN_Name
+    , quals : Dict String T.CDN_Name (EverySet String T.CDN_Name)
     }
 
 
@@ -124,7 +123,7 @@ type VarKind
     | BadType
 
 
-toKindInfo : VarKind -> CDN_Name -> ( D.Doc, D.Doc, D.Doc )
+toKindInfo : VarKind -> T.CDN_Name -> ( D.Doc, D.Doc, D.Doc )
 toKindInfo kind name =
     case kind of
         BadOp ->
@@ -507,7 +506,7 @@ toReport source err =
                         "Remove the (..) and it should work."
                     )
 
-        ImportExposingNotFound region (IO.CEMN_Canonical _ home) value possibleNames ->
+        ImportExposingNotFound region (T.CEMN_Canonical _ home) value possibleNames ->
             let
                 suggestions : List String
                 suggestions =
@@ -812,7 +811,7 @@ toReport source err =
                                 ]
                             )
 
-        RecursiveLet (A.CRA_At region name) names ->
+        RecursiveLet (T.CRA_At region name) names ->
             Report.Report "CYCLIC VALUE" region [] <|
                 Code.toSnippet source region Nothing <|
                     case names of
@@ -879,13 +878,13 @@ toReport source err =
             case ( unusedVars, unboundVars ) of
                 ( unused :: unuseds, [] ) ->
                     let
-                        backQuote : CDN_Name -> D.Doc
+                        backQuote : T.CDN_Name -> D.Doc
                         backQuote name =
                             D.fromChars "`"
                                 |> D.a (D.fromName name)
                                 |> D.a (D.fromChars "`")
 
-                        allUnusedNames : List CDN_Name
+                        allUnusedNames : List T.CDN_Name
                         allUnusedNames =
                             List.map Tuple.first unusedVars
 
@@ -944,11 +943,11 @@ toReport source err =
 
                 _ ->
                     let
-                        unused : List CDN_Name
+                        unused : List T.CDN_Name
                         unused =
                             List.map Tuple.first unusedVars
 
-                        unbound : List CDN_Name
+                        unbound : List T.CDN_Name
                         unbound =
                             List.map Tuple.first unboundVars
 
@@ -1030,10 +1029,10 @@ toReport source err =
                             )
 
 
-unboundTypeVars : Code.Source -> A.CRA_Region -> List D.Doc -> Name.CDN_Name -> List Name.CDN_Name -> ( Name.CDN_Name, A.CRA_Region ) -> List ( Name.CDN_Name, A.CRA_Region ) -> Report.Report
+unboundTypeVars : Code.Source -> T.CRA_Region -> List D.Doc -> T.CDN_Name -> List T.CDN_Name -> ( T.CDN_Name, T.CRA_Region ) -> List ( T.CDN_Name, T.CRA_Region ) -> Report.Report
 unboundTypeVars source declRegion tipe typeName allVars ( unboundVar, varRegion ) unboundVars =
     let
-        backQuote : CDN_Name -> D.Doc
+        backQuote : T.CDN_Name -> D.Doc
         backQuote name =
             D.fromChars "`"
                 |> D.a (D.fromName name)
@@ -1097,7 +1096,7 @@ unboundTypeVars source declRegion tipe typeName allVars ( unboundVar, varRegion 
             )
 
 
-nameClash : Code.Source -> A.CRA_Region -> A.CRA_Region -> String -> Report.Report
+nameClash : Code.Source -> T.CRA_Region -> T.CRA_Region -> String -> Report.Report
 nameClash source r1 r2 messageThatEndsWithPunctuation =
     Report.Report "NAME CLASH" r2 [] <|
         Code.toPair source
@@ -1112,10 +1111,10 @@ nameClash source r1 r2 messageThatEndsWithPunctuation =
             )
 
 
-ambiguousName : Code.Source -> A.CRA_Region -> Maybe Name.CDN_Name -> Name.CDN_Name -> IO.CEMN_Canonical -> OneOrMore.OneOrMore IO.CEMN_Canonical -> String -> Report.Report
+ambiguousName : Code.Source -> T.CRA_Region -> Maybe T.CDN_Name -> T.CDN_Name -> T.CEMN_Canonical -> OneOrMore.OneOrMore T.CEMN_Canonical -> String -> Report.Report
 ambiguousName source region maybePrefix name h hs thing =
     let
-        possibleHomes : List IO.CEMN_Canonical
+        possibleHomes : List T.CEMN_Canonical
         possibleHomes =
             List.sortWith ModuleName.compareCanonical (h :: OneOrMore.destruct (::) hs)
     in
@@ -1124,8 +1123,8 @@ ambiguousName source region maybePrefix name h hs thing =
             case maybePrefix of
                 Nothing ->
                     let
-                        homeToYellowDoc : IO.CEMN_Canonical -> D.Doc
-                        homeToYellowDoc (IO.CEMN_Canonical _ home) =
+                        homeToYellowDoc : T.CEMN_Canonical -> D.Doc
+                        homeToYellowDoc (T.CEMN_Canonical _ home) =
                             D.dullyellow
                                 (D.fromName home
                                     |> D.a (D.fromChars ".")
@@ -1146,8 +1145,8 @@ ambiguousName source region maybePrefix name h hs thing =
 
                 Just prefix ->
                     let
-                        homeToYellowDoc : IO.CEMN_Canonical -> D.Doc
-                        homeToYellowDoc (IO.CEMN_Canonical _ home) =
+                        homeToYellowDoc : T.CEMN_Canonical -> D.Doc
+                        homeToYellowDoc (T.CEMN_Canonical _ home) =
                             if prefix == home then
                                 D.cyan (D.fromChars "import")
                                     |> D.plus (D.fromName home)
@@ -1180,17 +1179,17 @@ ambiguousName source region maybePrefix name h hs thing =
                     )
 
 
-notFound : Code.Source -> A.CRA_Region -> Maybe Name.CDN_Name -> Name.CDN_Name -> String -> PossibleNames -> Report.Report
+notFound : Code.Source -> T.CRA_Region -> Maybe T.CDN_Name -> T.CDN_Name -> String -> PossibleNames -> Report.Report
 notFound source region maybePrefix name thing { locals, quals } =
     let
-        givenName : CDN_Name
+        givenName : T.CDN_Name
         givenName =
             Maybe.withDefault name (Maybe.map2 toQualString maybePrefix (Just name))
 
         possibleNames : List String
         possibleNames =
             let
-                addQuals : CDN_Name -> EverySet String CDN_Name -> List String -> List String
+                addQuals : T.CDN_Name -> EverySet String T.CDN_Name -> List String -> List String
                 addQuals prefix localSet allNames =
                     EverySet.foldr compare (\x xs -> toQualString prefix x :: xs) allNames localSet
             in
@@ -1241,7 +1240,7 @@ notFound source region maybePrefix name thing { locals, quals } =
             )
 
 
-toQualString : Name.CDN_Name -> Name.CDN_Name -> String
+toQualString : T.CDN_Name -> T.CDN_Name -> String
 toQualString prefix name =
     prefix ++ "." ++ name
 
@@ -1250,7 +1249,7 @@ toQualString prefix name =
 -- BAD ALIAS RECURSION
 
 
-aliasRecursionReport : Code.Source -> A.CRA_Region -> CDN_Name -> List CDN_Name -> Src.CASTS_Type -> List CDN_Name -> Report.Report
+aliasRecursionReport : Code.Source -> T.CRA_Region -> T.CDN_Name -> List T.CDN_Name -> T.CASTS_Type -> List T.CDN_Name -> Report.Report
 aliasRecursionReport source region name args tipe others =
     case others of
         [] ->
@@ -1281,7 +1280,7 @@ aliasRecursionReport source region name args tipe others =
                     )
 
 
-aliasToUnionDoc : CDN_Name -> List CDN_Name -> Src.CASTS_Type -> D.Doc
+aliasToUnionDoc : T.CDN_Name -> List T.CDN_Name -> T.CASTS_Type -> D.Doc
 aliasToUnionDoc name args tipe =
     D.vcat
         [ D.dullyellow <|

@@ -5,8 +5,8 @@ module Compiler.Json.String exposing
     , isEmpty
     )
 
-import Compiler.Data.Name as Name
 import Compiler.Parse.Primitives as P
+import Types as T
 
 
 
@@ -22,12 +22,12 @@ isEmpty =
 -- FROM
 
 
-fromSnippet : P.Snippet -> String
-fromSnippet (P.Snippet { fptr, offset, length }) =
+fromSnippet : T.CPP_Snippet -> String
+fromSnippet (T.CPP_Snippet { fptr, offset, length }) =
     String.slice offset (offset + length) fptr
 
 
-fromName : Name.CDN_Name -> String
+fromName : T.CDN_Name -> String
 fromName =
     identity
 
@@ -36,8 +36,8 @@ fromName =
 -- FROM COMMENT
 
 
-fromComment : P.Snippet -> String
-fromComment ((P.Snippet { fptr, offset, length }) as snippet) =
+fromComment : T.CPP_Snippet -> String
+fromComment ((T.CPP_Snippet { fptr, offset, length }) as snippet) =
     let
         pos : Int
         pos =
@@ -121,13 +121,13 @@ type Chunk
     | Escape Char
 
 
-fromChunks : P.Snippet -> List Chunk -> String
+fromChunks : T.CPP_Snippet -> List Chunk -> String
 fromChunks snippet chunks =
     writeChunks snippet chunks
 
 
-writeChunks : P.Snippet -> List Chunk -> String
-writeChunks ((P.Snippet { fptr }) as snippet) chunks =
+writeChunks : T.CPP_Snippet -> List Chunk -> String
+writeChunks ((T.CPP_Snippet { fptr }) as snippet) chunks =
     case chunks of
         [] ->
             ""

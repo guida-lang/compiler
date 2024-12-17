@@ -10,13 +10,12 @@ module Compiler.Reporting.Render.Code exposing
     )
 
 import Char
-import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (binopCharSet)
 import Compiler.Parse.Variable exposing (reservedWords)
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D exposing (Doc)
 import Data.Set as EverySet
 import Prelude
+import Types as T
 
 
 
@@ -36,7 +35,7 @@ toSource source =
 -- CODE FORMATTING
 
 
-toSnippet : Source -> A.CRA_Region -> Maybe A.CRA_Region -> ( Doc, Doc ) -> Doc
+toSnippet : Source -> T.CRA_Region -> Maybe T.CRA_Region -> ( Doc, Doc ) -> Doc
 toSnippet source region highlight ( preHint, postHint ) =
     D.vcat
         [ preHint
@@ -46,7 +45,7 @@ toSnippet source region highlight ( preHint, postHint ) =
         ]
 
 
-toPair : Source -> A.CRA_Region -> A.CRA_Region -> ( Doc, Doc ) -> ( Doc, Doc, Doc ) -> Doc
+toPair : Source -> T.CRA_Region -> T.CRA_Region -> ( Doc, Doc ) -> ( Doc, Doc, Doc ) -> Doc
 toPair source r1 r2 ( oneStart, oneEnd ) ( twoStart, twoMiddle, twoEnd ) =
     case renderPair source r1 r2 of
         OneLine codeDocs ->
@@ -73,8 +72,8 @@ toPair source r1 r2 ( oneStart, oneEnd ) ( twoStart, twoMiddle, twoEnd ) =
 -- RENDER SNIPPET
 
 
-render : Source -> A.CRA_Region -> Maybe A.CRA_Region -> Doc
-render sourceLines ((A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position endLine _)) as region) maybeSubRegion =
+render : Source -> T.CRA_Region -> Maybe T.CRA_Region -> Doc
+render sourceLines ((T.CRA_Region (T.CRA_Position startLine _) (T.CRA_Position endLine _)) as region) maybeSubRegion =
     let
         relevantLines : List ( Int, String )
         relevantLines =
@@ -86,7 +85,7 @@ render sourceLines ((A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position e
         width =
             String.length (String.fromInt (Tuple.first (Prelude.last relevantLines)))
 
-        smallerRegion : A.CRA_Region
+        smallerRegion : T.CRA_Region
         smallerRegion =
             Maybe.withDefault region maybeSubRegion
     in
@@ -98,8 +97,8 @@ render sourceLines ((A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position e
             drawLines False width smallerRegion relevantLines underline
 
 
-makeUnderline : Int -> Int -> A.CRA_Region -> Maybe Doc
-makeUnderline width realEndLine (A.CRA_Region (A.CRA_Position start c1) (A.CRA_Position end c2)) =
+makeUnderline : Int -> Int -> T.CRA_Region -> Maybe Doc
+makeUnderline width realEndLine (T.CRA_Region (T.CRA_Position start c1) (T.CRA_Position end c2)) =
     if start /= end || end < realEndLine then
         Nothing
 
@@ -119,8 +118,8 @@ makeUnderline width realEndLine (A.CRA_Region (A.CRA_Position start c1) (A.CRA_P
             )
 
 
-drawLines : Bool -> Int -> A.CRA_Region -> Source -> Doc -> Doc
-drawLines addZigZag width (A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position endLine _)) sourceLines finalLine =
+drawLines : Bool -> Int -> T.CRA_Region -> Source -> Doc -> Doc
+drawLines addZigZag width (T.CRA_Region (T.CRA_Position startLine _) (T.CRA_Position endLine _)) sourceLines finalLine =
     D.vcat <|
         List.map (drawLine addZigZag width startLine endLine) sourceLines
             ++ [ finalLine ]
@@ -162,13 +161,13 @@ type CodePair
     | TwoChunks Doc Doc
 
 
-renderPair : Source -> A.CRA_Region -> A.CRA_Region -> CodePair
+renderPair : Source -> T.CRA_Region -> T.CRA_Region -> CodePair
 renderPair source region1 region2 =
     let
-        (A.CRA_Region (A.CRA_Position startRow1 startCol1) (A.CRA_Position endRow1 endCol1)) =
+        (T.CRA_Region (T.CRA_Position startRow1 startCol1) (T.CRA_Position endRow1 endCol1)) =
             region1
 
-        (A.CRA_Region (A.CRA_Position startRow2 startCol2) (A.CRA_Position endRow2 endCol2)) =
+        (T.CRA_Region (T.CRA_Position startRow2 startCol2) (T.CRA_Position endRow2 endCol2)) =
             region2
     in
     if startRow1 == endRow1 && endRow1 == startRow2 && startRow2 == endRow2 then
@@ -226,7 +225,7 @@ type Next
     | Other (Maybe Char)
 
 
-whatIsNext : Source -> Row -> Col -> Next
+whatIsNext : Source -> T.CPP_Row -> T.CPP_Col -> Next
 whatIsNext sourceLines row col =
     case List.head (List.filter (\( r, _ ) -> r == row) sourceLines) of
         Nothing ->
@@ -300,7 +299,7 @@ startsWithKeyword restOfLine keyword =
            )
 
 
-nextLineStartsWithKeyword : String -> Source -> Row -> Maybe ( Row, Col )
+nextLineStartsWithKeyword : String -> Source -> T.CPP_Row -> Maybe ( T.CPP_Row, T.CPP_Col )
 nextLineStartsWithKeyword keyword sourceLines row =
     List.head (List.filter (\( r, _ ) -> r == row + 1) sourceLines)
         |> Maybe.andThen
@@ -313,7 +312,7 @@ nextLineStartsWithKeyword keyword sourceLines row =
             )
 
 
-nextLineStartsWithCloseCurly : Source -> Row -> Maybe ( Row, Col )
+nextLineStartsWithCloseCurly : Source -> T.CPP_Row -> Maybe ( T.CPP_Row, T.CPP_Col )
 nextLineStartsWithCloseCurly sourceLines row =
     List.head (List.filter (\( r, _ ) -> r == row + 1) sourceLines)
         |> Maybe.andThen

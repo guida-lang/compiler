@@ -27,7 +27,7 @@ module Compiler.AST.Optimized exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.Kernel as K
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
@@ -39,7 +39,7 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.TypeCheck.IO as IO
+import Types as T
 
 
 
@@ -52,32 +52,32 @@ type Expr
     | Str String
     | Int Int
     | Float Float
-    | VarLocal CDN_Name
+    | VarLocal T.CDN_Name
     | VarGlobal Global
-    | VarEnum Global Index.CDI_ZeroBased
+    | VarEnum Global T.CDI_ZeroBased
     | VarBox Global
-    | VarCycle IO.CEMN_Canonical CDN_Name
-    | VarDebug CDN_Name IO.CEMN_Canonical A.CRA_Region (Maybe CDN_Name)
-    | VarKernel CDN_Name CDN_Name
+    | VarCycle T.CEMN_Canonical T.CDN_Name
+    | VarDebug T.CDN_Name T.CEMN_Canonical T.CRA_Region (Maybe T.CDN_Name)
+    | VarKernel T.CDN_Name T.CDN_Name
     | List (List Expr)
-    | Function (List CDN_Name) Expr
+    | Function (List T.CDN_Name) Expr
     | Call Expr (List Expr)
-    | TailCall CDN_Name (List ( CDN_Name, Expr ))
+    | TailCall T.CDN_Name (List ( T.CDN_Name, Expr ))
     | If (List ( Expr, Expr )) Expr
     | Let Def Expr
     | Destruct Destructor Expr
-    | Case CDN_Name CDN_Name (Decider Choice) (List ( Int, Expr ))
-    | Accessor CDN_Name
-    | Access Expr CDN_Name
-    | Update Expr (Dict String CDN_Name Expr)
-    | Record (Dict String CDN_Name Expr)
+    | Case T.CDN_Name T.CDN_Name (Decider Choice) (List ( Int, Expr ))
+    | Accessor T.CDN_Name
+    | Access Expr T.CDN_Name
+    | Update Expr (Dict String T.CDN_Name Expr)
+    | Record (Dict String T.CDN_Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
-    | Shader Shader.CASTUS_Source (EverySet String CDN_Name) (EverySet String CDN_Name)
+    | Shader T.CASTUS_Source (EverySet String T.CDN_Name) (EverySet String T.CDN_Name)
 
 
 type Global
-    = Global IO.CEMN_Canonical CDN_Name
+    = Global T.CEMN_Canonical T.CDN_Name
 
 
 compareGlobal : Global -> Global -> Order
@@ -103,19 +103,19 @@ toComparableGlobal (Global home name) =
 
 
 type Def
-    = Def CDN_Name Expr
-    | TailDef CDN_Name (List CDN_Name) Expr
+    = Def T.CDN_Name Expr
+    | TailDef T.CDN_Name (List T.CDN_Name) Expr
 
 
 type Destructor
-    = Destructor CDN_Name Path
+    = Destructor T.CDN_Name Path
 
 
 type Path
-    = Index Index.CDI_ZeroBased Path
-    | Field CDN_Name Path
+    = Index T.CDI_ZeroBased Path
+    | Field T.CDN_Name Path
     | Unbox Path
-    | Root CDN_Name
+    | Root T.CDN_Name
 
 
 
@@ -138,7 +138,7 @@ type Choice
 
 
 type GlobalGraph
-    = GlobalGraph (Dict (List String) Global Node) (Dict String CDN_Name Int)
+    = GlobalGraph (Dict (List String) Global Node) (Dict String T.CDN_Name Int)
 
 
 type LocalGraph
@@ -146,24 +146,24 @@ type LocalGraph
         (Maybe Main)
         -- PERF profile switching Global to Name
         (Dict (List String) Global Node)
-        (Dict String CDN_Name Int)
+        (Dict String T.CDN_Name Int)
 
 
 type Main
     = Static
-    | Dynamic Can.CASTC_Type Expr
+    | Dynamic T.CASTC_Type Expr
 
 
 type Node
     = Define Expr (EverySet (List String) Global)
-    | DefineTailFunc (List CDN_Name) Expr (EverySet (List String) Global)
-    | Ctor Index.CDI_ZeroBased Int
-    | Enum Index.CDI_ZeroBased
+    | DefineTailFunc (List T.CDN_Name) Expr (EverySet (List String) Global)
+    | Ctor T.CDI_ZeroBased Int
+    | Enum T.CDI_ZeroBased
     | Box
     | Link Global
-    | Cycle (List CDN_Name) (List ( CDN_Name, Expr )) (List Def) (EverySet (List String) Global)
+    | Cycle (List T.CDN_Name) (List ( T.CDN_Name, Expr )) (List Def) (EverySet (List String) Global)
     | Manager EffectsType
-    | Kernel (List K.CEK_Chunk) (EverySet (List String) Global)
+    | Kernel (List T.CEK_Chunk) (EverySet (List String) Global)
     | PortIncoming Expr (EverySet (List String) Global)
     | PortOutgoing Expr (EverySet (List String) Global)
 
@@ -197,7 +197,7 @@ addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
         (Dict.union fields1 fields2)
 
 
-addKernel : CDN_Name -> List K.CEK_Chunk -> GlobalGraph -> GlobalGraph
+addKernel : T.CDN_Name -> List T.CEK_Chunk -> GlobalGraph -> GlobalGraph
 addKernel shortName chunks (GlobalGraph nodes fields) =
     let
         global : Global
@@ -213,37 +213,37 @@ addKernel shortName chunks (GlobalGraph nodes fields) =
         (Dict.union (K.countFields chunks) fields)
 
 
-addKernelDep : K.CEK_Chunk -> EverySet (List String) Global -> EverySet (List String) Global
+addKernelDep : T.CEK_Chunk -> EverySet (List String) Global -> EverySet (List String) Global
 addKernelDep chunk deps =
     case chunk of
-        K.CEK_JS _ ->
+        T.CEK_JS _ ->
             deps
 
-        K.CEK_ElmVar home name ->
+        T.CEK_ElmVar home name ->
             EverySet.insert toComparableGlobal (Global home name) deps
 
-        K.CEK_JsVar shortName _ ->
+        T.CEK_JsVar shortName _ ->
             EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
 
-        K.CEK_ElmField _ ->
+        T.CEK_ElmField _ ->
             deps
 
-        K.CEK_JsField _ ->
+        T.CEK_JsField _ ->
             deps
 
-        K.CEK_JsEnum _ ->
+        T.CEK_JsEnum _ ->
             deps
 
-        K.CEK_Debug ->
+        T.CEK_Debug ->
             deps
 
-        K.CEK_Prod ->
+        T.CEK_Prod ->
             deps
 
 
-toKernelGlobal : Name.CDN_Name -> Global
+toKernelGlobal : T.CDN_Name -> Global
 toKernelGlobal shortName =
-    Global (IO.CEMN_Canonical Pkg.kernel shortName) Name.dollar
+    Global (T.CEMN_Canonical Pkg.kernel shortName) Name.dollar
 
 
 

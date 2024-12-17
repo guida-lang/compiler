@@ -18,9 +18,7 @@ module Compiler.Elm.Docs exposing
 
 import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
-import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
 import Compiler.Elm.Compiler.Type as Type
@@ -29,7 +27,7 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Json.String as Json
-import Compiler.Parse.Primitives as P exposing (Col, Row, word1)
+import Compiler.Parse.Primitives as P
 import Compiler.Parse.Space as Space
 import Compiler.Parse.Symbol as Symbol
 import Compiler.Parse.Variable as Var
@@ -39,7 +37,7 @@ import Compiler.Reporting.Result as Result
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.TypeCheck.IO as IO
+import Types as T
 import Utils.Main as Utils
 
 
@@ -48,11 +46,11 @@ import Utils.Main as Utils
 
 
 type alias Documentation =
-    Dict String CDN_Name Module
+    Dict String T.CDN_Name Module
 
 
 type Module
-    = Module CDN_Name Comment (Dict String CDN_Name Union) (Dict String CDN_Name Alias) (Dict String CDN_Name Value) (Dict String CDN_Name Binop)
+    = Module T.CDN_Name Comment (Dict String T.CDN_Name Union) (Dict String T.CDN_Name Alias) (Dict String T.CDN_Name Value) (Dict String T.CDN_Name Binop)
 
 
 type alias Comment =
@@ -60,11 +58,11 @@ type alias Comment =
 
 
 type Alias
-    = Alias Comment (List CDN_Name) Type.Type
+    = Alias Comment (List T.CDN_Name) Type.Type
 
 
 type Union
-    = Union Comment (List CDN_Name) (List ( CDN_Name, List Type.Type ))
+    = Union Comment (List T.CDN_Name) (List ( T.CDN_Name, List Type.Type ))
 
 
 type Value
@@ -72,7 +70,7 @@ type Value
 
 
 type Binop
-    = Binop Comment Type.Type Binop.CASTU_Associativity Binop.CASTU_Precedence
+    = Binop Comment Type.Type T.CASTUB_Associativity T.CASTUB_Precedence
 
 
 
@@ -112,7 +110,7 @@ toDict modules =
     Dict.fromList identity (List.map toDictHelp modules)
 
 
-toDictHelp : Module -> ( Name.CDN_Name, Module )
+toDictHelp : Module -> ( T.CDN_Name, Module )
 toDictHelp ((Module name _ _ _ _ _) as modul) =
     ( name, modul )
 
@@ -128,24 +126,24 @@ moduleDecoder =
         |> D.apply (D.field "binops" (dictDecoder binop))
 
 
-dictDecoder : D.Decoder Error a -> D.Decoder Error (Dict String CDN_Name a)
+dictDecoder : D.Decoder Error a -> D.Decoder Error (Dict String T.CDN_Name a)
 dictDecoder entryDecoder =
     D.fmap (Dict.fromList identity) (D.list (named entryDecoder))
 
 
-named : D.Decoder Error a -> D.Decoder Error ( Name.CDN_Name, a )
+named : D.Decoder Error a -> D.Decoder Error ( T.CDN_Name, a )
 named entryDecoder =
     D.pure Tuple.pair
         |> D.apply (D.field "name" nameDecoder)
         |> D.apply entryDecoder
 
 
-nameDecoder : D.Decoder e CDN_Name
+nameDecoder : D.Decoder e T.CDN_Name
 nameDecoder =
     D.string
 
 
-moduleNameDecoder : D.Decoder Error ModuleName.CEMN_Raw
+moduleNameDecoder : D.Decoder Error T.CEMN_Raw
 moduleNameDecoder =
     D.mapError (always BadModuleName) ModuleName.decoder
 
@@ -159,7 +157,7 @@ typeDecoder =
 -- UNION JSON
 
 
-encodeUnion : ( CDN_Name, Union ) -> E.Value
+encodeUnion : ( T.CDN_Name, Union ) -> E.Value
 encodeUnion ( name, Union comment args cases ) =
     E.object
         [ ( "name", E.name name )
@@ -177,12 +175,12 @@ union =
         |> D.apply (D.field "cases" (D.list caseDecoder))
 
 
-encodeCase : ( CDN_Name, List Type.Type ) -> E.Value
+encodeCase : ( T.CDN_Name, List Type.Type ) -> E.Value
 encodeCase ( tag, args ) =
     E.list identity [ E.name tag, E.list Type.encode args ]
 
 
-caseDecoder : D.Decoder Error ( Name.CDN_Name, List Type.Type )
+caseDecoder : D.Decoder Error ( T.CDN_Name, List Type.Type )
 caseDecoder =
     D.pair nameDecoder (D.list typeDecoder)
 
@@ -191,7 +189,7 @@ caseDecoder =
 -- ALIAS JSON
 
 
-encodeAlias : ( CDN_Name, Alias ) -> E.Value
+encodeAlias : ( T.CDN_Name, Alias ) -> E.Value
 encodeAlias ( name, Alias comment args tipe ) =
     E.object
         [ ( "name", E.name name )
@@ -213,7 +211,7 @@ alias_ =
 -- VALUE JSON
 
 
-encodeValue : ( Name.CDN_Name, Value ) -> E.Value
+encodeValue : ( T.CDN_Name, Value ) -> E.Value
 encodeValue ( name, Value comment tipe ) =
     E.object
         [ ( "name", E.name name )
@@ -233,7 +231,7 @@ value =
 -- BINOP JSON
 
 
-encodeBinop : ( CDN_Name, Binop ) -> E.Value
+encodeBinop : ( T.CDN_Name, Binop ) -> E.Value
 encodeBinop ( name, Binop comment tipe assoc prec ) =
     E.object
         [ ( "name", E.name name )
@@ -257,20 +255,20 @@ binop =
 -- ASSOCIATIVITY JSON
 
 
-encodeAssoc : Binop.CASTU_Associativity -> E.Value
+encodeAssoc : T.CASTUB_Associativity -> E.Value
 encodeAssoc assoc =
     case assoc of
-        Binop.CASTU_Left ->
+        T.CASTUB_Left ->
             E.string "left"
 
-        Binop.CASTU_Non ->
+        T.CASTUB_Non ->
             E.string "non"
 
-        Binop.CASTU_Right ->
+        T.CASTUB_Right ->
             E.string "right"
 
 
-assocDecoder : D.Decoder Error Binop.CASTU_Associativity
+assocDecoder : D.Decoder Error T.CASTUB_Associativity
 assocDecoder =
     let
         left : String
@@ -289,13 +287,13 @@ assocDecoder =
         |> D.bind
             (\str ->
                 if str == left then
-                    D.pure Binop.CASTU_Left
+                    D.pure T.CASTUB_Left
 
                 else if str == non then
-                    D.pure Binop.CASTU_Non
+                    D.pure T.CASTUB_Non
 
                 else if str == right then
-                    D.pure Binop.CASTU_Right
+                    D.pure T.CASTUB_Right
 
                 else
                     D.failure BadAssociativity
@@ -306,12 +304,12 @@ assocDecoder =
 -- PRECEDENCE JSON
 
 
-encodePrec : Binop.CASTU_Precedence -> E.Value
+encodePrec : T.CASTUB_Precedence -> E.Value
 encodePrec n =
     E.int n
 
 
-precDecoder : D.Decoder Error Binop.CASTU_Precedence
+precDecoder : D.Decoder Error T.CASTUB_Precedence
 precDecoder =
     D.int
 
@@ -328,10 +326,10 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 
         Can.Export exportDict ->
             case docs of
-                Src.CASTS_NoDocs region ->
+                T.CASTS_NoDocs region ->
                     Err (E.NoDocs region)
 
-                Src.CASTS_YesDocs overview comments ->
+                T.CASTS_YesDocs overview comments ->
                     parseOverview overview
                         |> Result.andThen (checkNames exportDict)
                         |> Result.andThen (\_ -> checkDefs exportDict overview (Dict.fromList identity comments) modul)
@@ -341,8 +339,8 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 -- PARSE OVERVIEW
 
 
-parseOverview : Src.CASTS_Comment -> Result E.Error (List (A.CRA_Located Name.CDN_Name))
-parseOverview (Src.CASTS_Comment snippet) =
+parseOverview : T.CASTS_Comment -> Result E.Error (List (T.CRA_Located T.CDN_Name))
+parseOverview (T.CASTS_Comment snippet) =
     case P.fromSnippet (chompOverview []) E.BadEnd snippet of
         Err err ->
             Err (E.SyntaxProblem err)
@@ -355,7 +353,7 @@ type alias Parser a =
     P.Parser E.SyntaxProblem a
 
 
-chompOverview : List (A.CRA_Located Name.CDN_Name) -> Parser (List (A.CRA_Located Name.CDN_Name))
+chompOverview : List (T.CRA_Located T.CDN_Name) -> Parser (List (T.CRA_Located T.CDN_Name))
 chompOverview names =
     chompUntilDocs
         |> P.bind
@@ -369,7 +367,7 @@ chompOverview names =
             )
 
 
-chompDocs : List (A.CRA_Located Name.CDN_Name) -> Parser (List (A.CRA_Located Name.CDN_Name))
+chompDocs : List (T.CRA_Located T.CDN_Name) -> Parser (List (T.CRA_Located T.CDN_Name))
 chompDocs names =
     P.addLocation
         (P.oneOf E.Name
@@ -390,7 +388,7 @@ chompDocs names =
                                             Space.checkIndent pos E.Comma
                                                 |> P.bind
                                                     (\_ ->
-                                                        word1 ',' E.Comma
+                                                        P.word1 ',' E.Comma
                                                             |> P.bind
                                                                 (\_ ->
                                                                     Space.chomp E.Space
@@ -407,15 +405,15 @@ chompDocs names =
             )
 
 
-chompOperator : Parser CDN_Name
+chompOperator : Parser T.CDN_Name
 chompOperator =
-    word1 '(' E.Op
+    P.word1 '(' E.Op
         |> P.bind
             (\_ ->
                 Symbol.operator E.Op E.OpBad
                     |> P.bind
                         (\op ->
-                            word1 ')' E.Op
+                            P.word1 ')' E.Op
                                 |> P.fmap (\_ -> op)
                         )
             )
@@ -442,7 +440,7 @@ chompUntilDocs =
         )
 
 
-untilDocs : String -> Int -> Int -> Row -> Col -> ( ( Bool, Int ), ( Row, Col ) )
+untilDocs : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> ( ( Bool, Int ), ( T.CPP_Row, T.CPP_Col ) )
 untilDocs src pos end row col =
     if pos >= end then
         ( ( False, pos ), ( row, col ) )
@@ -486,22 +484,22 @@ untilDocs src pos end row col =
 -- CHECK NAMES
 
 
-checkNames : Dict String CDN_Name (A.CRA_Located Can.Export) -> List (A.CRA_Located CDN_Name) -> Result E.Error ()
+checkNames : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> List (T.CRA_Located T.CDN_Name) -> Result E.Error ()
 checkNames exports names =
     let
         docs : DocNameRegions
         docs =
             List.foldl addName Dict.empty names
 
-        loneExport : CDN_Name -> A.CRA_Located Can.Export -> Result.RResult i w E.NameProblem A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region
+        loneExport : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
         loneExport name export_ _ =
             onlyInExports name export_
 
-        checkBoth : CDN_Name -> A.CRA_Located Can.Export -> OneOrMore.OneOrMore A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region
+        checkBoth : T.CDN_Name -> T.CRA_Located Can.Export -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
         checkBoth n _ r _ =
             isUnique n r
 
-        loneDoc : CDN_Name -> OneOrMore.OneOrMore A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region
+        loneDoc : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
         loneDoc name regions _ =
             onlyInDocs name regions
     in
@@ -514,15 +512,15 @@ checkNames exports names =
 
 
 type alias DocNameRegions =
-    Dict String CDN_Name (OneOrMore.OneOrMore A.CRA_Region)
+    Dict String T.CDN_Name (OneOrMore.OneOrMore T.CRA_Region)
 
 
-addName : A.CRA_Located CDN_Name -> DocNameRegions -> DocNameRegions
-addName (A.CRA_At region name) dict =
+addName : T.CRA_Located T.CDN_Name -> DocNameRegions -> DocNameRegions
+addName (T.CRA_At region name) dict =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one region) dict
 
 
-isUnique : CDN_Name -> OneOrMore.OneOrMore A.CRA_Region -> Result.RResult i w E.NameProblem A.CRA_Region
+isUnique : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
 isUnique name regions =
     case regions of
         OneOrMore.One region ->
@@ -536,7 +534,7 @@ isUnique name regions =
             Result.throw (E.NameDuplicate name r1 r2)
 
 
-onlyInDocs : CDN_Name -> OneOrMore.OneOrMore A.CRA_Region -> Result.RResult i w E.NameProblem a
+onlyInDocs : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem a
 onlyInDocs name regions =
     isUnique name regions
         |> Result.bind
@@ -545,8 +543,8 @@ onlyInDocs name regions =
             )
 
 
-onlyInExports : CDN_Name -> A.CRA_Located Can.Export -> Result.RResult i w E.NameProblem a
-onlyInExports name (A.CRA_At region _) =
+onlyInExports : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.NameProblem a
+onlyInExports name (T.CRA_At region _) =
     Result.throw (E.NameOnlyInExports name region)
 
 
@@ -554,7 +552,7 @@ onlyInExports name (A.CRA_At region _) =
 -- CHECK DEFS
 
 
-checkDefs : Dict String CDN_Name (A.CRA_Located Can.Export) -> Src.CASTS_Comment -> Dict String CDN_Name Src.CASTS_Comment -> Can.Module -> Result E.Error Module
+checkDefs : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> T.CASTS_Comment -> Dict String T.CDN_Name T.CASTS_Comment -> Can.Module -> Result E.Error Module
 checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases infixes effects) =
     let
         types : Types
@@ -573,17 +571,17 @@ checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases
             Ok (Dict.foldr compare (\_ -> (<|)) (emptyModule name overview) inserters)
 
 
-emptyModule : IO.CEMN_Canonical -> Src.CASTS_Comment -> Module
-emptyModule (IO.CEMN_Canonical _ name) (Src.CASTS_Comment overview) =
+emptyModule : T.CEMN_Canonical -> T.CASTS_Comment -> Module
+emptyModule (T.CEMN_Canonical _ name) (T.CASTS_Comment overview) =
     Module name (Json.fromComment overview) Dict.empty Dict.empty Dict.empty Dict.empty
 
 
 type Info
-    = Info (Dict String Name.CDN_Name Src.CASTS_Comment) (Dict String Name.CDN_Name (Result A.CRA_Region Can.CASTC_Type)) (Dict String Name.CDN_Name Can.CASTC_Union) (Dict String Name.CDN_Name Can.CASTC_Alias) (Dict String Name.CDN_Name Can.Binop) Can.Effects
+    = Info (Dict String T.CDN_Name T.CASTS_Comment) (Dict String T.CDN_Name (Result T.CRA_Region T.CASTC_Type)) (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias) (Dict String T.CDN_Name Can.Binop) Can.Effects
 
 
-checkExport : Info -> CDN_Name -> A.CRA_Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
-checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.CRA_At region export) =
+checkExport : Info -> T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
+checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At region export) =
     case export of
         Can.ExportValue ->
             getType name info
@@ -631,7 +629,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.CRA_At regio
 
         Can.ExportAlias ->
             let
-                (Can.CASTC_Alias tvars tipe) =
+                (T.CASTC_Alias tvars tipe) =
                     Utils.find identity name iAliases
             in
             getComment region name info
@@ -650,7 +648,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.CRA_At regio
 
         Can.ExportUnionOpen ->
             let
-                (Can.CASTC_Union tvars ctors _ _) =
+                (T.CASTC_Union tvars ctors _ _) =
                     Utils.find identity name iUnions
             in
             getComment region name info
@@ -669,7 +667,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.CRA_At regio
 
         Can.ExportUnionClosed ->
             let
-                (Can.CASTC_Union tvars _ _ _) =
+                (T.CASTC_Union tvars _ _ _) =
                     Utils.find identity name iUnions
             in
             getComment region name info
@@ -706,17 +704,17 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.CRA_At regio
                     )
 
 
-getComment : A.CRA_Region -> Name.CDN_Name -> Info -> Result.RResult i w E.DefProblem Comment
+getComment : T.CRA_Region -> T.CDN_Name -> Info -> Result.RResult i w E.DefProblem Comment
 getComment region name (Info iComments _ _ _ _ _) =
     case Dict.get identity name iComments of
         Nothing ->
             Result.throw (E.NoComment name region)
 
-        Just (Src.CASTS_Comment snippet) ->
+        Just (T.CASTS_Comment snippet) ->
             Result.ok (Json.fromComment snippet)
 
 
-getType : Name.CDN_Name -> Info -> Result.RResult i w E.DefProblem Type.Type
+getType : T.CDN_Name -> Info -> Result.RResult i w E.DefProblem Type.Type
 getType name (Info _ iValues _ _ _ _) =
     case Utils.find identity name iValues of
         Err region ->
@@ -726,8 +724,8 @@ getType name (Info _ iValues _ _ _ _) =
             Result.ok (Extract.fromType tipe)
 
 
-dector : Can.CASTC_Ctor -> ( CDN_Name, List Type.Type )
-dector (Can.CASTC_Ctor name _ _ args) =
+dector : T.CASTC_Ctor -> ( T.CDN_Name, List Type.Type )
+dector (T.CASTC_Ctor name _ _ args) =
     ( name, List.map Extract.fromType args )
 
 
@@ -736,7 +734,7 @@ dector (Can.CASTC_Ctor name _ _ args) =
 
 
 type alias Types =
-    Dict String Name.CDN_Name (Result A.CRA_Region Can.CASTC_Type)
+    Dict String T.CDN_Name (Result T.CRA_Region T.CASTC_Type)
 
 
 gatherTypes : Can.Decls -> Types -> Types
@@ -755,14 +753,14 @@ gatherTypes decls types =
 addDef : Types -> Can.Def -> Types
 addDef types def =
     case def of
-        Can.Def (A.CRA_At region name) _ _ ->
+        Can.Def (T.CRA_At region name) _ _ ->
             Dict.insert identity name (Err region) types
 
-        Can.TypedDef (A.CRA_At _ name) _ typedArgs _ resultType ->
+        Can.TypedDef (T.CRA_At _ name) _ typedArgs _ resultType ->
             let
-                tipe : Can.CASTC_Type
+                tipe : T.CASTC_Type
                 tipe =
-                    List.foldr Can.CASTC_TLambda resultType (List.map Tuple.second typedArgs)
+                    List.foldr T.CASTC_TLambda resultType (List.map Tuple.second typedArgs)
             in
             Dict.insert identity name (Ok tipe) types
 

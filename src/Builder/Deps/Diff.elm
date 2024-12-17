@@ -18,23 +18,22 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Type as Type
 import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V exposing (Version)
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import List
 import System.IO as IO exposing (IO)
+import Types as T
 import Utils.Main as Utils
 
 
 type PackageChanges
-    = PackageChanges (List ModuleName.CEMN_Raw) (Dict String ModuleName.CEMN_Raw ModuleChanges) (List ModuleName.CEMN_Raw)
+    = PackageChanges (List T.CEMN_Raw) (Dict String T.CEMN_Raw ModuleChanges) (List T.CEMN_Raw)
 
 
 type ModuleChanges
-    = ModuleChanges (Changes String Name.CDN_Name Docs.Union) (Changes String Name.CDN_Name Docs.Alias) (Changes String Name.CDN_Name Docs.Value) (Changes String Name.CDN_Name Docs.Binop)
+    = ModuleChanges (Changes String T.CDN_Name Docs.Union) (Changes String T.CDN_Name Docs.Alias) (Changes String T.CDN_Name Docs.Value) (Changes String T.CDN_Name Docs.Binop)
 
 
 type Changes c k v
@@ -139,7 +138,7 @@ isEquivalentBinop (Docs.Binop c1 t1 a1 p1) (Docs.Binop c2 t2 a2 p2) =
 -- DIFF TYPES
 
 
-diffType : Type.Type -> Type.Type -> Maybe (List ( Name.CDN_Name, Name.CDN_Name ))
+diffType : Type.Type -> Type.Type -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffType oldType newType =
     case ( oldType, newType ) of
         ( Type.Var oldName, Type.Var newName ) ->
@@ -190,7 +189,7 @@ diffType oldType newType =
 -- handle very old docs that do not use qualified names
 
 
-isSameName : Name.CDN_Name -> Name.CDN_Name -> Bool
+isSameName : T.CDN_Name -> T.CDN_Name -> Bool
 isSameName oldFullName newFullName =
     let
         dedot : String -> List String
@@ -208,7 +207,7 @@ isSameName oldFullName newFullName =
             oldFullName == newFullName
 
 
-diffFields : List ( Name.CDN_Name, Type.Type ) -> List ( Name.CDN_Name, Type.Type ) -> Maybe (List ( Name.CDN_Name, Name.CDN_Name ))
+diffFields : List ( T.CDN_Name, Type.Type ) -> List ( T.CDN_Name, Type.Type ) -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffFields oldRawFields newRawFields =
     if List.length oldRawFields /= List.length newRawFields then
         Nothing
@@ -219,11 +218,11 @@ diffFields oldRawFields newRawFields =
             sort fields =
                 List.sortBy Tuple.first fields
 
-            oldFields : List ( Name.CDN_Name, Type.Type )
+            oldFields : List ( T.CDN_Name, Type.Type )
             oldFields =
                 sort oldRawFields
 
-            newFields : List ( Name.CDN_Name, Type.Type )
+            newFields : List ( T.CDN_Name, Type.Type )
             newFields =
                 sort newRawFields
         in
@@ -238,14 +237,14 @@ diffFields oldRawFields newRawFields =
 -- TYPE VARIABLES
 
 
-isEquivalentRenaming : List ( Name.CDN_Name, Name.CDN_Name ) -> Bool
+isEquivalentRenaming : List ( T.CDN_Name, T.CDN_Name ) -> Bool
 isEquivalentRenaming varPairs =
     let
-        renamings : List ( Name.CDN_Name, List Name.CDN_Name )
+        renamings : List ( T.CDN_Name, List T.CDN_Name )
         renamings =
             Dict.toList compare (List.foldr insert Dict.empty varPairs)
 
-        insert : ( Name.CDN_Name, Name.CDN_Name ) -> Dict String Name.CDN_Name (List Name.CDN_Name) -> Dict String Name.CDN_Name (List Name.CDN_Name)
+        insert : ( T.CDN_Name, T.CDN_Name ) -> Dict String T.CDN_Name (List T.CDN_Name) -> Dict String T.CDN_Name (List T.CDN_Name)
         insert ( old, new ) dict =
             Utils.mapInsertWith identity (++) old [ new ] dict
 
@@ -275,7 +274,7 @@ isEquivalentRenaming varPairs =
                 && allUnique (List.map Tuple.second verifiedRenamings)
 
 
-compatibleVars : ( Name.CDN_Name, Name.CDN_Name ) -> Bool
+compatibleVars : ( T.CDN_Name, T.CDN_Name ) -> Bool
 compatibleVars ( old, new ) =
     case ( categorizeVar old, categorizeVar new ) of
         ( CompAppend, CompAppend ) ->
@@ -308,7 +307,7 @@ type TypeVarCategory
     | Var
 
 
-categorizeVar : Name.CDN_Name -> TypeVarCategory
+categorizeVar : T.CDN_Name -> TypeVarCategory
 categorizeVar name =
     if Name.isCompappendType name then
         CompAppend
@@ -395,7 +394,7 @@ changeMagnitude (Changes added changed removed) =
 -- GET DOCS
 
 
-getDocs : Stuff.PackageCache -> Http.Manager -> Pkg.CEP_Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
+getDocs : Stuff.PackageCache -> Http.Manager -> T.CEP_Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
 getDocs cache manager name version =
     let
         home : String

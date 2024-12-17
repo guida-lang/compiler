@@ -4,9 +4,6 @@ module Compiler.Parse.Declaration exposing
     , infix_
     )
 
-import Compiler.AST.Source as Src
-import Compiler.AST.Utils.Binop as Binop
-import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Parse.Expression as Expr
 import Compiler.Parse.Keyword as Keyword
 import Compiler.Parse.Number as Number
@@ -18,6 +15,7 @@ import Compiler.Parse.Type as Type
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 
 
 
@@ -25,10 +23,10 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type Decl
-    = Value (Maybe Src.CASTS_Comment) (A.CRA_Located Src.CASTS_Value)
-    | Union (Maybe Src.CASTS_Comment) (A.CRA_Located Src.CASTS_Union)
-    | Alias (Maybe Src.CASTS_Comment) (A.CRA_Located Src.CASTS_Alias)
-    | Port (Maybe Src.CASTS_Comment) Src.CASTS_Port
+    = Value (Maybe T.CASTS_Comment) (T.CRA_Located T.CASTS_Value)
+    | Union (Maybe T.CASTS_Comment) (T.CRA_Located T.CASTS_Union)
+    | Alias (Maybe T.CASTS_Comment) (T.CRA_Located T.CASTS_Alias)
+    | Port (Maybe T.CASTS_Comment) T.CASTS_Port
 
 
 declaration : Space.Parser E.Decl Decl
@@ -52,7 +50,7 @@ declaration =
 -- DOC COMMENT
 
 
-chompDocComment : P.Parser E.Decl (Maybe Src.CASTS_Comment)
+chompDocComment : P.Parser E.Decl (Maybe T.CASTS_Comment)
 chompDocComment =
     P.oneOfWithFallback
         [ Space.docComment E.DeclStart E.DeclSpace
@@ -70,7 +68,7 @@ chompDocComment =
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : Maybe Src.CASTS_Comment -> A.CRA_Position -> Space.Parser E.Decl Decl
+valueDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.Decl Decl
 valueDecl maybeDocs start =
     Var.lower E.DeclStart
         |> P.bind
@@ -104,7 +102,7 @@ valueDecl maybeDocs start =
             )
 
 
-chompDefArgsAndBody : Maybe Src.CASTS_Comment -> A.CRA_Position -> A.CRA_Located CDN_Name -> Maybe Src.CASTS_Type -> List Src.CASTS_Pattern -> Space.Parser E.DeclDef Decl
+chompDefArgsAndBody : Maybe T.CASTS_Comment -> T.CRA_Position -> T.CRA_Located T.CDN_Name -> Maybe T.CASTS_Type -> List T.CASTS_Pattern -> Space.Parser E.DeclDef Decl
 chompDefArgsAndBody maybeDocs start name tipe revArgs =
     P.oneOf E.DeclDefEquals
         [ P.specialize E.DeclDefArg Pattern.term
@@ -119,11 +117,11 @@ chompDefArgsAndBody maybeDocs start name tipe revArgs =
             |> P.fmap
                 (\( body, end ) ->
                     let
-                        value : Src.CASTS_Value
+                        value : T.CASTS_Value
                         value =
-                            Src.CASTS_Value name (List.reverse revArgs) body tipe
+                            T.CASTS_Value name (List.reverse revArgs) body tipe
 
-                        avalue : A.CRA_Located Src.CASTS_Value
+                        avalue : T.CRA_Located T.CASTS_Value
                         avalue =
                             A.at start end value
                     in
@@ -132,7 +130,7 @@ chompDefArgsAndBody maybeDocs start name tipe revArgs =
         ]
 
 
-chompMatchingName : CDN_Name -> P.Parser E.DeclDef (A.CRA_Located CDN_Name)
+chompMatchingName : T.CDN_Name -> P.Parser E.DeclDef (T.CRA_Located T.CDN_Name)
 chompMatchingName expectedName =
     let
         (P.Parser parserL) =
@@ -143,7 +141,7 @@ chompMatchingName expectedName =
             Result.andThen
                 (\(P.POk status name ((P.State _ _ _ _ er ec) as newState)) ->
                     if expectedName == name then
-                        Ok (P.POk status (A.CRA_At (A.CRA_Region (A.CRA_Position sr sc) (A.CRA_Position er ec)) name) newState)
+                        Ok (P.POk status (T.CRA_At (T.CRA_Region (T.CRA_Position sr sc) (T.CRA_Position er ec)) name) newState)
 
                     else
                         Err (P.PErr status sr sc (E.DeclDefNameMatch name))
@@ -155,7 +153,7 @@ chompMatchingName expectedName =
 -- TYPE DECLARATIONS
 
 
-typeDecl : Maybe Src.CASTS_Comment -> A.CRA_Position -> Space.Parser E.Decl Decl
+typeDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.Decl Decl
 typeDecl maybeDocs start =
     P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
@@ -171,9 +169,9 @@ typeDecl maybeDocs start =
                                             |> P.fmap
                                                 (\( tipe, end ) ->
                                                     let
-                                                        alias : A.CRA_Located Src.CASTS_Alias
+                                                        alias : T.CRA_Located T.CASTS_Alias
                                                         alias =
-                                                            A.at start end (Src.CASTS_Alias name args tipe)
+                                                            A.at start end (T.CASTS_Alias name args tipe)
                                                     in
                                                     ( Alias maybeDocs alias, end )
                                                 )
@@ -190,9 +188,9 @@ typeDecl maybeDocs start =
                                                         |> P.fmap
                                                             (\( variants, end ) ->
                                                                 let
-                                                                    union : A.CRA_Located Src.CASTS_Union
+                                                                    union : T.CRA_Located T.CASTS_Union
                                                                     union =
-                                                                        A.at start end (Src.CASTS_Union name args variants)
+                                                                        A.at start end (T.CASTS_Union name args variants)
                                                                 in
                                                                 ( Union maybeDocs union, end )
                                                             )
@@ -208,7 +206,7 @@ typeDecl maybeDocs start =
 -- TYPE ALIASES
 
 
-chompAliasNameToEquals : P.Parser E.TypeAlias ( A.CRA_Located CDN_Name, List (A.CRA_Located CDN_Name) )
+chompAliasNameToEquals : P.Parser E.TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompAliasNameToEquals =
     P.addLocation (Var.upper E.AliasName)
         |> P.bind
@@ -218,7 +216,7 @@ chompAliasNameToEquals =
             )
 
 
-chompAliasNameToEqualsHelp : A.CRA_Located CDN_Name -> List (A.CRA_Located CDN_Name) -> P.Parser E.TypeAlias ( A.CRA_Located CDN_Name, List (A.CRA_Located CDN_Name) )
+chompAliasNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompAliasNameToEqualsHelp name args =
     P.oneOf E.AliasEquals
         [ P.addLocation (Var.lower E.AliasEquals)
@@ -237,7 +235,7 @@ chompAliasNameToEqualsHelp name args =
 -- CUSTOM TYPES
 
 
-chompCustomNameToEquals : P.Parser E.CustomType ( A.CRA_Located CDN_Name, List (A.CRA_Located CDN_Name) )
+chompCustomNameToEquals : P.Parser E.CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompCustomNameToEquals =
     P.addLocation (Var.upper E.CT_Name)
         |> P.bind
@@ -247,7 +245,7 @@ chompCustomNameToEquals =
             )
 
 
-chompCustomNameToEqualsHelp : A.CRA_Located CDN_Name -> List (A.CRA_Located CDN_Name) -> P.Parser E.CustomType ( A.CRA_Located CDN_Name, List (A.CRA_Located CDN_Name) )
+chompCustomNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompCustomNameToEqualsHelp name args =
     P.oneOf E.CT_Equals
         [ P.addLocation (Var.lower E.CT_Equals)
@@ -262,7 +260,7 @@ chompCustomNameToEqualsHelp name args =
         ]
 
 
-chompVariants : List ( A.CRA_Located CDN_Name, List Src.CASTS_Type ) -> A.CRA_Position -> Space.Parser E.CustomType (List ( A.CRA_Located CDN_Name, List Src.CASTS_Type ))
+chompVariants : List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ) -> T.CRA_Position -> Space.Parser E.CustomType (List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ))
 chompVariants variants end =
     P.oneOfWithFallback
         [ Space.checkIndent end E.CT_IndentBar
@@ -278,7 +276,7 @@ chompVariants variants end =
 -- PORT
 
 
-portDecl : Maybe Src.CASTS_Comment -> Space.Parser E.Decl Decl
+portDecl : Maybe T.CASTS_Comment -> Space.Parser E.Decl Decl
 portDecl maybeDocs =
     P.inContext E.Port (Keyword.port_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.PortSpace E.PortIndentName
@@ -293,7 +291,7 @@ portDecl maybeDocs =
                                 P.specialize E.PortType Type.expression
                                     |> P.fmap
                                         (\( tipe, end ) ->
-                                            ( Port maybeDocs (Src.CASTS_Port name tipe)
+                                            ( Port maybeDocs (T.CASTS_Port name tipe)
                                             , end
                                             )
                                         )
@@ -308,14 +306,14 @@ portDecl maybeDocs =
 --
 
 
-infix_ : P.Parser E.Module (A.CRA_Located Src.CASTS_Infix)
+infix_ : P.Parser E.Module (T.CRA_Located T.CASTS_Infix)
 infix_ =
     let
-        err : P.Row -> P.Col -> E.Module
+        err : T.CPP_Row -> T.CPP_Col -> E.Module
         err =
             E.Infix
 
-        err_ : a -> P.Row -> P.Col -> E.Module
+        err_ : a -> T.CPP_Row -> T.CPP_Col -> E.Module
         err_ =
             \_ -> E.Infix
     in
@@ -327,9 +325,9 @@ infix_ =
                     |> P.bind
                         (\_ ->
                             P.oneOf err
-                                [ Keyword.left_ err |> P.fmap (\_ -> Binop.CASTU_Left)
-                                , Keyword.right_ err |> P.fmap (\_ -> Binop.CASTU_Right)
-                                , Keyword.non_ err |> P.fmap (\_ -> Binop.CASTU_Non)
+                                [ Keyword.left_ err |> P.fmap (\_ -> T.CASTUB_Left)
+                                , Keyword.right_ err |> P.fmap (\_ -> T.CASTUB_Right)
+                                , Keyword.non_ err |> P.fmap (\_ -> T.CASTUB_Non)
                                 ]
                         )
                     |> P.bind
@@ -355,7 +353,7 @@ infix_ =
                                                                         (\end ->
                                                                             Space.chomp err_
                                                                                 |> P.bind (\_ -> Space.checkFreshLine err)
-                                                                                |> P.fmap (\_ -> A.at start end (Src.CASTS_Infix op associativity precedence name))
+                                                                                |> P.fmap (\_ -> A.at start end (T.CASTS_Infix op associativity precedence name))
                                                                         )
                                                             )
                                                 )

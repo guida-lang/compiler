@@ -25,7 +25,7 @@ import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
-import System.TypeCheck.IO as IO
+import Types as T
 import Utils.Main as Utils
 
 
@@ -33,40 +33,40 @@ import Utils.Main as Utils
 -- EXTRACTION
 
 
-fromType : Can.CASTC_Type -> T.Type
+fromType : T.CASTC_Type -> T.Type
 fromType astType =
     Tuple.second (run (extract astType))
 
 
-extract : Can.CASTC_Type -> Extractor T.Type
+extract : T.CASTC_Type -> Extractor T.Type
 extract astType =
     case astType of
-        Can.CASTC_TLambda arg result ->
+        T.CASTC_TLambda arg result ->
             pure T.Lambda
                 |> apply (extract arg)
                 |> apply (extract result)
 
-        Can.CASTC_TVar x ->
+        T.CASTC_TVar x ->
             pure (T.Var x)
 
-        Can.CASTC_TType home name args ->
+        T.CASTC_TType home name args ->
             addUnion (Opt.Global home name) (T.Type (toPublicName home name))
                 |> apply (traverse extract args)
 
-        Can.CASTC_TRecord fields ext ->
+        T.CASTC_TRecord fields ext ->
             traverse (tupleTraverse extract) (Can.fieldsToList fields)
                 |> fmap (\efields -> T.Record efields ext)
 
-        Can.CASTC_TUnit ->
+        T.CASTC_TUnit ->
             pure T.Unit
 
-        Can.CASTC_TTuple a b maybeC ->
+        T.CASTC_TTuple a b maybeC ->
             pure T.Tuple
                 |> apply (extract a)
                 |> apply (extract b)
                 |> apply (traverse extract (Maybe.toList maybeC))
 
-        Can.CASTC_TAlias home name args aliasType ->
+        T.CASTC_TAlias home name args aliasType ->
             addAlias (Opt.Global home name) ()
                 |> bind
                     (\_ ->
@@ -79,8 +79,8 @@ extract astType =
                     )
 
 
-toPublicName : IO.CEMN_Canonical -> Name.CDN_Name -> Name.CDN_Name
-toPublicName (IO.CEMN_Canonical _ home) name =
+toPublicName : T.CEMN_Canonical -> T.CDN_Name -> T.CDN_Name
+toPublicName (T.CEMN_Canonical _ home) name =
     Name.sepBy '.' home name
 
 
@@ -92,11 +92,11 @@ type Types
     = -- PERF profile Opt.Global representation
       -- current representation needs less allocation
       -- but maybe the lookup is much worse
-      Types (Dict (List String) IO.CEMN_Canonical Types_)
+      Types (Dict (List String) T.CEMN_Canonical Types_)
 
 
 type Types_
-    = Types_ (Dict String Name.CDN_Name Can.CASTC_Union) (Dict String Name.CDN_Name Can.CASTC_Alias)
+    = Types_ (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias)
 
 
 mergeMany : List Types -> Types
@@ -114,19 +114,19 @@ merge (Types types1) (Types types2) =
     Types (Dict.union types1 types2)
 
 
-fromInterface : ModuleName.CEMN_Raw -> I.CEI_Interface -> Types
-fromInterface name (I.CEI_Interface pkg _ unions aliases _) =
+fromInterface : T.CEMN_Raw -> T.CEI_Interface -> Types
+fromInterface name (T.CEI_Interface pkg _ unions aliases _) =
     Types <|
-        Dict.singleton ModuleName.toComparableCanonical (IO.CEMN_Canonical pkg name) <|
+        Dict.singleton ModuleName.toComparableCanonical (T.CEMN_Canonical pkg name) <|
             Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
 
-fromDependencyInterface : IO.CEMN_Canonical -> I.DependencyInterface -> Types
+fromDependencyInterface : T.CEMN_Canonical -> I.DependencyInterface -> Types
 fromDependencyInterface home di =
     Types
         (Dict.singleton ModuleName.toComparableCanonical home <|
             case di of
-                I.Public (I.CEI_Interface _ _ unions aliases _) ->
+                I.Public (T.CEI_Interface _ _ unions aliases _) ->
                     Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
                 I.Private _ unions aliases ->
@@ -138,7 +138,7 @@ fromDependencyInterface home di =
 -- EXTRACT MODEL, MSG, AND ANY TRANSITIVE DEPENDENCIES
 
 
-fromMsg : Types -> Can.CASTC_Type -> T.DebugMetadata
+fromMsg : Types -> T.CASTC_Type -> T.DebugMetadata
 fromMsg types message =
     let
         ( msgDeps, msgType ) =
@@ -186,7 +186,7 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
 extractAlias : Types -> Opt.Global -> Extractor T.Alias
 extractAlias (Types dict) (Opt.Global home name) =
     let
-        (Can.CASTC_Alias args aliasType) =
+        (T.CASTC_Alias args aliasType) =
             Utils.find ModuleName.toComparableCanonical home dict
                 |> (\(Types_ _ aliasInfo) -> aliasInfo)
                 |> Utils.find identity name
@@ -201,11 +201,11 @@ extractUnion (Types dict) (Opt.Global home name) =
 
     else
         let
-            pname : Name.CDN_Name
+            pname : T.CDN_Name
             pname =
                 toPublicName home name
 
-            (Can.CASTC_Union vars ctors _ _) =
+            (T.CASTC_Union vars ctors _ _) =
                 Utils.find ModuleName.toComparableCanonical home dict
                     |> (\(Types_ unionInfo _) -> unionInfo)
                     |> Utils.find identity name
@@ -213,8 +213,8 @@ extractUnion (Types dict) (Opt.Global home name) =
         fmap (T.Union pname vars) (traverse extractCtor ctors)
 
 
-extractCtor : Can.CASTC_Ctor -> Extractor ( Name.CDN_Name, List T.Type )
-extractCtor (Can.CASTC_Ctor ctor _ _ args) =
+extractCtor : T.CASTC_Ctor -> Extractor ( T.CDN_Name, List T.Type )
+extractCtor (T.CASTC_Ctor ctor _ _ args) =
     fmap (Tuple.pair ctor) (traverse extract args)
 
 

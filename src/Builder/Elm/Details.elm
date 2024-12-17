@@ -1,6 +1,5 @@
 module Builder.Elm.Details exposing
-    ( BED_Status
-    , BuildID
+    ( BuildID
     , Details(..)
     , Extras
     , Foreign(..)
@@ -44,15 +43,14 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
-import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
-import System.TypeCheck.IO as TypeCheck
+import Types as T
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils exposing (FilePath, MVar)
+import Utils.Main as Utils exposing (FilePath)
 
 
 
@@ -60,7 +58,7 @@ import Utils.Main as Utils exposing (FilePath, MVar)
 
 
 type Details
-    = Details File.Time ValidOutline BuildID (Dict String ModuleName.CEMN_Raw Local) (Dict String ModuleName.CEMN_Raw Foreign) Extras
+    = Details File.Time ValidOutline BuildID (Dict String T.CEMN_Raw Local) (Dict String T.CEMN_Raw Foreign) Extras
 
 
 type alias BuildID =
@@ -69,7 +67,7 @@ type alias BuildID =
 
 type ValidOutline
     = ValidApp (NE.Nonempty Outline.SrcDir)
-    | ValidPkg Pkg.CEP_Name (List ModuleName.CEMN_Raw) (Dict ( String, String ) Pkg.CEP_Name V.Version {- for docs in reactor -})
+    | ValidPkg T.CEP_Name (List T.CEMN_Raw) (Dict ( String, String ) T.CEP_Name V.Version {- for docs in reactor -})
 
 
 
@@ -89,11 +87,11 @@ type ValidOutline
 
 
 type Local
-    = Local FilePath File.Time (List ModuleName.CEMN_Raw) Bool BuildID BuildID
+    = Local FilePath File.Time (List T.CEMN_Raw) Bool BuildID BuildID
 
 
 type Foreign
-    = Foreign Pkg.CEP_Name (List Pkg.CEP_Name)
+    = Foreign T.CEP_Name (List T.CEP_Name)
 
 
 type Extras
@@ -102,14 +100,14 @@ type Extras
 
 
 type alias Interfaces =
-    Dict (List String) TypeCheck.CEMN_Canonical I.DependencyInterface
+    Dict (List String) T.CEMN_Canonical I.DependencyInterface
 
 
 
 -- LOAD ARTIFACTS
 
 
-loadObjects : FilePath -> Details -> IO (MVar (Maybe Opt.GlobalGraph))
+loadObjects : FilePath -> Details -> IO (T.MVar (Maybe Opt.GlobalGraph))
 loadObjects root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh _ o ->
@@ -119,7 +117,7 @@ loadObjects root (Details _ _ _ _ _ extras) =
             fork (Utils.maybeEncoder Opt.globalGraphEncoder) (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
 
 
-loadInterfaces : FilePath -> Details -> IO (MVar (Maybe Interfaces))
+loadInterfaces : FilePath -> Details -> IO (T.MVar (Maybe Interfaces))
 loadInterfaces root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh i _ ->
@@ -259,11 +257,11 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
             |> Task.bind
                 (\solution ->
                     let
-                        exposedList : List ModuleName.CEMN_Raw
+                        exposedList : List T.CEMN_Raw
                         exposedList =
                             Outline.flattenExposed exposed
 
-                        exactDeps : Dict ( String, String ) Pkg.CEP_Name V.Version
+                        exactDeps : Dict ( String, String ) T.CEP_Name V.Version
                         exactDeps =
                             Dict.map (\_ (Solver.Details v _) -> v) solution
 
@@ -297,7 +295,7 @@ verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outl
         Task.throw (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
-checkAppDeps : Outline.AppOutline -> Task (Dict ( String, String ) Pkg.CEP_Name V.Version)
+checkAppDeps : Outline.AppOutline -> Task (Dict ( String, String ) T.CEP_Name V.Version)
 checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
     union identity Pkg.compareName allowEqualDups indirect testDirect
         |> Task.bind
@@ -311,7 +309,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 -- VERIFY CONSTRAINTS
 
 
-verifyConstraints : Env -> Dict ( String, String ) Pkg.CEP_Name Con.Constraint -> Task (Dict ( String, String ) Pkg.CEP_Name Solver.Details)
+verifyConstraints : Env -> Dict ( String, String ) T.CEP_Name Con.Constraint -> Task (Dict ( String, String ) T.CEP_Name Solver.Details)
 verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
     Task.io (Solver.verify cache connection registry constraints)
         |> Task.bind
@@ -367,7 +365,7 @@ allowEqualDups _ v1 v2 =
 -- FORK
 
 
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
+fork : (a -> Encode.Value) -> IO a -> IO (T.MVar a)
 fork encoder work =
     Utils.newEmptyMVar
         |> IO.bind
@@ -381,7 +379,7 @@ fork encoder work =
 -- VERIFY DEPENDENCIES
 
 
-verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.CEP_Name Solver.Details -> Dict ( String, String ) Pkg.CEP_Name a -> Task Details
+verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
@@ -419,7 +417,7 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                     ifaces =
                                                                         Dict.foldr compare (addInterfaces directDeps) Dict.empty artifacts
 
-                                                                    foreigns : Dict String ModuleName.CEMN_Raw Foreign
+                                                                    foreigns : Dict String T.CEMN_Raw Foreign
                                                                     foreigns =
                                                                         Dict.map (\_ -> OneOrMore.destruct Foreign) (Dict.foldr compare gatherForeigns Dict.empty (Dict.intersection compare artifacts directDeps))
 
@@ -443,12 +441,12 @@ addObjects (Artifacts _ objs) graph =
     Opt.addGlobalGraph objs graph
 
 
-addInterfaces : Dict ( String, String ) Pkg.CEP_Name a -> Pkg.CEP_Name -> Artifacts -> Interfaces -> Interfaces
+addInterfaces : Dict ( String, String ) T.CEP_Name a -> T.CEP_Name -> Artifacts -> Interfaces -> Interfaces
 addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
     Dict.union
         dependencyInterfaces
         (Dict.fromList ModuleName.toComparableCanonical
-            (List.map (Tuple.mapFirst (TypeCheck.CEMN_Canonical pkg))
+            (List.map (Tuple.mapFirst (T.CEMN_Canonical pkg))
                 (Dict.toList compare
                     (if Dict.member identity pkg directDeps then
                         ifaces
@@ -461,10 +459,10 @@ addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
         )
 
 
-gatherForeigns : Pkg.CEP_Name -> Artifacts -> Dict String ModuleName.CEMN_Raw (OneOrMore.OneOrMore Pkg.CEP_Name) -> Dict String ModuleName.CEMN_Raw (OneOrMore.OneOrMore Pkg.CEP_Name)
+gatherForeigns : T.CEP_Name -> Artifacts -> Dict String T.CEMN_Raw (OneOrMore.OneOrMore T.CEP_Name) -> Dict String T.CEMN_Raw (OneOrMore.OneOrMore T.CEP_Name)
 gatherForeigns pkg (Artifacts ifaces _) foreigns =
     let
-        isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore Pkg.CEP_Name)
+        isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore T.CEP_Name)
         isPublic di =
             case di of
                 I.Public _ ->
@@ -481,17 +479,17 @@ gatherForeigns pkg (Artifacts ifaces _) foreigns =
 
 
 type Artifacts
-    = Artifacts (Dict String ModuleName.CEMN_Raw I.DependencyInterface) Opt.GlobalGraph
+    = Artifacts (Dict String T.CEMN_Raw I.DependencyInterface) Opt.GlobalGraph
 
 
 type alias Dep =
     Result (Maybe Exit.DetailsBadDep) Artifacts
 
 
-verifyDep : Env -> MVar (Dict ( String, String ) Pkg.CEP_Name (MVar Dep)) -> Dict ( String, String ) Pkg.CEP_Name Solver.Details -> Pkg.CEP_Name -> Solver.Details -> IO Dep
+verifyDep : Env -> T.MVar (Dict ( String, String ) T.CEP_Name (T.MVar Dep)) -> Dict ( String, String ) T.CEP_Name Solver.Details -> T.CEP_Name -> Solver.Details -> IO Dep
 verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
-        fingerprint : Dict ( String, String ) Pkg.CEP_Name V.Version
+        fingerprint : Dict ( String, String ) T.CEP_Name V.Version
         fingerprint =
             Utils.mapIntersectionWith identity Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
     in
@@ -547,7 +545,7 @@ type ArtifactCache
 
 
 type alias Fingerprint =
-    Dict ( String, String ) Pkg.CEP_Name V.Version
+    Dict ( String, String ) T.CEP_Name V.Version
 
 
 toComparableFingerprint : Fingerprint -> List ( ( String, String ), ( Int, Int, Int ) )
@@ -560,7 +558,7 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
-build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.CEP_Name (MVar Dep)) -> Pkg.CEP_Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO Dep
+build : Reporting.DKey -> Stuff.PackageCache -> T.MVar (Dict ( String, String ) T.CEP_Name (T.MVar Dep)) -> T.CEP_Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Outline.read (Stuff.package cache pkg vsn)
         |> IO.bind
@@ -592,11 +590,11 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                             src =
                                                                 Stuff.package cache pkg vsn ++ "/src"
 
-                                                            foreignDeps : Dict String ModuleName.CEMN_Raw ForeignInterface
+                                                            foreignDeps : Dict String T.CEMN_Raw ForeignInterface
                                                             foreignDeps =
                                                                 gatherForeignInterfaces directArtifacts
 
-                                                            exposedDict : Dict String ModuleName.CEMN_Raw ()
+                                                            exposedDict : Dict String T.CEMN_Raw ()
                                                             exposedDict =
                                                                 Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
                                                         in
@@ -641,7 +639,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                 path =
                                                                                                                                                                     Stuff.package cache pkg vsn ++ "/artifacts.json"
 
-                                                                                                                                                                ifaces : Dict String ModuleName.CEMN_Raw I.DependencyInterface
+                                                                                                                                                                ifaces : Dict String T.CEMN_Raw I.DependencyInterface
                                                                                                                                                                 ifaces =
                                                                                                                                                                     gatherInterfaces exposedDict results
 
@@ -677,12 +675,12 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 -- GATHER
 
 
-gatherObjects : Dict String ModuleName.CEMN_Raw DResult -> Opt.GlobalGraph
+gatherObjects : Dict String T.CEMN_Raw DResult -> Opt.GlobalGraph
 gatherObjects results =
     Dict.foldr compare addLocalGraph Opt.empty results
 
 
-addLocalGraph : ModuleName.CEMN_Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
+addLocalGraph : T.CEMN_Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
 addLocalGraph name status graph =
     case status of
         RLocal _ objs _ ->
@@ -698,7 +696,7 @@ addLocalGraph name status graph =
             graph
 
 
-gatherInterfaces : Dict String ModuleName.CEMN_Raw () -> Dict String ModuleName.CEMN_Raw DResult -> Dict String ModuleName.CEMN_Raw I.DependencyInterface
+gatherInterfaces : Dict String T.CEMN_Raw () -> Dict String T.CEMN_Raw DResult -> Dict String T.CEMN_Raw I.DependencyInterface
 gatherInterfaces exposed artifacts =
     let
         onLeft : a -> b -> c -> d
@@ -720,7 +718,7 @@ gatherInterfaces exposed artifacts =
     Dict.merge compare onLeft onBoth onRight exposed artifacts Dict.empty
 
 
-toLocalInterface : (I.CEI_Interface -> a) -> DResult -> Maybe a
+toLocalInterface : (T.CEI_Interface -> a) -> DResult -> Maybe a
 toLocalInterface func result =
     case result of
         RLocal iface _ _ ->
@@ -742,13 +740,13 @@ toLocalInterface func result =
 
 type ForeignInterface
     = ForeignAmbiguous
-    | ForeignSpecific I.CEI_Interface
+    | ForeignSpecific T.CEI_Interface
 
 
-gatherForeignInterfaces : Dict ( String, String ) Pkg.CEP_Name Artifacts -> Dict String ModuleName.CEMN_Raw ForeignInterface
+gatherForeignInterfaces : Dict ( String, String ) T.CEP_Name Artifacts -> Dict String T.CEMN_Raw ForeignInterface
 gatherForeignInterfaces directArtifacts =
     let
-        finalize : I.CEI_Interface -> List I.CEI_Interface -> ForeignInterface
+        finalize : T.CEI_Interface -> List T.CEI_Interface -> ForeignInterface
         finalize i is =
             case is of
                 [] ->
@@ -757,11 +755,11 @@ gatherForeignInterfaces directArtifacts =
                 _ :: _ ->
                     ForeignAmbiguous
 
-        gather : Pkg.CEP_Name -> Artifacts -> Dict String ModuleName.CEMN_Raw (OneOrMore.OneOrMore I.CEI_Interface) -> Dict String ModuleName.CEMN_Raw (OneOrMore.OneOrMore I.CEI_Interface)
+        gather : T.CEP_Name -> Artifacts -> Dict String T.CEMN_Raw (OneOrMore.OneOrMore T.CEI_Interface) -> Dict String T.CEMN_Raw (OneOrMore.OneOrMore T.CEI_Interface)
         gather _ (Artifacts ifaces _) buckets =
             Utils.mapUnionWith identity compare OneOrMore.more buckets (Utils.mapMapMaybe identity compare isPublic ifaces)
 
-        isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore I.CEI_Interface)
+        isPublic : I.DependencyInterface -> Maybe (OneOrMore.OneOrMore T.CEI_Interface)
         isPublic di =
             case di of
                 I.Public iface ->
@@ -778,18 +776,7 @@ gatherForeignInterfaces directArtifacts =
 -- CRAWL
 
 
-type alias BED_StatusDict =
-    Dict String ModuleName.CEMN_Raw (MVar (Maybe BED_Status))
-
-
-type BED_Status
-    = BED_SLocal BED_DocsStatus (Dict String ModuleName.CEMN_Raw ()) Src.CASTS_Module
-    | BED_SForeign I.CEI_Interface
-    | BED_SKernelLocal (List Kernel.CEK_Chunk)
-    | BED_SKernelForeign
-
-
-crawlModule : Dict String ModuleName.CEMN_Raw ForeignInterface -> MVar BED_StatusDict -> Pkg.CEP_Name -> FilePath -> BED_DocsStatus -> ModuleName.CEMN_Raw -> IO (Maybe BED_Status)
+crawlModule : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
         path : FilePath
@@ -808,7 +795,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
                             IO.pure Nothing
 
                         else
-                            IO.pure (Just (BED_SForeign iface))
+                            IO.pure (Just (T.BED_SForeign iface))
 
                     Nothing ->
                         if exists then
@@ -822,16 +809,16 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : Dict String ModuleName.CEMN_Raw ForeignInterface -> MVar BED_StatusDict -> Pkg.CEP_Name -> FilePath -> BED_DocsStatus -> ModuleName.CEMN_Raw -> FilePath -> IO (Maybe BED_Status)
+crawlFile : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> FilePath -> IO (Maybe T.BED_Status)
 crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> IO.bind
             (\bytes ->
                 case Parse.fromByteString (Parse.Package pkg) bytes of
-                    Ok ((Src.CASTS_Module (Just (A.CRA_At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
+                    Ok ((T.CASTS_Module (Just (T.CRA_At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports
-                                |> IO.fmap (\deps -> Just (BED_SLocal docsStatus deps modul))
+                                |> IO.fmap (\deps -> Just (T.BED_SLocal docsStatus deps modul))
 
                         else
                             IO.pure Nothing
@@ -841,21 +828,21 @@ crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
             )
 
 
-crawlImports : Dict String ModuleName.CEMN_Raw ForeignInterface -> MVar BED_StatusDict -> Pkg.CEP_Name -> FilePath -> List Src.CASTS_Import -> IO (Dict String ModuleName.CEMN_Raw ())
+crawlImports : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> List T.CASTS_Import -> IO (Dict String T.CEMN_Raw ())
 crawlImports foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
         |> IO.bind
             (\statusDict ->
                 let
-                    deps : Dict String Name.CDN_Name ()
+                    deps : Dict String T.CDN_Name ()
                     deps =
                         Dict.fromList identity (List.map (\i -> ( Src.getImportName i, () )) imports)
 
-                    news : Dict String Name.CDN_Name ()
+                    news : Dict String T.CDN_Name ()
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src BED_DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src T.BED_DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
@@ -865,7 +852,7 @@ crawlImports foreignDeps mvar pkg src imports =
             )
 
 
-crawlKernel : Dict String ModuleName.CEMN_Raw ForeignInterface -> MVar BED_StatusDict -> Pkg.CEP_Name -> FilePath -> ModuleName.CEMN_Raw -> IO (Maybe BED_Status)
+crawlKernel : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlKernel foreignDeps mvar pkg src name =
     let
         path : FilePath
@@ -885,18 +872,18 @@ crawlKernel foreignDeps mvar pkg src name =
 
                                     Just (Kernel.Content imports chunks) ->
                                         crawlImports foreignDeps mvar pkg src imports
-                                            |> IO.fmap (\_ -> Just (BED_SKernelLocal chunks))
+                                            |> IO.fmap (\_ -> Just (T.BED_SKernelLocal chunks))
                             )
 
                 else
-                    IO.pure (Just BED_SKernelForeign)
+                    IO.pure (Just T.BED_SKernelForeign)
             )
 
 
-getDepHome : ForeignInterface -> Maybe Pkg.CEP_Name
+getDepHome : ForeignInterface -> Maybe T.CEP_Name
 getDepHome fi =
     case fi of
-        ForeignSpecific (I.CEI_Interface pkg _ _ _ _) ->
+        ForeignSpecific (T.CEI_Interface pkg _ _ _ _) ->
             Just pkg
 
         ForeignAmbiguous ->
@@ -908,16 +895,16 @@ getDepHome fi =
 
 
 type DResult
-    = RLocal I.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
-    | RForeign I.CEI_Interface
-    | RKernelLocal (List Kernel.CEK_Chunk)
+    = RLocal T.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
+    | RForeign T.CEI_Interface
+    | RKernelLocal (List T.CEK_Chunk)
     | RKernelForeign
 
 
-compile : Pkg.CEP_Name -> MVar (Dict String ModuleName.CEMN_Raw (MVar (Maybe DResult))) -> BED_Status -> IO (Maybe DResult)
+compile : T.CEP_Name -> T.MVar (Dict String T.CEMN_Raw (T.MVar (Maybe DResult))) -> T.BED_Status -> IO (Maybe DResult)
 compile pkg mvar status =
     case status of
-        BED_SLocal docsStatus deps modul ->
+        T.BED_SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
                 |> IO.bind
                     (\resultsDict ->
@@ -935,7 +922,7 @@ compile pkg mvar status =
 
                                                             Ok (Compile.Artifacts canonical annotations objects) ->
                                                                 let
-                                                                    ifaces : I.CEI_Interface
+                                                                    ifaces : T.CEI_Interface
                                                                     ifaces =
                                                                         I.fromModule pkg canonical annotations
 
@@ -951,17 +938,17 @@ compile pkg mvar status =
                                 )
                     )
 
-        BED_SForeign iface ->
+        T.BED_SForeign iface ->
             IO.pure (Just (RForeign iface))
 
-        BED_SKernelLocal chunks ->
+        T.BED_SKernelLocal chunks ->
             IO.pure (Just (RKernelLocal chunks))
 
-        BED_SKernelForeign ->
+        T.BED_SKernelForeign ->
             IO.pure (Just RKernelForeign)
 
 
-getInterface : DResult -> Maybe I.CEI_Interface
+getInterface : DResult -> Maybe T.CEI_Interface
 getInterface result =
     case result of
         RLocal iface _ _ ->
@@ -981,28 +968,23 @@ getInterface result =
 -- MAKE DOCS
 
 
-type BED_DocsStatus
-    = BED_DocsNeeded
-    | BED_DocsNotNeeded
-
-
-getDocsStatus : Stuff.PackageCache -> Pkg.CEP_Name -> V.Version -> IO BED_DocsStatus
+getDocsStatus : Stuff.PackageCache -> T.CEP_Name -> V.Version -> IO T.BED_DocsStatus
 getDocsStatus cache pkg vsn =
     File.exists (Stuff.package cache pkg vsn ++ "/docs.json")
         |> IO.fmap
             (\exists ->
                 if exists then
-                    BED_DocsNotNeeded
+                    T.BED_DocsNotNeeded
 
                 else
-                    BED_DocsNeeded
+                    T.BED_DocsNeeded
             )
 
 
-makeDocs : BED_DocsStatus -> Can.Module -> Maybe Docs.Module
+makeDocs : T.BED_DocsStatus -> Can.Module -> Maybe Docs.Module
 makeDocs status modul =
     case status of
-        BED_DocsNeeded ->
+        T.BED_DocsNeeded ->
             case Docs.fromModule modul of
                 Ok docs ->
                     Just docs
@@ -1010,18 +992,18 @@ makeDocs status modul =
                 Err _ ->
                     Nothing
 
-        BED_DocsNotNeeded ->
+        T.BED_DocsNotNeeded ->
             Nothing
 
 
-writeDocs : Stuff.PackageCache -> Pkg.CEP_Name -> V.Version -> BED_DocsStatus -> Dict String ModuleName.CEMN_Raw DResult -> IO ()
+writeDocs : Stuff.PackageCache -> T.CEP_Name -> V.Version -> T.BED_DocsStatus -> Dict String T.CEMN_Raw DResult -> IO ()
 writeDocs cache pkg vsn status results =
     case status of
-        BED_DocsNeeded ->
+        T.BED_DocsNeeded ->
             E.writeUgly (Stuff.package cache pkg vsn ++ "/docs.json")
                 (Docs.encode (Utils.mapMapMaybe identity compare toDocs results))
 
-        BED_DocsNotNeeded ->
+        T.BED_DocsNotNeeded ->
             IO.pure ()
 
 
@@ -1045,7 +1027,7 @@ toDocs result =
 -- DOWNLOAD PACKAGE
 
 
-downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.CEP_Name -> V.Version -> IO (Result Exit.PackageProblem ())
+downloadPackage : Stuff.PackageCache -> Http.Manager -> T.CEP_Name -> V.Version -> IO (Result Exit.PackageProblem ())
 downloadPackage cache manager pkg vsn =
     let
         url : String
@@ -1159,7 +1141,7 @@ artifactsDecoder =
         (Decode.field "objects" Opt.globalGraphDecoder)
 
 
-dictNameMVarDepEncoder : Dict ( String, String ) Pkg.CEP_Name (MVar Dep) -> Encode.Value
+dictNameMVarDepEncoder : Dict ( String, String ) T.CEP_Name (T.MVar Dep) -> Encode.Value
 dictNameMVarDepEncoder =
     E.assocListDict compare Pkg.nameEncoder Utils.mVarEncoder
 
@@ -1180,15 +1162,15 @@ artifactCacheDecoder =
         (Decode.field "artifacts" artifactsDecoder)
 
 
-dictPkgNameMVarDepDecoder : Decode.Decoder (Dict ( String, String ) Pkg.CEP_Name (MVar Dep))
+dictPkgNameMVarDepDecoder : Decode.Decoder (Dict ( String, String ) T.CEP_Name (T.MVar Dep))
 dictPkgNameMVarDepDecoder =
     D.assocListDict identity Pkg.nameDecoder Utils.mVarDecoder
 
 
-statusEncoder : BED_Status -> Encode.Value
+statusEncoder : T.BED_Status -> Encode.Value
 statusEncoder status =
     case status of
-        BED_SLocal docsStatus deps modul ->
+        T.BED_SLocal docsStatus deps modul ->
             Encode.object
                 [ ( "type", Encode.string "SLocal" )
                 , ( "docsStatus", docsStatusEncoder docsStatus )
@@ -1196,56 +1178,56 @@ statusEncoder status =
                 , ( "modul", Src.moduleEncoder modul )
                 ]
 
-        BED_SForeign iface ->
+        T.BED_SForeign iface ->
             Encode.object
                 [ ( "type", Encode.string "SForeign" )
                 , ( "iface", I.interfaceEncoder iface )
                 ]
 
-        BED_SKernelLocal chunks ->
+        T.BED_SKernelLocal chunks ->
             Encode.object
                 [ ( "type", Encode.string "SKernelLocal" )
                 , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
                 ]
 
-        BED_SKernelForeign ->
+        T.BED_SKernelForeign ->
             Encode.object
                 [ ( "type", Encode.string "SKernelForeign" )
                 ]
 
 
-statusDecoder : Decode.Decoder BED_Status
+statusDecoder : Decode.Decoder T.BED_Status
 statusDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "SLocal" ->
-                        Decode.map3 BED_SLocal
+                        Decode.map3 T.BED_SLocal
                             (Decode.field "docsStatus" docsStatusDecoder)
                             (Decode.field "deps" (D.assocListDict identity ModuleName.rawDecoder (Decode.succeed ())))
                             (Decode.field "modul" Src.moduleDecoder)
 
                     "SForeign" ->
-                        Decode.map BED_SForeign (Decode.field "iface" I.interfaceDecoder)
+                        Decode.map T.BED_SForeign (Decode.field "iface" I.interfaceDecoder)
 
                     "SKernelLocal" ->
-                        Decode.map BED_SKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
+                        Decode.map T.BED_SKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
 
                     "SKernelForeign" ->
-                        Decode.succeed BED_SKernelForeign
+                        Decode.succeed T.BED_SKernelForeign
 
                     _ ->
                         Decode.fail ("Failed to decode Status' type: " ++ type_)
             )
 
 
-dictRawMVarMaybeDResultEncoder : Dict String ModuleName.CEMN_Raw (MVar (Maybe DResult)) -> Encode.Value
+dictRawMVarMaybeDResultEncoder : Dict String T.CEMN_Raw (T.MVar (Maybe DResult)) -> Encode.Value
 dictRawMVarMaybeDResultEncoder =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict String ModuleName.CEMN_Raw (MVar (Maybe DResult)))
+moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict String T.CEMN_Raw (T.MVar (Maybe DResult)))
 moduleNameRawMVarMaybeDResultDecoder =
     D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
@@ -1305,12 +1287,12 @@ dResultDecoder =
             )
 
 
-statusDictEncoder : BED_StatusDict -> Encode.Value
+statusDictEncoder : T.BED_StatusDict -> Encode.Value
 statusDictEncoder statusDict =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
 
 
-statusDictDecoder : Decode.Decoder BED_StatusDict
+statusDictDecoder : Decode.Decoder T.BED_StatusDict
 statusDictDecoder =
     D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
@@ -1438,27 +1420,27 @@ fingerprintDecoder =
     D.assocListDict identity Pkg.nameDecoder V.versionDecoder
 
 
-docsStatusEncoder : BED_DocsStatus -> Encode.Value
+docsStatusEncoder : T.BED_DocsStatus -> Encode.Value
 docsStatusEncoder docsStatus =
     case docsStatus of
-        BED_DocsNeeded ->
+        T.BED_DocsNeeded ->
             Encode.string "DocsNeeded"
 
-        BED_DocsNotNeeded ->
+        T.BED_DocsNotNeeded ->
             Encode.string "DocsNotNeeded"
 
 
-docsStatusDecoder : Decode.Decoder BED_DocsStatus
+docsStatusDecoder : Decode.Decoder T.BED_DocsStatus
 docsStatusDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "DocsNeeded" ->
-                        Decode.succeed BED_DocsNeeded
+                        Decode.succeed T.BED_DocsNeeded
 
                     "DocsNotNeeded" ->
-                        Decode.succeed BED_DocsNotNeeded
+                        Decode.succeed T.BED_DocsNotNeeded
 
                     _ ->
                         Decode.fail ("Unknown DocsStatus: " ++ str)

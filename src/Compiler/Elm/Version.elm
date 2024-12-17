@@ -23,9 +23,10 @@ module Compiler.Elm.Version exposing
 
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Parse.Primitives as P
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 
 
 
@@ -137,7 +138,7 @@ toChars (Version major_ minor patch) =
 -- JSON
 
 
-decoder : D.Decoder ( Row, Col ) Version
+decoder : D.Decoder ( T.CPP_Row, T.CPP_Col ) Version
 decoder =
     D.customString parser Tuple.pair
 
@@ -151,7 +152,7 @@ encode version =
 -- PARSER
 
 
-parser : P.Parser ( Row, Col ) Version
+parser : P.Parser ( T.CPP_Row, T.CPP_Col ) Version
 parser =
     numberParser
         |> P.bind
@@ -170,7 +171,7 @@ parser =
             )
 
 
-numberParser : P.Parser ( Row, Col ) Int
+numberParser : P.Parser ( T.CPP_Row, T.CPP_Col ) Int
 numberParser =
     P.Parser <|
         \(P.State src pos end indent row col) ->

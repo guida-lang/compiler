@@ -16,19 +16,17 @@ import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
-import Compiler.AST.Utils.Binop as Binop
-import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Compiler.Type as Type
 import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
-import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
 import System.IO exposing (IO)
+import Types as T
 
 
 
@@ -39,7 +37,7 @@ type Args
     = CodeVsLatest
     | CodeVsExactly V.Version
     | LocalInquiry V.Version V.Version
-    | GlobalInquiry Pkg.CEP_Name V.Version V.Version
+    | GlobalInquiry T.CEP_Name V.Version V.Version
 
 
 run : Args -> () -> IO ()
@@ -143,7 +141,7 @@ diff ((Env _ _ _ registry) as env) args =
 -- GET DOCS
 
 
-getDocs : Env -> Pkg.CEP_Name -> Registry.KnownVersions -> V.Version -> Task Docs.Documentation
+getDocs : Env -> T.CEP_Name -> Registry.KnownVersions -> V.Version -> Task Docs.Documentation
 getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) version =
     if latest == version || List.member version previous then
         Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
@@ -152,7 +150,7 @@ getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) ve
         Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
 
 
-getLatestDocs : Env -> Pkg.CEP_Name -> Registry.KnownVersions -> Task Docs.Documentation
+getLatestDocs : Env -> T.CEP_Name -> Registry.KnownVersions -> Task Docs.Documentation
 getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
     Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
@@ -161,7 +159,7 @@ getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
 -- READ OUTLINE
 
 
-readOutline : Env -> Task ( Pkg.CEP_Name, Registry.KnownVersions )
+readOutline : Env -> Task ( T.CEP_Name, Registry.KnownVersions )
 readOutline (Env maybeRoot _ _ registry) =
     case maybeRoot of
         Nothing ->
@@ -314,7 +312,7 @@ chunkToDoc (Chunk title magnitude details) =
         ]
 
 
-changesToChunk : L.Localizer -> ( Name.CDN_Name, ModuleChanges ) -> Chunk
+changesToChunk : L.Localizer -> ( T.CDN_Name, ModuleChanges ) -> Chunk
 changesToChunk localizer ( name, (ModuleChanges unions aliases values binops) as changes ) =
     let
         magnitude : M.Magnitude
@@ -379,7 +377,7 @@ changesToDoc categoryName unions aliases values binops =
                     ++ values
 
 
-unionToDoc : L.Localizer -> Name.CDN_Name -> Docs.Union -> D.Doc
+unionToDoc : L.Localizer -> T.CDN_Name -> Docs.Union -> D.Doc
 unionToDoc localizer name (Docs.Union _ tvars ctors) =
     let
         setup : D.Doc
@@ -388,7 +386,7 @@ unionToDoc localizer name (Docs.Union _ tvars ctors) =
                 |> D.plus (D.fromName name)
                 |> D.plus (D.hsep (List.map D.fromName tvars))
 
-        ctorDoc : ( Name.CDN_Name, List Type.Type ) -> D.Doc
+        ctorDoc : ( T.CDN_Name, List Type.Type ) -> D.Doc
         ctorDoc ( ctor, tipes ) =
             typeDoc localizer (Type.Type ctor tipes)
     in
@@ -402,7 +400,7 @@ unionToDoc localizer name (Docs.Union _ tvars ctors) =
         )
 
 
-aliasToDoc : L.Localizer -> Name.CDN_Name -> Docs.Alias -> D.Doc
+aliasToDoc : L.Localizer -> T.CDN_Name -> Docs.Alias -> D.Doc
 aliasToDoc localizer name (Docs.Alias _ tvars tipe) =
     let
         declaration : D.Doc
@@ -417,12 +415,12 @@ aliasToDoc localizer name (Docs.Alias _ tvars tipe) =
     D.hang 4 (D.sep [ declaration, typeDoc localizer tipe ])
 
 
-valueToDoc : L.Localizer -> Name.CDN_Name -> Docs.Value -> D.Doc
+valueToDoc : L.Localizer -> T.CDN_Name -> Docs.Value -> D.Doc
 valueToDoc localizer name (Docs.Value _ tipe) =
     D.hang 4 <| D.sep [ D.fromName name |> D.plus (D.fromChars ":"), typeDoc localizer tipe ]
 
 
-binopToDoc : L.Localizer -> Name.CDN_Name -> Docs.Binop -> D.Doc
+binopToDoc : L.Localizer -> T.CDN_Name -> Docs.Binop -> D.Doc
 binopToDoc localizer name (Docs.Binop _ tipe associativity n) =
     let
         details : D.Doc
@@ -439,13 +437,13 @@ binopToDoc localizer name (Docs.Binop _ tipe associativity n) =
         assoc : String
         assoc =
             case associativity of
-                Binop.CASTU_Left ->
+                T.CASTUB_Left ->
                     "left"
 
-                Binop.CASTU_Non ->
+                T.CASTUB_Non ->
                     "non"
 
-                Binop.CASTU_Right ->
+                T.CASTUB_Right ->
                     "right"
     in
     D.plus (D.fromChars "(")

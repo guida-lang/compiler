@@ -49,8 +49,6 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as Decode
 import Compiler.Json.Encode as Encode
-import Compiler.Parse.Primitives exposing (Col, Row)
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Import as Import
@@ -60,6 +58,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
 import System.IO exposing (IO)
+import Types as T
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -82,8 +81,8 @@ toJson report =
 
 
 type Init
-    = InitNoSolution (List Pkg.CEP_Name)
-    | InitNoOfflineSolution (List Pkg.CEP_Name)
+    = InitNoSolution (List T.CEP_Name)
+    | InitNoOfflineSolution (List T.CEP_Name)
     | InitSolverProblem Solver
     | InitAlreadyExists
     | InitRegistryProblem RegistryProblem
@@ -149,7 +148,7 @@ type Diff
     | DiffApplication
     | DiffNoExposed
     | DiffUnpublished
-    | DiffUnknownPackage Pkg.CEP_Name (List Pkg.CEP_Name)
+    | DiffUnknownPackage T.CEP_Name (List T.CEP_Name)
     | DiffUnknownVersion V.Version (List V.Version)
     | DiffDocsProblem V.Version DocsProblem
     | DiffMustHaveLatestRegistry RegistryProblem
@@ -1027,13 +1026,13 @@ type Install
     | InstallBadOutline Outline
     | InstallBadRegistry RegistryProblem
     | InstallNoArgs FilePath
-    | InstallNoOnlineAppSolution Pkg.CEP_Name
-    | InstallNoOfflineAppSolution Pkg.CEP_Name
-    | InstallNoOnlinePkgSolution Pkg.CEP_Name
-    | InstallNoOfflinePkgSolution Pkg.CEP_Name
+    | InstallNoOnlineAppSolution T.CEP_Name
+    | InstallNoOfflineAppSolution T.CEP_Name
+    | InstallNoOnlinePkgSolution T.CEP_Name
+    | InstallNoOfflinePkgSolution T.CEP_Name
     | InstallHadSolverTrouble Solver
-    | InstallUnknownPackageOnline Pkg.CEP_Name (List Pkg.CEP_Name)
-    | InstallUnknownPackageOffline Pkg.CEP_Name (List Pkg.CEP_Name)
+    | InstallUnknownPackageOnline T.CEP_Name (List T.CEP_Name)
+    | InstallUnknownPackageOffline T.CEP_Name (List T.CEP_Name)
     | InstallBadDetails Details
 
 
@@ -1251,9 +1250,9 @@ installToReport exit =
 
 
 type Solver
-    = SolverBadCacheData Pkg.CEP_Name V.Version
-    | SolverBadHttpData Pkg.CEP_Name V.Version String
-    | SolverBadHttp Pkg.CEP_Name V.Version Http.Error
+    = SolverBadCacheData T.CEP_Name V.Version
+    | SolverBadHttpData T.CEP_Name V.Version String
+    | SolverBadHttp T.CEP_Name V.Version Http.Error
 
 
 toSolverReport : Solver -> Help.Report
@@ -1300,12 +1299,12 @@ type Outline
 
 type OutlineProblem
     = OP_BadType
-    | OP_BadPkgName Row Col
-    | OP_BadVersion Row Col
+    | OP_BadPkgName T.CPP_Row T.CPP_Col
+    | OP_BadVersion T.CPP_Row T.CPP_Col
     | OP_BadConstraint C.Error
-    | OP_BadModuleName Row Col
+    | OP_BadModuleName T.CPP_Row T.CPP_Col
     | OP_BadModuleHeaderTooLong
-    | OP_BadDependencyName Row Col
+    | OP_BadDependencyName T.CPP_Row T.CPP_Col
     | OP_BadLicense (List String)
     | OP_BadSummaryTooLong
     | OP_NoSrcDirs
@@ -1391,14 +1390,14 @@ toOutlineReport problem =
                 ]
 
 
-toOutlineProblemReport : FilePath -> Code.Source -> Json.Context -> A.CRA_Region -> OutlineProblem -> Help.Report
+toOutlineProblemReport : FilePath -> Code.Source -> Json.Context -> T.CRA_Region -> OutlineProblem -> Help.Report
 toOutlineProblemReport path source _ region problem =
     let
-        toHighlight : Int -> Int -> Maybe A.CRA_Region
+        toHighlight : Int -> Int -> Maybe T.CRA_Region
         toHighlight row col =
-            Just <| A.CRA_Region (A.CRA_Position row col) (A.CRA_Position row col)
+            Just <| T.CRA_Region (T.CRA_Position row col) (T.CRA_Position row col)
 
-        toSnippet : String -> Maybe A.CRA_Region -> ( D.Doc, D.Doc ) -> Help.Report
+        toSnippet : String -> Maybe T.CRA_Region -> ( D.Doc, D.Doc ) -> Help.Report
         toSnippet title highlight pair =
             Help.jsonReport title (Just path) <|
                 Code.toSnippet source region highlight pair
@@ -1843,8 +1842,8 @@ type Details
 
 
 type DetailsBadDep
-    = BD_BadDownload Pkg.CEP_Name V.Version PackageProblem
-    | BD_BadBuild Pkg.CEP_Name V.Version (Dict ( String, String ) Pkg.CEP_Name V.Version)
+    = BD_BadDownload T.CEP_Name V.Version PackageProblem
+    | BD_BadBuild T.CEP_Name V.Version (Dict ( String, String ) T.CEP_Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2053,7 +2052,7 @@ type PackageProblem
     | PP_BadArchiveHash String String String
 
 
-toPackageProblemReport : Pkg.CEP_Name -> V.Version -> PackageProblem -> Help.Report
+toPackageProblemReport : T.CEP_Name -> V.Version -> PackageProblem -> Help.Report
 toPackageProblemReport pkg vsn problem =
     let
         thePackage : String
@@ -2247,7 +2246,7 @@ type Make
     | MakePkgNeedsExposing
     | MakeMultipleFilesIntoHtml
     | MakeNoMain
-    | MakeNonMainFilesIntoJavaScript ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
+    | MakeNonMainFilesIntoJavaScript T.CEMN_Raw (List T.CEMN_Raw)
     | MakeCannotBuild BuildProblem
     | MakeBadGenerate Generate
 
@@ -2514,11 +2513,11 @@ type BuildProjectProblem
     | BP_WithBadExtension FilePath
     | BP_WithAmbiguousSrcDir FilePath FilePath FilePath
     | BP_MainPathDuplicate FilePath FilePath
-    | BP_RootNameDuplicate ModuleName.CEMN_Raw FilePath FilePath
+    | BP_RootNameDuplicate T.CEMN_Raw FilePath FilePath
     | BP_RootNameInvalid FilePath FilePath (List String)
     | BP_CannotLoadDependencies
-    | BP_Cycle ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
-    | BP_MissingExposed (NE.Nonempty ( ModuleName.CEMN_Raw, Import.Problem ))
+    | BP_Cycle T.CEMN_Raw (List T.CEMN_Raw)
+    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, Import.Problem ))
 
 
 toBuildProblemReport : BuildProblem -> Help.Report
@@ -2737,7 +2736,7 @@ toModuleNameConventionTable srcDir names =
 
 type Generate
     = GenerateCannotLoadArtifacts
-    | GenerateCannotOptimizeDebugValues ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
+    | GenerateCannotOptimizeDebugValues T.CEMN_Raw (List T.CEMN_Raw)
 
 
 toGenerateReport : Generate -> Help.Report

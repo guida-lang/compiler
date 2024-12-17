@@ -4,14 +4,14 @@ module Compiler.Optimize.Port exposing
     , toFlagsDecoder
     )
 
-import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Optimize.Names as Names
 import Data.Map as Dict exposing (Dict)
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -19,25 +19,25 @@ import Utils.Crash exposing (crash)
 -- ENCODE
 
 
-toEncoder : Can.CASTC_Type -> Names.Tracker Opt.Expr
+toEncoder : T.CASTC_Type -> Names.Tracker Opt.Expr
 toEncoder tipe =
     case tipe of
-        Can.CASTC_TAlias _ _ args alias ->
+        T.CASTC_TAlias _ _ args alias ->
             toEncoder (Type.dealias args alias)
 
-        Can.CASTC_TLambda _ _ ->
+        T.CASTC_TLambda _ _ ->
             crash "toEncoder: function"
 
-        Can.CASTC_TVar _ ->
+        T.CASTC_TVar _ ->
             crash "toEncoder: type variable"
 
-        Can.CASTC_TUnit ->
+        T.CASTC_TUnit ->
             Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
 
-        Can.CASTC_TTuple a b c ->
+        T.CASTC_TTuple a b c ->
             encodeTuple a b c
 
-        Can.CASTC_TType _ name args ->
+        T.CASTC_TType _ name args ->
             case args of
                 [] ->
                     if name == Name.float then
@@ -74,13 +74,13 @@ toEncoder tipe =
                 _ ->
                     crash "toEncoder: bad custom type"
 
-        Can.CASTC_TRecord _ (Just _) ->
+        T.CASTC_TRecord _ (Just _) ->
             crash "toEncoder: bad record"
 
-        Can.CASTC_TRecord fields Nothing ->
+        T.CASTC_TRecord fields Nothing ->
             let
-                encodeField : ( CDN_Name, Can.CASTC_FieldType ) -> Names.Tracker Opt.Expr
-                encodeField ( name, Can.CASTC_FieldType _ fieldType ) =
+                encodeField : ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker Opt.Expr
+                encodeField ( name, T.CASTC_FieldType _ fieldType ) =
                     toEncoder fieldType
                         |> Names.fmap
                             (\encoder ->
@@ -108,7 +108,7 @@ toEncoder tipe =
 -- ENCODE HELPERS
 
 
-encodeMaybe : Can.CASTC_Type -> Names.Tracker Opt.Expr
+encodeMaybe : T.CASTC_Type -> Names.Tracker Opt.Expr
 encodeMaybe tipe =
     encode "null"
         |> Names.bind
@@ -131,7 +131,7 @@ encodeMaybe tipe =
             )
 
 
-encodeList : Can.CASTC_Type -> Names.Tracker Opt.Expr
+encodeList : T.CASTC_Type -> Names.Tracker Opt.Expr
 encodeList tipe =
     encode "list"
         |> Names.bind
@@ -141,7 +141,7 @@ encodeList tipe =
             )
 
 
-encodeArray : Can.CASTC_Type -> Names.Tracker Opt.Expr
+encodeArray : T.CASTC_Type -> Names.Tracker Opt.Expr
 encodeArray tipe =
     encode "array"
         |> Names.bind
@@ -151,14 +151,14 @@ encodeArray tipe =
             )
 
 
-encodeTuple : Can.CASTC_Type -> Can.CASTC_Type -> Maybe Can.CASTC_Type -> Names.Tracker Opt.Expr
+encodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker Opt.Expr
 encodeTuple a b maybeC =
     let
-        let_ : CDN_Name -> Index.CDI_ZeroBased -> Opt.Expr -> Opt.Expr
+        let_ : T.CDN_Name -> T.CDI_ZeroBased -> Opt.Expr -> Opt.Expr
         let_ arg index body =
             Opt.Destruct (Opt.Destructor arg (Opt.Index index (Opt.Root Name.dollar))) body
 
-        encodeArg : CDN_Name -> Can.CASTC_Type -> Names.Tracker Opt.Expr
+        encodeArg : T.CDN_Name -> T.CASTC_Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
             toEncoder tipe
                 |> Names.fmap (\encoder -> Opt.Call encoder [ Opt.VarLocal arg ])
@@ -222,10 +222,10 @@ encodeTuple a b maybeC =
 -- FLAGS DECODER
 
 
-toFlagsDecoder : Can.CASTC_Type -> Names.Tracker Opt.Expr
+toFlagsDecoder : T.CASTC_Type -> Names.Tracker Opt.Expr
 toFlagsDecoder tipe =
     case tipe of
-        Can.CASTC_TUnit ->
+        T.CASTC_TUnit ->
             Names.fmap (\succeed -> Opt.Call succeed [ Opt.Unit ])
                 (decode "succeed")
 
@@ -237,25 +237,25 @@ toFlagsDecoder tipe =
 -- DECODE
 
 
-toDecoder : Can.CASTC_Type -> Names.Tracker Opt.Expr
+toDecoder : T.CASTC_Type -> Names.Tracker Opt.Expr
 toDecoder tipe =
     case tipe of
-        Can.CASTC_TLambda _ _ ->
+        T.CASTC_TLambda _ _ ->
             crash "functions should not be allowed through input ports"
 
-        Can.CASTC_TVar _ ->
+        T.CASTC_TVar _ ->
             crash "type variables should not be allowed through input ports"
 
-        Can.CASTC_TAlias _ _ args alias ->
+        T.CASTC_TAlias _ _ args alias ->
             toDecoder (Type.dealias args alias)
 
-        Can.CASTC_TUnit ->
+        T.CASTC_TUnit ->
             decodeTuple0
 
-        Can.CASTC_TTuple a b c ->
+        T.CASTC_TTuple a b c ->
             decodeTuple a b c
 
-        Can.CASTC_TType _ name args ->
+        T.CASTC_TType _ name args ->
             case ( name, args ) of
                 ( "Float", [] ) ->
                     decode "float"
@@ -284,10 +284,10 @@ toDecoder tipe =
                 _ ->
                     crash "toDecoder: bad type"
 
-        Can.CASTC_TRecord _ (Just _) ->
+        T.CASTC_TRecord _ (Just _) ->
             crash "toDecoder: bad record"
 
-        Can.CASTC_TRecord fields Nothing ->
+        T.CASTC_TRecord fields Nothing ->
             decodeRecord fields
 
 
@@ -295,7 +295,7 @@ toDecoder tipe =
 -- DECODE MAYBE
 
 
-decodeMaybe : Can.CASTC_Type -> Names.Tracker Opt.Expr
+decodeMaybe : T.CASTC_Type -> Names.Tracker Opt.Expr
 decodeMaybe tipe =
     Names.bind
         (\nothing ->
@@ -333,7 +333,7 @@ decodeMaybe tipe =
 -- DECODE LIST
 
 
-decodeList : Can.CASTC_Type -> Names.Tracker Opt.Expr
+decodeList : T.CASTC_Type -> Names.Tracker Opt.Expr
 decodeList tipe =
     Names.bind
         (\list ->
@@ -347,7 +347,7 @@ decodeList tipe =
 -- DECODE ARRAY
 
 
-decodeArray : Can.CASTC_Type -> Names.Tracker Opt.Expr
+decodeArray : T.CASTC_Type -> Names.Tracker Opt.Expr
 decodeArray tipe =
     Names.bind
         (\array ->
@@ -367,7 +367,7 @@ decodeTuple0 =
         (decode "null")
 
 
-decodeTuple : Can.CASTC_Type -> Can.CASTC_Type -> Maybe Can.CASTC_Type -> Names.Tracker Opt.Expr
+decodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker Opt.Expr
 decodeTuple a b maybeC =
     Names.bind
         (\succeed ->
@@ -399,7 +399,7 @@ toLocal index =
     Opt.VarLocal (Name.fromVarIndex index)
 
 
-indexAndThen : Int -> Can.CASTC_Type -> Opt.Expr -> Names.Tracker Opt.Expr
+indexAndThen : Int -> T.CASTC_Type -> Opt.Expr -> Names.Tracker Opt.Expr
 indexAndThen i tipe decoder =
     Names.bind
         (\andThen ->
@@ -423,10 +423,10 @@ indexAndThen i tipe decoder =
 -- DECODE RECORDS
 
 
-decodeRecord : Dict String Name.CDN_Name Can.CASTC_FieldType -> Names.Tracker Opt.Expr
+decodeRecord : Dict String T.CDN_Name T.CASTC_FieldType -> Names.Tracker Opt.Expr
 decodeRecord fields =
     let
-        toFieldExpr : CDN_Name -> b -> Opt.Expr
+        toFieldExpr : T.CDN_Name -> b -> Opt.Expr
         toFieldExpr name _ =
             Opt.VarLocal name
 
@@ -447,8 +447,8 @@ decodeRecord fields =
         (decode "succeed")
 
 
-fieldAndThen : Opt.Expr -> ( Name.CDN_Name, Can.CASTC_FieldType ) -> Names.Tracker Opt.Expr
-fieldAndThen decoder ( key, Can.CASTC_FieldType _ tipe ) =
+fieldAndThen : Opt.Expr -> ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker Opt.Expr
+fieldAndThen decoder ( key, T.CASTC_FieldType _ tipe ) =
     Names.bind
         (\andThen ->
             Names.bind
@@ -471,11 +471,11 @@ fieldAndThen decoder ( key, Can.CASTC_FieldType _ tipe ) =
 -- GLOBALS HELPERS
 
 
-encode : CDN_Name -> Names.Tracker Opt.Expr
+encode : T.CDN_Name -> Names.Tracker Opt.Expr
 encode name =
     Names.registerGlobal ModuleName.jsonEncode name
 
 
-decode : CDN_Name -> Names.Tracker Opt.Expr
+decode : T.CDN_Name -> Names.Tracker Opt.Expr
 decode name =
     Names.registerGlobal ModuleName.jsonDecode name

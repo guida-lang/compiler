@@ -16,6 +16,7 @@ import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
 import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
+import Types as T
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -119,7 +120,7 @@ package =
         }
 
 
-parsePackage : String -> Maybe Pkg.CEP_Name
+parsePackage : String -> Maybe T.CEP_Name
 parsePackage chars =
     case P.fromByteString Pkg.parser Tuple.pair chars of
         Ok pkg ->

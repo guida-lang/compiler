@@ -17,21 +17,18 @@ import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
-import Compiler.AST.Source as Src
 import Compiler.Data.Name as N
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Licenses as Licenses
-import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Parse.Declaration as PD
 import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Parse.Primitives as P
 import Compiler.Parse.Space as PS
 import Compiler.Parse.Type as PT
 import Compiler.Parse.Variable as PV
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as ES
 import Compiler.Reporting.Render.Code as Code
@@ -45,6 +42,7 @@ import Prelude
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -167,10 +165,10 @@ loop env state =
 
 
 type Input
-    = Import ModuleName.CEMN_Raw String
-    | Type N.CDN_Name String
+    = Import T.CEMN_Raw String
+    | Type T.CDN_Name String
     | Port
-    | Decl N.CDN_Name String
+    | Decl T.CDN_Name String
     | Expr String
       --
     | Reset
@@ -251,7 +249,7 @@ stripLegacyBackslash chars =
 
 type Prefill
     = Indent
-    | DefStart N.CDN_Name
+    | DefStart T.CDN_Name
 
 
 renderPrefill : Prefill -> String
@@ -338,12 +336,12 @@ attemptImport lines =
         src =
             linesToByteString lines
 
-        parser : P.Parser () Src.CASTS_Import
+        parser : P.Parser () T.CASTS_Import
         parser =
             P.specialize (\_ _ _ -> ()) PM.chompImport
     in
     case P.fromByteString parser (\_ _ -> ()) src of
-        Ok (Src.CASTS_Import (A.CRA_At _ name) _ _) ->
+        Ok (T.CASTS_Import (T.CRA_At _ name) _ _) ->
             Done (Import name src)
 
         Err () ->
@@ -375,20 +373,20 @@ attemptDeclOrExpr lines =
         src =
             linesToByteString lines
 
-        declParser : P.Parser ( Row, Col ) ( PD.Decl, A.CRA_Position )
+        declParser : P.Parser ( T.CPP_Row, T.CPP_Col ) ( PD.Decl, T.CRA_Position )
         declParser =
             P.specialize (toDeclPosition src) PD.declaration
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
             case decl of
-                PD.Value _ (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) ->
+                PD.Value _ (T.CRA_At _ (T.CASTS_Value (T.CRA_At _ name) _ _ _)) ->
                     ifDone lines (Decl name src)
 
-                PD.Union _ (A.CRA_At _ (Src.CASTS_Union (A.CRA_At _ name) _ _)) ->
+                PD.Union _ (T.CRA_At _ (T.CASTS_Union (T.CRA_At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
-                PD.Alias _ (A.CRA_At _ (Src.CASTS_Alias (A.CRA_At _ name) _ _)) ->
+                PD.Alias _ (T.CRA_At _ (T.CASTS_Alias (T.CRA_At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Port _ _ ->
@@ -403,7 +401,7 @@ attemptDeclOrExpr lines =
 
             else
                 let
-                    exprParser : P.Parser ( Row, Col ) ( Src.CASTS_Expr, A.CRA_Position )
+                    exprParser : P.Parser ( T.CPP_Row, T.CPP_Col ) ( T.CASTS_Expr, T.CRA_Position )
                     exprParser =
                         P.specialize (toExprPosition src) PE.expression
                 in
@@ -470,7 +468,7 @@ startsWithKeyword keyword lines =
            )
 
 
-toExprPosition : String -> ES.Expr -> Row -> Col -> ( Row, Col )
+toExprPosition : String -> ES.Expr -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toExprPosition src expr row col =
     let
         decl : ES.Decl
@@ -480,7 +478,7 @@ toExprPosition src expr row col =
     toDeclPosition src decl row col
 
 
-toDeclPosition : String -> ES.Decl -> Row -> Col -> ( Row, Col )
+toDeclPosition : String -> ES.Decl -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toDeclPosition src decl r c =
     let
         err : ES.Error
@@ -491,20 +489,20 @@ toDeclPosition src decl r c =
         report =
             ES.toReport (Code.toSource src) err
 
-        (Report.Report _ (A.CRA_Region (A.CRA_Position row col) _) _ _) =
+        (Report.Report _ (T.CRA_Region (T.CRA_Position row col) _) _ _) =
             report
     in
     ( row, col )
 
 
-annotation : P.Parser () N.CDN_Name
+annotation : P.Parser () T.CDN_Name
 annotation =
     let
-        err : Row -> Col -> ()
+        err : T.CPP_Row -> T.CPP_Col -> ()
         err _ _ =
             ()
 
-        err_ : x -> Row -> Col -> ()
+        err_ : x -> T.CPP_Row -> T.CPP_Col -> ()
         err_ _ _ _ =
             ()
     in
@@ -579,7 +577,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
 
 type Output
     = OutputNothing
-    | OutputDecl N.CDN_Name
+    | OutputDecl T.CDN_Name
     | OutputExpr String
 
 
@@ -684,7 +682,7 @@ outputToBuilder output =
 -- TO PRINT NAME
 
 
-toPrintName : Output -> Maybe N.CDN_Name
+toPrintName : Output -> Maybe T.CDN_Name
 toPrintName output =
     case output of
         OutputNothing ->
@@ -758,7 +756,7 @@ getRoot =
             )
 
 
-defaultDeps : Dict ( String, String ) Pkg.CEP_Name C.Constraint
+defaultDeps : Dict ( String, String ) T.CEP_Name C.Constraint
 defaultDeps =
     Map.fromList identity
         [ ( Pkg.core, C.anything )
@@ -842,7 +840,7 @@ lookupCompletions string =
             )
 
 
-commands : Dict.Dict N.CDN_Name ()
+commands : Dict.Dict T.CDN_Name ()
 commands =
     Dict.fromList
         [ ( ":exit", () )
@@ -852,12 +850,12 @@ commands =
         ]
 
 
-addMatches : String -> Bool -> Dict.Dict N.CDN_Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
+addMatches : String -> Bool -> Dict.Dict T.CDN_Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
 addMatches string isFinished dict completions =
     Dict.foldr (addMatch string isFinished) completions dict
 
 
-addMatch : String -> Bool -> N.CDN_Name -> v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
+addMatch : String -> Bool -> T.CDN_Name -> v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
 addMatch string isFinished name _ completions =
     let
         suggestion : String

@@ -8,6 +8,7 @@ import Builder.File as File
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Types as T
 import Utils.Main as Utils
 
 
@@ -16,7 +17,7 @@ import Utils.Main as Utils
 
 
 type Scope
-    = Scope (Utils.MVar (List (Utils.MVar ())))
+    = Scope (T.MVar (List (T.MVar ())))
 
 
 withScope : (Scope -> IO a) -> IO a
@@ -49,7 +50,7 @@ writeBinary encoder (Scope workList) path value =
                                 |> IO.bind
                                     (\oldWork ->
                                         let
-                                            newWork : List (Utils.MVar ())
+                                            newWork : List (T.MVar ())
                                             newWork =
                                                 mvar :: oldWork
                                         in

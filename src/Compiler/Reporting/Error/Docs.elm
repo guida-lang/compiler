@@ -8,11 +8,9 @@ module Compiler.Reporting.Error.Docs exposing
     , toReports
     )
 
-import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as EncodeX
-import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (BadOperator)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -21,34 +19,35 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 
 
 type Error
-    = NoDocs A.CRA_Region
-    | ImplicitExposing A.CRA_Region
+    = NoDocs T.CRA_Region
+    | ImplicitExposing T.CRA_Region
     | SyntaxProblem SyntaxProblem
     | NameProblems (NE.Nonempty NameProblem)
     | DefProblems (NE.Nonempty DefProblem)
 
 
 type SyntaxProblem
-    = Op Row Col
-    | OpBad BadOperator Row Col
-    | Name Row Col
-    | Space E.Space Row Col
-    | Comma Row Col
-    | BadEnd Row Col
+    = Op T.CPP_Row T.CPP_Col
+    | OpBad BadOperator T.CPP_Row T.CPP_Col
+    | Name T.CPP_Row T.CPP_Col
+    | Space E.Space T.CPP_Row T.CPP_Col
+    | Comma T.CPP_Row T.CPP_Col
+    | BadEnd T.CPP_Row T.CPP_Col
 
 
 type NameProblem
-    = NameDuplicate Name.CDN_Name A.CRA_Region A.CRA_Region
-    | NameOnlyInDocs Name.CDN_Name A.CRA_Region
-    | NameOnlyInExports Name.CDN_Name A.CRA_Region
+    = NameDuplicate T.CDN_Name T.CRA_Region T.CRA_Region
+    | NameOnlyInDocs T.CDN_Name T.CRA_Region
+    | NameOnlyInExports T.CDN_Name T.CRA_Region
 
 
 type DefProblem
-    = NoComment Name.CDN_Name A.CRA_Region
-    | NoAnnotation Name.CDN_Name A.CRA_Region
+    = NoComment T.CDN_Name T.CRA_Region
+    | NoAnnotation T.CDN_Name T.CRA_Region
 
 
 toReports : Code.Source -> Error -> NE.Nonempty Report.Report
@@ -88,10 +87,10 @@ toReports source err =
 toSyntaxProblemReport : Code.Source -> SyntaxProblem -> Report.Report
 toSyntaxProblemReport source problem =
     let
-        toSyntaxReport : Row -> Col -> String -> Report.Report
+        toSyntaxReport : T.CPP_Row -> T.CPP_Col -> String -> Report.Report
         toSyntaxReport row col details =
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -126,14 +125,14 @@ toSyntaxProblemReport source problem =
             toSyntaxReport row col "I am not really sure what I am getting stuck on though."
 
 
-toRegion : Row -> Col -> A.CRA_Region
+toRegion : T.CPP_Row -> T.CPP_Col -> T.CRA_Region
 toRegion row col =
     let
-        pos : A.CRA_Position
+        pos : T.CRA_Position
         pos =
-            A.CRA_Position row col
+            T.CRA_Position row col
     in
-    A.CRA_Region pos pos
+    T.CRA_Region pos pos
 
 
 toNameProblemReport : Code.Source -> NameProblem -> Report.Report

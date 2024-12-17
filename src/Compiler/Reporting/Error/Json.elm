@@ -8,9 +8,9 @@ module Compiler.Reporting.Error.Json exposing
 import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Json.Decode exposing (DecodeExpectation(..), Error(..), ParseError(..), Problem(..), StringProblem(..))
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -48,17 +48,17 @@ parseErrorToReport path source parseError reason =
         toSnippet : String -> Int -> Int -> ( String, D.Doc ) -> Help.Report
         toSnippet title row col ( problem, details ) =
             let
-                pos : A.CRA_Position
+                pos : T.CRA_Position
                 pos =
-                    A.CRA_Position row col
+                    T.CRA_Position row col
 
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position (max 1 (row - 2)) 1) pos
+                    T.CRA_Region (T.CRA_Position (max 1 (row - 2)) 1) pos
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
-                    A.CRA_Region pos pos
+                    T.CRA_Region pos pos
             in
             Help.jsonReport title (Just path) <|
                 Code.toSnippet source
@@ -362,25 +362,25 @@ getMaxDepth problem =
 
 
 type FailureToReport x
-    = FailureToReport (String -> Code.Source -> Context -> A.CRA_Region -> x -> Help.Report)
+    = FailureToReport (String -> Code.Source -> Context -> T.CRA_Region -> x -> Help.Report)
 
 
-expectationToReport : String -> Code.Source -> Context -> A.CRA_Region -> DecodeExpectation -> Reason -> Help.Report
-expectationToReport path source context (A.CRA_Region start end) expectation reason =
+expectationToReport : String -> Code.Source -> Context -> T.CRA_Region -> DecodeExpectation -> Reason -> Help.Report
+expectationToReport path source context (T.CRA_Region start end) expectation reason =
     let
-        (A.CRA_Position sr _) =
+        (T.CRA_Position sr _) =
             start
 
-        (A.CRA_Position er _) =
+        (T.CRA_Position er _) =
             end
 
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             if sr == er then
                 crash "region"
 
             else
-                A.CRA_Region start start
+                T.CRA_Region start start
 
         introduction : String
         introduction =

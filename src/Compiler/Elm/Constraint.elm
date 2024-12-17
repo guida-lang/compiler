@@ -17,7 +17,8 @@ module Compiler.Elm.Constraint exposing
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D exposing (Decoder)
 import Compiler.Json.Encode as E exposing (Value)
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Parse.Primitives as P
+import Types as T
 
 
 
@@ -195,7 +196,7 @@ decoder =
 
 
 type Error
-    = BadFormat Row Col
+    = BadFormat T.CPP_Row T.CPP_Col
     | InvalidRange V.Version V.Version
 
 

@@ -3,7 +3,6 @@ module Compiler.Parse.Pattern exposing
     , term
     )
 
-import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
 import Compiler.Parse.Keyword as Keyword
 import Compiler.Parse.Number as Number
@@ -13,13 +12,14 @@ import Compiler.Parse.String as String
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 
 
 
 -- TERM
 
 
-term : P.Parser E.Pattern Src.CASTS_Pattern
+term : P.Parser E.Pattern T.CASTS_Pattern
 term =
     P.getPosition
         |> P.bind
@@ -33,13 +33,13 @@ term =
             )
 
 
-termHelp : A.CRA_Position -> P.Parser E.Pattern Src.CASTS_Pattern
+termHelp : T.CRA_Position -> P.Parser E.Pattern T.CASTS_Pattern
 termHelp start =
     P.oneOf E.PStart
         [ wildcard
-            |> P.bind (\_ -> P.addEnd start Src.CASTS_PAnything)
+            |> P.bind (\_ -> P.addEnd start T.CASTS_PAnything)
         , Var.lower E.PStart
-            |> P.bind (\name -> P.addEnd start (Src.CASTS_PVar name))
+            |> P.bind (\name -> P.addEnd start (T.CASTS_PVar name))
         , Var.foreignUpper E.PStart
             |> P.bind
                 (\upper ->
@@ -47,17 +47,17 @@ termHelp start =
                         |> P.fmap
                             (\end ->
                                 let
-                                    region : A.CRA_Region
+                                    region : T.CRA_Region
                                     region =
-                                        A.CRA_Region start end
+                                        T.CRA_Region start end
                                 in
                                 A.at start end <|
                                     case upper of
                                         Var.Unqualified name ->
-                                            Src.CASTS_PCtor region name []
+                                            T.CASTS_PCtor region name []
 
                                         Var.Qualified home name ->
-                                            Src.CASTS_PCtorQual region home name []
+                                            T.CASTS_PCtorQual region home name []
                             )
                 )
         , Number.number E.PStart E.PNumber
@@ -68,7 +68,7 @@ termHelp start =
                             (\end ->
                                 case number of
                                     Number.Int int ->
-                                        P.pure (A.at start end (Src.CASTS_PInt int))
+                                        P.pure (A.at start end (T.CASTS_PInt int))
 
                                     Number.Float float ->
                                         P.Parser <|
@@ -83,9 +83,9 @@ termHelp start =
                             )
                 )
         , String.string E.PStart E.PString
-            |> P.bind (\str -> P.addEnd start (Src.CASTS_PStr str))
+            |> P.bind (\str -> P.addEnd start (T.CASTS_PStr str))
         , String.character E.PStart E.PChar
-            |> P.bind (\chr -> P.addEnd start (Src.CASTS_PChr chr))
+            |> P.bind (\chr -> P.addEnd start (T.CASTS_PChr chr))
         ]
 
 
@@ -106,7 +106,7 @@ wildcard =
                     newPos =
                         pos + 1
 
-                    newCol : P.Col
+                    newCol : T.CPP_Col
                     newCol =
                         col + 1
                 in
@@ -130,7 +130,7 @@ wildcard =
 -- RECORDS
 
 
-record : A.CRA_Position -> P.Parser E.Pattern Src.CASTS_Pattern
+record : T.CRA_Position -> P.Parser E.Pattern T.CASTS_Pattern
 record start =
     P.inContext E.PRecord (P.word1 '{' E.PStart) <|
         (Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentOpen
@@ -144,13 +144,13 @@ record start =
                                         |> P.bind (\_ -> recordHelp start [ var ])
                                 )
                         , P.word1 '}' E.PRecordEnd
-                            |> P.bind (\_ -> P.addEnd start (Src.CASTS_PRecord []))
+                            |> P.bind (\_ -> P.addEnd start (T.CASTS_PRecord []))
                         ]
                 )
         )
 
 
-recordHelp : A.CRA_Position -> List (A.CRA_Located Name.CDN_Name) -> P.Parser E.PRecord Src.CASTS_Pattern
+recordHelp : T.CRA_Position -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.PRecord T.CASTS_Pattern
 recordHelp start vars =
     P.oneOf E.PRecordEnd
         [ P.word1 ',' E.PRecordEnd
@@ -162,7 +162,7 @@ recordHelp start vars =
                         |> P.bind (\_ -> recordHelp start (var :: vars))
                 )
         , P.word1 '}' E.PRecordEnd
-            |> P.bind (\_ -> P.addEnd start (Src.CASTS_PRecord vars))
+            |> P.bind (\_ -> P.addEnd start (T.CASTS_PRecord vars))
         ]
 
 
@@ -170,7 +170,7 @@ recordHelp start vars =
 -- TUPLES
 
 
-tuple : A.CRA_Position -> P.Parser E.Pattern Src.CASTS_Pattern
+tuple : T.CRA_Position -> P.Parser E.Pattern T.CASTS_Pattern
 tuple start =
     P.inContext E.PTuple (P.word1 '(' E.PStart) <|
         (Space.chompAndCheckIndent E.PTupleSpace E.PTupleIndentExpr1
@@ -184,13 +184,13 @@ tuple start =
                                         |> P.bind (\_ -> tupleHelp start pattern [])
                                 )
                         , P.word1 ')' E.PTupleEnd
-                            |> P.bind (\_ -> P.addEnd start Src.CASTS_PUnit)
+                            |> P.bind (\_ -> P.addEnd start T.CASTS_PUnit)
                         ]
                 )
         )
 
 
-tupleHelp : A.CRA_Position -> Src.CASTS_Pattern -> List Src.CASTS_Pattern -> P.Parser E.PTuple Src.CASTS_Pattern
+tupleHelp : T.CRA_Position -> T.CASTS_Pattern -> List T.CASTS_Pattern -> P.Parser E.PTuple T.CASTS_Pattern
 tupleHelp start firstPattern revPatterns =
     P.oneOf E.PTupleEnd
         [ P.word1 ',' E.PTupleEnd
@@ -209,7 +209,7 @@ tupleHelp start firstPattern revPatterns =
                             P.pure firstPattern
 
                         secondPattern :: otherPatterns ->
-                            P.addEnd start (Src.CASTS_PTuple firstPattern secondPattern otherPatterns)
+                            P.addEnd start (T.CASTS_PTuple firstPattern secondPattern otherPatterns)
                 )
         ]
 
@@ -218,7 +218,7 @@ tupleHelp start firstPattern revPatterns =
 -- LIST
 
 
-list : A.CRA_Position -> P.Parser E.Pattern Src.CASTS_Pattern
+list : T.CRA_Position -> P.Parser E.Pattern T.CASTS_Pattern
 list start =
     P.inContext E.PList (P.word1 '[' E.PStart) <|
         (Space.chompAndCheckIndent E.PListSpace E.PListIndentOpen
@@ -232,13 +232,13 @@ list start =
                                         |> P.bind (\_ -> listHelp start [ pattern ])
                                 )
                         , P.word1 ']' E.PListEnd
-                            |> P.bind (\_ -> P.addEnd start (Src.CASTS_PList []))
+                            |> P.bind (\_ -> P.addEnd start (T.CASTS_PList []))
                         ]
                 )
         )
 
 
-listHelp : A.CRA_Position -> List Src.CASTS_Pattern -> P.Parser E.PList Src.CASTS_Pattern
+listHelp : T.CRA_Position -> List T.CASTS_Pattern -> P.Parser E.PList T.CASTS_Pattern
 listHelp start patterns =
     P.oneOf E.PListEnd
         [ P.word1 ',' E.PListEnd
@@ -250,7 +250,7 @@ listHelp start patterns =
                         |> P.bind (\_ -> listHelp start (pattern :: patterns))
                 )
         , P.word1 ']' E.PListEnd
-            |> P.bind (\_ -> P.addEnd start (Src.CASTS_PList (List.reverse patterns)))
+            |> P.bind (\_ -> P.addEnd start (T.CASTS_PList (List.reverse patterns)))
         ]
 
 
@@ -258,7 +258,7 @@ listHelp start patterns =
 -- EXPRESSION
 
 
-expression : Space.Parser E.Pattern Src.CASTS_Pattern
+expression : Space.Parser E.Pattern T.CASTS_Pattern
 expression =
     P.getPosition
         |> P.bind
@@ -271,7 +271,7 @@ expression =
             )
 
 
-exprHelp : A.CRA_Position -> List Src.CASTS_Pattern -> ( Src.CASTS_Pattern, A.CRA_Position ) -> Space.Parser E.Pattern Src.CASTS_Pattern
+exprHelp : T.CRA_Position -> List T.CASTS_Pattern -> ( T.CASTS_Pattern, T.CRA_Position ) -> Space.Parser E.Pattern T.CASTS_Pattern
 exprHelp start revPatterns ( pattern, end ) =
     P.oneOfWithFallback
         [ Space.checkIndent end E.PIndentStart
@@ -295,11 +295,11 @@ exprHelp start revPatterns ( pattern, end ) =
                                                 |> P.fmap
                                                     (\_ ->
                                                         let
-                                                            alias_ : A.CRA_Located Name.CDN_Name
+                                                            alias_ : T.CRA_Located T.CDN_Name
                                                             alias_ =
                                                                 A.at nameStart newEnd name
                                                         in
-                                                        ( A.at start newEnd (Src.CASTS_PAlias (List.foldl cons pattern revPatterns) alias_)
+                                                        ( A.at start newEnd (T.CASTS_PAlias (List.foldl cons pattern revPatterns) alias_)
                                                         , newEnd
                                                         )
                                                     )
@@ -312,16 +312,16 @@ exprHelp start revPatterns ( pattern, end ) =
         )
 
 
-cons : Src.CASTS_Pattern -> Src.CASTS_Pattern -> Src.CASTS_Pattern
+cons : T.CASTS_Pattern -> T.CASTS_Pattern -> T.CASTS_Pattern
 cons hd tl =
-    A.merge hd tl (Src.CASTS_PCons hd tl)
+    A.merge hd tl (T.CASTS_PCons hd tl)
 
 
 
 -- EXPRESSION PART
 
 
-exprPart : Space.Parser E.Pattern Src.CASTS_Pattern
+exprPart : Space.Parser E.Pattern T.CASTS_Pattern
 exprPart =
     P.oneOf E.PStart
         [ P.getPosition
@@ -331,19 +331,19 @@ exprPart =
                         |> P.bind
                             (\upper ->
                                 P.getPosition
-                                    |> P.bind (\end -> exprTermHelp (A.CRA_Region start end) upper start [])
+                                    |> P.bind (\end -> exprTermHelp (T.CRA_Region start end) upper start [])
                             )
                 )
         , term
             |> P.bind
-                (\((A.CRA_At (A.CRA_Region _ end) _) as eterm) ->
+                (\((T.CRA_At (T.CRA_Region _ end) _) as eterm) ->
                     Space.chomp E.PSpace
                         |> P.fmap (\_ -> ( eterm, end ))
                 )
         ]
 
 
-exprTermHelp : A.CRA_Region -> Var.Upper -> A.CRA_Position -> List Src.CASTS_Pattern -> Space.Parser E.Pattern Src.CASTS_Pattern
+exprTermHelp : T.CRA_Region -> Var.Upper -> T.CRA_Position -> List T.CASTS_Pattern -> Space.Parser E.Pattern T.CASTS_Pattern
 exprTermHelp region upper start revArgs =
     P.getPosition
         |> P.bind
@@ -359,10 +359,10 @@ exprTermHelp region upper start revArgs =
                                 ( A.at start end <|
                                     case upper of
                                         Var.Unqualified name ->
-                                            Src.CASTS_PCtor region name (List.reverse revArgs)
+                                            T.CASTS_PCtor region name (List.reverse revArgs)
 
                                         Var.Qualified home name ->
-                                            Src.CASTS_PCtorQual region home name (List.reverse revArgs)
+                                            T.CASTS_PCtorQual region home name (List.reverse revArgs)
                                 , end
                                 )
                         )

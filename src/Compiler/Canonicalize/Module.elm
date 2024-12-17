@@ -11,17 +11,13 @@ import Compiler.Canonicalize.Expression as Expr
 import Compiler.Canonicalize.Pattern as Pattern
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
-import System.TypeCheck.IO as IO
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -37,14 +33,14 @@ type alias MResult i w a =
 -- MODULES
 
 
-canonicalize : Pkg.CEP_Name -> Dict String ModuleName.CEMN_Raw I.CEI_Interface -> Src.CASTS_Module -> MResult i (List W.Warning) Can.Module
-canonicalize pkg ifaces ((Src.CASTS_Module _ exports docs imports values _ _ binops effects) as modul) =
+canonicalize : T.CEP_Name -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> MResult i (List W.Warning) Can.Module
+canonicalize pkg ifaces ((T.CASTS_Module _ exports docs imports values _ _ binops effects) as modul) =
     let
-        home : IO.CEMN_Canonical
+        home : T.CEMN_Canonical
         home =
-            IO.CEMN_Canonical pkg (Src.getName modul)
+            T.CEMN_Canonical pkg (Src.getName modul)
 
-        cbinops : Dict String Name.CDN_Name Can.Binop
+        cbinops : Dict String T.CDN_Name Can.Binop
         cbinops =
             Dict.fromList identity (List.map canonicalizeBinop binops)
     in
@@ -72,8 +68,8 @@ canonicalize pkg ifaces ((Src.CASTS_Module _ exports docs imports values _ _ bin
 -- CANONICALIZE BINOP
 
 
-canonicalizeBinop : A.CRA_Located Src.CASTS_Infix -> ( Name.CDN_Name, Can.Binop )
-canonicalizeBinop (A.CRA_At _ (Src.CASTS_Infix op associativity precedence func)) =
+canonicalizeBinop : T.CRA_Located T.CASTS_Infix -> ( T.CDN_Name, Can.Binop )
+canonicalizeBinop (T.CRA_At _ (T.CASTS_Infix op associativity precedence func)) =
     ( op, Can.Binop_ associativity precedence func )
 
 
@@ -86,7 +82,7 @@ canonicalizeBinop (A.CRA_At _ (Src.CASTS_Infix op associativity precedence func)
 -- 2. Detect cycles using DIRECT dependencies => nonterminating recursion
 
 
-canonicalizeValues : Env.Env -> List (A.CRA_Located Src.CASTS_Value) -> MResult i (List W.Warning) Can.Decls
+canonicalizeValues : Env.Env -> List (T.CRA_Located T.CASTS_Value) -> MResult i (List W.Warning) Can.Decls
 canonicalizeValues env values =
     R.traverse (toNodeOne env) values
         |> R.bind (\nodes -> detectCycles (Graph.stronglyConnComp nodes))
@@ -127,17 +123,17 @@ detectBadCycles scc =
 
         Graph.CyclicSCC (def :: defs) ->
             let
-                (A.CRA_At region name) =
+                (T.CRA_At region name) =
                     extractDefName def
 
-                names : List Name.CDN_Name
+                names : List T.CDN_Name
                 names =
                     List.map (A.toValue << extractDefName) defs
             in
             R.throw (Error.RecursiveDecl region name names)
 
 
-extractDefName : Can.Def -> A.CRA_Located Name.CDN_Name
+extractDefName : Can.Def -> T.CRA_Located T.CDN_Name
 extractDefName def =
     case def of
         Can.Def name _ _ ->
@@ -157,7 +153,7 @@ extractDefName def =
 
 
 type alias NodeOne =
-    ( NodeTwo, Name.CDN_Name, List Name.CDN_Name )
+    ( NodeTwo, T.CDN_Name, List T.CDN_Name )
 
 
 
@@ -166,11 +162,11 @@ type alias NodeOne =
 
 
 type alias NodeTwo =
-    ( Can.Def, Name.CDN_Name, List Name.CDN_Name )
+    ( Can.Def, T.CDN_Name, List T.CDN_Name )
 
 
-toNodeOne : Env.Env -> A.CRA_Located Src.CASTS_Value -> MResult i (List W.Warning) NodeOne
-toNodeOne env (A.CRA_At _ (Src.CASTS_Value ((A.CRA_At _ name) as aname) srcArgs body maybeType)) =
+toNodeOne : Env.Env -> T.CRA_Located T.CASTS_Value -> MResult i (List W.Warning) NodeOne
+toNodeOne env (T.CRA_At _ (T.CASTS_Value ((T.CRA_At _ name) as aname) srcArgs body maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
@@ -199,7 +195,7 @@ toNodeOne env (A.CRA_At _ (Src.CASTS_Value ((A.CRA_At _ name) as aname) srcArgs 
         Just srcType ->
             Type.toAnnotation env srcType
                 |> R.bind
-                    (\(Can.CASTC_Forall freeVars tipe) ->
+                    (\(T.CASTC_Forall freeVars tipe) ->
                         Pattern.verify (Error.DPFuncArgs name)
                             (Expr.gatherTypedArgs env name srcArgs tipe Index.first [])
                             |> R.bind
@@ -225,7 +221,7 @@ toNodeOne env (A.CRA_At _ (Src.CASTS_Value ((A.CRA_At _ name) as aname) srcArgs 
                     )
 
 
-toNodeTwo : Name.CDN_Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
+toNodeTwo : T.CDN_Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
 toNodeTwo name args def freeLocals =
     case args of
         [] ->
@@ -235,7 +231,7 @@ toNodeTwo name args def freeLocals =
             ( def, name, [] )
 
 
-addDirects : Name.CDN_Name -> Expr.Uses -> List Name.CDN_Name -> List Name.CDN_Name
+addDirects : T.CDN_Name -> Expr.Uses -> List T.CDN_Name -> List T.CDN_Name
 addDirects name (Expr.Uses { direct }) directDeps =
     if direct > 0 then
         name :: directDeps
@@ -249,21 +245,21 @@ addDirects name (Expr.Uses { direct }) directDeps =
 
 
 canonicalizeExports :
-    List (A.CRA_Located Src.CASTS_Value)
-    -> Dict String Name.CDN_Name union
-    -> Dict String Name.CDN_Name alias
-    -> Dict String Name.CDN_Name binop
+    List (T.CRA_Located T.CASTS_Value)
+    -> Dict String T.CDN_Name union
+    -> Dict String T.CDN_Name alias
+    -> Dict String T.CDN_Name binop
     -> Can.Effects
-    -> A.CRA_Located Src.CASTS_Exposing
+    -> T.CRA_Located T.CASTS_Exposing
     -> MResult i w Can.Exports
-canonicalizeExports values unions aliases binops effects (A.CRA_At region exposing_) =
+canonicalizeExports values unions aliases binops effects (T.CRA_At region exposing_) =
     case exposing_ of
-        Src.CASTS_Open ->
+        T.CASTS_Open ->
             R.ok (Can.ExportEverything region)
 
-        Src.CASTS_Explicit exposeds ->
+        T.CASTS_Explicit exposeds ->
             let
-                names : Dict String Name.CDN_Name ()
+                names : Dict String T.CDN_Name ()
                 names =
                     Dict.fromList identity (List.map valueToName values)
             in
@@ -275,22 +271,22 @@ canonicalizeExports values unions aliases binops effects (A.CRA_At region exposi
                     )
 
 
-valueToName : A.CRA_Located Src.CASTS_Value -> ( Name.CDN_Name, () )
-valueToName (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) =
+valueToName : T.CRA_Located T.CASTS_Value -> ( T.CDN_Name, () )
+valueToName (T.CRA_At _ (T.CASTS_Value (T.CRA_At _ name) _ _ _)) =
     ( name, () )
 
 
 checkExposed :
-    Dict String Name.CDN_Name value
-    -> Dict String Name.CDN_Name union
-    -> Dict String Name.CDN_Name alias
-    -> Dict String Name.CDN_Name binop
+    Dict String T.CDN_Name value
+    -> Dict String T.CDN_Name union
+    -> Dict String T.CDN_Name alias
+    -> Dict String T.CDN_Name binop
     -> Can.Effects
-    -> Src.CASTS_Exposed
-    -> MResult i w (Dups.Tracker (A.CRA_Located Can.Export))
+    -> T.CASTS_Exposed
+    -> MResult i w (Dups.Tracker (T.CRA_Located Can.Export))
 checkExposed values unions aliases binops effects exposed =
     case exposed of
-        Src.CASTS_Lower (A.CRA_At region name) ->
+        T.CASTS_Lower (T.CRA_At region name) ->
             if Dict.member identity name values then
                 ok name region Can.ExportValue
 
@@ -302,14 +298,14 @@ checkExposed values unions aliases binops effects exposed =
                     Just ports ->
                         R.throw (Error.ExportNotFound region Error.BadVar name (ports ++ Dict.keys compare values))
 
-        Src.CASTS_Operator region name ->
+        T.CASTS_Operator region name ->
             if Dict.member identity name binops then
                 ok name region Can.ExportBinop
 
             else
                 R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys compare binops))
 
-        Src.CASTS_Upper (A.CRA_At region name) (Src.CASTS_Public dotDotRegion) ->
+        T.CASTS_Upper (T.CRA_At region name) (T.CASTS_Public dotDotRegion) ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionOpen
 
@@ -319,7 +315,7 @@ checkExposed values unions aliases binops effects exposed =
             else
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
-        Src.CASTS_Upper (A.CRA_At region name) Src.CASTS_Private ->
+        T.CASTS_Upper (T.CRA_At region name) T.CASTS_Private ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionClosed
 
@@ -330,7 +326,7 @@ checkExposed values unions aliases binops effects exposed =
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
 
-checkPorts : Can.Effects -> Name.CDN_Name -> Maybe (List Name.CDN_Name)
+checkPorts : Can.Effects -> T.CDN_Name -> Maybe (List T.CDN_Name)
 checkPorts effects name =
     case effects of
         Can.NoEffects ->
@@ -347,6 +343,6 @@ checkPorts effects name =
             Just []
 
 
-ok : Name.CDN_Name -> A.CRA_Region -> Can.Export -> MResult i w (Dups.Tracker (A.CRA_Located Can.Export))
+ok : T.CDN_Name -> T.CRA_Region -> Can.Export -> MResult i w (Dups.Tracker (T.CRA_Located Can.Export))
 ok name region export =
-    R.ok (Dups.one name region (A.CRA_At region export))
+    R.ok (Dups.one name region (T.CRA_At region export))

@@ -35,7 +35,6 @@ module Compiler.Reporting.Doc exposing
 -}
 
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Encode as E
@@ -44,6 +43,7 @@ import Prelude
 import System.Console.Ansi as Ansi
 import System.IO exposing (Handle, IO)
 import Text.PrettyPrint.ANSI.Leijen as P
+import Types as T
 
 
 
@@ -55,7 +55,7 @@ fromChars =
     P.text
 
 
-fromName : Name.CDN_Name -> Doc
+fromName : T.CDN_Name -> Doc
 fromName =
     P.text
 
@@ -65,7 +65,7 @@ fromVersion vsn =
     P.text (V.toChars vsn)
 
 
-fromPackage : Pkg.CEP_Name -> Doc
+fromPackage : T.CEP_Name -> Doc
 fromPackage pkg =
     P.text (Pkg.toChars pkg)
 
@@ -224,7 +224,7 @@ moreArgs n =
            )
 
 
-ordinal : Index.CDI_ZeroBased -> String
+ordinal : T.CDI_ZeroBased -> String
 ordinal index =
     intToOrdinal (Index.toHuman index)
 
@@ -262,10 +262,10 @@ intToOrdinal number =
     String.fromInt number ++ ending
 
 
-cycle : Int -> Name.CDN_Name -> List Name.CDN_Name -> Doc
+cycle : Int -> T.CDN_Name -> List T.CDN_Name -> Doc
 cycle indent_ name names =
     let
-        toLn : Name.CDN_Name -> P.Doc
+        toLn : T.CDN_Name -> P.Doc
         toLn n =
             P.append cycleLn (P.dullyellow (fromName n))
     in

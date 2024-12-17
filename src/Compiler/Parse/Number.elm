@@ -6,10 +6,10 @@ module Compiler.Parse.Number exposing
     , precedence
     )
 
-import Compiler.AST.Utils.Binop as Binop
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -36,7 +36,7 @@ type Number
     | Float Float
 
 
-number : (Row -> Col -> x) -> (E.Number -> Row -> Col -> x) -> P.Parser x Number
+number : (T.CPP_Row -> T.CPP_Col -> x) -> (E.Number -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x Number
 number toExpectation toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -65,7 +65,7 @@ number toExpectation toError =
                     case outcome of
                         Err_ newPos problem ->
                             let
-                                newCol : Col
+                                newCol : T.CPP_Col
                                 newCol =
                                     col + (newPos - pos)
                             in
@@ -73,7 +73,7 @@ number toExpectation toError =
 
                         OkInt newPos n ->
                             let
-                                newCol : Col
+                                newCol : T.CPP_Col
                                 newCol =
                                     col + (newPos - pos)
 
@@ -89,7 +89,7 @@ number toExpectation toError =
 
                         OkFloat newPos ->
                             let
-                                newCol : Col
+                                newCol : T.CPP_Col
                                 newCol =
                                     col + (newPos - pos)
 
@@ -344,7 +344,7 @@ stepHex src pos end word acc =
 -- PRECEDENCE
 
 
-precedence : (Row -> Col -> x) -> P.Parser x Binop.CASTU_Precedence
+precedence : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x T.CASTUB_Precedence
 precedence toExpectation =
     P.Parser <|
         \(P.State src pos end indent row col) ->

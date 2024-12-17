@@ -4,7 +4,6 @@ module System.TypeCheck.IO exposing
     , foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
     , Point(..), PointInfo(..)
     , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
-    , CEMN_Canonical(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -27,16 +26,12 @@ module System.TypeCheck.IO exposing
 
 @docs Descriptor, Content, SuperType, Mark, Variable, FlatType
 
-
-# Compiler.Elm.ModuleName
-
-@docs Canonical
-
 -}
 
 import Array exposing (Array)
 import Compiler.Data.Index as Index
 import Data.Map as Dict exposing (Dict)
+import Types as T
 
 
 unsafePerformIO : IO a -> a
@@ -163,12 +158,12 @@ mapM =
     traverseList
 
 
-traverseIndexed : (Index.CDI_ZeroBased -> a -> IO b) -> List a -> IO (List b)
+traverseIndexed : (T.CDI_ZeroBased -> a -> IO b) -> List a -> IO (List b)
 traverseIndexed func xs =
     sequenceAList (Index.indexedMap func xs)
 
 
-indexedForA : List a -> (Index.CDI_ZeroBased -> a -> IO b) -> IO (List b)
+indexedForA : List a -> (T.CDI_ZeroBased -> a -> IO b) -> IO (List b)
 indexedForA xs func =
     sequenceAList (Index.indexedMap func xs)
 
@@ -213,7 +208,7 @@ type Content
     | RigidVar String
     | RigidSuper SuperType String
     | Structure FlatType
-    | Alias CEMN_Canonical String (List ( String, Variable )) Variable
+    | Alias T.CEMN_Canonical String (List ( String, Variable )) Variable
     | Error
 
 
@@ -249,19 +244,9 @@ type alias Variable =
 {-| FIXME Compiler.Type.Type
 -}
 type FlatType
-    = App1 CEMN_Canonical String (List Variable)
+    = App1 T.CEMN_Canonical String (List Variable)
     | Fun1 Variable Variable
     | EmptyRecord1
     | Record1 (Dict String String Variable) Variable
     | Unit1
     | Tuple1 Variable Variable (Maybe Variable)
-
-
-
--- CANONICAL
-
-
-{-| FIXME Compiler.Elm.ModuleName
--}
-type CEMN_Canonical
-    = CEMN_Canonical ( String, String ) String

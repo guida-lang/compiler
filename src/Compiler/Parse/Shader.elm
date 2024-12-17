@@ -1,13 +1,13 @@
 module Compiler.Parse.Shader exposing (shader)
 
-import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Shader as Shader
-import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
+import Compiler.Parse.Primitives as P exposing (Parser)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
 import Data.Map as Dict
 import Language.GLSL.Parser as GLP
 import Language.GLSL.Syntax as GLS
+import Types as T
 import Utils.Crash as Crash
 
 
@@ -15,8 +15,8 @@ import Utils.Crash as Crash
 -- SHADER
 
 
-shader : A.CRA_Position -> Parser E.Expr Src.CASTS_Expr
-shader ((A.CRA_Position row col) as start) =
+shader : T.CRA_Position -> Parser E.Expr T.CASTS_Expr
+shader ((T.CRA_Position row col) as start) =
     parseBlock
         |> P.bind
             (\block ->
@@ -26,7 +26,7 @@ shader ((A.CRA_Position row col) as start) =
                             P.getPosition
                                 |> P.fmap
                                     (\end ->
-                                        A.at start end (Src.CASTS_Shader (Shader.fromString block) shdr)
+                                        A.at start end (T.CASTS_Shader (Shader.fromString block) shdr)
                                     )
                         )
             )
@@ -91,7 +91,7 @@ type Status
     | Unending
 
 
-eatShader : String -> Int -> Int -> Row -> Col -> ( ( Status, Int ), ( Row, Col ) )
+eatShader : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> ( ( Status, Int ), ( T.CPP_Row, T.CPP_Col ) )
 eatShader src pos end row col =
     if pos >= end then
         ( ( Unending, pos ), ( row, col ) )
@@ -121,7 +121,7 @@ eatShader src pos end row col =
 -- GLSL
 
 
-parseGlsl : Row -> Col -> String -> Parser E.Expr Shader.CASTUS_Types
+parseGlsl : T.CPP_Row -> T.CPP_Col -> String -> Parser E.Expr T.CASTUS_Types
 parseGlsl startRow startCol src =
     case GLP.parse src of
         Ok (GLS.TranslationUnit decls) ->
@@ -168,7 +168,7 @@ showErrorMessages msgs =
         String.join "\n" msgs
 
 
-failure : Row -> Col -> String -> Parser E.Expr a
+failure : T.CPP_Row -> T.CPP_Col -> String -> Parser E.Expr a
 failure row col msg =
     P.Parser <|
         \_ ->
@@ -179,53 +179,53 @@ failure row col msg =
 -- INPUTS
 
 
-emptyTypes : Shader.CASTUS_Types
+emptyTypes : T.CASTUS_Types
 emptyTypes =
-    Shader.CASTUS_Types Dict.empty Dict.empty Dict.empty
+    T.CASTUS_Types Dict.empty Dict.empty Dict.empty
 
 
-addInput : ( GLS.StorageQualifier, Shader.CASTUS_Type, String ) -> Shader.CASTUS_Types -> Shader.CASTUS_Types
-addInput ( qual, tipe, name ) (Shader.CASTUS_Types attribute uniform varying) =
+addInput : ( GLS.StorageQualifier, T.CASTUS_Type, String ) -> T.CASTUS_Types -> T.CASTUS_Types
+addInput ( qual, tipe, name ) (T.CASTUS_Types attribute uniform varying) =
     case qual of
         GLS.Attribute ->
-            Shader.CASTUS_Types (Dict.insert identity name tipe attribute) uniform varying
+            T.CASTUS_Types (Dict.insert identity name tipe attribute) uniform varying
 
         GLS.Uniform ->
-            Shader.CASTUS_Types attribute (Dict.insert identity name tipe uniform) varying
+            T.CASTUS_Types attribute (Dict.insert identity name tipe uniform) varying
 
         GLS.Varying ->
-            Shader.CASTUS_Types attribute uniform (Dict.insert identity name tipe varying)
+            T.CASTUS_Types attribute uniform (Dict.insert identity name tipe varying)
 
         _ ->
             Crash.crash "Should never happen due to `extractInputs` function"
 
 
-extractInputs : GLS.ExternalDeclaration -> List ( GLS.StorageQualifier, Shader.CASTUS_Type, String )
+extractInputs : GLS.ExternalDeclaration -> List ( GLS.StorageQualifier, T.CASTUS_Type, String )
 extractInputs decl =
     case decl of
         GLS.Declaration (GLS.InitDeclaration (GLS.TypeDeclarator (GLS.FullType (Just (GLS.TypeQualSto qual)) (GLS.TypeSpec _ (GLS.TypeSpecNoPrecision tipe _)))) [ GLS.InitDecl name _ _ ]) ->
             if List.member qual [ GLS.Attribute, GLS.Varying, GLS.Uniform ] then
                 case tipe of
                     GLS.Vec2 ->
-                        [ ( qual, Shader.CASTUS_V2, name ) ]
+                        [ ( qual, T.CASTUS_V2, name ) ]
 
                     GLS.Vec3 ->
-                        [ ( qual, Shader.CASTUS_V3, name ) ]
+                        [ ( qual, T.CASTUS_V3, name ) ]
 
                     GLS.Vec4 ->
-                        [ ( qual, Shader.CASTUS_V4, name ) ]
+                        [ ( qual, T.CASTUS_V4, name ) ]
 
                     GLS.Mat4 ->
-                        [ ( qual, Shader.CASTUS_M4, name ) ]
+                        [ ( qual, T.CASTUS_M4, name ) ]
 
                     GLS.Int ->
-                        [ ( qual, Shader.CASTUS_Int, name ) ]
+                        [ ( qual, T.CASTUS_Int, name ) ]
 
                     GLS.Float ->
-                        [ ( qual, Shader.CASTUS_Float, name ) ]
+                        [ ( qual, T.CASTUS_Float, name ) ]
 
                     GLS.Sampler2D ->
-                        [ ( qual, Shader.CASTUS_Texture, name ) ]
+                        [ ( qual, T.CASTUS_Texture, name ) ]
 
                     _ ->
                         []

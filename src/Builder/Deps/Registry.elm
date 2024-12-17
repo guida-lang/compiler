@@ -26,6 +26,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Types as T
 
 
 
@@ -33,7 +34,7 @@ import System.IO as IO exposing (IO)
 
 
 type Registry
-    = Registry Int (Dict ( String, String ) Pkg.CEP_Name KnownVersions)
+    = Registry Int (Dict ( String, String ) T.CEP_Name KnownVersions)
 
 
 type KnownVersions
@@ -94,10 +95,10 @@ addEntry (KnownVersions _ vs) count =
     count + 1 + List.length vs
 
 
-allPkgsDecoder : D.Decoder () (Dict ( String, String ) Pkg.CEP_Name KnownVersions)
+allPkgsDecoder : D.Decoder () (Dict ( String, String ) T.CEP_Name KnownVersions)
 allPkgsDecoder =
     let
-        keyDecoder : D.KeyDecoder () Pkg.CEP_Name
+        keyDecoder : D.KeyDecoder () T.CEP_Name
         keyDecoder =
             Pkg.keyDecoder bail
 
@@ -135,7 +136,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         newSize =
                             size + List.length news
 
-                        newPkgs : Dict ( String, String ) Pkg.CEP_Name KnownVersions
+                        newPkgs : Dict ( String, String ) T.CEP_Name KnownVersions
                         newPkgs =
                             List.foldr addNew packages news
 
@@ -147,7 +148,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         |> IO.fmap (\_ -> newRegistry)
 
 
-addNew : ( Pkg.CEP_Name, V.Version ) -> Dict ( String, String ) Pkg.CEP_Name KnownVersions -> Dict ( String, String ) Pkg.CEP_Name KnownVersions
+addNew : ( T.CEP_Name, V.Version ) -> Dict ( String, String ) T.CEP_Name KnownVersions -> Dict ( String, String ) T.CEP_Name KnownVersions
 addNew ( name, version ) versions =
     let
         add : Maybe KnownVersions -> KnownVersions
@@ -166,12 +167,12 @@ addNew ( name, version ) versions =
 -- NEW PACKAGE DECODER
 
 
-newPkgDecoder : D.Decoder () ( Pkg.CEP_Name, V.Version )
+newPkgDecoder : D.Decoder () ( T.CEP_Name, V.Version )
 newPkgDecoder =
     D.customString newPkgParser bail
 
 
-newPkgParser : P.Parser () ( Pkg.CEP_Name, V.Version )
+newPkgParser : P.Parser () ( T.CEP_Name, V.Version )
 newPkgParser =
     P.specialize (\_ _ _ -> ()) Pkg.parser
         |> P.bind
@@ -209,12 +210,12 @@ latest manager cache =
 -- GET VERSIONS
 
 
-getVersions : Pkg.CEP_Name -> Registry -> Maybe KnownVersions
+getVersions : T.CEP_Name -> Registry -> Maybe KnownVersions
 getVersions name (Registry _ versions) =
     Dict.get identity name versions
 
 
-getVersions_ : Pkg.CEP_Name -> Registry -> Result (List Pkg.CEP_Name) KnownVersions
+getVersions_ : T.CEP_Name -> Registry -> Result (List T.CEP_Name) KnownVersions
 getVersions_ name (Registry _ versions) =
     case Dict.get identity name versions of
         Just kvs ->

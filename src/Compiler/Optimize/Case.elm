@@ -2,10 +2,10 @@ module Compiler.Optimize.Case exposing (optimize)
 
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
-import Compiler.Data.Name as Name
 import Compiler.Optimize.DecisionTree as DT
 import Data.Map as Dict exposing (Dict)
 import Prelude
+import Types as T
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -14,7 +14,7 @@ import Utils.Main as Utils
 -- OPTIMIZE A CASE EXPRESSION
 
 
-optimize : Name.CDN_Name -> Name.CDN_Name -> List ( Can.Pattern, Opt.Expr ) -> Opt.Expr
+optimize : T.CDN_Name -> T.CDN_Name -> List ( Can.Pattern, Opt.Expr ) -> Opt.Expr
 optimize temp root optBranches =
     let
         ( patterns, indexedBranches ) =

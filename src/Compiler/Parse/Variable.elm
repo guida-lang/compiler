@@ -13,17 +13,17 @@ module Compiler.Parse.Variable exposing
     )
 
 import Bitwise
-import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name exposing (CDN_Name)
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Data.Name as Name
+import Compiler.Parse.Primitives as P
 import Data.Set as EverySet exposing (EverySet)
+import Types as T
 
 
 
 -- LOCAL UPPER
 
 
-upper : (Row -> Col -> x) -> P.Parser x CDN_Name
+upper : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x T.CDN_Name
 upper toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -36,7 +36,7 @@ upper toError =
 
             else
                 let
-                    name : CDN_Name
+                    name : T.CDN_Name
                     name =
                         Name.fromPtr src pos newPos
                 in
@@ -47,7 +47,7 @@ upper toError =
 -- LOCAL LOWER
 
 
-lower : (Row -> Col -> x) -> P.Parser x CDN_Name
+lower : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x T.CDN_Name
 lower toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -60,7 +60,7 @@ lower toError =
 
             else
                 let
-                    name : CDN_Name
+                    name : T.CDN_Name
                     name =
                         Name.fromPtr src pos newPos
                 in
@@ -76,7 +76,7 @@ lower toError =
                     Ok (P.POk P.Consumed name newState)
 
 
-reservedWords : EverySet String CDN_Name
+reservedWords : EverySet String T.CDN_Name
 reservedWords =
     EverySet.fromList identity
         [ "if"
@@ -100,7 +100,7 @@ reservedWords =
 -- MODULE NAME
 
 
-moduleName : (Row -> Col -> x) -> P.Parser x CDN_Name
+moduleName : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x T.CDN_Name
 moduleName toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -119,7 +119,7 @@ moduleName toError =
                 case status of
                     Good ->
                         let
-                            name : CDN_Name
+                            name : T.CDN_Name
                             name =
                                 Name.fromPtr src pos newPos
 
@@ -138,7 +138,7 @@ type ModuleNameStatus
     | Bad
 
 
-moduleNameHelp : String -> Int -> Int -> Col -> ( ModuleNameStatus, Int, Col )
+moduleNameHelp : String -> Int -> Int -> T.CPP_Col -> ( ModuleNameStatus, Int, T.CPP_Col )
 moduleNameHelp src pos end col =
     if isDot src pos end then
         let
@@ -164,11 +164,11 @@ moduleNameHelp src pos end col =
 
 
 type Upper
-    = Unqualified CDN_Name
-    | Qualified CDN_Name CDN_Name
+    = Unqualified T.CDN_Name
+    | Qualified T.CDN_Name T.CDN_Name
 
 
-foreignUpper : (Row -> Col -> x) -> P.Parser x Upper
+foreignUpper : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x Upper
 foreignUpper toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -185,7 +185,7 @@ foreignUpper toError =
                     newState =
                         P.State src upperEnd end indent row newCol
 
-                    name : CDN_Name
+                    name : T.CDN_Name
                     name =
                         Name.fromPtr src upperStart upperEnd
 
@@ -196,7 +196,7 @@ foreignUpper toError =
 
                         else
                             let
-                                home : CDN_Name
+                                home : T.CDN_Name
                                 home =
                                     Name.fromPtr src pos (upperStart + -1)
                             in
@@ -205,7 +205,7 @@ foreignUpper toError =
                 Ok (P.POk P.Consumed upperName newState)
 
 
-foreignUpperHelp : String -> Int -> Int -> Col -> ( Int, Int, Col )
+foreignUpperHelp : String -> Int -> Int -> T.CPP_Col -> ( Int, Int, T.CPP_Col )
 foreignUpperHelp src pos end col =
     let
         ( newPos, newCol ) =
@@ -225,7 +225,7 @@ foreignUpperHelp src pos end col =
 -- FOREIGN ALPHA
 
 
-foreignAlpha : (Row -> Col -> x) -> P.Parser x Src.CASTS_Expr_
+foreignAlpha : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x T.CASTS_Expr_
 foreignAlpha toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -238,7 +238,7 @@ foreignAlpha toError =
 
             else
                 let
-                    name : CDN_Name
+                    name : T.CDN_Name
                     name =
                         Name.fromPtr src alphaStart alphaEnd
 
@@ -251,25 +251,25 @@ foreignAlpha toError =
                         Err (P.PErr P.Empty row col toError)
 
                     else
-                        Ok (P.POk P.Consumed (Src.CASTS_Var varType name) newState)
+                        Ok (P.POk P.Consumed (T.CASTS_Var varType name) newState)
 
                 else
                     let
-                        home : CDN_Name
+                        home : T.CDN_Name
                         home =
                             Name.fromPtr src pos (alphaStart + -1)
                     in
-                    Ok (P.POk P.Consumed (Src.CASTS_VarQual varType home name) newState)
+                    Ok (P.POk P.Consumed (T.CASTS_VarQual varType home name) newState)
 
 
-foreignAlphaHelp : String -> Int -> Int -> Col -> ( ( Int, Int ), ( Col, Src.CASTS_VarType ) )
+foreignAlphaHelp : String -> Int -> Int -> T.CPP_Col -> ( ( Int, Int ), ( T.CPP_Col, T.CASTS_VarType ) )
 foreignAlphaHelp src pos end col =
     let
         ( lowerPos, lowerCol ) =
             chompLower src pos end col
     in
     if pos < lowerPos then
-        ( ( pos, lowerPos ), ( lowerCol, Src.CASTS_LowVar ) )
+        ( ( pos, lowerPos ), ( lowerCol, T.CASTS_LowVar ) )
 
     else
         let
@@ -277,13 +277,13 @@ foreignAlphaHelp src pos end col =
                 chompUpper src pos end col
         in
         if pos == upperPos then
-            ( ( pos, pos ), ( col, Src.CASTS_CapVar ) )
+            ( ( pos, pos ), ( col, T.CASTS_CapVar ) )
 
         else if isDot src upperPos end then
             foreignAlphaHelp src (upperPos + 1) end (upperCol + 1)
 
         else
-            ( ( pos, upperPos ), ( upperCol, Src.CASTS_CapVar ) )
+            ( ( pos, upperPos ), ( upperCol, T.CASTS_CapVar ) )
 
 
 
@@ -300,7 +300,7 @@ isDot src pos end =
 -- UPPER CHARS
 
 
-chompUpper : String -> Int -> Int -> Col -> ( Int, Col )
+chompUpper : String -> Int -> Int -> T.CPP_Col -> ( Int, T.CPP_Col )
 chompUpper src pos end col =
     let
         width : Int
@@ -365,7 +365,7 @@ getUpperWidthHelp src pos _ word =
 -- LOWER CHARS
 
 
-chompLower : String -> Int -> Int -> Col -> ( Int, Col )
+chompLower : String -> Int -> Int -> T.CPP_Col -> ( Int, T.CPP_Col )
 chompLower src pos end col =
     let
         width : Int
@@ -430,7 +430,7 @@ getLowerWidthHelp src pos _ word =
 -- INNER CHARS
 
 
-chompInnerChars : String -> Int -> Int -> Col -> ( Int, Col )
+chompInnerChars : String -> Int -> Int -> T.CPP_Col -> ( Int, T.CPP_Col )
 chompInnerChars src pos end col =
     let
         width : Int

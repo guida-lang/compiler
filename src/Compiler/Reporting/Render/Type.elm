@@ -11,13 +11,12 @@ module Compiler.Reporting.Render.Type exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type.Localizer as L
 import List.Extra as List
 import Maybe.Extra as Maybe
+import Types as T
 
 
 
@@ -159,44 +158,44 @@ vrecord entries maybeExt =
 -- SOURCE TYPE TO DOC
 
 
-srcToDoc : Context -> Src.CASTS_Type -> D.Doc
-srcToDoc context (A.CRA_At _ tipe) =
+srcToDoc : Context -> T.CASTS_Type -> D.Doc
+srcToDoc context (T.CRA_At _ tipe) =
     case tipe of
-        Src.CASTS_TLambda arg1 result ->
+        T.CASTS_TLambda arg1 result ->
             let
                 ( arg2, rest ) =
                     collectSrcArgs result
             in
             lambda context (srcToDoc Func arg1) (srcToDoc Func arg2) (List.map (srcToDoc Func) rest)
 
-        Src.CASTS_TVar name ->
+        T.CASTS_TVar name ->
             D.fromName name
 
-        Src.CASTS_TType _ name args ->
+        T.CASTS_TType _ name args ->
             apply context (D.fromName name) (List.map (srcToDoc App) args)
 
-        Src.CASTS_TTypeQual _ home name args ->
+        T.CASTS_TTypeQual _ home name args ->
             apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (srcToDoc App) args)
 
-        Src.CASTS_TRecord fields ext ->
+        T.CASTS_TRecord fields ext ->
             record (List.map srcFieldToDocs fields) (Maybe.map (D.fromName << A.toValue) ext)
 
-        Src.CASTS_TUnit ->
+        T.CASTS_TUnit ->
             D.fromChars "()"
 
-        Src.CASTS_TTuple a b cs ->
+        T.CASTS_TTuple a b cs ->
             tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) cs)
 
 
-srcFieldToDocs : ( A.CRA_Located Name.CDN_Name, Src.CASTS_Type ) -> ( D.Doc, D.Doc )
-srcFieldToDocs ( A.CRA_At _ fieldName, fieldType ) =
+srcFieldToDocs : ( T.CRA_Located T.CDN_Name, T.CASTS_Type ) -> ( D.Doc, D.Doc )
+srcFieldToDocs ( T.CRA_At _ fieldName, fieldType ) =
     ( D.fromName fieldName, srcToDoc None fieldType )
 
 
-collectSrcArgs : Src.CASTS_Type -> ( Src.CASTS_Type, List Src.CASTS_Type )
+collectSrcArgs : T.CASTS_Type -> ( T.CASTS_Type, List T.CASTS_Type )
 collectSrcArgs tipe =
     case tipe of
-        A.CRA_At _ (Src.CASTS_TLambda a result) ->
+        T.CRA_At _ (T.CASTS_TLambda a result) ->
             let
                 ( b, cs ) =
                     collectSrcArgs result
@@ -211,44 +210,44 @@ collectSrcArgs tipe =
 -- CANONICAL TYPE TO DOC
 
 
-canToDoc : L.Localizer -> Context -> Can.CASTC_Type -> D.Doc
+canToDoc : L.Localizer -> Context -> T.CASTC_Type -> D.Doc
 canToDoc localizer context tipe =
     case tipe of
-        Can.CASTC_TLambda arg1 result ->
+        T.CASTC_TLambda arg1 result ->
             let
                 ( arg2, rest ) =
                     collectArgs result
             in
             lambda context (canToDoc localizer Func arg1) (canToDoc localizer Func arg2) (List.map (canToDoc localizer Func) rest)
 
-        Can.CASTC_TVar name ->
+        T.CASTC_TVar name ->
             D.fromName name
 
-        Can.CASTC_TType home name args ->
+        T.CASTC_TType home name args ->
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App) args)
 
-        Can.CASTC_TRecord fields ext ->
+        T.CASTC_TRecord fields ext ->
             record (List.map (canFieldToDoc localizer) (Can.fieldsToList fields)) (Maybe.map D.fromName ext)
 
-        Can.CASTC_TUnit ->
+        T.CASTC_TUnit ->
             D.fromChars "()"
 
-        Can.CASTC_TTuple a b maybeC ->
+        T.CASTC_TTuple a b maybeC ->
             tuple (canToDoc localizer None a) (canToDoc localizer None b) (List.map (canToDoc localizer None) (Maybe.toList maybeC))
 
-        Can.CASTC_TAlias home name args _ ->
+        T.CASTC_TAlias home name args _ ->
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App << Tuple.second) args)
 
 
-canFieldToDoc : L.Localizer -> ( Name.CDN_Name, Can.CASTC_Type ) -> ( D.Doc, D.Doc )
+canFieldToDoc : L.Localizer -> ( T.CDN_Name, T.CASTC_Type ) -> ( D.Doc, D.Doc )
 canFieldToDoc localizer ( name, tipe ) =
     ( D.fromName name, canToDoc localizer None tipe )
 
 
-collectArgs : Can.CASTC_Type -> ( Can.CASTC_Type, List Can.CASTC_Type )
+collectArgs : T.CASTC_Type -> ( T.CASTC_Type, List T.CASTC_Type )
 collectArgs tipe =
     case tipe of
-        Can.CASTC_TLambda a rest ->
+        T.CASTC_TLambda a rest ->
             let
                 ( b, cs ) =
                     collectArgs rest

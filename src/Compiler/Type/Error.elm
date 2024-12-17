@@ -17,7 +17,7 @@ module Compiler.Type.Error exposing
     )
 
 import Compiler.Data.Bag as Bag
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as EncodeX
@@ -29,7 +29,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
-import System.TypeCheck.IO as IO
+import Types as T
 
 
 
@@ -40,15 +40,15 @@ type Type
     = Lambda Type Type (List Type)
     | Infinite
     | Error
-    | FlexVar CDN_Name
-    | FlexSuper Super CDN_Name
-    | RigidVar CDN_Name
-    | RigidSuper Super CDN_Name
-    | Type IO.CEMN_Canonical CDN_Name (List Type)
-    | Record (Dict String CDN_Name Type) Extension
+    | FlexVar T.CDN_Name
+    | FlexSuper Super T.CDN_Name
+    | RigidVar T.CDN_Name
+    | RigidSuper Super T.CDN_Name
+    | Type T.CEMN_Canonical T.CDN_Name (List Type)
+    | Record (Dict String T.CDN_Name Type) Extension
     | Unit
     | Tuple Type Type (Maybe Type)
-    | Alias IO.CEMN_Canonical CDN_Name (List ( CDN_Name, Type )) Type
+    | Alias T.CEMN_Canonical T.CDN_Name (List ( T.CDN_Name, Type )) Type
 
 
 type Super
@@ -60,8 +60,8 @@ type Super
 
 type Extension
     = Closed
-    | FlexOpen CDN_Name
-    | RigidOpen CDN_Name
+    | FlexOpen T.CDN_Name
+    | RigidOpen T.CDN_Name
 
 
 iteratedDealias : Type -> Type
@@ -126,19 +126,19 @@ toDoc localizer ctx tipe =
             aliasToDoc localizer ctx home name args
 
 
-aliasToDoc : L.Localizer -> RT.Context -> IO.CEMN_Canonical -> CDN_Name -> List ( CDN_Name, Type ) -> D.Doc
+aliasToDoc : L.Localizer -> RT.Context -> T.CEMN_Canonical -> T.CDN_Name -> List ( T.CDN_Name, Type ) -> D.Doc
 aliasToDoc localizer ctx home name args =
     RT.apply ctx
         (L.toDoc localizer home name)
         (List.map (toDoc localizer RT.App << Tuple.second) args)
 
 
-fieldsToDocs : L.Localizer -> Dict String CDN_Name Type -> List ( D.Doc, D.Doc )
+fieldsToDocs : L.Localizer -> Dict String T.CDN_Name Type -> List ( D.Doc, D.Doc )
 fieldsToDocs localizer fields =
     Dict.foldr compare (addField localizer) [] fields
 
 
-addField : L.Localizer -> CDN_Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
+addField : L.Localizer -> T.CDN_Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
 addField localizer fieldName fieldType docs =
     let
         f : D.Doc
@@ -188,10 +188,10 @@ type Problem
     | AnythingFromMaybe
     | ArityMismatch Int Int
     | BadFlexSuper Direction Super Type
-    | BadRigidVar CDN_Name Type
-    | BadRigidSuper Super CDN_Name Type
-    | FieldTypo CDN_Name (List CDN_Name)
-    | FieldsMissing (List CDN_Name)
+    | BadRigidVar T.CDN_Name Type
+    | BadRigidSuper Super T.CDN_Name Type
+    | FieldTypo T.CDN_Name (List T.CDN_Name)
+    | FieldsMissing (List T.CDN_Name)
 
 
 type Direction
@@ -544,37 +544,37 @@ isSimilar (Diff _ _ status) =
 -- IS TYPE?
 
 
-isBool : IO.CEMN_Canonical -> CDN_Name -> Bool
+isBool : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isBool home name =
     home == ModuleName.basics && name == Name.bool
 
 
-isInt : IO.CEMN_Canonical -> CDN_Name -> Bool
+isInt : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isInt home name =
     home == ModuleName.basics && name == Name.int
 
 
-isFloat : IO.CEMN_Canonical -> CDN_Name -> Bool
+isFloat : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isFloat home name =
     home == ModuleName.basics && name == Name.float
 
 
-isString : IO.CEMN_Canonical -> CDN_Name -> Bool
+isString : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isString home name =
     home == ModuleName.string && name == Name.string
 
 
-isChar : IO.CEMN_Canonical -> CDN_Name -> Bool
+isChar : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isChar home name =
     home == ModuleName.char && name == Name.char
 
 
-isMaybe : IO.CEMN_Canonical -> CDN_Name -> Bool
+isMaybe : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isMaybe home name =
     home == ModuleName.maybe && name == Name.maybe
 
 
-isList : IO.CEMN_Canonical -> CDN_Name -> Bool
+isList : T.CEMN_Canonical -> T.CDN_Name -> Bool
 isList home name =
     home == ModuleName.list && name == Name.list
 
@@ -622,8 +622,8 @@ isSuper super tipe =
 -- NAME CLASH
 
 
-nameClashToDoc : RT.Context -> L.Localizer -> IO.CEMN_Canonical -> CDN_Name -> List Type -> D.Doc
-nameClashToDoc ctx localizer (IO.CEMN_Canonical _ home) name args =
+nameClashToDoc : RT.Context -> L.Localizer -> T.CEMN_Canonical -> T.CDN_Name -> List Type -> D.Doc
+nameClashToDoc ctx localizer (T.CEMN_Canonical _ home) name args =
     RT.apply ctx
         (D.yellow (D.fromName home) |> D.a (D.dullyellow (D.fromChars "." |> D.a (D.fromName name))))
         (List.map (toDoc localizer RT.App) args)
@@ -647,32 +647,32 @@ diffAliasedRecord localizer t1 t2 =
 -- RECORD DIFFS
 
 
-diffRecord : L.Localizer -> Dict String CDN_Name Type -> Extension -> Dict String CDN_Name Type -> Extension -> Diff D.Doc
+diffRecord : L.Localizer -> Dict String T.CDN_Name Type -> Extension -> Dict String T.CDN_Name Type -> Extension -> Diff D.Doc
 diffRecord localizer fields1 ext1 fields2 ext2 =
     let
-        toUnknownDocs : CDN_Name -> Type -> ( D.Doc, D.Doc )
+        toUnknownDocs : T.CDN_Name -> Type -> ( D.Doc, D.Doc )
         toUnknownDocs field tipe =
             ( D.dullyellow (D.fromName field), toDoc localizer RT.None tipe )
 
-        toOverlapDocs : CDN_Name -> Type -> Type -> Diff ( D.Doc, D.Doc )
+        toOverlapDocs : T.CDN_Name -> Type -> Type -> Diff ( D.Doc, D.Doc )
         toOverlapDocs field t1 t2 =
             fmapDiff (Tuple.pair (D.fromName field)) <| toDiff localizer RT.None t1 t2
 
-        left : Dict String CDN_Name ( D.Doc, D.Doc )
+        left : Dict String T.CDN_Name ( D.Doc, D.Doc )
         left =
             Dict.map toUnknownDocs (Dict.diff fields1 fields2)
 
-        right : Dict String CDN_Name ( D.Doc, D.Doc )
+        right : Dict String T.CDN_Name ( D.Doc, D.Doc )
         right =
             Dict.map toUnknownDocs (Dict.diff fields2 fields1)
 
         fieldsDiff : Diff (List ( D.Doc, D.Doc ))
         fieldsDiff =
             let
-                fieldsDiffDict : Diff (Dict String CDN_Name ( D.Doc, D.Doc ))
+                fieldsDiffDict : Diff (Dict String T.CDN_Name ( D.Doc, D.Doc ))
                 fieldsDiffDict =
                     let
-                        both : Dict String CDN_Name (Diff ( D.Doc, D.Doc ))
+                        both : Dict String T.CDN_Name (Diff ( D.Doc, D.Doc ))
                         both =
                             Dict.merge compare
                                 (\_ _ acc -> acc)
@@ -682,7 +682,7 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
                                 fields2
                                 Dict.empty
 
-                        sequenceA : Dict String CDN_Name (Diff ( D.Doc, D.Doc )) -> Diff (Dict String CDN_Name ( D.Doc, D.Doc ))
+                        sequenceA : Dict String T.CDN_Name (Diff ( D.Doc, D.Doc )) -> Diff (Dict String T.CDN_Name ( D.Doc, D.Doc ))
                         sequenceA =
                             Dict.foldr compare (\k x acc -> applyDiff acc (fmapDiff (Dict.insert identity k) x)) (pureDiff Dict.empty)
                     in
@@ -706,7 +706,7 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
             case ( hasFixedFields ext1, hasFixedFields ext2 ) of
                 ( True, True ) ->
                     let
-                        minView : Maybe ( CDN_Name, ( D.Doc, D.Doc ) )
+                        minView : Maybe ( T.CDN_Name, ( D.Doc, D.Doc ) )
                         minView =
                             Dict.toList compare left
                                 |> List.sortBy Tuple.first
@@ -725,7 +725,7 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
 
                 ( False, True ) ->
                     let
-                        minView : Maybe ( CDN_Name, ( D.Doc, D.Doc ) )
+                        minView : Maybe ( T.CDN_Name, ( D.Doc, D.Doc ) )
                         minView =
                             Dict.toList compare left
                                 |> List.sortBy Tuple.first
@@ -740,7 +740,7 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
 
                 ( True, False ) ->
                     let
-                        minView : Maybe ( CDN_Name, ( D.Doc, D.Doc ) )
+                        minView : Maybe ( T.CDN_Name, ( D.Doc, D.Doc ) )
                         minView =
                             Dict.toList compare right
                                 |> List.sortBy Tuple.first

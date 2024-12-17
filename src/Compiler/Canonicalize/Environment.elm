@@ -17,18 +17,13 @@ module Compiler.Canonicalize.Environment exposing
     , mergeInfo
     )
 
-import Compiler.AST.Canonical as Can
-import Compiler.AST.Utils.Binop as Binop
-import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Maybe exposing (Maybe(..))
-import System.TypeCheck.IO exposing (CEMN_Canonical)
+import Types as T
 
 
 
@@ -44,23 +39,23 @@ type alias EResult i w a =
 
 
 type alias Env =
-    { home : CEMN_Canonical
-    , vars : Dict String Name.CDN_Name Var
+    { home : T.CEMN_Canonical
+    , vars : Dict String T.CDN_Name Var
     , types : Exposed Type
     , ctors : Exposed Ctor
     , binops : Exposed Binop
-    , q_vars : Qualified Can.CASTC_Annotation
+    , q_vars : Qualified T.CASTC_Annotation
     , q_types : Qualified Type
     , q_ctors : Qualified Ctor
     }
 
 
 type alias Exposed a =
-    Dict String Name.CDN_Name (Info a)
+    Dict String T.CDN_Name (Info a)
 
 
 type alias Qualified a =
-    Dict String Name.CDN_Name (Dict String Name.CDN_Name (Info a))
+    Dict String T.CDN_Name (Dict String T.CDN_Name (Info a))
 
 
 
@@ -68,8 +63,8 @@ type alias Qualified a =
 
 
 type Info a
-    = Specific CEMN_Canonical a
-    | Ambiguous CEMN_Canonical (OneOrMore.OneOrMore CEMN_Canonical)
+    = Specific T.CEMN_Canonical a
+    | Ambiguous T.CEMN_Canonical (OneOrMore.OneOrMore T.CEMN_Canonical)
 
 
 mergeInfo : Info a -> Info a -> Info a
@@ -101,10 +96,10 @@ mergeInfo info1 info2 =
 
 
 type Var
-    = Local A.CRA_Region
-    | TopLevel A.CRA_Region
-    | Foreign CEMN_Canonical Can.CASTC_Annotation
-    | Foreigns CEMN_Canonical (OneOrMore.OneOrMore CEMN_Canonical)
+    = Local T.CRA_Region
+    | TopLevel T.CRA_Region
+    | Foreign T.CEMN_Canonical T.CASTC_Annotation
+    | Foreigns T.CEMN_Canonical (OneOrMore.OneOrMore T.CEMN_Canonical)
 
 
 
@@ -112,8 +107,8 @@ type Var
 
 
 type Type
-    = Alias Int CEMN_Canonical (List Name.CDN_Name) Can.CASTC_Type
-    | Union Int CEMN_Canonical
+    = Alias Int T.CEMN_Canonical (List T.CDN_Name) T.CASTC_Type
+    | Union Int T.CEMN_Canonical
 
 
 
@@ -121,8 +116,8 @@ type Type
 
 
 type Ctor
-    = RecordCtor CEMN_Canonical (List Name.CDN_Name) Can.CASTC_Type
-    | Ctor CEMN_Canonical Name.CDN_Name Can.CASTC_Union Index.CDI_ZeroBased (List Can.CASTC_Type)
+    = RecordCtor T.CEMN_Canonical (List T.CDN_Name) T.CASTC_Type
+    | Ctor T.CEMN_Canonical T.CDN_Name T.CASTC_Union T.CDI_ZeroBased (List T.CASTC_Type)
 
 
 
@@ -130,14 +125,14 @@ type Ctor
 
 
 type Binop
-    = Binop Name.CDN_Name CEMN_Canonical Name.CDN_Name Can.CASTC_Annotation Binop.CASTU_Associativity Binop.CASTU_Precedence
+    = Binop T.CDN_Name T.CEMN_Canonical T.CDN_Name T.CASTC_Annotation T.CASTUB_Associativity T.CASTUB_Precedence
 
 
 
 -- VARIABLE -- ADD LOCALS
 
 
-addLocals : Dict String Name.CDN_Name A.CRA_Region -> Env -> EResult i w Env
+addLocals : Dict String T.CDN_Name T.CRA_Region -> Env -> EResult i w Env
 addLocals names env =
     R.fmap (\newVars -> { env | vars = newVars })
         (Dict.merge compare
@@ -153,12 +148,12 @@ addLocals names env =
         )
 
 
-addLocalLeft : Name.CDN_Name -> A.CRA_Region -> Var
+addLocalLeft : T.CDN_Name -> T.CRA_Region -> Var
 addLocalLeft _ region =
     Local region
 
 
-addLocalBoth : Name.CDN_Name -> A.CRA_Region -> Var -> EResult i w Var
+addLocalBoth : T.CDN_Name -> T.CRA_Region -> Var -> EResult i w Var
 addLocalBoth name region var =
     case var of
         Foreign _ _ ->
@@ -178,7 +173,7 @@ addLocalBoth name region var =
 -- FIND TYPE
 
 
-findType : A.CRA_Region -> Env -> Name.CDN_Name -> EResult i w Type
+findType : T.CRA_Region -> Env -> T.CDN_Name -> EResult i w Type
 findType region { types, q_types } name =
     case Dict.get identity name types of
         Just (Specific _ tipe) ->
@@ -191,7 +186,7 @@ findType region { types, q_types } name =
             R.throw (Error.NotFoundType region Nothing name (toPossibleNames types q_types))
 
 
-findTypeQual : A.CRA_Region -> Env -> Name.CDN_Name -> Name.CDN_Name -> EResult i w Type
+findTypeQual : T.CRA_Region -> Env -> T.CDN_Name -> T.CDN_Name -> EResult i w Type
 findTypeQual region { types, q_types } prefix name =
     case Dict.get identity prefix q_types of
         Just qualified ->
@@ -213,7 +208,7 @@ findTypeQual region { types, q_types } prefix name =
 -- FIND CTOR
 
 
-findCtor : A.CRA_Region -> Env -> Name.CDN_Name -> EResult i w Ctor
+findCtor : T.CRA_Region -> Env -> T.CDN_Name -> EResult i w Ctor
 findCtor region { ctors, q_ctors } name =
     case Dict.get identity name ctors of
         Just (Specific _ ctor) ->
@@ -226,7 +221,7 @@ findCtor region { ctors, q_ctors } name =
             R.throw (Error.NotFoundVariant region Nothing name (toPossibleNames ctors q_ctors))
 
 
-findCtorQual : A.CRA_Region -> Env -> Name.CDN_Name -> Name.CDN_Name -> EResult i w Ctor
+findCtorQual : T.CRA_Region -> Env -> T.CDN_Name -> T.CDN_Name -> EResult i w Ctor
 findCtorQual region { ctors, q_ctors } prefix name =
     case Dict.get identity prefix q_ctors of
         Just qualified ->
@@ -248,7 +243,7 @@ findCtorQual region { ctors, q_ctors } prefix name =
 -- FIND BINOP
 
 
-findBinop : A.CRA_Region -> Env -> Name.CDN_Name -> EResult i w Binop
+findBinop : T.CRA_Region -> Env -> T.CDN_Name -> EResult i w Binop
 findBinop region { binops } name =
     case Dict.get identity name binops of
         Just (Specific _ binop) ->

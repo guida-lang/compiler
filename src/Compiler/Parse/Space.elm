@@ -8,10 +8,9 @@ module Compiler.Parse.Space exposing
     , docComment
     )
 
-import Compiler.AST.Source as Src
-import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Compiler.Reporting.Annotation as A
+import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 
 
 
@@ -19,14 +18,14 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type alias Parser x a =
-    P.Parser x ( a, A.CRA_Position )
+    P.Parser x ( a, T.CRA_Position )
 
 
 
 -- CHOMP
 
 
-chomp : (E.Space -> Row -> Col -> x) -> P.Parser x ()
+chomp : (E.Space -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
 chomp toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -54,8 +53,8 @@ chomp toError =
 -- CHECKS -- to be called right after a `chomp`
 
 
-checkIndent : A.CRA_Position -> (Int -> Int -> x) -> P.Parser x ()
-checkIndent (A.CRA_Position endRow endCol) toError =
+checkIndent : T.CRA_Position -> (Int -> Int -> x) -> P.Parser x ()
+checkIndent (T.CRA_Position endRow endCol) toError =
     P.Parser <|
         \((P.State _ _ _ indent _ col) as state) ->
             if col > indent && col > 1 then
@@ -76,7 +75,7 @@ checkAligned toError =
                 Err (P.PErr P.Empty row col (toError indent))
 
 
-checkFreshLine : (Row -> Col -> x) -> P.Parser x ()
+checkFreshLine : (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
 checkFreshLine toError =
     P.Parser <|
         \((P.State _ _ _ _ row col) as state) ->
@@ -91,7 +90,7 @@ checkFreshLine toError =
 -- CHOMP AND CHECK
 
 
-chompAndCheckIndent : (E.Space -> Row -> Col -> x) -> (Row -> Col -> x) -> P.Parser x ()
+chompAndCheckIndent : (E.Space -> T.CPP_Row -> T.CPP_Col -> x) -> (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
 chompAndCheckIndent toSpaceError toIndentError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -140,7 +139,7 @@ type Status
     | EndlessMultiComment
 
 
-eat : EatType -> String -> Int -> Int -> Row -> Col -> ( ( Status, Int ), ( Row, Col ) )
+eat : EatType -> String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> ( ( Status, Int ), ( T.CPP_Row, T.CPP_Col ) )
 eat eatType src pos end row col =
     case eatType of
         Spaces ->
@@ -244,7 +243,7 @@ type MultiStatus
     | MultiEndless
 
 
-eatMultiCommentHelp : String -> Int -> Int -> Row -> Col -> Int -> ( ( MultiStatus, Int ), ( Row, Col ) )
+eatMultiCommentHelp : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> ( ( MultiStatus, Int ), ( T.CPP_Row, T.CPP_Col ) )
 eatMultiCommentHelp src pos end row col openComments =
     if pos >= end then
         ( ( MultiEndless, pos ), ( row, col ) )
@@ -284,7 +283,7 @@ eatMultiCommentHelp src pos end row col openComments =
 -- DOCUMENTATION COMMENT
 
 
-docComment : (Int -> Int -> x) -> (E.Space -> Int -> Int -> x) -> P.Parser x Src.CASTS_Comment
+docComment : (Int -> Int -> x) -> (E.Space -> Int -> Int -> x) -> P.Parser x T.CASTS_Comment
 docComment toExpectation toSpaceError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -300,7 +299,7 @@ docComment toExpectation toSpaceError =
                     && (P.unsafeIndex src (pos + 2) == '|')
             then
                 let
-                    col3 : Col
+                    col3 : T.CPP_Col
                     col3 =
                         col + 3
 
@@ -318,9 +317,9 @@ docComment toExpectation toSpaceError =
                             len =
                                 newPos - pos3 - 2
 
-                            snippet : P.Snippet
+                            snippet : T.CPP_Snippet
                             snippet =
-                                P.Snippet
+                                T.CPP_Snippet
                                     { fptr = src
                                     , offset = off
                                     , length = len
@@ -328,9 +327,9 @@ docComment toExpectation toSpaceError =
                                     , offCol = col3
                                     }
 
-                            comment : Src.CASTS_Comment
+                            comment : T.CASTS_Comment
                             comment =
-                                Src.CASTS_Comment snippet
+                                T.CASTS_Comment snippet
 
                             newState : P.State
                             newState =

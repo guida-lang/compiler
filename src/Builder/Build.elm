@@ -39,7 +39,6 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
@@ -51,9 +50,9 @@ import Data.Set as EverySet
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
-import System.TypeCheck.IO as TypeCheck
+import Types as T
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils exposing (FilePath, MVar(..))
+import Utils.Main as Utils exposing (FilePath)
 
 
 
@@ -61,7 +60,7 @@ import Utils.Main as Utils exposing (FilePath, MVar(..))
 
 
 type Env
-    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) Details.BuildID (Dict String ModuleName.CEMN_Raw Details.Local) (Dict String ModuleName.CEMN_Raw Details.Foreign)
+    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) Details.BuildID (Dict String T.CEMN_Raw Details.Local) (Dict String T.CEMN_Raw Details.Foreign)
 
 
 makeEnv : Reporting.BKey -> FilePath -> Details.Details -> IO Env
@@ -111,7 +110,7 @@ addRelative (AbsoluteSrcDir srcDir) path =
 described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 <https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead>
 -}
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
+fork : (a -> Encode.Value) -> IO a -> IO (T.MVar a)
 fork encoder work =
     Utils.newEmptyMVar
         |> IO.bind
@@ -121,7 +120,7 @@ fork encoder work =
             )
 
 
-forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> Encode.Value) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (MVar b))
+forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> Encode.Value) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (T.MVar b))
 forkWithKey toComparable keyComparison encoder func dict =
     Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork encoder (func k v)) dict
 
@@ -130,7 +129,7 @@ forkWithKey toComparable keyComparison encoder func dict =
 -- FROM EXPOSED
 
 
-fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.CEMN_Raw -> IO (Result Exit.BuildProblem docs)
+fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> IO (Result Exit.BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style <|
         \key ->
@@ -206,16 +205,16 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
 
 
 type Artifacts
-    = Artifacts Pkg.CEP_Name Dependencies (NE.Nonempty Root) (List Module)
+    = Artifacts T.CEP_Name Dependencies (NE.Nonempty Root) (List Module)
 
 
 type Module
-    = Fresh ModuleName.CEMN_Raw I.CEI_Interface Opt.LocalGraph
-    | Cached ModuleName.CEMN_Raw Bool (MVar CachedInterface)
+    = Fresh T.CEMN_Raw T.CEI_Interface Opt.LocalGraph
+    | Cached T.CEMN_Raw Bool (T.MVar CachedInterface)
 
 
 type alias Dependencies =
-    Dict (List String) TypeCheck.CEMN_Canonical I.DependencyInterface
+    Dict (List String) T.CEMN_Canonical I.DependencyInterface
 
 
 fromPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> IO (Result Exit.BuildProblem Artifacts)
@@ -297,12 +296,12 @@ fromPaths style root details paths =
 -- GET ROOT NAMES
 
 
-getRootNames : Artifacts -> NE.Nonempty ModuleName.CEMN_Raw
+getRootNames : Artifacts -> NE.Nonempty T.CEMN_Raw
 getRootNames (Artifacts _ _ roots _) =
     NE.map getRootName roots
 
 
-getRootName : Root -> ModuleName.CEMN_Raw
+getRootName : Root -> T.CEMN_Raw
 getRootName root =
     case root of
         Inside name ->
@@ -317,22 +316,22 @@ getRootName root =
 
 
 type alias StatusDict =
-    Dict String ModuleName.CEMN_Raw (MVar Status)
+    Dict String T.CEMN_Raw (T.MVar Status)
 
 
 type Status
     = SCached Details.Local
-    | SChanged Details.Local String Src.CASTS_Module DocsNeed
+    | SChanged Details.Local String T.CASTS_Module DocsNeed
     | SBadImport Import.Problem
     | SBadSyntax FilePath File.Time String Syntax.Error
-    | SForeign Pkg.CEP_Name
+    | SForeign T.CEP_Name
     | SKernel
 
 
-crawlDeps : Env -> MVar StatusDict -> List ModuleName.CEMN_Raw -> a -> IO a
+crawlDeps : Env -> T.MVar StatusDict -> List T.CEMN_Raw -> a -> IO a
 crawlDeps env mvar deps blockedValue =
     let
-        crawlNew : ModuleName.CEMN_Raw -> () -> IO (MVar Status)
+        crawlNew : T.CEMN_Raw -> () -> IO (T.MVar Status)
         crawlNew name () =
             fork statusEncoder (crawlModule env mvar (DocsNeed False) name)
     in
@@ -340,11 +339,11 @@ crawlDeps env mvar deps blockedValue =
         |> IO.bind
             (\statusDict ->
                 let
-                    depsDict : Dict String ModuleName.CEMN_Raw ()
+                    depsDict : Dict String T.CEMN_Raw ()
                     depsDict =
                         Map.fromKeys (\_ -> ()) deps
 
-                    newsDict : Dict String ModuleName.CEMN_Raw ()
+                    newsDict : Dict String T.CEMN_Raw ()
                     newsDict =
                         Dict.diff depsDict statusDict
                 in
@@ -361,7 +360,7 @@ crawlDeps env mvar deps blockedValue =
             )
 
 
-crawlModule : Env -> MVar StatusDict -> DocsNeed -> ModuleName.CEMN_Raw -> IO Status
+crawlModule : Env -> T.MVar StatusDict -> DocsNeed -> T.CEMN_Raw -> IO Status
 crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mvar ((DocsNeed needsDocs) as docsNeed) name =
     let
         fileName : String
@@ -423,7 +422,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
             )
 
 
-crawlFile : Env -> MVar StatusDict -> DocsNeed -> ModuleName.CEMN_Raw -> FilePath -> File.Time -> Details.BuildID -> IO Status
+crawlFile : Env -> T.MVar StatusDict -> DocsNeed -> T.CEMN_Raw -> FilePath -> File.Time -> Details.BuildID -> IO Status
 crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
     File.readUtf8 (Utils.fpForwardSlash root path)
         |> IO.bind
@@ -432,15 +431,15 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                     Err err ->
                         IO.pure <| SBadSyntax path time source err
 
-                    Ok ((Src.CASTS_Module maybeActualName _ _ imports values _ _ _ _) as modul) ->
+                    Ok ((T.CASTS_Module maybeActualName _ _ imports values _ _ _ _) as modul) ->
                         case maybeActualName of
                             Nothing ->
                                 IO.pure <| SBadSyntax path time source (Syntax.ModuleNameUnspecified expectedName)
 
-                            Just ((A.CRA_At _ actualName) as name) ->
+                            Just ((T.CRA_At _ actualName) as name) ->
                                 if expectedName == actualName then
                                     let
-                                        deps : List Name.CDN_Name
+                                        deps : List T.CDN_Name
                                         deps =
                                             List.map Src.getImportName imports
 
@@ -455,8 +454,8 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
             )
 
 
-isMain : A.CRA_Located Src.CASTS_Value -> Bool
-isMain (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) =
+isMain : T.CRA_Located T.CASTS_Value -> Bool
+isMain (T.CRA_At _ (T.CASTS_Value (T.CRA_At _ name) _ _ _)) =
     name == Name.main_
 
 
@@ -465,27 +464,27 @@ isMain (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) =
 
 
 type alias ResultDict =
-    Dict String ModuleName.CEMN_Raw (MVar BResult)
+    Dict String T.CEMN_Raw (T.MVar BResult)
 
 
 type BResult
-    = RNew Details.Local I.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
-    | RSame Details.Local I.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
-    | RCached Bool Details.BuildID (MVar CachedInterface)
+    = RNew Details.Local T.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
+    | RSame Details.Local T.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
+    | RCached Bool Details.BuildID (T.MVar CachedInterface)
     | RNotFound Import.Problem
     | RProblem Error.Module
     | RBlocked
-    | RForeign I.CEI_Interface
+    | RForeign T.CEI_Interface
     | RKernel
 
 
 type CachedInterface
     = Unneeded
-    | Loaded I.CEI_Interface
+    | Loaded T.CEI_Interface
     | Corrupted
 
 
-checkModule : Env -> Dependencies -> MVar ResultDict -> ModuleName.CEMN_Raw -> Status -> IO BResult
+checkModule : Env -> Dependencies -> T.MVar ResultDict -> T.CEMN_Raw -> Status -> IO BResult
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
         SCached ((Details.Local path time deps hasMain lastChange lastCompile) as local) ->
@@ -528,7 +527,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                             RProblem <|
                                                                 Error.Module name path time source <|
                                                                     case Parse.fromByteString projectType source of
-                                                                        Ok (Src.CASTS_Module _ _ _ imports _ _ _ _ _) ->
+                                                                        Ok (T.CASTS_Module _ _ _ imports _ _ _ _ _) ->
                                                                             Error.BadImports (toImportErrors env results imports problems)
 
                                                                         Err err ->
@@ -537,7 +536,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                 )
                     )
 
-        SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
+        SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
             Utils.readMVar resultDictDecoder resultsMVar
                 |> IO.bind
                     (\results ->
@@ -581,7 +580,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                         Error.BadSyntax err
 
         SForeign home ->
-            case Utils.find ModuleName.toComparableCanonical (TypeCheck.CEMN_Canonical home name) foreigns of
+            case Utils.find ModuleName.toComparableCanonical (T.CEMN_Canonical home name) foreigns of
                 I.Public iface ->
                     IO.pure (RForeign iface)
 
@@ -597,26 +596,26 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
 
 
 type DepsStatus
-    = DepsChange (Dict String ModuleName.CEMN_Raw I.CEI_Interface)
+    = DepsChange (Dict String T.CEMN_Raw T.CEI_Interface)
     | DepsSame (List Dep) (List CDep)
     | DepsBlock
-    | DepsNotFound (NE.Nonempty ( ModuleName.CEMN_Raw, Import.Problem ))
+    | DepsNotFound (NE.Nonempty ( T.CEMN_Raw, Import.Problem ))
 
 
-checkDeps : FilePath -> ResultDict -> List ModuleName.CEMN_Raw -> Details.BuildID -> IO DepsStatus
+checkDeps : FilePath -> ResultDict -> List T.CEMN_Raw -> Details.BuildID -> IO DepsStatus
 checkDeps root results deps lastCompile =
     checkDepsHelp root results deps [] [] [] [] False 0 lastCompile
 
 
 type alias Dep =
-    ( ModuleName.CEMN_Raw, I.CEI_Interface )
+    ( T.CEMN_Raw, T.CEI_Interface )
 
 
 type alias CDep =
-    ( ModuleName.CEMN_Raw, MVar CachedInterface )
+    ( T.CEMN_Raw, T.MVar CachedInterface )
 
 
-checkDepsHelp : FilePath -> ResultDict -> List ModuleName.CEMN_Raw -> List Dep -> List Dep -> List CDep -> List ( ModuleName.CEMN_Raw, Import.Problem ) -> Bool -> Details.BuildID -> Details.BuildID -> IO DepsStatus
+checkDepsHelp : FilePath -> ResultDict -> List T.CEMN_Raw -> List Dep -> List Dep -> List CDep -> List ( T.CEMN_Raw, Import.Problem ) -> Bool -> Details.BuildID -> Details.BuildID -> IO DepsStatus
 checkDepsHelp root results deps new same cached importProblems isBlocked lastDepChange lastCompile =
     case deps of
         dep :: otherDeps ->
@@ -678,10 +677,10 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
 -- TO IMPORT ERROR
 
 
-toImportErrors : Env -> ResultDict -> List Src.CASTS_Import -> NE.Nonempty ( ModuleName.CEMN_Raw, Import.Problem ) -> NE.Nonempty Import.Error
+toImportErrors : Env -> ResultDict -> List T.CASTS_Import -> NE.Nonempty ( T.CEMN_Raw, Import.Problem ) -> NE.Nonempty Import.Error
 toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
     let
-        knownModules : EverySet.EverySet String ModuleName.CEMN_Raw
+        knownModules : EverySet.EverySet String T.CEMN_Raw
         knownModules =
             EverySet.fromList identity
                 (List.concat
@@ -691,15 +690,15 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
                     ]
                 )
 
-        unimportedModules : EverySet.EverySet String ModuleName.CEMN_Raw
+        unimportedModules : EverySet.EverySet String T.CEMN_Raw
         unimportedModules =
             EverySet.diff knownModules (EverySet.fromList identity (List.map Src.getImportName imports))
 
-        regionDict : Dict String Name.CDN_Name A.CRA_Region
+        regionDict : Dict String T.CDN_Name T.CRA_Region
         regionDict =
-            Dict.fromList identity (List.map (\(Src.CASTS_Import (A.CRA_At region name) _ _) -> ( name, region )) imports)
+            Dict.fromList identity (List.map (\(T.CASTS_Import (T.CRA_At region name) _ _) -> ( name, region )) imports)
 
-        toError : ( Name.CDN_Name, Import.Problem ) -> Import.Error
+        toError : ( T.CDN_Name, Import.Problem ) -> Import.Error
         toError ( name, problem ) =
             Import.Error (Utils.find identity name regionDict) name unimportedModules problem
     in
@@ -710,7 +709,7 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 -- LOAD CACHED INTERFACES
 
 
-loadInterfaces : FilePath -> List Dep -> List CDep -> IO (Maybe (Dict String ModuleName.CEMN_Raw I.CEI_Interface))
+loadInterfaces : FilePath -> List Dep -> List CDep -> IO (Maybe (Dict String T.CEMN_Raw T.CEI_Interface))
 loadInterfaces root same cached =
     Utils.listTraverse (fork maybeDepEncoder << loadInterface root) cached
         |> IO.bind
@@ -762,7 +761,7 @@ loadInterface root ( name, ciMvar ) =
 -- CHECK PROJECT
 
 
-checkMidpoint : MVar (Maybe Dependencies) -> Dict String ModuleName.CEMN_Raw Status -> IO (Result Exit.BuildProjectProblem Dependencies)
+checkMidpoint : T.MVar (Maybe Dependencies) -> Dict String T.CEMN_Raw Status -> IO (Result Exit.BuildProjectProblem Dependencies)
 checkMidpoint dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
@@ -782,7 +781,7 @@ checkMidpoint dmvar statuses =
                 |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
 
 
-checkMidpointAndRoots : MVar (Maybe Dependencies) -> Dict String ModuleName.CEMN_Raw Status -> NE.Nonempty RootStatus -> IO (Result Exit.BuildProjectProblem Dependencies)
+checkMidpointAndRoots : T.MVar (Maybe Dependencies) -> Dict String T.CEMN_Raw Status -> NE.Nonempty RootStatus -> IO (Result Exit.BuildProjectProblem Dependencies)
 checkMidpointAndRoots dmvar statuses sroots =
     case checkForCycles statuses of
         Nothing ->
@@ -812,21 +811,21 @@ checkMidpointAndRoots dmvar statuses sroots =
 -- CHECK FOR CYCLES
 
 
-checkForCycles : Dict String ModuleName.CEMN_Raw Status -> Maybe (NE.Nonempty ModuleName.CEMN_Raw)
+checkForCycles : Dict String T.CEMN_Raw Status -> Maybe (NE.Nonempty T.CEMN_Raw)
 checkForCycles modules =
     let
         graph : List Node
         graph =
             Dict.foldr compare addToGraph [] modules
 
-        sccs : List (Graph.SCC ModuleName.CEMN_Raw)
+        sccs : List (Graph.SCC T.CEMN_Raw)
         sccs =
             Graph.stronglyConnComp graph
     in
     checkForCyclesHelp sccs
 
 
-checkForCyclesHelp : List (Graph.SCC ModuleName.CEMN_Raw) -> Maybe (NE.Nonempty ModuleName.CEMN_Raw)
+checkForCyclesHelp : List (Graph.SCC T.CEMN_Raw) -> Maybe (NE.Nonempty T.CEMN_Raw)
 checkForCyclesHelp sccs =
     case sccs of
         [] ->
@@ -845,13 +844,13 @@ checkForCyclesHelp sccs =
 
 
 type alias Node =
-    ( ModuleName.CEMN_Raw, ModuleName.CEMN_Raw, List ModuleName.CEMN_Raw )
+    ( T.CEMN_Raw, T.CEMN_Raw, List T.CEMN_Raw )
 
 
-addToGraph : ModuleName.CEMN_Raw -> Status -> List Node -> List Node
+addToGraph : T.CEMN_Raw -> Status -> List Node -> List Node
 addToGraph name status graph =
     let
-        dependencies : List ModuleName.CEMN_Raw
+        dependencies : List T.CEMN_Raw
         dependencies =
             case status of
                 SCached (Details.Local _ _ deps _ _ _) ->
@@ -879,10 +878,10 @@ addToGraph name status graph =
 -- CHECK UNIQUE ROOTS
 
 
-checkUniqueRoots : Dict String ModuleName.CEMN_Raw Status -> NE.Nonempty RootStatus -> Maybe Exit.BuildProjectProblem
+checkUniqueRoots : Dict String T.CEMN_Raw Status -> NE.Nonempty RootStatus -> Maybe Exit.BuildProjectProblem
 checkUniqueRoots insides sroots =
     let
-        outsidesDict : Dict String ModuleName.CEMN_Raw (OneOrMore.OneOrMore FilePath)
+        outsidesDict : Dict String T.CEMN_Raw (OneOrMore.OneOrMore FilePath)
         outsidesDict =
             Utils.mapFromListWith identity OneOrMore.more (List.filterMap rootStatusToNamePathPair (NE.toList sroots))
     in
@@ -899,7 +898,7 @@ checkUniqueRoots insides sroots =
                     Just problem
 
 
-rootStatusToNamePathPair : RootStatus -> Maybe ( ModuleName.CEMN_Raw, OneOrMore.OneOrMore FilePath )
+rootStatusToNamePathPair : RootStatus -> Maybe ( T.CEMN_Raw, OneOrMore.OneOrMore FilePath )
 rootStatusToNamePathPair sroot =
     case sroot of
         SInside _ ->
@@ -912,7 +911,7 @@ rootStatusToNamePathPair sroot =
             Nothing
 
 
-checkOutside : ModuleName.CEMN_Raw -> OneOrMore.OneOrMore FilePath -> Result Exit.BuildProjectProblem FilePath
+checkOutside : T.CEMN_Raw -> OneOrMore.OneOrMore FilePath -> Result Exit.BuildProjectProblem FilePath
 checkOutside name paths =
     case OneOrMore.destruct NE.Nonempty paths of
         NE.Nonempty p [] ->
@@ -922,7 +921,7 @@ checkOutside name paths =
             Err (Exit.BP_RootNameDuplicate name p1 p2)
 
 
-checkInside : ModuleName.CEMN_Raw -> FilePath -> Status -> Result Exit.BuildProjectProblem ()
+checkInside : T.CEMN_Raw -> FilePath -> Status -> Result Exit.BuildProjectProblem ()
 checkInside name p1 status =
     case status of
         SCached (Details.Local p2 _ _ _ _ _) ->
@@ -948,10 +947,10 @@ checkInside name p1 status =
 -- COMPILE MODULE
 
 
-compile : Env -> DocsNeed -> Details.Local -> String -> Dict String ModuleName.CEMN_Raw I.CEI_Interface -> Src.CASTS_Module -> IO BResult
+compile : Env -> DocsNeed -> Details.Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO BResult
 compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path time deps main lastChange _) source ifaces modul =
     let
-        pkg : Pkg.CEP_Name
+        pkg : T.CEP_Name
         pkg =
             projectTypeToPkg projectType
     in
@@ -968,11 +967,11 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                             Ok docs ->
                                 let
-                                    name : Name.CDN_Name
+                                    name : T.CDN_Name
                                     name =
                                         Src.getName modul
 
-                                    iface : I.CEI_Interface
+                                    iface : T.CEI_Interface
                                     iface =
                                         I.fromModule pkg canonical annotations
 
@@ -1043,7 +1042,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
             )
 
 
-projectTypeToPkg : Parse.ProjectType -> Pkg.CEP_Name
+projectTypeToPkg : Parse.ProjectType -> T.CEP_Name
 projectTypeToPkg projectType =
     case projectType of
         Parse.Package pkg ->
@@ -1057,13 +1056,13 @@ projectTypeToPkg projectType =
 -- WRITE DETAILS
 
 
-writeDetails : FilePath -> Details.Details -> Dict String ModuleName.CEMN_Raw BResult -> IO ()
+writeDetails : FilePath -> Details.Details -> Dict String T.CEMN_Raw BResult -> IO ()
 writeDetails root (Details.Details time outline buildID locals foreigns extras) results =
     File.writeBinary Details.detailsEncoder (Stuff.details root) <|
         Details.Details time outline buildID (Dict.foldr compare addNewLocal locals results) foreigns extras
 
 
-addNewLocal : ModuleName.CEMN_Raw -> BResult -> Dict String ModuleName.CEMN_Raw Details.Local -> Dict String ModuleName.CEMN_Raw Details.Local
+addNewLocal : T.CEMN_Raw -> BResult -> Dict String T.CEMN_Raw Details.Local -> Dict String T.CEMN_Raw Details.Local
 addNewLocal name result locals =
     case result of
         RNew local _ _ _ ->
@@ -1095,7 +1094,7 @@ addNewLocal name result locals =
 -- FINALIZE EXPOSED
 
 
-finalizeExposed : FilePath -> DocsGoal docs -> NE.Nonempty ModuleName.CEMN_Raw -> Dict String ModuleName.CEMN_Raw BResult -> IO (Result Exit.BuildProblem docs)
+finalizeExposed : FilePath -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> Dict String T.CEMN_Raw BResult -> IO (Result Exit.BuildProblem docs)
 finalizeExposed root docsGoal exposed results =
     case List.foldr (addImportProblems results) [] (NE.toList exposed) of
         p :: ps ->
@@ -1138,7 +1137,7 @@ addErrors result errors =
             errors
 
 
-addImportProblems : Dict String ModuleName.CEMN_Raw BResult -> ModuleName.CEMN_Raw -> List ( ModuleName.CEMN_Raw, Import.Problem ) -> List ( ModuleName.CEMN_Raw, Import.Problem )
+addImportProblems : Dict String T.CEMN_Raw BResult -> T.CEMN_Raw -> List ( T.CEMN_Raw, Import.Problem ) -> List ( T.CEMN_Raw, Import.Problem )
 addImportProblems results name problems =
     case Utils.find identity name results of
         RNew _ _ _ _ ->
@@ -1171,12 +1170,12 @@ addImportProblems results name problems =
 
 
 type DocsGoal docs
-    = KeepDocs (Dict String ModuleName.CEMN_Raw BResult -> docs)
-    | WriteDocs (Dict String ModuleName.CEMN_Raw BResult -> IO docs)
+    = KeepDocs (Dict String T.CEMN_Raw BResult -> docs)
+    | WriteDocs (Dict String T.CEMN_Raw BResult -> IO docs)
     | IgnoreDocs docs
 
 
-keepDocs : DocsGoal (Dict String ModuleName.CEMN_Raw Docs.Module)
+keepDocs : DocsGoal (Dict String T.CEMN_Raw Docs.Module)
 keepDocs =
     KeepDocs (Utils.mapMapMaybe identity compare toDocs)
 
@@ -1222,7 +1221,7 @@ makeDocs (DocsNeed isNeeded) modul =
         Ok Nothing
 
 
-finalizeDocs : DocsGoal docs -> Dict String ModuleName.CEMN_Raw BResult -> IO docs
+finalizeDocs : DocsGoal docs -> Dict String T.CEMN_Raw BResult -> IO docs
 finalizeDocs goal results =
     case goal of
         KeepDocs f ->
@@ -1271,7 +1270,7 @@ toDocs result =
 
 
 type ReplArtifacts
-    = ReplArtifacts TypeCheck.CEMN_Canonical (List Module) L.Localizer (Dict String Name.CDN_Name Can.CASTC_Annotation)
+    = ReplArtifacts T.CEMN_Canonical (List Module) L.Localizer (Dict String T.CDN_Name T.CASTC_Annotation)
 
 
 fromRepl : FilePath -> Details.Details -> String -> IO (Result Exit.Repl ReplArtifacts)
@@ -1283,12 +1282,12 @@ fromRepl root details source =
                     Err syntaxError ->
                         IO.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
-                    Ok ((Src.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
+                    Ok ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
                         Details.loadInterfaces root details
                             |> IO.bind
                                 (\dmvar ->
                                     let
-                                        deps : List Name.CDN_Name
+                                        deps : List T.CDN_Name
                                         deps =
                                             List.map Src.getImportName imports
                                     in
@@ -1342,14 +1341,14 @@ fromRepl root details source =
             )
 
 
-finalizeReplArtifacts : Env -> String -> Src.CASTS_Module -> DepsStatus -> ResultDict -> Dict String ModuleName.CEMN_Raw BResult -> IO (Result Exit.Repl ReplArtifacts)
-finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
+finalizeReplArtifacts : Env -> String -> T.CASTS_Module -> DepsStatus -> ResultDict -> Dict String T.CEMN_Raw BResult -> IO (Result Exit.Repl ReplArtifacts)
+finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
     let
-        pkg : Pkg.CEP_Name
+        pkg : T.CEP_Name
         pkg =
             projectTypeToPkg projectType
 
-        compileInput : Dict String ModuleName.CEMN_Raw I.CEI_Interface -> IO (Result Exit.Repl ReplArtifacts)
+        compileInput : Dict String T.CEMN_Raw T.CEI_Interface -> IO (Result Exit.Repl ReplArtifacts)
         compileInput ifaces =
             Compile.compile pkg ifaces modul
                 |> IO.fmap
@@ -1357,7 +1356,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.CAS
                         case result of
                             Ok (Compile.Artifacts ((Can.Module name _ _ _ _ _ _ _) as canonical) annotations objects) ->
                                 let
-                                    h : TypeCheck.CEMN_Canonical
+                                    h : T.CEMN_Canonical
                                     h =
                                         name
 
@@ -1417,7 +1416,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.CAS
 
 
 type RootLocation
-    = LInside ModuleName.CEMN_Raw
+    = LInside T.CEMN_Raw
     | LOutside FilePath
 
 
@@ -1588,12 +1587,12 @@ dropPrefix roots paths =
 
 
 type RootStatus
-    = SInside ModuleName.CEMN_Raw
-    | SOutsideOk Details.Local String Src.CASTS_Module
+    = SInside T.CEMN_Raw
+    | SOutsideOk Details.Local String T.CASTS_Module
     | SOutsideErr Error.Module
 
 
-crawlRoot : Env -> MVar StatusDict -> RootLocation -> IO RootStatus
+crawlRoot : Env -> T.MVar StatusDict -> RootLocation -> IO RootStatus
 crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
     case root of
         LInside name ->
@@ -1620,9 +1619,9 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                             |> IO.bind
                                 (\source ->
                                     case Parse.fromByteString projectType source of
-                                        Ok ((Src.CASTS_Module _ _ _ imports values _ _ _ _) as modul) ->
+                                        Ok ((T.CASTS_Module _ _ _ imports values _ _ _ _) as modul) ->
                                             let
-                                                deps : List Name.CDN_Name
+                                                deps : List T.CDN_Name
                                                 deps =
                                                     List.map Src.getImportName imports
 
@@ -1645,8 +1644,8 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
 
 
 type RootResult
-    = RInside ModuleName.CEMN_Raw
-    | ROutsideOk ModuleName.CEMN_Raw I.CEI_Interface Opt.LocalGraph
+    = RInside T.CEMN_Raw
+    | ROutsideOk T.CEMN_Raw T.CEI_Interface Opt.LocalGraph
     | ROutsideErr Error.Module
     | ROutsideBlocked
 
@@ -1660,7 +1659,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
         SOutsideErr err ->
             IO.pure (ROutsideErr err)
 
-        SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
+        SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
             checkDeps root results deps lastCompile
                 |> IO.bind
                     (\depsStatus ->
@@ -1691,14 +1690,14 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
                     )
 
 
-compileOutside : Env -> Details.Local -> String -> Dict String ModuleName.CEMN_Raw I.CEI_Interface -> Src.CASTS_Module -> IO RootResult
+compileOutside : Env -> Details.Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO RootResult
 compileOutside (Env key _ projectType _ _ _ _) (Details.Local path time _ _ _ _) source ifaces modul =
     let
-        pkg : Pkg.CEP_Name
+        pkg : T.CEP_Name
         pkg =
             projectTypeToPkg projectType
 
-        name : Name.CDN_Name
+        name : T.CDN_Name
         name =
             Src.getName modul
     in
@@ -1720,11 +1719,11 @@ compileOutside (Env key _ projectType _ _ _ _) (Details.Local path time _ _ _ _)
 
 
 type Root
-    = Inside ModuleName.CEMN_Raw
-    | Outside ModuleName.CEMN_Raw I.CEI_Interface Opt.LocalGraph
+    = Inside T.CEMN_Raw
+    | Outside T.CEMN_Raw T.CEI_Interface Opt.LocalGraph
 
 
-toArtifacts : Env -> Dependencies -> Dict String ModuleName.CEMN_Raw BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
+toArtifacts : Env -> Dependencies -> Dict String T.CEMN_Raw BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
 toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
     case gatherProblemsOrMains results rootResults of
         Err (NE.Nonempty e es) ->
@@ -1736,7 +1735,7 @@ toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
                     Dict.foldr compare addInside (NE.foldr addOutside [] rootResults) results
 
 
-gatherProblemsOrMains : Dict String ModuleName.CEMN_Raw BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty Error.Module) (NE.Nonempty Root)
+gatherProblemsOrMains : Dict String T.CEMN_Raw BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty Error.Module) (NE.Nonempty Root)
 gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
     let
         addResult : RootResult -> ( List Error.Module, List Root ) -> ( List Error.Module, List Root )
@@ -1781,7 +1780,7 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
             Err (NE.Nonempty e es)
 
 
-addInside : ModuleName.CEMN_Raw -> BResult -> List Module -> List Module
+addInside : T.CEMN_Raw -> BResult -> List Module -> List Module
 addInside name result modules =
     case result of
         RNew _ iface objs _ ->
@@ -1809,7 +1808,7 @@ addInside name result modules =
             modules
 
 
-badInside : ModuleName.CEMN_Raw -> String
+badInside : T.CEMN_Raw -> String
 badInside name =
     "Error from `" ++ name ++ "` should have been reported already."
 
@@ -1834,7 +1833,7 @@ addOutside root modules =
 -- ENCODERS and DECODERS
 
 
-dictRawMVarBResultEncoder : Dict String ModuleName.CEMN_Raw (MVar BResult) -> Encode.Value
+dictRawMVarBResultEncoder : Dict String T.CEMN_Raw (T.MVar BResult) -> Encode.Value
 dictRawMVarBResultEncoder =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
@@ -1864,7 +1863,7 @@ bResultEncoder bResult =
                 , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
                 ]
 
-        RCached main lastChange (MVar ref) ->
+        RCached main lastChange (T.MVar ref) ->
             Encode.object
                 [ ( "type", Encode.string "RCached" )
                 , ( "main", Encode.bool main )
@@ -1921,7 +1920,7 @@ bResultDecoder =
                         Decode.map3 RCached
                             (Decode.field "main" Decode.bool)
                             (Decode.field "lastChange" Decode.int)
-                            (Decode.field "mvar" (Decode.map MVar Decode.int))
+                            (Decode.field "mvar" (Decode.map T.MVar Decode.int))
 
                     "RNotFound" ->
                         Decode.map RNotFound

@@ -7,7 +7,6 @@ module Compiler.Canonicalize.Pattern exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Index as Index
@@ -17,6 +16,7 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map exposing (Dict)
+import Types as T
 import Utils.Main as Utils
 
 
@@ -29,7 +29,7 @@ type alias PResult i w a =
 
 
 type alias Bindings =
-    Dict String Name.CDN_Name A.CRA_Region
+    Dict String T.CDN_Name T.CRA_Region
 
 
 
@@ -60,67 +60,67 @@ verify context (R.RResult k) =
 
 
 type alias DupsDict =
-    Dups.Tracker A.CRA_Region
+    Dups.Tracker T.CRA_Region
 
 
-canonicalize : Env.Env -> Src.CASTS_Pattern -> PResult DupsDict w Can.Pattern
-canonicalize env (A.CRA_At region pattern) =
-    R.fmap (A.CRA_At region) <|
+canonicalize : Env.Env -> T.CASTS_Pattern -> PResult DupsDict w Can.Pattern
+canonicalize env (T.CRA_At region pattern) =
+    R.fmap (T.CRA_At region) <|
         case pattern of
-            Src.CASTS_PAnything ->
+            T.CASTS_PAnything ->
                 R.ok Can.PAnything
 
-            Src.CASTS_PVar name ->
+            T.CASTS_PVar name ->
                 logVar name region (Can.PVar name)
 
-            Src.CASTS_PRecord fields ->
+            T.CASTS_PRecord fields ->
                 logFields fields (Can.PRecord (List.map A.toValue fields))
 
-            Src.CASTS_PUnit ->
+            T.CASTS_PUnit ->
                 R.ok Can.PUnit
 
-            Src.CASTS_PTuple a b cs ->
+            T.CASTS_PTuple a b cs ->
                 R.ok Can.PTuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
                     |> R.apply (canonicalizeTuple region env cs)
 
-            Src.CASTS_PCtor nameRegion name patterns ->
+            T.CASTS_PCtor nameRegion name patterns ->
                 Env.findCtor nameRegion env name
                     |> R.bind (canonicalizeCtor env region name patterns)
 
-            Src.CASTS_PCtorQual nameRegion home name patterns ->
+            T.CASTS_PCtorQual nameRegion home name patterns ->
                 Env.findCtorQual nameRegion env home name
                     |> R.bind (canonicalizeCtor env region name patterns)
 
-            Src.CASTS_PList patterns ->
+            T.CASTS_PList patterns ->
                 R.fmap Can.PList (canonicalizeList env patterns)
 
-            Src.CASTS_PCons first rest ->
+            T.CASTS_PCons first rest ->
                 R.ok Can.PCons
                     |> R.apply (canonicalize env first)
                     |> R.apply (canonicalize env rest)
 
-            Src.CASTS_PAlias ptrn (A.CRA_At reg name) ->
+            T.CASTS_PAlias ptrn (T.CRA_At reg name) ->
                 canonicalize env ptrn
                     |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
 
-            Src.CASTS_PChr chr ->
+            T.CASTS_PChr chr ->
                 R.ok (Can.PChr chr)
 
-            Src.CASTS_PStr str ->
+            T.CASTS_PStr str ->
                 R.ok (Can.PStr str)
 
-            Src.CASTS_PInt int ->
+            T.CASTS_PInt int ->
                 R.ok (Can.PInt int)
 
 
-canonicalizeCtor : Env.Env -> A.CRA_Region -> Name.CDN_Name -> List Src.CASTS_Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
+canonicalizeCtor : Env.Env -> T.CRA_Region -> T.CDN_Name -> List T.CASTS_Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
 canonicalizeCtor env region name patterns ctor =
     case ctor of
         Env.Ctor home tipe union index args ->
             let
-                toCanonicalArg : Index.CDI_ZeroBased -> Src.CASTS_Pattern -> Can.CASTC_Type -> R.RResult DupsDict w Error.Error Can.PatternCtorArg
+                toCanonicalArg : T.CDI_ZeroBased -> T.CASTS_Pattern -> T.CASTC_Type -> R.RResult DupsDict w Error.Error Can.PatternCtorArg
                 toCanonicalArg argIndex argPattern argTipe =
                     R.fmap (Can.PatternCtorArg argIndex argTipe)
                         (canonicalize env argPattern)
@@ -144,7 +144,7 @@ canonicalizeCtor env region name patterns ctor =
             R.throw (Error.PatternHasRecordCtor region name)
 
 
-canonicalizeTuple : A.CRA_Region -> Env.Env -> List Src.CASTS_Pattern -> PResult DupsDict w (Maybe Can.Pattern)
+canonicalizeTuple : T.CRA_Region -> Env.Env -> List T.CASTS_Pattern -> PResult DupsDict w (Maybe Can.Pattern)
 canonicalizeTuple tupleRegion env extras =
     case extras of
         [] ->
@@ -157,7 +157,7 @@ canonicalizeTuple tupleRegion env extras =
             R.throw (Error.TupleLargerThanThree tupleRegion)
 
 
-canonicalizeList : Env.Env -> List Src.CASTS_Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeList : Env.Env -> List T.CASTS_Pattern -> PResult DupsDict w (List Can.Pattern)
 canonicalizeList env list =
     case list of
         [] ->
@@ -173,18 +173,18 @@ canonicalizeList env list =
 -- LOG BINDINGS
 
 
-logVar : Name.CDN_Name -> A.CRA_Region -> a -> PResult DupsDict w a
+logVar : T.CDN_Name -> T.CRA_Region -> a -> PResult DupsDict w a
 logVar name region value =
     R.RResult <|
         \bindings warnings ->
             Ok (R.ROk (Dups.insert name region region bindings) warnings value)
 
 
-logFields : List (A.CRA_Located Name.CDN_Name) -> a -> PResult DupsDict w a
+logFields : List (T.CRA_Located T.CDN_Name) -> a -> PResult DupsDict w a
 logFields fields value =
     let
-        addField : A.CRA_Located Name.CDN_Name -> Dups.Tracker A.CRA_Region -> Dups.Tracker A.CRA_Region
-        addField (A.CRA_At region name) dict =
+        addField : T.CRA_Located T.CDN_Name -> Dups.Tracker T.CRA_Region -> Dups.Tracker T.CRA_Region
+        addField (T.CRA_At region name) dict =
             Dups.insert name region region dict
     in
     R.RResult <|

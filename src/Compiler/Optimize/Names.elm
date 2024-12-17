@@ -16,15 +16,12 @@ module Compiler.Optimize.Names exposing
     , traverse
     )
 
-import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
-import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.TypeCheck.IO as IO
+import Types as T
 import Utils.Main as Utils
 
 
@@ -36,37 +33,37 @@ type Tracker a
     = Tracker
         (Int
          -> EverySet (List String) Opt.Global
-         -> Dict String CDN_Name Int
+         -> Dict String T.CDN_Name Int
          -> TResult a
         )
 
 
 type TResult a
-    = TResult Int (EverySet (List String) Opt.Global) (Dict String CDN_Name Int) a
+    = TResult Int (EverySet (List String) Opt.Global) (Dict String T.CDN_Name Int) a
 
 
-run : Tracker a -> ( EverySet (List String) Opt.Global, Dict String CDN_Name Int, a )
+run : Tracker a -> ( EverySet (List String) Opt.Global, Dict String T.CDN_Name Int, a )
 run (Tracker k) =
     case k 0 EverySet.empty Dict.empty of
         TResult _ deps fields value ->
             ( deps, fields, value )
 
 
-generate : Tracker CDN_Name
+generate : Tracker T.CDN_Name
 generate =
     Tracker <|
         \uid deps fields ->
             TResult (uid + 1) deps fields (Name.fromVarIndex uid)
 
 
-registerKernel : CDN_Name -> a -> Tracker a
+registerKernel : T.CDN_Name -> a -> Tracker a
 registerKernel home value =
     Tracker <|
         \uid deps fields ->
             TResult uid (EverySet.insert Opt.toComparableGlobal (Opt.toKernelGlobal home) deps) fields value
 
 
-registerGlobal : IO.CEMN_Canonical -> CDN_Name -> Tracker Opt.Expr
+registerGlobal : T.CEMN_Canonical -> T.CDN_Name -> Tracker Opt.Expr
 registerGlobal home name =
     Tracker <|
         \uid deps fields ->
@@ -78,7 +75,7 @@ registerGlobal home name =
             TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal global)
 
 
-registerDebug : CDN_Name -> IO.CEMN_Canonical -> A.CRA_Region -> Tracker Opt.Expr
+registerDebug : T.CDN_Name -> T.CEMN_Canonical -> T.CRA_Region -> Tracker Opt.Expr
 registerDebug name home region =
     Tracker <|
         \uid deps fields ->
@@ -90,7 +87,7 @@ registerDebug name home region =
             TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug name home region Nothing)
 
 
-registerCtor : IO.CEMN_Canonical -> CDN_Name -> Index.CDI_ZeroBased -> Can.CASTC_CtorOpts -> Tracker Opt.Expr
+registerCtor : T.CEMN_Canonical -> T.CDN_Name -> T.CDI_ZeroBased -> T.CASTC_CtorOpts -> Tracker Opt.Expr
 registerCtor home name index opts =
     Tracker <|
         \uid deps fields ->
@@ -104,10 +101,10 @@ registerCtor home name index opts =
                     EverySet.insert Opt.toComparableGlobal global deps
             in
             case opts of
-                Can.CASTC_Normal ->
+                T.CASTC_Normal ->
                     TResult uid newDeps fields (Opt.VarGlobal global)
 
-                Can.CASTC_Enum ->
+                T.CASTC_Enum ->
                     TResult uid newDeps fields <|
                         case name of
                             "True" ->
@@ -127,7 +124,7 @@ registerCtor home name index opts =
                             _ ->
                                 Opt.VarEnum global index
 
-                Can.CASTC_Unbox ->
+                T.CASTC_Unbox ->
                     TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox global)
 
 
@@ -136,14 +133,14 @@ identity =
     Opt.Global ModuleName.basics Name.identity_
 
 
-registerField : CDN_Name -> a -> Tracker a
+registerField : T.CDN_Name -> a -> Tracker a
 registerField name value =
     Tracker <|
         \uid d fields ->
             TResult uid d (Utils.mapInsertWith Basics.identity (+) name 1 fields) value
 
 
-registerFieldDict : Dict String CDN_Name v -> a -> Tracker a
+registerFieldDict : Dict String T.CDN_Name v -> a -> Tracker a
 registerFieldDict newFields value =
     Tracker <|
         \uid d fields ->
@@ -158,14 +155,14 @@ toOne _ =
     1
 
 
-registerFieldList : List CDN_Name -> a -> Tracker a
+registerFieldList : List T.CDN_Name -> a -> Tracker a
 registerFieldList names value =
     Tracker <|
         \uid deps fields ->
             TResult uid deps (List.foldr addOne fields names) value
 
 
-addOne : CDN_Name -> Dict String CDN_Name Int -> Dict String CDN_Name Int
+addOne : T.CDN_Name -> Dict String T.CDN_Name Int -> Dict String T.CDN_Name Int
 addOne name fields =
     Utils.mapInsertWith Basics.identity (+) name 1 fields
 

@@ -11,8 +11,6 @@ module Compiler.Elm.Compiler.Type exposing
     , toDoc
     )
 
-import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name
 import Compiler.Json.Decode as D exposing (Decoder)
 import Compiler.Json.Encode as E exposing (Value)
 import Compiler.Json.String as Json
@@ -24,6 +22,7 @@ import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -33,9 +32,9 @@ import Utils.Crash exposing (crash)
 
 type Type
     = Lambda Type Type
-    | Var Name.CDN_Name
-    | Type Name.CDN_Name (List Type)
-    | Record (List ( Name.CDN_Name, Type )) (Maybe Name.CDN_Name)
+    | Var T.CDN_Name
+    | Type T.CDN_Name (List Type)
+    | Record (List ( T.CDN_Name, Type )) (Maybe T.CDN_Name)
     | Unit
     | Tuple Type Type (List Type)
 
@@ -45,11 +44,11 @@ type DebugMetadata
 
 
 type Alias
-    = Alias Name.CDN_Name (List Name.CDN_Name) Type
+    = Alias T.CDN_Name (List T.CDN_Name) Type
 
 
 type Union
-    = Union Name.CDN_Name (List Name.CDN_Name) (List ( Name.CDN_Name, List Type ))
+    = Union T.CDN_Name (List T.CDN_Name) (List ( T.CDN_Name, List Type ))
 
 
 
@@ -91,7 +90,7 @@ toDoc localizer context tipe =
                 (Maybe.map D.fromName ext)
 
 
-entryToDoc : L.Localizer -> ( Name.CDN_Name, Type ) -> ( D.Doc, D.Doc )
+entryToDoc : L.Localizer -> ( T.CDN_Name, Type ) -> ( D.Doc, D.Doc )
 entryToDoc localizer ( field, fieldType ) =
     ( D.fromName field, toDoc localizer RT.None fieldType )
 
@@ -125,34 +124,34 @@ parser =
     P.specialize (\_ _ _ -> ()) (P.fmap fromRawType (P.fmap Tuple.first Type.expression))
 
 
-fromRawType : Src.CASTS_Type -> Type
-fromRawType (A.CRA_At _ astType) =
+fromRawType : T.CASTS_Type -> Type
+fromRawType (T.CRA_At _ astType) =
     case astType of
-        Src.CASTS_TLambda t1 t2 ->
+        T.CASTS_TLambda t1 t2 ->
             Lambda (fromRawType t1) (fromRawType t2)
 
-        Src.CASTS_TVar x ->
+        T.CASTS_TVar x ->
             Var x
 
-        Src.CASTS_TUnit ->
+        T.CASTS_TUnit ->
             Unit
 
-        Src.CASTS_TTuple a b cs ->
+        T.CASTS_TTuple a b cs ->
             Tuple
                 (fromRawType a)
                 (fromRawType b)
                 (List.map fromRawType cs)
 
-        Src.CASTS_TType _ name args ->
+        T.CASTS_TType _ name args ->
             Type name (List.map fromRawType args)
 
-        Src.CASTS_TTypeQual _ _ name args ->
+        T.CASTS_TTypeQual _ _ name args ->
             Type name (List.map fromRawType args)
 
-        Src.CASTS_TRecord fields ext ->
+        T.CASTS_TRecord fields ext ->
             let
-                fromField : ( A.CRA_Located a, Src.CASTS_Type ) -> ( a, Type )
-                fromField ( A.CRA_At _ field, tipe ) =
+                fromField : ( T.CRA_Located a, T.CASTS_Type ) -> ( a, Type )
+                fromField ( T.CRA_At _ field, tipe ) =
                     ( field, fromRawType tipe )
             in
             Record
@@ -193,7 +192,7 @@ toCustomTypeField (Union name args constructors) =
     )
 
 
-toVariantObject : ( Name.CDN_Name, List Type ) -> ( String, Value )
+toVariantObject : ( T.CDN_Name, List Type ) -> ( String, Value )
 toVariantObject ( name, args ) =
     ( Json.fromName name, E.list encode args )
 

@@ -25,25 +25,26 @@ module Compiler.Parse.Keyword exposing
     , where_
     )
 
-import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
+import Compiler.Parse.Primitives as P exposing (Parser)
 import Compiler.Parse.Variable as Var
+import Types as T
 
 
 
 -- DECLARATIONS
 
 
-type_ : (Row -> Col -> x) -> Parser x ()
+type_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 type_ tx =
     k4 't' 'y' 'p' 'e' tx
 
 
-alias_ : (Row -> Col -> x) -> Parser x ()
+alias_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 alias_ tx =
     k5 'a' 'l' 'i' 'a' 's' tx
 
 
-port_ : (Row -> Col -> x) -> Parser x ()
+port_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 port_ tx =
     k4 'p' 'o' 'r' 't' tx
 
@@ -52,17 +53,17 @@ port_ tx =
 -- IF EXPRESSIONS
 
 
-if_ : (Row -> Col -> x) -> Parser x ()
+if_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 if_ tx =
     k2 'i' 'f' tx
 
 
-then_ : (Row -> Col -> x) -> Parser x ()
+then_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 then_ tx =
     k4 't' 'h' 'e' 'n' tx
 
 
-else_ : (Row -> Col -> x) -> Parser x ()
+else_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 else_ tx =
     k4 'e' 'l' 's' 'e' tx
 
@@ -71,12 +72,12 @@ else_ tx =
 -- CASE EXPRESSIONS
 
 
-case_ : (Row -> Col -> x) -> Parser x ()
+case_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 case_ tx =
     k4 'c' 'a' 's' 'e' tx
 
 
-of_ : (Row -> Col -> x) -> Parser x ()
+of_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 of_ tx =
     k2 'o' 'f' tx
 
@@ -85,12 +86,12 @@ of_ tx =
 -- LET EXPRESSIONS
 
 
-let_ : (Row -> Col -> x) -> Parser x ()
+let_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 let_ tx =
     k3 'l' 'e' 't' tx
 
 
-in_ : (Row -> Col -> x) -> Parser x ()
+in_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 in_ tx =
     k2 'i' 'n' tx
 
@@ -99,22 +100,22 @@ in_ tx =
 -- INFIXES
 
 
-infix_ : (Row -> Col -> x) -> Parser x ()
+infix_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 infix_ tx =
     k5 'i' 'n' 'f' 'i' 'x' tx
 
 
-left_ : (Row -> Col -> x) -> Parser x ()
+left_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 left_ tx =
     k4 'l' 'e' 'f' 't' tx
 
 
-right_ : (Row -> Col -> x) -> Parser x ()
+right_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 right_ tx =
     k5 'r' 'i' 'g' 'h' 't' tx
 
 
-non_ : (Row -> Col -> x) -> Parser x ()
+non_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 non_ tx =
     k3 'n' 'o' 'n' tx
 
@@ -123,22 +124,22 @@ non_ tx =
 -- IMPORTS
 
 
-module_ : (Row -> Col -> x) -> Parser x ()
+module_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 module_ tx =
     k6 'm' 'o' 'd' 'u' 'l' 'e' tx
 
 
-import_ : (Row -> Col -> x) -> Parser x ()
+import_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 import_ tx =
     k6 'i' 'm' 'p' 'o' 'r' 't' tx
 
 
-exposing_ : (Row -> Col -> x) -> Parser x ()
+exposing_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 exposing_ tx =
     k8 'e' 'x' 'p' 'o' 's' 'i' 'n' 'g' tx
 
 
-as_ : (Row -> Col -> x) -> Parser x ()
+as_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 as_ tx =
     k2 'a' 's' tx
 
@@ -147,22 +148,22 @@ as_ tx =
 -- EFFECTS
 
 
-effect_ : (Row -> Col -> x) -> Parser x ()
+effect_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 effect_ tx =
     k6 'e' 'f' 'f' 'e' 'c' 't' tx
 
 
-where_ : (Row -> Col -> x) -> Parser x ()
+where_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 where_ tx =
     k5 'w' 'h' 'e' 'r' 'e' tx
 
 
-command_ : (Row -> Col -> x) -> Parser x ()
+command_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 command_ tx =
     k7 'c' 'o' 'm' 'm' 'a' 'n' 'd' tx
 
 
-subscription_ : (Row -> Col -> x) -> Parser x ()
+subscription_ : (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 subscription_ toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -202,7 +203,7 @@ subscription_ toError =
 -- KEYWORDS
 
 
-k2 : Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k2 : Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k2 w1 w2 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -228,7 +229,7 @@ k2 w1 w2 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k3 : Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k3 : Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k3 w1 w2 w3 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -255,7 +256,7 @@ k3 w1 w2 w3 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k4 : Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k4 : Char -> Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k4 w1 w2 w3 w4 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -283,7 +284,7 @@ k4 w1 w2 w3 w4 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k5 : Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k5 : Char -> Char -> Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k5 w1 w2 w3 w4 w5 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -312,7 +313,7 @@ k5 w1 w2 w3 w4 w5 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k6 : Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k6 : Char -> Char -> Char -> Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k6 w1 w2 w3 w4 w5 w6 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -342,7 +343,7 @@ k6 w1 w2 w3 w4 w5 w6 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k7 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k7 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k7 w1 w2 w3 w4 w5 w6 w7 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -373,7 +374,7 @@ k7 w1 w2 w3 w4 w5 w6 w7 toError =
                 Err (P.PErr P.Empty row col toError)
 
 
-k8 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
+k8 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> Char -> (T.CPP_Row -> T.CPP_Col -> x) -> Parser x ()
 k8 w1 w2 w3 w4 w5 w6 w7 w8 toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->

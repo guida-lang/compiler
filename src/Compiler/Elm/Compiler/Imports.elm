@@ -1,19 +1,18 @@
 module Compiler.Elm.Compiler.Imports exposing (defaults)
 
-import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name exposing (CDN_Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
-import System.TypeCheck.IO as IO
+import Types as T
 
 
 
 -- DEFAULTS
 
 
-defaults : List Src.CASTS_Import
+defaults : List T.CASTS_Import
 defaults =
-    [ import_ ModuleName.basics Nothing Src.CASTS_Open
+    [ import_ ModuleName.basics Nothing T.CASTS_Open
     , import_ ModuleName.debug Nothing closed
     , import_ ModuleName.list Nothing (operator "::")
     , import_ ModuleName.maybe Nothing (typeOpen Name.maybe)
@@ -27,30 +26,30 @@ defaults =
     ]
 
 
-import_ : IO.CEMN_Canonical -> Maybe CDN_Name -> Src.CASTS_Exposing -> Src.CASTS_Import
-import_ (IO.CEMN_Canonical _ name) maybeAlias exposing_ =
-    Src.CASTS_Import (A.CRA_At A.zero name) maybeAlias exposing_
+import_ : T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTS_Exposing -> T.CASTS_Import
+import_ (T.CEMN_Canonical _ name) maybeAlias exposing_ =
+    T.CASTS_Import (T.CRA_At A.zero name) maybeAlias exposing_
 
 
 
 -- EXPOSING
 
 
-closed : Src.CASTS_Exposing
+closed : T.CASTS_Exposing
 closed =
-    Src.CASTS_Explicit []
+    T.CASTS_Explicit []
 
 
-typeOpen : CDN_Name -> Src.CASTS_Exposing
+typeOpen : T.CDN_Name -> T.CASTS_Exposing
 typeOpen name =
-    Src.CASTS_Explicit [ Src.CASTS_Upper (A.CRA_At A.zero name) (Src.CASTS_Public A.zero) ]
+    T.CASTS_Explicit [ T.CASTS_Upper (T.CRA_At A.zero name) (T.CASTS_Public A.zero) ]
 
 
-typeClosed : CDN_Name -> Src.CASTS_Exposing
+typeClosed : T.CDN_Name -> T.CASTS_Exposing
 typeClosed name =
-    Src.CASTS_Explicit [ Src.CASTS_Upper (A.CRA_At A.zero name) Src.CASTS_Private ]
+    T.CASTS_Explicit [ T.CASTS_Upper (T.CRA_At A.zero name) T.CASTS_Private ]
 
 
-operator : CDN_Name -> Src.CASTS_Exposing
+operator : T.CDN_Name -> T.CASTS_Exposing
 operator op =
-    Src.CASTS_Explicit [ Src.CASTS_Operator A.zero op ]
+    T.CASTS_Explicit [ T.CASTS_Operator A.zero op ]

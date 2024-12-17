@@ -31,7 +31,8 @@ import Json.Decode as Decode
 import Json.Encode as CoreEncode
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
-import Utils.Main as Utils exposing (Chan, MVar)
+import Types as T
+import Utils.Main as Utils exposing (Chan)
 
 
 
@@ -41,7 +42,7 @@ import Utils.Main as Utils exposing (Chan, MVar)
 type Style
     = Silent
     | Json
-    | Terminal (MVar ())
+    | Terminal (T.MVar ())
 
 
 silent : Style
@@ -263,8 +264,8 @@ type DMsg
     = DStart Int
     | DCached
     | DRequested
-    | DReceived Pkg.CEP_Name V.Version
-    | DFailed Pkg.CEP_Name V.Version
+    | DReceived T.CEP_Name V.Version
+    | DFailed T.CEP_Name V.Version
     | DBuilt
     | DBroken
 
@@ -302,7 +303,7 @@ detailsStep msg (DState total cached rqst rcvd failed built broken) =
             putBuilt (DState total cached rqst rcvd failed built (broken + 1))
 
 
-putDownload : D.Doc -> Pkg.CEP_Name -> V.Version -> IO ()
+putDownload : D.Doc -> T.CEP_Name -> V.Version -> IO ()
 putDownload mark pkg vsn =
     Help.toStdout
         (D.indent 2
@@ -472,7 +473,7 @@ toFinalMessage done result =
 -- GENERATE
 
 
-reportGenerate : Style -> NE.Nonempty ModuleName.CEMN_Raw -> String -> IO ()
+reportGenerate : Style -> NE.Nonempty T.CEMN_Raw -> String -> IO ()
 reportGenerate style names output =
     case style of
         Silent ->

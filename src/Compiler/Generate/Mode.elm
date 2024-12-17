@@ -6,10 +6,10 @@ module Compiler.Generate.Mode exposing
     )
 
 import Compiler.AST.Optimized as Opt
-import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Type.Extract as Extract
 import Compiler.Generate.JavaScript.Name as JsName
 import Data.Map as Dict exposing (Dict)
+import Types as T
 import Utils.Main as Utils
 
 
@@ -40,7 +40,7 @@ isDebug mode =
 
 
 type alias ShortFieldNames =
-    Dict String Name.CDN_Name JsName.Name
+    Dict String T.CDN_Name JsName.Name
 
 
 shortenFieldNames : Opt.GlobalGraph -> ShortFieldNames
@@ -49,17 +49,17 @@ shortenFieldNames (Opt.GlobalGraph _ frequencies) =
         Dict.foldr compare addToBuckets Dict.empty frequencies
 
 
-addToBuckets : Name.CDN_Name -> Int -> Dict Int Int (List Name.CDN_Name) -> Dict Int Int (List Name.CDN_Name)
+addToBuckets : T.CDN_Name -> Int -> Dict Int Int (List T.CDN_Name) -> Dict Int Int (List T.CDN_Name)
 addToBuckets field frequency buckets =
     Utils.mapInsertWith identity (++) frequency [ field ] buckets
 
 
-addToShortNames : List Name.CDN_Name -> ShortFieldNames -> ShortFieldNames
+addToShortNames : List T.CDN_Name -> ShortFieldNames -> ShortFieldNames
 addToShortNames fields shortNames =
     List.foldl addField shortNames fields
 
 
-addField : Name.CDN_Name -> ShortFieldNames -> ShortFieldNames
+addField : T.CDN_Name -> ShortFieldNames -> ShortFieldNames
 addField field shortNames =
     let
         rename : JsName.Name

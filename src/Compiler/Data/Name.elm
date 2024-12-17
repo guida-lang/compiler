@@ -1,6 +1,5 @@
 module Compiler.Data.Name exposing
-    ( CDN_Name
-    , array
+    ( array
     , basics
     , bitwise
     , bool
@@ -55,27 +54,20 @@ module Compiler.Data.Name exposing
     , virtualDom
     )
 
+import Types as T
 import Utils.Crash exposing (crash)
-
-
-
--- NAME
-
-
-type alias CDN_Name =
-    String
 
 
 
 -- TO
 
 
-toChars : CDN_Name -> List Char
+toChars : T.CDN_Name -> List Char
 toChars =
     String.toList
 
 
-toElmString : CDN_Name -> String
+toElmString : T.CDN_Name -> String
 toElmString =
     identity
 
@@ -84,7 +76,7 @@ toElmString =
 -- FROM
 
 
-fromPtr : String -> Int -> Int -> CDN_Name
+fromPtr : String -> Int -> Int -> T.CDN_Name
 fromPtr src start end =
     String.slice start end src
 
@@ -93,12 +85,12 @@ fromPtr src start end =
 -- HAS DOT
 
 
-hasDot : CDN_Name -> Bool
+hasDot : T.CDN_Name -> Bool
 hasDot =
     String.contains "."
 
 
-splitDots : CDN_Name -> List String
+splitDots : T.CDN_Name -> List String
 splitDots =
     String.split "."
 
@@ -107,7 +99,7 @@ splitDots =
 -- GET KERNEL
 
 
-getKernel : CDN_Name -> CDN_Name
+getKernel : T.CDN_Name -> T.CDN_Name
 getKernel name =
     if isKernel name then
         String.dropLeft (String.length prefixKernel) name
@@ -120,52 +112,52 @@ getKernel name =
 -- STARTS WITH
 
 
-isKernel : CDN_Name -> Bool
+isKernel : T.CDN_Name -> Bool
 isKernel =
     String.startsWith prefixKernel
 
 
-isNumberType : CDN_Name -> Bool
+isNumberType : T.CDN_Name -> Bool
 isNumberType =
     String.startsWith prefixNumber
 
 
-isComparableType : CDN_Name -> Bool
+isComparableType : T.CDN_Name -> Bool
 isComparableType =
     String.startsWith prefixComparable
 
 
-isAppendableType : CDN_Name -> Bool
+isAppendableType : T.CDN_Name -> Bool
 isAppendableType =
     String.startsWith prefixAppendable
 
 
-isCompappendType : CDN_Name -> Bool
+isCompappendType : T.CDN_Name -> Bool
 isCompappendType =
     String.startsWith prefixCompappend
 
 
-prefixKernel : CDN_Name
+prefixKernel : T.CDN_Name
 prefixKernel =
     "Elm.Kernel."
 
 
-prefixNumber : CDN_Name
+prefixNumber : T.CDN_Name
 prefixNumber =
     "number"
 
 
-prefixComparable : CDN_Name
+prefixComparable : T.CDN_Name
 prefixComparable =
     "comparable"
 
 
-prefixAppendable : CDN_Name
+prefixAppendable : T.CDN_Name
 prefixAppendable =
     "appendable"
 
 
-prefixCompappend : CDN_Name
+prefixCompappend : T.CDN_Name
 prefixCompappend =
     "compappend"
 
@@ -174,7 +166,7 @@ prefixCompappend =
 -- FROM VAR INDEX
 
 
-fromVarIndex : Int -> CDN_Name
+fromVarIndex : Int -> T.CDN_Name
 fromVarIndex n =
     writeDigitsAtEnd "_v" n
 
@@ -188,7 +180,7 @@ writeDigitsAtEnd prefix n =
 -- FROM TYPE VARIABLE
 
 
-fromTypeVariable : CDN_Name -> Int -> CDN_Name
+fromTypeVariable : T.CDN_Name -> Int -> T.CDN_Name
 fromTypeVariable name index =
     if index <= 0 then
         name
@@ -213,7 +205,7 @@ fromTypeVariable name index =
 -- FROM TYPE VARIABLE SCHEME
 
 
-fromTypeVariableScheme : Int -> CDN_Name
+fromTypeVariableScheme : Int -> T.CDN_Name
 fromTypeVariableScheme scheme =
     if scheme < 26 then
         (0x61 + scheme)
@@ -258,7 +250,7 @@ fromTypeVariableScheme scheme =
 -- normal name. Same logic for destructuring patterns like (x,y)
 
 
-fromManyNames : List CDN_Name -> CDN_Name
+fromManyNames : List T.CDN_Name -> T.CDN_Name
 fromManyNames names =
     case names of
         [] ->
@@ -270,7 +262,7 @@ fromManyNames names =
             blank ++ firstName
 
 
-blank : CDN_Name
+blank : T.CDN_Name
 blank =
     "_M$"
 
@@ -279,7 +271,7 @@ blank =
 -- FROM WORDS
 
 
-fromWords : List Char -> CDN_Name
+fromWords : List Char -> T.CDN_Name
 fromWords words =
     String.fromList words
 
@@ -297,7 +289,7 @@ fromWords words =
 -- SEP BY
 
 
-sepBy : Char -> CDN_Name -> CDN_Name -> CDN_Name
+sepBy : Char -> T.CDN_Name -> T.CDN_Name -> T.CDN_Name
 sepBy sep ba1 ba2 =
     String.join (String.fromChar sep) [ ba1, ba2 ]
 
@@ -306,181 +298,181 @@ sepBy sep ba1 ba2 =
 -- COMMON NAMES
 
 
-int : CDN_Name
+int : T.CDN_Name
 int =
     "Int"
 
 
-float : CDN_Name
+float : T.CDN_Name
 float =
     "Float"
 
 
-bool : CDN_Name
+bool : T.CDN_Name
 bool =
     "Bool"
 
 
-char : CDN_Name
+char : T.CDN_Name
 char =
     "Char"
 
 
-string : CDN_Name
+string : T.CDN_Name
 string =
     "String"
 
 
-maybe : CDN_Name
+maybe : T.CDN_Name
 maybe =
     "Maybe"
 
 
-result : CDN_Name
+result : T.CDN_Name
 result =
     "Result"
 
 
-list : CDN_Name
+list : T.CDN_Name
 list =
     "List"
 
 
-array : CDN_Name
+array : T.CDN_Name
 array =
     "Array"
 
 
-dict : CDN_Name
+dict : T.CDN_Name
 dict =
     "Dict"
 
 
-tuple : CDN_Name
+tuple : T.CDN_Name
 tuple =
     "Tuple"
 
 
-jsArray : CDN_Name
+jsArray : T.CDN_Name
 jsArray =
     "JsArray"
 
 
-task : CDN_Name
+task : T.CDN_Name
 task =
     "Task"
 
 
-router : CDN_Name
+router : T.CDN_Name
 router =
     "Router"
 
 
-cmd : CDN_Name
+cmd : T.CDN_Name
 cmd =
     "Cmd"
 
 
-sub : CDN_Name
+sub : T.CDN_Name
 sub =
     "Sub"
 
 
-platform : CDN_Name
+platform : T.CDN_Name
 platform =
     "Platform"
 
 
-virtualDom : CDN_Name
+virtualDom : T.CDN_Name
 virtualDom =
     "VirtualDom"
 
 
-shader : CDN_Name
+shader : T.CDN_Name
 shader =
     "Shader"
 
 
-debug : CDN_Name
+debug : T.CDN_Name
 debug =
     "Debug"
 
 
-debugger : CDN_Name
+debugger : T.CDN_Name
 debugger =
     "Debugger"
 
 
-bitwise : CDN_Name
+bitwise : T.CDN_Name
 bitwise =
     "Bitwise"
 
 
-basics : CDN_Name
+basics : T.CDN_Name
 basics =
     "Basics"
 
 
-utils : CDN_Name
+utils : T.CDN_Name
 utils =
     "Utils"
 
 
-negate : CDN_Name
+negate : T.CDN_Name
 negate =
     "negate"
 
 
-true : CDN_Name
+true : T.CDN_Name
 true =
     "True"
 
 
-false : CDN_Name
+false : T.CDN_Name
 false =
     "False"
 
 
-value : CDN_Name
+value : T.CDN_Name
 value =
     "Value"
 
 
-node : CDN_Name
+node : T.CDN_Name
 node =
     "Node"
 
 
-program : CDN_Name
+program : T.CDN_Name
 program =
     "Program"
 
 
-main_ : CDN_Name
+main_ : T.CDN_Name
 main_ =
     "main"
 
 
-mainModule : CDN_Name
+mainModule : T.CDN_Name
 mainModule =
     "Main"
 
 
-dollar : CDN_Name
+dollar : T.CDN_Name
 dollar =
     "$"
 
 
-identity_ : CDN_Name
+identity_ : T.CDN_Name
 identity_ =
     "identity"
 
 
-replModule : CDN_Name
+replModule : T.CDN_Name
 replModule =
     "Elm_Repl"
 
 
-replValueToPrint : CDN_Name
+replValueToPrint : T.CDN_Name
 replValueToPrint =
     "repl_input_value_"

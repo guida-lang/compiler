@@ -38,9 +38,7 @@ module Compiler.Reporting.Error.Syntax exposing
     , toSpaceReport
     )
 
-import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (BadOperator(..))
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -49,6 +47,7 @@ import Compiler.Reporting.Report as Report
 import Hex
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Types as T
 
 
 
@@ -56,61 +55,61 @@ import Json.Encode as Encode
 
 
 type Error
-    = ModuleNameUnspecified ModuleName.CEMN_Raw
-    | ModuleNameMismatch ModuleName.CEMN_Raw (A.CRA_Located ModuleName.CEMN_Raw)
-    | UnexpectedPort A.CRA_Region
-    | NoPorts A.CRA_Region
-    | NoPortsInPackage (A.CRA_Located CDN_Name)
-    | NoPortModulesInPackage A.CRA_Region
-    | NoEffectsOutsideKernel A.CRA_Region
+    = ModuleNameUnspecified T.CEMN_Raw
+    | ModuleNameMismatch T.CEMN_Raw (T.CRA_Located T.CEMN_Raw)
+    | UnexpectedPort T.CRA_Region
+    | NoPorts T.CRA_Region
+    | NoPortsInPackage (T.CRA_Located T.CDN_Name)
+    | NoPortModulesInPackage T.CRA_Region
+    | NoEffectsOutsideKernel T.CRA_Region
     | ParseError Module
 
 
 type Module
-    = ModuleSpace Space Row Col
-    | ModuleBadEnd Row Col
+    = ModuleSpace Space T.CPP_Row T.CPP_Col
+    | ModuleBadEnd T.CPP_Row T.CPP_Col
       --
-    | ModuleProblem Row Col
-    | ModuleName Row Col
-    | ModuleExposing Exposing Row Col
+    | ModuleProblem T.CPP_Row T.CPP_Col
+    | ModuleName T.CPP_Row T.CPP_Col
+    | ModuleExposing Exposing T.CPP_Row T.CPP_Col
       --
-    | PortModuleProblem Row Col
-    | PortModuleName Row Col
-    | PortModuleExposing Exposing Row Col
+    | PortModuleProblem T.CPP_Row T.CPP_Col
+    | PortModuleName T.CPP_Row T.CPP_Col
+    | PortModuleExposing Exposing T.CPP_Row T.CPP_Col
       --
-    | Effect Row Col
+    | Effect T.CPP_Row T.CPP_Col
       --
-    | FreshLine Row Col
+    | FreshLine T.CPP_Row T.CPP_Col
       --
-    | ImportStart Row Col
-    | ImportName Row Col
-    | ImportAs Row Col
-    | ImportAlias Row Col
-    | ImportExposing Row Col
-    | ImportExposingList Exposing Row Col
-    | ImportEnd Row Col -- different based on col=1 or if greater
+    | ImportStart T.CPP_Row T.CPP_Col
+    | ImportName T.CPP_Row T.CPP_Col
+    | ImportAs T.CPP_Row T.CPP_Col
+    | ImportAlias T.CPP_Row T.CPP_Col
+    | ImportExposing T.CPP_Row T.CPP_Col
+    | ImportExposingList Exposing T.CPP_Row T.CPP_Col
+    | ImportEnd T.CPP_Row T.CPP_Col -- different based on col=1 or if greater
       --
-    | ImportIndentName Row Col
-    | ImportIndentAlias Row Col
-    | ImportIndentExposingList Row Col
+    | ImportIndentName T.CPP_Row T.CPP_Col
+    | ImportIndentAlias T.CPP_Row T.CPP_Col
+    | ImportIndentExposingList T.CPP_Row T.CPP_Col
       --
-    | Infix Row Col
+    | Infix T.CPP_Row T.CPP_Col
       --
-    | Declarations Decl Row Col
+    | Declarations Decl T.CPP_Row T.CPP_Col
 
 
 type Exposing
-    = ExposingSpace Space Row Col
-    | ExposingStart Row Col
-    | ExposingValue Row Col
-    | ExposingOperator Row Col
-    | ExposingOperatorReserved BadOperator Row Col
-    | ExposingOperatorRightParen Row Col
-    | ExposingTypePrivacy Row Col
-    | ExposingEnd Row Col
+    = ExposingSpace Space T.CPP_Row T.CPP_Col
+    | ExposingStart T.CPP_Row T.CPP_Col
+    | ExposingValue T.CPP_Row T.CPP_Col
+    | ExposingOperator T.CPP_Row T.CPP_Col
+    | ExposingOperatorReserved BadOperator T.CPP_Row T.CPP_Col
+    | ExposingOperatorRightParen T.CPP_Row T.CPP_Col
+    | ExposingTypePrivacy T.CPP_Row T.CPP_Col
+    | ExposingEnd T.CPP_Row T.CPP_Col
       --
-    | ExposingIndentEnd Row Col
-    | ExposingIndentValue Row Col
+    | ExposingIndentEnd T.CPP_Row T.CPP_Col
+    | ExposingIndentValue T.CPP_Row T.CPP_Col
 
 
 
@@ -118,38 +117,38 @@ type Exposing
 
 
 type Decl
-    = DeclStart Row Col
-    | DeclSpace Space Row Col
+    = DeclStart T.CPP_Row T.CPP_Col
+    | DeclSpace Space T.CPP_Row T.CPP_Col
       --
-    | Port Port Row Col
-    | DeclType DeclType Row Col
-    | DeclDef CDN_Name DeclDef Row Col
+    | Port Port T.CPP_Row T.CPP_Col
+    | DeclType DeclType T.CPP_Row T.CPP_Col
+    | DeclDef T.CDN_Name DeclDef T.CPP_Row T.CPP_Col
       --
-    | DeclFreshLineAfterDocComment Row Col
+    | DeclFreshLineAfterDocComment T.CPP_Row T.CPP_Col
 
 
 type DeclDef
-    = DeclDefSpace Space Row Col
-    | DeclDefEquals Row Col
-    | DeclDefType Type Row Col
-    | DeclDefArg Pattern Row Col
-    | DeclDefBody Expr Row Col
-    | DeclDefNameRepeat Row Col
-    | DeclDefNameMatch CDN_Name Row Col
+    = DeclDefSpace Space T.CPP_Row T.CPP_Col
+    | DeclDefEquals T.CPP_Row T.CPP_Col
+    | DeclDefType Type T.CPP_Row T.CPP_Col
+    | DeclDefArg Pattern T.CPP_Row T.CPP_Col
+    | DeclDefBody Expr T.CPP_Row T.CPP_Col
+    | DeclDefNameRepeat T.CPP_Row T.CPP_Col
+    | DeclDefNameMatch T.CDN_Name T.CPP_Row T.CPP_Col
       --
-    | DeclDefIndentType Row Col
-    | DeclDefIndentEquals Row Col
-    | DeclDefIndentBody Row Col
+    | DeclDefIndentType T.CPP_Row T.CPP_Col
+    | DeclDefIndentEquals T.CPP_Row T.CPP_Col
+    | DeclDefIndentBody T.CPP_Row T.CPP_Col
 
 
 type Port
-    = PortSpace Space Row Col
-    | PortName Row Col
-    | PortColon Row Col
-    | PortType Type Row Col
-    | PortIndentName Row Col
-    | PortIndentColon Row Col
-    | PortIndentType Row Col
+    = PortSpace Space T.CPP_Row T.CPP_Col
+    | PortName T.CPP_Row T.CPP_Col
+    | PortColon T.CPP_Row T.CPP_Col
+    | PortType Type T.CPP_Row T.CPP_Col
+    | PortIndentName T.CPP_Row T.CPP_Col
+    | PortIndentColon T.CPP_Row T.CPP_Col
+    | PortIndentType T.CPP_Row T.CPP_Col
 
 
 
@@ -157,36 +156,36 @@ type Port
 
 
 type DeclType
-    = DT_Space Space Row Col
-    | DT_Name Row Col
-    | DT_Alias TypeAlias Row Col
-    | DT_Union CustomType Row Col
+    = DT_Space Space T.CPP_Row T.CPP_Col
+    | DT_Name T.CPP_Row T.CPP_Col
+    | DT_Alias TypeAlias T.CPP_Row T.CPP_Col
+    | DT_Union CustomType T.CPP_Row T.CPP_Col
       --
-    | DT_IndentName Row Col
+    | DT_IndentName T.CPP_Row T.CPP_Col
 
 
 type TypeAlias
-    = AliasSpace Space Row Col
-    | AliasName Row Col
-    | AliasEquals Row Col
-    | AliasBody Type Row Col
+    = AliasSpace Space T.CPP_Row T.CPP_Col
+    | AliasName T.CPP_Row T.CPP_Col
+    | AliasEquals T.CPP_Row T.CPP_Col
+    | AliasBody Type T.CPP_Row T.CPP_Col
       --
-    | AliasIndentEquals Row Col
-    | AliasIndentBody Row Col
+    | AliasIndentEquals T.CPP_Row T.CPP_Col
+    | AliasIndentBody T.CPP_Row T.CPP_Col
 
 
 type CustomType
-    = CT_Space Space Row Col
-    | CT_Name Row Col
-    | CT_Equals Row Col
-    | CT_Bar Row Col
-    | CT_Variant Row Col
-    | CT_VariantArg Type Row Col
+    = CT_Space Space T.CPP_Row T.CPP_Col
+    | CT_Name T.CPP_Row T.CPP_Col
+    | CT_Equals T.CPP_Row T.CPP_Col
+    | CT_Bar T.CPP_Row T.CPP_Col
+    | CT_Variant T.CPP_Row T.CPP_Col
+    | CT_VariantArg Type T.CPP_Row T.CPP_Col
       --
-    | CT_IndentEquals Row Col
-    | CT_IndentBar Row Col
-    | CT_IndentAfterBar Row Col
-    | CT_IndentAfterEquals Row Col
+    | CT_IndentEquals T.CPP_Row T.CPP_Col
+    | CT_IndentBar T.CPP_Row T.CPP_Col
+    | CT_IndentAfterBar T.CPP_Row T.CPP_Col
+    | CT_IndentAfterEquals T.CPP_Row T.CPP_Col
 
 
 
@@ -194,145 +193,145 @@ type CustomType
 
 
 type Expr
-    = Let Let Row Col
-    | Case Case Row Col
-    | If If Row Col
-    | List List_ Row Col
-    | Record Record Row Col
-    | Tuple Tuple Row Col
-    | Func Func Row Col
+    = Let Let T.CPP_Row T.CPP_Col
+    | Case Case T.CPP_Row T.CPP_Col
+    | If If T.CPP_Row T.CPP_Col
+    | List List_ T.CPP_Row T.CPP_Col
+    | Record Record T.CPP_Row T.CPP_Col
+    | Tuple Tuple T.CPP_Row T.CPP_Col
+    | Func Func T.CPP_Row T.CPP_Col
       --
-    | Dot Row Col
-    | Access Row Col
-    | OperatorRight CDN_Name Row Col
-    | OperatorReserved BadOperator Row Col
+    | Dot T.CPP_Row T.CPP_Col
+    | Access T.CPP_Row T.CPP_Col
+    | OperatorRight T.CDN_Name T.CPP_Row T.CPP_Col
+    | OperatorReserved BadOperator T.CPP_Row T.CPP_Col
       --
-    | Start Row Col
-    | Char Char Row Col
-    | String_ String_ Row Col
-    | Number Number Row Col
-    | Space Space Row Col
-    | EndlessShader Row Col
-    | ShaderProblem String Row Col
-    | IndentOperatorRight CDN_Name Row Col
+    | Start T.CPP_Row T.CPP_Col
+    | Char Char T.CPP_Row T.CPP_Col
+    | String_ String_ T.CPP_Row T.CPP_Col
+    | Number Number T.CPP_Row T.CPP_Col
+    | Space Space T.CPP_Row T.CPP_Col
+    | EndlessShader T.CPP_Row T.CPP_Col
+    | ShaderProblem String T.CPP_Row T.CPP_Col
+    | IndentOperatorRight T.CDN_Name T.CPP_Row T.CPP_Col
 
 
 type Record
-    = RecordOpen Row Col
-    | RecordEnd Row Col
-    | RecordField Row Col
-    | RecordEquals Row Col
-    | RecordExpr Expr Row Col
-    | RecordSpace Space Row Col
+    = RecordOpen T.CPP_Row T.CPP_Col
+    | RecordEnd T.CPP_Row T.CPP_Col
+    | RecordField T.CPP_Row T.CPP_Col
+    | RecordEquals T.CPP_Row T.CPP_Col
+    | RecordExpr Expr T.CPP_Row T.CPP_Col
+    | RecordSpace Space T.CPP_Row T.CPP_Col
       --
-    | RecordIndentOpen Row Col
-    | RecordIndentEnd Row Col
-    | RecordIndentField Row Col
-    | RecordIndentEquals Row Col
-    | RecordIndentExpr Row Col
+    | RecordIndentOpen T.CPP_Row T.CPP_Col
+    | RecordIndentEnd T.CPP_Row T.CPP_Col
+    | RecordIndentField T.CPP_Row T.CPP_Col
+    | RecordIndentEquals T.CPP_Row T.CPP_Col
+    | RecordIndentExpr T.CPP_Row T.CPP_Col
 
 
 type Tuple
-    = TupleExpr Expr Row Col
-    | TupleSpace Space Row Col
-    | TupleEnd Row Col
-    | TupleOperatorClose Row Col
-    | TupleOperatorReserved BadOperator Row Col
+    = TupleExpr Expr T.CPP_Row T.CPP_Col
+    | TupleSpace Space T.CPP_Row T.CPP_Col
+    | TupleEnd T.CPP_Row T.CPP_Col
+    | TupleOperatorClose T.CPP_Row T.CPP_Col
+    | TupleOperatorReserved BadOperator T.CPP_Row T.CPP_Col
       --
-    | TupleIndentExpr1 Row Col
-    | TupleIndentExprN Row Col
-    | TupleIndentEnd Row Col
+    | TupleIndentExpr1 T.CPP_Row T.CPP_Col
+    | TupleIndentExprN T.CPP_Row T.CPP_Col
+    | TupleIndentEnd T.CPP_Row T.CPP_Col
 
 
 type List_
-    = ListSpace Space Row Col
-    | ListOpen Row Col
-    | ListExpr Expr Row Col
-    | ListEnd Row Col
+    = ListSpace Space T.CPP_Row T.CPP_Col
+    | ListOpen T.CPP_Row T.CPP_Col
+    | ListExpr Expr T.CPP_Row T.CPP_Col
+    | ListEnd T.CPP_Row T.CPP_Col
       --
-    | ListIndentOpen Row Col
-    | ListIndentEnd Row Col
-    | ListIndentExpr Row Col
+    | ListIndentOpen T.CPP_Row T.CPP_Col
+    | ListIndentEnd T.CPP_Row T.CPP_Col
+    | ListIndentExpr T.CPP_Row T.CPP_Col
 
 
 type Func
-    = FuncSpace Space Row Col
-    | FuncArg Pattern Row Col
-    | FuncBody Expr Row Col
-    | FuncArrow Row Col
+    = FuncSpace Space T.CPP_Row T.CPP_Col
+    | FuncArg Pattern T.CPP_Row T.CPP_Col
+    | FuncBody Expr T.CPP_Row T.CPP_Col
+    | FuncArrow T.CPP_Row T.CPP_Col
       --
-    | FuncIndentArg Row Col
-    | FuncIndentArrow Row Col
-    | FuncIndentBody Row Col
+    | FuncIndentArg T.CPP_Row T.CPP_Col
+    | FuncIndentArrow T.CPP_Row T.CPP_Col
+    | FuncIndentBody T.CPP_Row T.CPP_Col
 
 
 type Case
-    = CaseSpace Space Row Col
-    | CaseOf Row Col
-    | CasePattern Pattern Row Col
-    | CaseArrow Row Col
-    | CaseExpr Expr Row Col
-    | CaseBranch Expr Row Col
+    = CaseSpace Space T.CPP_Row T.CPP_Col
+    | CaseOf T.CPP_Row T.CPP_Col
+    | CasePattern Pattern T.CPP_Row T.CPP_Col
+    | CaseArrow T.CPP_Row T.CPP_Col
+    | CaseExpr Expr T.CPP_Row T.CPP_Col
+    | CaseBranch Expr T.CPP_Row T.CPP_Col
       --
-    | CaseIndentOf Row Col
-    | CaseIndentExpr Row Col
-    | CaseIndentPattern Row Col
-    | CaseIndentArrow Row Col
-    | CaseIndentBranch Row Col
-    | CasePatternAlignment Int Row Col
+    | CaseIndentOf T.CPP_Row T.CPP_Col
+    | CaseIndentExpr T.CPP_Row T.CPP_Col
+    | CaseIndentPattern T.CPP_Row T.CPP_Col
+    | CaseIndentArrow T.CPP_Row T.CPP_Col
+    | CaseIndentBranch T.CPP_Row T.CPP_Col
+    | CasePatternAlignment Int T.CPP_Row T.CPP_Col
 
 
 type If
-    = IfSpace Space Row Col
-    | IfThen Row Col
-    | IfElse Row Col
-    | IfElseBranchStart Row Col
+    = IfSpace Space T.CPP_Row T.CPP_Col
+    | IfThen T.CPP_Row T.CPP_Col
+    | IfElse T.CPP_Row T.CPP_Col
+    | IfElseBranchStart T.CPP_Row T.CPP_Col
       --
-    | IfCondition Expr Row Col
-    | IfThenBranch Expr Row Col
-    | IfElseBranch Expr Row Col
+    | IfCondition Expr T.CPP_Row T.CPP_Col
+    | IfThenBranch Expr T.CPP_Row T.CPP_Col
+    | IfElseBranch Expr T.CPP_Row T.CPP_Col
       --
-    | IfIndentCondition Row Col
-    | IfIndentThen Row Col
-    | IfIndentThenBranch Row Col
-    | IfIndentElseBranch Row Col
-    | IfIndentElse Row Col
+    | IfIndentCondition T.CPP_Row T.CPP_Col
+    | IfIndentThen T.CPP_Row T.CPP_Col
+    | IfIndentThenBranch T.CPP_Row T.CPP_Col
+    | IfIndentElseBranch T.CPP_Row T.CPP_Col
+    | IfIndentElse T.CPP_Row T.CPP_Col
 
 
 type Let
-    = LetSpace Space Row Col
-    | LetIn Row Col
-    | LetDefAlignment Int Row Col
-    | LetDefName Row Col
-    | LetDef CDN_Name Def Row Col
-    | LetDestruct Destruct Row Col
-    | LetBody Expr Row Col
-    | LetIndentDef Row Col
-    | LetIndentIn Row Col
-    | LetIndentBody Row Col
+    = LetSpace Space T.CPP_Row T.CPP_Col
+    | LetIn T.CPP_Row T.CPP_Col
+    | LetDefAlignment Int T.CPP_Row T.CPP_Col
+    | LetDefName T.CPP_Row T.CPP_Col
+    | LetDef T.CDN_Name Def T.CPP_Row T.CPP_Col
+    | LetDestruct Destruct T.CPP_Row T.CPP_Col
+    | LetBody Expr T.CPP_Row T.CPP_Col
+    | LetIndentDef T.CPP_Row T.CPP_Col
+    | LetIndentIn T.CPP_Row T.CPP_Col
+    | LetIndentBody T.CPP_Row T.CPP_Col
 
 
 type Def
-    = DefSpace Space Row Col
-    | DefType Type Row Col
-    | DefNameRepeat Row Col
-    | DefNameMatch CDN_Name Row Col
-    | DefArg Pattern Row Col
-    | DefEquals Row Col
-    | DefBody Expr Row Col
-    | DefIndentEquals Row Col
-    | DefIndentType Row Col
-    | DefIndentBody Row Col
-    | DefAlignment Int Row Col
+    = DefSpace Space T.CPP_Row T.CPP_Col
+    | DefType Type T.CPP_Row T.CPP_Col
+    | DefNameRepeat T.CPP_Row T.CPP_Col
+    | DefNameMatch T.CDN_Name T.CPP_Row T.CPP_Col
+    | DefArg Pattern T.CPP_Row T.CPP_Col
+    | DefEquals T.CPP_Row T.CPP_Col
+    | DefBody Expr T.CPP_Row T.CPP_Col
+    | DefIndentEquals T.CPP_Row T.CPP_Col
+    | DefIndentType T.CPP_Row T.CPP_Col
+    | DefIndentBody T.CPP_Row T.CPP_Col
+    | DefAlignment Int T.CPP_Row T.CPP_Col
 
 
 type Destruct
-    = DestructSpace Space Row Col
-    | DestructPattern Pattern Row Col
-    | DestructEquals Row Col
-    | DestructBody Expr Row Col
-    | DestructIndentEquals Row Col
-    | DestructIndentBody Row Col
+    = DestructSpace Space T.CPP_Row T.CPP_Col
+    | DestructPattern Pattern T.CPP_Row T.CPP_Col
+    | DestructEquals T.CPP_Row T.CPP_Col
+    | DestructBody Expr T.CPP_Row T.CPP_Col
+    | DestructIndentEquals T.CPP_Row T.CPP_Col
+    | DestructIndentBody T.CPP_Row T.CPP_Col
 
 
 
@@ -340,54 +339,54 @@ type Destruct
 
 
 type Pattern
-    = PRecord PRecord Row Col
-    | PTuple PTuple Row Col
-    | PList PList Row Col
+    = PRecord PRecord T.CPP_Row T.CPP_Col
+    | PTuple PTuple T.CPP_Row T.CPP_Col
+    | PList PList T.CPP_Row T.CPP_Col
       --
-    | PStart Row Col
-    | PChar Char Row Col
-    | PString String_ Row Col
-    | PNumber Number Row Col
-    | PFloat Int Row Col
-    | PAlias Row Col
-    | PWildcardNotVar CDN_Name Int Row Col
-    | PSpace Space Row Col
+    | PStart T.CPP_Row T.CPP_Col
+    | PChar Char T.CPP_Row T.CPP_Col
+    | PString String_ T.CPP_Row T.CPP_Col
+    | PNumber Number T.CPP_Row T.CPP_Col
+    | PFloat Int T.CPP_Row T.CPP_Col
+    | PAlias T.CPP_Row T.CPP_Col
+    | PWildcardNotVar T.CDN_Name Int T.CPP_Row T.CPP_Col
+    | PSpace Space T.CPP_Row T.CPP_Col
       --
-    | PIndentStart Row Col
-    | PIndentAlias Row Col
+    | PIndentStart T.CPP_Row T.CPP_Col
+    | PIndentAlias T.CPP_Row T.CPP_Col
 
 
 type PRecord
-    = PRecordOpen Row Col
-    | PRecordEnd Row Col
-    | PRecordField Row Col
-    | PRecordSpace Space Row Col
+    = PRecordOpen T.CPP_Row T.CPP_Col
+    | PRecordEnd T.CPP_Row T.CPP_Col
+    | PRecordField T.CPP_Row T.CPP_Col
+    | PRecordSpace Space T.CPP_Row T.CPP_Col
       --
-    | PRecordIndentOpen Row Col
-    | PRecordIndentEnd Row Col
-    | PRecordIndentField Row Col
+    | PRecordIndentOpen T.CPP_Row T.CPP_Col
+    | PRecordIndentEnd T.CPP_Row T.CPP_Col
+    | PRecordIndentField T.CPP_Row T.CPP_Col
 
 
 type PTuple
-    = PTupleOpen Row Col
-    | PTupleEnd Row Col
-    | PTupleExpr Pattern Row Col
-    | PTupleSpace Space Row Col
+    = PTupleOpen T.CPP_Row T.CPP_Col
+    | PTupleEnd T.CPP_Row T.CPP_Col
+    | PTupleExpr Pattern T.CPP_Row T.CPP_Col
+    | PTupleSpace Space T.CPP_Row T.CPP_Col
       --
-    | PTupleIndentEnd Row Col
-    | PTupleIndentExpr1 Row Col
-    | PTupleIndentExprN Row Col
+    | PTupleIndentEnd T.CPP_Row T.CPP_Col
+    | PTupleIndentExpr1 T.CPP_Row T.CPP_Col
+    | PTupleIndentExprN T.CPP_Row T.CPP_Col
 
 
 type PList
-    = PListOpen Row Col
-    | PListEnd Row Col
-    | PListExpr Pattern Row Col
-    | PListSpace Space Row Col
+    = PListOpen T.CPP_Row T.CPP_Col
+    | PListEnd T.CPP_Row T.CPP_Col
+    | PListExpr Pattern T.CPP_Row T.CPP_Col
+    | PListSpace Space T.CPP_Row T.CPP_Col
       --
-    | PListIndentOpen Row Col
-    | PListIndentEnd Row Col
-    | PListIndentExpr Row Col
+    | PListIndentOpen T.CPP_Row T.CPP_Col
+    | PListIndentEnd T.CPP_Row T.CPP_Col
+    | PListIndentExpr T.CPP_Row T.CPP_Col
 
 
 
@@ -395,41 +394,41 @@ type PList
 
 
 type Type
-    = TRecord TRecord Row Col
-    | TTuple TTuple Row Col
+    = TRecord TRecord T.CPP_Row T.CPP_Col
+    | TTuple TTuple T.CPP_Row T.CPP_Col
       --
-    | TStart Row Col
-    | TSpace Space Row Col
+    | TStart T.CPP_Row T.CPP_Col
+    | TSpace Space T.CPP_Row T.CPP_Col
       --
-    | TIndentStart Row Col
+    | TIndentStart T.CPP_Row T.CPP_Col
 
 
 type TRecord
-    = TRecordOpen Row Col
-    | TRecordEnd Row Col
+    = TRecordOpen T.CPP_Row T.CPP_Col
+    | TRecordEnd T.CPP_Row T.CPP_Col
       --
-    | TRecordField Row Col
-    | TRecordColon Row Col
-    | TRecordType Type Row Col
+    | TRecordField T.CPP_Row T.CPP_Col
+    | TRecordColon T.CPP_Row T.CPP_Col
+    | TRecordType Type T.CPP_Row T.CPP_Col
       --
-    | TRecordSpace Space Row Col
+    | TRecordSpace Space T.CPP_Row T.CPP_Col
       --
-    | TRecordIndentOpen Row Col
-    | TRecordIndentField Row Col
-    | TRecordIndentColon Row Col
-    | TRecordIndentType Row Col
-    | TRecordIndentEnd Row Col
+    | TRecordIndentOpen T.CPP_Row T.CPP_Col
+    | TRecordIndentField T.CPP_Row T.CPP_Col
+    | TRecordIndentColon T.CPP_Row T.CPP_Col
+    | TRecordIndentType T.CPP_Row T.CPP_Col
+    | TRecordIndentEnd T.CPP_Row T.CPP_Col
 
 
 type TTuple
-    = TTupleOpen Row Col
-    | TTupleEnd Row Col
-    | TTupleType Type Row Col
-    | TTupleSpace Space Row Col
+    = TTupleOpen T.CPP_Row T.CPP_Col
+    | TTupleEnd T.CPP_Row T.CPP_Col
+    | TTupleType Type T.CPP_Row T.CPP_Col
+    | TTupleSpace Space T.CPP_Row T.CPP_Col
       --
-    | TTupleIndentType1 Row Col
-    | TTupleIndentTypeN Row Col
-    | TTupleIndentEnd Row Col
+    | TTupleIndentType1 T.CPP_Row T.CPP_Col
+    | TTupleIndentTypeN T.CPP_Row T.CPP_Col
+    | TTupleIndentEnd T.CPP_Row T.CPP_Col
 
 
 
@@ -480,7 +479,7 @@ toReport source err =
     case err of
         ModuleNameUnspecified name ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion 1 1
             in
@@ -500,7 +499,7 @@ toReport source err =
                         "It is best to replace (..) with an explicit list of types and functions you want to expose. When you know a value is only used within this module, you can refactor without worrying about uses elsewhere. Limiting exposed values can also speed up compilation because I can skip a bunch of work if I see that the exposed API has not changed."
                     ]
 
-        ModuleNameMismatch expectedName (A.CRA_At region actualName) ->
+        ModuleNameMismatch expectedName (T.CRA_At region actualName) ->
             Report.Report "MODULE NAME MISMATCH" region [ expectedName ] <|
                 Code.toSnippet source region Nothing <|
                     ( D.fromChars "It looks like this module name is out of sync:"
@@ -566,7 +565,7 @@ toReport source err =
                         ]
                     )
 
-        NoPortsInPackage (A.CRA_At region _) ->
+        NoPortsInPackage (T.CRA_At region _) ->
             Report.Report "PACKAGES CANNOT HAVE PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -643,7 +642,7 @@ toParseErrorReport source modul =
 
         ModuleProblem row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -676,7 +675,7 @@ toParseErrorReport source modul =
 
         ModuleName row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -724,7 +723,7 @@ toParseErrorReport source modul =
 
         PortModuleProblem row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -758,7 +757,7 @@ toParseErrorReport source modul =
 
         PortModuleName row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -796,7 +795,7 @@ toParseErrorReport source modul =
 
         Effect row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -810,7 +809,7 @@ toParseErrorReport source modul =
 
         FreshLine row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
 
@@ -869,7 +868,7 @@ toParseErrorReport source modul =
 
         ImportName row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -914,7 +913,7 @@ toParseErrorReport source modul =
 
         ImportAlias row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -969,7 +968,7 @@ toParseErrorReport source modul =
 
         ImportIndentExposingList row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1002,7 +1001,7 @@ toParseErrorReport source modul =
 
         Infix row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1022,12 +1021,12 @@ toParseErrorReport source modul =
 -- WEIRD END
 
 
-toWeirdEndReport : Code.Source -> Row -> Col -> Report.Report
+toWeirdEndReport : Code.Source -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toWeirdEndReport source row col =
     case Code.whatIsNext source row col of
         Code.Keyword keyword ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toKeywordRegion row col keyword
             in
@@ -1040,7 +1039,7 @@ toWeirdEndReport source row col =
 
         Code.Operator op ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toKeywordRegion row col op
             in
@@ -1053,7 +1052,7 @@ toWeirdEndReport source row col =
 
         Code.Close term bracket ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1065,7 +1064,7 @@ toWeirdEndReport source row col =
 
         Code.Lower c cs ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toKeywordRegion row col (String.cons c cs)
             in
@@ -1077,7 +1076,7 @@ toWeirdEndReport source row col =
 
         Code.Upper c cs ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toKeywordRegion row col (String.fromChar c ++ cs)
             in
@@ -1089,7 +1088,7 @@ toWeirdEndReport source row col =
 
         Code.Other maybeChar ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1158,7 +1157,7 @@ toWeirdEndReport source row col =
                     toWeirdEndSyntaxProblemReport source region
 
 
-toWeirdEndSyntaxProblemReport : Code.Source -> A.CRA_Region -> Report.Report
+toWeirdEndSyntaxProblemReport : Code.Source -> T.CRA_Region -> Report.Report
 toWeirdEndSyntaxProblemReport source region =
     Report.Report "SYNTAX PROBLEM" region [] <|
         Code.toSnippet source region Nothing <|
@@ -1171,10 +1170,10 @@ toWeirdEndSyntaxProblemReport source region =
 -- IMPORTS
 
 
-toImportReport : Code.Source -> Row -> Col -> Report.Report
+toImportReport : Code.Source -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toImportReport source row col =
     let
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             toRegion row col
     in
@@ -1220,7 +1219,7 @@ toImportReport source row col =
 -- EXPOSING
 
 
-toExposingReport : Code.Source -> Exposing -> Row -> Col -> Report.Report
+toExposingReport : Code.Source -> Exposing -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toExposingReport source exposing_ startRow startCol =
     case exposing_ of
         ExposingSpace space row col ->
@@ -1228,11 +1227,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingStart row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1279,11 +1278,11 @@ toExposingReport source exposing_ startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -1295,11 +1294,11 @@ toExposingReport source exposing_ startRow startCol =
 
                 Code.Operator op ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col op
                     in
@@ -1324,11 +1323,11 @@ toExposingReport source exposing_ startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -1358,11 +1357,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingOperator row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1400,11 +1399,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingOperatorReserved op row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1448,11 +1447,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingOperatorRightParen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1483,11 +1482,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1499,11 +1498,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingTypePrivacy row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1544,11 +1543,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1577,11 +1576,11 @@ toExposingReport source exposing_ startRow startCol =
 
         ExposingIndentValue row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1596,12 +1595,12 @@ toExposingReport source exposing_ startRow startCol =
 -- SPACES
 
 
-toSpaceReport : Code.Source -> Space -> Row -> Col -> Report.Report
+toSpaceReport : Code.Source -> Space -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toSpaceReport source space row col =
     case space of
         HasTab ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1613,7 +1612,7 @@ toSpaceReport source space row col =
 
         EndlessMultiComment ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col 2
             in
@@ -1632,28 +1631,28 @@ toSpaceReport source space row col =
 -- DECLARATIONS
 
 
-toRegion : Row -> Col -> A.CRA_Region
+toRegion : T.CPP_Row -> T.CPP_Col -> T.CRA_Region
 toRegion row col =
     let
-        pos : A.CRA_Position
+        pos : T.CRA_Position
         pos =
-            A.CRA_Position row col
+            T.CRA_Position row col
     in
-    A.CRA_Region pos pos
+    T.CRA_Region pos pos
 
 
-toWiderRegion : Row -> Col -> Int -> A.CRA_Region
+toWiderRegion : T.CPP_Row -> T.CPP_Col -> Int -> T.CRA_Region
 toWiderRegion row col extra =
-    A.CRA_Region
-        (A.CRA_Position row col)
-        (A.CRA_Position row (col + extra))
+    T.CRA_Region
+        (T.CRA_Position row col)
+        (T.CRA_Position row (col + extra))
 
 
-toKeywordRegion : Row -> Col -> String -> A.CRA_Region
+toKeywordRegion : T.CPP_Row -> T.CPP_Col -> String -> T.CRA_Region
 toKeywordRegion row col keyword =
-    A.CRA_Region
-        (A.CRA_Position row col)
-        (A.CRA_Position row (col + String.length keyword))
+    T.CRA_Region
+        (T.CRA_Position row col)
+        (T.CRA_Position row (col + String.length keyword))
 
 
 toDeclarationsReport : Code.Source -> Decl -> Report.Report
@@ -1676,7 +1675,7 @@ toDeclarationsReport source decl =
 
         DeclFreshLineAfterDocComment row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1687,12 +1686,12 @@ toDeclarationsReport source decl =
                     )
 
 
-toDeclStartReport : Code.Source -> Row -> Col -> Report.Report
+toDeclStartReport : Code.Source -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toDeclStartReport source row col =
     case Code.whatIsNext source row col of
         Code.Close term bracket ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1704,7 +1703,7 @@ toDeclStartReport source row col =
 
         Code.Keyword keyword ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toKeywordRegion row col keyword
             in
@@ -1760,7 +1759,7 @@ toDeclStartReport source row col =
 
         Code.Upper c cs ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1794,7 +1793,7 @@ toDeclStartReport source row col =
 
         Code.Other (Just char) ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1827,7 +1826,7 @@ toDeclStartReport source row col =
             toDeclStartWeirdDeclarationReport source (toRegion row col)
 
 
-toDeclStartWeirdDeclarationReport : Code.Source -> A.CRA_Region -> Report.Report
+toDeclStartWeirdDeclarationReport : Code.Source -> T.CRA_Region -> Report.Report
 toDeclStartWeirdDeclarationReport source region =
     Report.Report "WEIRD DECLARATION" region [] <|
         Code.toSnippet source region Nothing <|
@@ -1854,7 +1853,7 @@ toDeclStartWeirdDeclarationReport source region =
 -- PORT
 
 
-toPortReport : Code.Source -> Port -> Row -> Col -> Report.Report
+toPortReport : Code.Source -> Port -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPortReport source port_ startRow startCol =
     case port_ of
         PortSpace space row col ->
@@ -1864,11 +1863,11 @@ toPortReport source port_ startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -1880,11 +1879,11 @@ toPortReport source port_ startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -1919,11 +1918,11 @@ toPortReport source port_ startRow startCol =
 
         PortColon row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1941,11 +1940,11 @@ toPortReport source port_ startRow startCol =
 
         PortIndentName row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1980,11 +1979,11 @@ toPortReport source port_ startRow startCol =
 
         PortIndentColon row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -1999,11 +1998,11 @@ toPortReport source port_ startRow startCol =
 
         PortIndentType row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2059,7 +2058,7 @@ portNote =
 -- DECL TYPE
 
 
-toDeclTypeReport : Code.Source -> DeclType -> Row -> Col -> Report.Report
+toDeclTypeReport : Code.Source -> DeclType -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toDeclTypeReport source declType startRow startCol =
     case declType of
         DT_Space space row col ->
@@ -2067,11 +2066,11 @@ toDeclTypeReport source declType startRow startCol =
 
         DT_Name row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2116,11 +2115,11 @@ toDeclTypeReport source declType startRow startCol =
 
         DT_IndentName row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2158,7 +2157,7 @@ toDeclTypeReport source declType startRow startCol =
                     )
 
 
-toTypeAliasReport : Code.Source -> TypeAlias -> Row -> Col -> Report.Report
+toTypeAliasReport : Code.Source -> TypeAlias -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTypeAliasReport source typeAlias startRow startCol =
     case typeAlias of
         AliasSpace space row col ->
@@ -2166,11 +2165,11 @@ toTypeAliasReport source typeAlias startRow startCol =
 
         AliasName row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2211,11 +2210,11 @@ toTypeAliasReport source typeAlias startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -2234,11 +2233,11 @@ toTypeAliasReport source typeAlias startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -2256,11 +2255,11 @@ toTypeAliasReport source typeAlias startRow startCol =
 
         AliasIndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2275,11 +2274,11 @@ toTypeAliasReport source typeAlias startRow startCol =
 
         AliasIndentBody row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2336,7 +2335,7 @@ typeAliasNote =
         ]
 
 
-toCustomTypeReport : Code.Source -> CustomType -> Row -> Col -> Report.Report
+toCustomTypeReport : Code.Source -> CustomType -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCustomTypeReport source customType startRow startCol =
     case customType of
         CT_Space space row col ->
@@ -2344,11 +2343,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_Name row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2389,11 +2388,11 @@ toCustomTypeReport source customType startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -2411,11 +2410,11 @@ toCustomTypeReport source customType startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -2430,11 +2429,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_Bar row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2449,11 +2448,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_Variant row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2496,11 +2495,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_IndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2515,11 +2514,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_IndentBar row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2534,11 +2533,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_IndentAfterBar row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2553,11 +2552,11 @@ toCustomTypeReport source customType startRow startCol =
 
         CT_IndentAfterEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2590,7 +2589,7 @@ customTypeNote =
 -- DECL DEF
 
 
-toDeclDefReport : Code.Source -> CDN_Name -> DeclDef -> Row -> Col -> Report.Report
+toDeclDefReport : Code.Source -> T.CDN_Name -> DeclDef -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toDeclDefReport source name declDef startRow startCol =
     case declDef of
         DeclDefSpace space row col ->
@@ -2600,11 +2599,11 @@ toDeclDefReport source name declDef startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -2670,11 +2669,11 @@ toDeclDefReport source name declDef startRow startCol =
 
                 Code.Operator "->" ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toWiderRegion row col 2
                     in
@@ -2730,11 +2729,11 @@ toDeclDefReport source name declDef startRow startCol =
 
                 Code.Operator op ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col op
                     in
@@ -2761,11 +2760,11 @@ toDeclDefReport source name declDef startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -2801,11 +2800,11 @@ toDeclDefReport source name declDef startRow startCol =
 
         DeclDefNameRepeat row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2823,11 +2822,11 @@ toDeclDefReport source name declDef startRow startCol =
 
         DeclDefNameMatch defName row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2852,11 +2851,11 @@ toDeclDefReport source name declDef startRow startCol =
 
         DeclDefIndentType row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2874,11 +2873,11 @@ toDeclDefReport source name declDef startRow startCol =
 
         DeclDefIndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2896,11 +2895,11 @@ toDeclDefReport source name declDef startRow startCol =
 
         DeclDefIndentBody row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -2939,9 +2938,9 @@ declDefNote =
 
 
 type Context
-    = InNode Node Row Col Context
-    | InDef CDN_Name Row Col
-    | InDestruct Row Col
+    = InNode Node T.CPP_Row T.CPP_Col Context
+    | InDef T.CDN_Name T.CPP_Row T.CPP_Col
+    | InDestruct T.CPP_Row T.CPP_Col
 
 
 type Node
@@ -2956,7 +2955,7 @@ type Node
     | NBranch
 
 
-getDefName : Context -> Maybe CDN_Name
+getDefName : Context -> Maybe T.CDN_Name
 getDefName context =
     case context of
         InDestruct _ _ ->
@@ -2986,7 +2985,7 @@ isWithin desiredNode context =
 -- EXPR REPORTS
 
 
-toExprReport : Code.Source -> Context -> Expr -> Row -> Col -> Report.Report
+toExprReport : Code.Source -> Context -> Expr -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toExprReport source context expr startRow startCol =
     case expr of
         Let let_ row col ->
@@ -3012,7 +3011,7 @@ toExprReport source context expr startRow startCol =
 
         Dot row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3037,7 +3036,7 @@ toExprReport source context expr startRow startCol =
 
         Access row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3065,11 +3064,11 @@ toExprReport source context expr startRow startCol =
 
         OperatorRight op row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
 
@@ -3187,11 +3186,11 @@ toExprReport source context expr startRow startCol =
                         InNode NBranch r c _ ->
                             ( r, c, "a `case` expression" )
 
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position contextRow contextCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position contextRow contextCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3244,7 +3243,7 @@ toExprReport source context expr startRow startCol =
 
         EndlessShader row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col 6
             in
@@ -3256,7 +3255,7 @@ toExprReport source context expr startRow startCol =
 
         ShaderProblem problem row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3271,11 +3270,11 @@ toExprReport source context expr startRow startCol =
 
         IndentOperatorRight op row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3319,12 +3318,12 @@ toExprReport source context expr startRow startCol =
 -- CHAR
 
 
-toCharReport : Code.Source -> Char -> Row -> Col -> Report.Report
+toCharReport : Code.Source -> Char -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCharReport source char row col =
     case char of
         CharEndless ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3340,7 +3339,7 @@ toCharReport source char row col =
 
         CharNotString width ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
             in
@@ -3364,12 +3363,12 @@ toCharReport source char row col =
 -- STRING
 
 
-toStringReport : Code.Source -> String_ -> Row -> Col -> Report.Report
+toStringReport : Code.Source -> String_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toStringReport source string row col =
     case string of
         StringEndless_Single ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3418,7 +3417,7 @@ toStringReport source string row col =
 
         StringEndless_Multi ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col 3
             in
@@ -3452,12 +3451,12 @@ toStringReport source string row col =
 -- ESCAPES
 
 
-toEscapeReport : Code.Source -> Escape -> Row -> Col -> Report.Report
+toEscapeReport : Code.Source -> Escape -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toEscapeReport source escape row col =
     case escape of
         EscapeUnknown ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col 2
             in
@@ -3484,7 +3483,7 @@ toEscapeReport source escape row col =
 
         BadUnicodeFormat width ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
             in
@@ -3507,7 +3506,7 @@ toEscapeReport source escape row col =
 
         BadUnicodeCode width ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
             in
@@ -3519,7 +3518,7 @@ toEscapeReport source escape row col =
 
         BadUnicodeLength width numDigits badCode ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
             in
@@ -3577,10 +3576,10 @@ toEscapeReport source escape row col =
 -- NUMBERS
 
 
-toNumberReport : Code.Source -> Number -> Row -> Col -> Report.Report
+toNumberReport : Code.Source -> Number -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toNumberReport source number row col =
     let
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             toRegion row col
     in
@@ -3648,12 +3647,12 @@ toNumberReport source number row col =
 -- OPERATORS
 
 
-toOperatorReport : Code.Source -> Context -> BadOperator -> Row -> Col -> Report.Report
+toOperatorReport : Code.Source -> Context -> BadOperator -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toOperatorReport source context operator row col =
     case operator of
         BadDot ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3665,7 +3664,7 @@ toOperatorReport source context operator row col =
 
         BadPipe ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3677,7 +3676,7 @@ toOperatorReport source context operator row col =
 
         BadArrow ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col 2
             in
@@ -3713,7 +3712,7 @@ toOperatorReport source context operator row col =
 
         BadEquals ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3741,7 +3740,7 @@ toOperatorReport source context operator row col =
 
         BadHasType ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3802,7 +3801,7 @@ toOperatorReport source context operator row col =
 -- CASE
 
 
-toLetReport : Code.Source -> Context -> Let -> Row -> Col -> Report.Report
+toLetReport : Code.Source -> Context -> Let -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetReport source context let_ startRow startCol =
     case let_ of
         LetSpace space row col ->
@@ -3810,11 +3809,11 @@ toLetReport source context let_ startRow startCol =
 
         LetIn row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3849,11 +3848,11 @@ toLetReport source context let_ startRow startCol =
 
         LetDefAlignment _ row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -3890,11 +3889,11 @@ toLetReport source context let_ startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -3953,14 +3952,14 @@ toLetReport source context let_ startRow startCol =
                     "I was expecting an expression next. Tell me what should happen with the value you just defined!"
 
 
-toUnfinishLetReport : Code.Source -> Row -> Col -> Row -> Col -> D.Doc -> Report.Report
+toUnfinishLetReport : Code.Source -> T.CPP_Row -> T.CPP_Col -> T.CPP_Row -> T.CPP_Col -> D.Doc -> Report.Report
 toUnfinishLetReport source row col startRow startCol message =
     let
-        surroundings : A.CRA_Region
+        surroundings : T.CRA_Region
         surroundings =
-            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             toRegion row col
     in
@@ -4004,7 +4003,7 @@ toUnfinishLetReport source row col startRow startCol message =
             )
 
 
-toLetDefReport : Code.Source -> CDN_Name -> Def -> Row -> Col -> Report.Report
+toLetDefReport : Code.Source -> T.CDN_Name -> Def -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetDefReport source name def startRow startCol =
     case def of
         DefSpace space row col ->
@@ -4015,11 +4014,11 @@ toLetDefReport source name def startRow startCol =
 
         DefNameRepeat row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4034,11 +4033,11 @@ toLetDefReport source name def startRow startCol =
 
         DefNameMatch defName row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4063,11 +4062,11 @@ toLetDefReport source name def startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -4133,11 +4132,11 @@ toLetDefReport source name def startRow startCol =
 
                 Code.Operator "->" ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toWiderRegion row col 2
                     in
@@ -4190,11 +4189,11 @@ toLetDefReport source name def startRow startCol =
 
                 Code.Operator op ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col op
                     in
@@ -4218,11 +4217,11 @@ toLetDefReport source name def startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -4249,11 +4248,11 @@ toLetDefReport source name def startRow startCol =
 
         DefIndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4268,11 +4267,11 @@ toLetDefReport source name def startRow startCol =
 
         DefIndentType row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4287,11 +4286,11 @@ toLetDefReport source name def startRow startCol =
 
         DefIndentBody row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4306,11 +4305,11 @@ toLetDefReport source name def startRow startCol =
 
         DefAlignment indent row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
 
@@ -4355,7 +4354,7 @@ defNote =
         ]
 
 
-toLetDestructReport : Code.Source -> Destruct -> Row -> Col -> Report.Report
+toLetDestructReport : Code.Source -> Destruct -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetDestructReport source destruct startRow startCol =
     case destruct of
         DestructSpace space row col ->
@@ -4366,11 +4365,11 @@ toLetDestructReport source destruct startRow startCol =
 
         DestructEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4393,11 +4392,11 @@ toLetDestructReport source destruct startRow startCol =
 
         DestructIndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4409,11 +4408,11 @@ toLetDestructReport source destruct startRow startCol =
 
         DestructIndentBody row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4428,7 +4427,7 @@ toLetDestructReport source destruct startRow startCol =
 -- CASE
 
 
-toCaseReport : Code.Source -> Context -> Case -> Row -> Col -> Report.Report
+toCaseReport : Code.Source -> Context -> Case -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCaseReport source context case_ startRow startCol =
     case case_ of
         CaseSpace space row col ->
@@ -4460,11 +4459,11 @@ toCaseReport source context case_ startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -4477,11 +4476,11 @@ toCaseReport source context case_ startRow startCol =
 
                 Code.Operator ":" ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -4510,11 +4509,11 @@ toCaseReport source context case_ startRow startCol =
 
                 Code.Operator "=" ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -4538,11 +4537,11 @@ toCaseReport source context case_ startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -4641,11 +4640,11 @@ toCaseReport source context case_ startRow startCol =
 toUnfinishCaseReport : Code.Source -> Int -> Int -> Int -> Int -> D.Doc -> Report.Report
 toUnfinishCaseReport source row col startRow startCol message =
     let
-        surroundings : A.CRA_Region
+        surroundings : T.CRA_Region
         surroundings =
-            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             toRegion row col
     in
@@ -4695,7 +4694,7 @@ noteForCaseIndentError =
 -- IF
 
 
-toIfReport : Code.Source -> Context -> If -> Row -> Col -> Report.Report
+toIfReport : Code.Source -> Context -> If -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toIfReport source context if_ startRow startCol =
     case if_ of
         IfSpace space row col ->
@@ -4703,11 +4702,11 @@ toIfReport source context if_ startRow startCol =
 
         IfThen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4729,11 +4728,11 @@ toIfReport source context if_ startRow startCol =
 
         IfElse row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4755,11 +4754,11 @@ toIfReport source context if_ startRow startCol =
 
         IfElseBranchStart row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4780,11 +4779,11 @@ toIfReport source context if_ startRow startCol =
 
         IfIndentCondition row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4815,11 +4814,11 @@ toIfReport source context if_ startRow startCol =
 
         IfIndentThen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4844,11 +4843,11 @@ toIfReport source context if_ startRow startCol =
 
         IfIndentThenBranch row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4863,11 +4862,11 @@ toIfReport source context if_ startRow startCol =
 
         IfIndentElseBranch row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -4884,11 +4883,11 @@ toIfReport source context if_ startRow startCol =
             case Code.nextLineStartsWithKeyword "else" source row of
                 Just ( elseRow, elseCol ) ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position elseRow elseCol)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position elseRow elseCol)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toWiderRegion elseRow elseCol 4
                     in
@@ -4917,11 +4916,11 @@ toIfReport source context if_ startRow startCol =
 
                 Nothing ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -4964,18 +4963,18 @@ toIfReport source context if_ startRow startCol =
 -- RECORD
 
 
-toRecordReport : Code.Source -> Context -> Record -> Row -> Col -> Report.Report
+toRecordReport : Code.Source -> Context -> Record -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toRecordReport source context record startRow startCol =
     case record of
         RecordOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -4988,11 +4987,11 @@ toRecordReport source context record startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -5031,11 +5030,11 @@ toRecordReport source context record startRow startCol =
 
         RecordEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5074,11 +5073,11 @@ toRecordReport source context record startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -5090,11 +5089,11 @@ toRecordReport source context record startRow startCol =
 
                 Code.Other (Just ',') ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -5110,11 +5109,11 @@ toRecordReport source context record startRow startCol =
 
                 Code.Close _ '}' ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -5129,11 +5128,11 @@ toRecordReport source context record startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -5172,11 +5171,11 @@ toRecordReport source context record startRow startCol =
 
         RecordEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5221,11 +5220,11 @@ toRecordReport source context record startRow startCol =
 
         RecordIndentOpen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5258,11 +5257,11 @@ toRecordReport source context record startRow startCol =
             case Code.nextLineStartsWithCloseCurly source row of
                 Just ( curlyRow, curlyCol ) ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position curlyRow curlyCol)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position curlyRow curlyCol)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion curlyRow curlyCol
                     in
@@ -5277,11 +5276,11 @@ toRecordReport source context record startRow startCol =
 
                 Nothing ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -5317,11 +5316,11 @@ toRecordReport source context record startRow startCol =
 
         RecordIndentField row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5336,11 +5335,11 @@ toRecordReport source context record startRow startCol =
 
         RecordIndentEquals row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5364,11 +5363,11 @@ toRecordReport source context record startRow startCol =
 
         RecordIndentExpr row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5426,7 +5425,7 @@ noteForRecordIndentError =
 -- TUPLE
 
 
-toTupleReport : Code.Source -> Context -> Tuple -> Row -> Col -> Report.Report
+toTupleReport : Code.Source -> Context -> Tuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTupleReport source context tuple startRow startCol =
     case tuple of
         TupleExpr expr row col ->
@@ -5437,11 +5436,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5466,11 +5465,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleOperatorClose row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5495,11 +5494,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleOperatorReserved operator row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5576,11 +5575,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleIndentExpr1 row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5611,11 +5610,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleIndentExprN row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5648,11 +5647,11 @@ toTupleReport source context tuple startRow startCol =
 
         TupleIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5676,7 +5675,7 @@ toTupleReport source context tuple startRow startCol =
                     )
 
 
-toListReport : Code.Source -> Context -> List_ -> Row -> Col -> Report.Report
+toListReport : Code.Source -> Context -> List_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toListReport source context list startRow startCol =
     case list of
         ListSpace space row col ->
@@ -5684,11 +5683,11 @@ toListReport source context list startRow startCol =
 
         ListOpen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5728,11 +5727,11 @@ toListReport source context list startRow startCol =
             case expr of
                 Start r c ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position r c)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position r c)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion r c
                     in
@@ -5758,11 +5757,11 @@ toListReport source context list startRow startCol =
 
         ListEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5800,11 +5799,11 @@ toListReport source context list startRow startCol =
 
         ListIndentOpen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5863,11 +5862,11 @@ toListReport source context list startRow startCol =
 
         ListIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5907,11 +5906,11 @@ toListReport source context list startRow startCol =
 
         ListIndentExpr row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -5933,7 +5932,7 @@ toListReport source context list startRow startCol =
                     )
 
 
-toFuncReport : Code.Source -> Context -> Func -> Row -> Col -> Report.Report
+toFuncReport : Code.Source -> Context -> Func -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toFuncReport source context func startRow startCol =
     case func of
         FuncSpace space row col ->
@@ -5949,11 +5948,11 @@ toFuncReport source context func startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -5965,11 +5964,11 @@ toFuncReport source context func startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6001,11 +6000,11 @@ toFuncReport source context func startRow startCol =
 
         FuncIndentArg row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6034,11 +6033,11 @@ toFuncReport source context func startRow startCol =
 
         FuncIndentArrow row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6073,11 +6072,11 @@ toFuncReport source context func startRow startCol =
 
         FuncIndentBody row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6119,7 +6118,7 @@ type PContext
     | PLet
 
 
-toPatternReport : Code.Source -> PContext -> Pattern -> Row -> Col -> Report.Report
+toPatternReport : Code.Source -> PContext -> Pattern -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPatternReport source context pattern startRow startCol =
     case pattern of
         PRecord record row col ->
@@ -6135,11 +6134,11 @@ toPatternReport source context pattern startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
 
@@ -6165,11 +6164,11 @@ toPatternReport source context pattern startRow startCol =
 
                 Code.Operator "-" ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6183,11 +6182,11 @@ toPatternReport source context pattern startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6238,7 +6237,7 @@ toPatternReport source context pattern startRow startCol =
 
         PFloat width row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
             in
@@ -6274,7 +6273,7 @@ toPatternReport source context pattern startRow startCol =
 
         PAlias row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6332,7 +6331,7 @@ toPatternReport source context pattern startRow startCol =
 
         PWildcardNotVar name width row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toWiderRegion row col width
 
@@ -6385,11 +6384,11 @@ toPatternReport source context pattern startRow startCol =
 
         PIndentStart row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6435,7 +6434,7 @@ toPatternReport source context pattern startRow startCol =
 
         PIndentAlias row col ->
             let
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6491,7 +6490,7 @@ toPatternReport source context pattern startRow startCol =
                     )
 
 
-toPRecordReport : Code.Source -> PRecord -> Row -> Col -> Report.Report
+toPRecordReport : Code.Source -> PRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPRecordReport source record startRow startCol =
     case record of
         PRecordOpen row col ->
@@ -6522,11 +6521,11 @@ toPRecordReport source record startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -6576,14 +6575,14 @@ toPRecordReport source record startRow startCol =
                 D.reflow "I was expecting to see a field name next."
 
 
-toUnfinishRecordPatternReport : Code.Source -> Row -> Col -> Row -> Col -> D.Doc -> Report.Report
+toUnfinishRecordPatternReport : Code.Source -> T.CPP_Row -> T.CPP_Col -> T.CPP_Row -> T.CPP_Col -> D.Doc -> Report.Report
 toUnfinishRecordPatternReport source row col startRow startCol message =
     let
-        surroundings : A.CRA_Region
+        surroundings : T.CRA_Region
         surroundings =
-            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-        region : A.CRA_Region
+        region : T.CRA_Region
         region =
             toRegion row col
     in
@@ -6616,18 +6615,18 @@ toUnfinishRecordPatternReport source row col startRow startCol message =
             )
 
 
-toPTupleReport : Code.Source -> PContext -> PTuple -> Row -> Col -> Report.Report
+toPTupleReport : Code.Source -> PContext -> PTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPTupleReport source context tuple startRow startCol =
     case tuple of
         PTupleOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -6643,11 +6642,11 @@ toPTupleReport source context tuple startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6683,11 +6682,11 @@ toPTupleReport source context tuple startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -6703,11 +6702,11 @@ toPTupleReport source context tuple startRow startCol =
 
                 Code.Operator op ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col op
                     in
@@ -6723,11 +6722,11 @@ toPTupleReport source context tuple startRow startCol =
 
                 Code.Close term bracket ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6747,11 +6746,11 @@ toPTupleReport source context tuple startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6788,11 +6787,11 @@ toPTupleReport source context tuple startRow startCol =
 
         PTupleIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6819,11 +6818,11 @@ toPTupleReport source context tuple startRow startCol =
 
         PTupleIndentExpr1 row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6857,11 +6856,11 @@ toPTupleReport source context tuple startRow startCol =
 
         PTupleIndentExprN row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6900,18 +6899,18 @@ toPTupleReport source context tuple startRow startCol =
                     )
 
 
-toPListReport : Code.Source -> PContext -> PList -> Row -> Col -> Report.Report
+toPListReport : Code.Source -> PContext -> PList -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPListReport source context list startRow startCol =
     case list of
         PListOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -6923,11 +6922,11 @@ toPListReport source context list startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -6949,11 +6948,11 @@ toPListReport source context list startRow startCol =
 
         PListEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -6981,11 +6980,11 @@ toPListReport source context list startRow startCol =
 
         PListIndentOpen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7010,11 +7009,11 @@ toPListReport source context list startRow startCol =
 
         PListIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7039,11 +7038,11 @@ toPListReport source context list startRow startCol =
 
         PListIndentExpr row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7062,13 +7061,13 @@ toPListReport source context list startRow startCol =
 
 
 type TContext
-    = TC_Annotation CDN_Name
+    = TC_Annotation T.CDN_Name
     | TC_CustomType
     | TC_TypeAlias
     | TC_Port
 
 
-toTypeReport : Code.Source -> TContext -> Type -> Row -> Col -> Report.Report
+toTypeReport : Code.Source -> TContext -> Type -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTypeReport source context tipe startRow startCol =
     case tipe of
         TRecord record row col ->
@@ -7081,11 +7080,11 @@ toTypeReport source context tipe startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -7097,11 +7096,11 @@ toTypeReport source context tipe startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
 
@@ -7162,11 +7161,11 @@ toTypeReport source context tipe startRow startCol =
 
         TIndentStart row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
 
@@ -7211,18 +7210,18 @@ toTypeReport source context tipe startRow startCol =
                     )
 
 
-toTRecordReport : Code.Source -> TContext -> TRecord -> Row -> Col -> Report.Report
+toTRecordReport : Code.Source -> TContext -> TRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTRecordReport source context record startRow startCol =
     case record of
         TRecordOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -7234,11 +7233,11 @@ toTRecordReport source context record startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7266,11 +7265,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7309,11 +7308,11 @@ toTRecordReport source context record startRow startCol =
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -7325,11 +7324,11 @@ toTRecordReport source context record startRow startCol =
 
                 Code.Other (Just ',') ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7345,11 +7344,11 @@ toTRecordReport source context record startRow startCol =
 
                 Code.Close _ '}' ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7364,11 +7363,11 @@ toTRecordReport source context record startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7406,11 +7405,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordColon row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7454,11 +7453,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordIndentOpen row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7491,11 +7490,11 @@ toTRecordReport source context record startRow startCol =
             case Code.nextLineStartsWithCloseCurly source row of
                 Just ( curlyRow, curlyCol ) ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position curlyRow curlyCol)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position curlyRow curlyCol)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion curlyRow curlyCol
                     in
@@ -7510,11 +7509,11 @@ toTRecordReport source context record startRow startCol =
 
                 Nothing ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7550,11 +7549,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordIndentField row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7569,11 +7568,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordIndentColon row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7597,11 +7596,11 @@ toTRecordReport source context record startRow startCol =
 
         TRecordIndentType row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7659,18 +7658,18 @@ noteForRecordTypeIndentError =
         ]
 
 
-toTTupleReport : Code.Source -> TContext -> TTuple -> Row -> Col -> Report.Report
+toTTupleReport : Code.Source -> TContext -> TTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTTupleReport source context tuple startRow startCol =
     case tuple of
         TTupleOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toKeywordRegion row col keyword
                     in
@@ -7684,11 +7683,11 @@ toTTupleReport source context tuple startRow startCol =
 
                 _ ->
                     let
-                        surroundings : A.CRA_Region
+                        surroundings : T.CRA_Region
                         surroundings =
-                            A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                            T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                        region : A.CRA_Region
+                        region : T.CRA_Region
                         region =
                             toRegion row col
                     in
@@ -7716,11 +7715,11 @@ toTTupleReport source context tuple startRow startCol =
 
         TTupleEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7753,11 +7752,11 @@ toTTupleReport source context tuple startRow startCol =
 
         TTupleIndentType1 row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7789,11 +7788,11 @@ toTTupleReport source context tuple startRow startCol =
 
         TTupleIndentTypeN row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in
@@ -7828,11 +7827,11 @@ toTTupleReport source context tuple startRow startCol =
 
         TTupleIndentEnd row col ->
             let
-                surroundings : A.CRA_Region
+                surroundings : T.CRA_Region
                 surroundings =
-                    A.CRA_Region (A.CRA_Position startRow startCol) (A.CRA_Position row col)
+                    T.CRA_Region (T.CRA_Position startRow startCol) (T.CRA_Position row col)
 
-                region : A.CRA_Region
+                region : T.CRA_Region
                 region =
                     toRegion row col
             in

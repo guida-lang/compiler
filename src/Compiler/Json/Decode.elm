@@ -35,11 +35,11 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Json.String as Json
 import Compiler.Parse.Keyword as K
-import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Compiler.Reporting.Annotation as A
+import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -147,8 +147,8 @@ type Problem x
     = Field String (Problem x)
     | Index Int (Problem x)
     | OneOf (Problem x) (List (Problem x))
-    | Failure A.CRA_Region x
-    | Expecting A.CRA_Region DecodeExpectation
+    | Failure T.CRA_Region x
+    | Expecting T.CRA_Region DecodeExpectation
 
 
 type DecodeExpectation
@@ -206,7 +206,7 @@ bind callback (Decoder decodeA) =
 string : Decoder x String
 string =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 String snippet ->
                     Ok (Json.fromSnippet snippet)
@@ -215,10 +215,10 @@ string =
                     Err (Expecting region TString)
 
 
-customString : P.Parser x a -> (Row -> Col -> x) -> Decoder x a
+customString : P.Parser x a -> (T.CPP_Row -> T.CPP_Col -> x) -> Decoder x a
 customString parser toBadEnd =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 String snippet ->
                     P.fromSnippet parser toBadEnd snippet
@@ -235,7 +235,7 @@ customString parser toBadEnd =
 int : Decoder x Int
 int =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 Int n ->
                     Ok n
@@ -251,7 +251,7 @@ int =
 list : Decoder x a -> Decoder x (List a)
 list decoder =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 Array asts ->
                     listHelp decoder 0 asts []
@@ -282,7 +282,7 @@ listHelp ((Decoder decodeA) as decoder) i asts revs =
 nonEmptyList : Decoder x a -> x -> Decoder x (NE.Nonempty a)
 nonEmptyList decoder x =
     Decoder <|
-        \((A.CRA_At region _) as ast) ->
+        \((T.CRA_At region _) as ast) ->
             let
                 (Decoder values) =
                     list decoder
@@ -305,7 +305,7 @@ nonEmptyList decoder x =
 pair : Decoder x a -> Decoder x b -> Decoder x ( a, b )
 pair (Decoder decodeA) (Decoder decodeB) =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 Array vs ->
                     case vs of
@@ -328,7 +328,7 @@ pair (Decoder decodeA) (Decoder decodeB) =
 
 
 type KeyDecoder x a
-    = KeyDecoder (P.Parser x a) (Row -> Col -> x)
+    = KeyDecoder (P.Parser x a) (T.CPP_Row -> T.CPP_Col -> x)
 
 
 dict : (k -> comparable) -> KeyDecoder x k -> Decoder x a -> Decoder x (Dict comparable k a)
@@ -339,7 +339,7 @@ dict toComparable keyDecoder valueDecoder =
 pairs : KeyDecoder x k -> Decoder x a -> Decoder x (List ( k, a ))
 pairs keyDecoder valueDecoder =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 Object kvs ->
                     pairsHelp keyDecoder valueDecoder kvs []
@@ -348,7 +348,7 @@ pairs keyDecoder valueDecoder =
                     Err (Expecting region TObject)
 
 
-pairsHelp : KeyDecoder x k -> Decoder x a -> List ( P.Snippet, AST ) -> List ( k, a ) -> Result (Problem x) (List ( k, a ))
+pairsHelp : KeyDecoder x k -> Decoder x a -> List ( T.CPP_Snippet, AST ) -> List ( k, a ) -> Result (Problem x) (List ( k, a ))
 pairsHelp ((KeyDecoder keyParser toBadEnd) as keyDecoder) ((Decoder decodeA) as valueDecoder) kvs revs =
     case kvs of
         [] ->
@@ -366,15 +366,15 @@ pairsHelp ((KeyDecoder keyParser toBadEnd) as keyDecoder) ((Decoder decodeA) as 
 
                         Err prob ->
                             let
-                                (P.Snippet { fptr, offset, length }) =
+                                (T.CPP_Snippet { fptr, offset, length }) =
                                     snippet
                             in
                             Err (Field (String.slice offset (offset + length) fptr) prob)
 
 
-snippetToRegion : P.Snippet -> A.CRA_Region
-snippetToRegion (P.Snippet { length, offRow, offCol }) =
-    A.CRA_Region (A.CRA_Position offRow offCol) (A.CRA_Position offRow (offCol + length))
+snippetToRegion : T.CPP_Snippet -> T.CRA_Region
+snippetToRegion (T.CPP_Snippet { length, offRow, offCol }) =
+    T.CRA_Region (T.CRA_Position offRow offCol) (T.CRA_Position offRow (offCol + length))
 
 
 
@@ -384,7 +384,7 @@ snippetToRegion (P.Snippet { length, offRow, offCol }) =
 field : String -> Decoder x a -> Decoder x a
 field key (Decoder decodeA) =
     Decoder <|
-        \(A.CRA_At region ast) ->
+        \(T.CRA_At region ast) ->
             case ast of
                 Object kvs ->
                     case findField key kvs of
@@ -399,13 +399,13 @@ field key (Decoder decodeA) =
                     Err (Expecting region TObject)
 
 
-findField : String -> List ( P.Snippet, AST ) -> Maybe AST
+findField : String -> List ( T.CPP_Snippet, AST ) -> Maybe AST
 findField key pairs_ =
     case pairs_ of
         [] ->
             Nothing
 
-        ( P.Snippet { fptr, offset, length }, value ) :: remainingPairs ->
+        ( T.CPP_Snippet { fptr, offset, length }, value ) :: remainingPairs ->
             if key == String.slice offset (offset + length) fptr then
                 Just value
 
@@ -466,7 +466,7 @@ oneOfError problems prob ps =
 failure : x -> Decoder x a
 failure x =
     Decoder <|
-        \(A.CRA_At region _) ->
+        \(T.CRA_At region _) ->
             Err (Failure region x)
 
 
@@ -503,13 +503,13 @@ mapErrorHelp func problem =
 
 
 type alias AST =
-    A.CRA_Located AST_
+    T.CRA_Located AST_
 
 
 type AST_
     = Array (List AST)
-    | Object (List ( P.Snippet, AST ))
-    | String P.Snippet
+    | Object (List ( T.CPP_Snippet, AST ))
+    | String T.CPP_Snippet
     | Int Int
     | TRUE
     | FALSE
@@ -525,15 +525,15 @@ type alias Parser a =
 
 
 type ParseError
-    = Start Row Col
-    | ObjectField Row Col
-    | ObjectColon Row Col
-    | ObjectEnd Row Col
-    | ArrayEnd Row Col
-    | StringProblem StringProblem Row Col
-    | NoLeadingZeros Row Col
-    | NoFloats Row Col
-    | BadEnd Row Col
+    = Start T.CPP_Row T.CPP_Col
+    | ObjectField T.CPP_Row T.CPP_Col
+    | ObjectColon T.CPP_Row T.CPP_Col
+    | ObjectEnd T.CPP_Row T.CPP_Col
+    | ArrayEnd T.CPP_Row T.CPP_Col
+    | StringProblem StringProblem T.CPP_Row T.CPP_Col
+    | NoLeadingZeros T.CPP_Row T.CPP_Col
+    | NoFloats T.CPP_Row T.CPP_Col
+    | BadEnd T.CPP_Row T.CPP_Col
 
 
 type StringProblem
@@ -594,7 +594,7 @@ pObject =
             )
 
 
-pObjectHelp : List ( P.Snippet, AST ) -> Parser (P.Step (List ( P.Snippet, AST )) AST_)
+pObjectHelp : List ( T.CPP_Snippet, AST ) -> Parser (P.Step (List ( T.CPP_Snippet, AST )) AST_)
 pObjectHelp revEntries =
     P.oneOf ObjectEnd
         [ P.word1 ',' ObjectEnd
@@ -610,7 +610,7 @@ pObjectHelp revEntries =
         ]
 
 
-pField : Parser ( P.Snippet, AST )
+pField : Parser ( T.CPP_Snippet, AST )
 pField =
     pString ObjectField
         |> P.bind
@@ -666,7 +666,7 @@ pArrayHelp revEntries =
 -- STRING
 
 
-pString : (Row -> Col -> ParseError) -> Parser P.Snippet
+pString : (T.CPP_Row -> T.CPP_Col -> ParseError) -> Parser T.CPP_Snippet
 pString start =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -676,7 +676,7 @@ pString start =
                     pos1 =
                         pos + 1
 
-                    col1 : Col
+                    col1 : T.CPP_Col
                     col1 =
                         col + 1
 
@@ -695,9 +695,9 @@ pString start =
                             len =
                                 (newPos - pos1) - 1
 
-                            snp : P.Snippet
+                            snp : T.CPP_Snippet
                             snp =
-                                P.Snippet
+                                T.CPP_Snippet
                                     { fptr = src
                                     , offset = off
                                     , length = len
@@ -723,7 +723,7 @@ type StringStatus
     | BadString StringProblem
 
 
-pStringHelp : String -> Int -> Int -> Row -> Col -> ( ( StringStatus, Int ), ( Row, Col ) )
+pStringHelp : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> ( ( StringStatus, Int ), ( T.CPP_Row, T.CPP_Col ) )
 pStringHelp src pos end row col =
     if pos >= end then
         ( ( BadString BadStringEnd, pos ), ( row, col ) )
@@ -849,7 +849,7 @@ spaces =
                 Ok (P.POk P.Consumed () newState)
 
 
-eatSpaces : String -> Int -> Int -> Row -> Col -> ( Int, Row, Col )
+eatSpaces : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> ( Int, T.CPP_Row, T.CPP_Col )
 eatSpaces src pos end row col =
     if pos >= end then
         ( pos, row, col )

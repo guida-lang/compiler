@@ -5,15 +5,16 @@ module Compiler.Parse.String exposing
 
 import Compiler.Elm.String as ES
 import Compiler.Parse.Number as Number
-import Compiler.Parse.Primitives as P exposing (Col, Parser(..), Row)
+import Compiler.Parse.Primitives as P exposing (Parser(..))
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 
 
 
 -- CHARACTER
 
 
-character : (Row -> Col -> x) -> (E.Char -> Row -> Col -> x) -> Parser x String
+character : (T.CPP_Row -> T.CPP_Col -> x) -> (E.Char -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
 character toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
@@ -47,12 +48,12 @@ character toExpectation toError =
 
 
 type CharResult
-    = Good Int Col Int ES.Chunk
-    | CharEndless Col
-    | CharEscape Row Col E.Escape
+    = Good Int T.CPP_Col Int ES.Chunk
+    | CharEndless T.CPP_Col
+    | CharEscape T.CPP_Row T.CPP_Col E.Escape
 
 
-chompChar : String -> Int -> Int -> Row -> Col -> Int -> ES.Chunk -> CharResult
+chompChar : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> ES.Chunk -> CharResult
 chompChar src pos end row col numChars mostRecent =
     if pos >= end then
         CharEndless col
@@ -103,7 +104,7 @@ chompChar src pos end row col numChars mostRecent =
 -- STRINGS
 
 
-string : (Row -> Col -> x) -> (E.String_ -> Row -> Col -> x) -> Parser x String
+string : (T.CPP_Row -> T.CPP_Col -> x) -> (E.String_ -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
 string toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
@@ -126,7 +127,7 @@ string toExpectation toError =
                                 pos3 =
                                     pos + 3
 
-                                col3 : Col
+                                col3 : T.CPP_Col
                                 col3 =
                                     col + 3
                             in
@@ -160,8 +161,8 @@ isDoubleQuote src pos end =
 
 
 type StringResult
-    = SROk Int Row Col String
-    | SRErr Row Col E.String_
+    = SROk Int T.CPP_Row T.CPP_Col String
+    | SRErr T.CPP_Row T.CPP_Col E.String_
 
 
 finalize : String -> Int -> Int -> List ES.Chunk -> String
@@ -189,7 +190,7 @@ addEscape chunk start end revChunks =
 -- SINGLE STRINGS
 
 
-singleString : String -> Int -> Int -> Row -> Col -> Int -> List ES.Chunk -> StringResult
+singleString : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> List ES.Chunk -> StringResult
 singleString src pos end row col initialPos revChunks =
     if pos >= end then
         SRErr row col E.StringEndless_Single
@@ -249,7 +250,7 @@ singleString src pos end row col initialPos revChunks =
 -- MULTI STRINGS
 
 
-multiString : String -> Int -> Int -> Row -> Col -> Int -> Row -> Col -> List ES.Chunk -> StringResult
+multiString : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> T.CPP_Row -> T.CPP_Col -> List ES.Chunk -> StringResult
 multiString src pos end row col initialPos sr sc revChunks =
     if pos >= end then
         SRErr sr sc E.StringEndless_Multi
@@ -328,10 +329,10 @@ type Escape
     = EscapeNormal
     | EscapeUnicode Int Int
     | EscapeEndOfFile
-    | EscapeProblem Row Col E.Escape
+    | EscapeProblem T.CPP_Row T.CPP_Col E.Escape
 
 
-eatEscape : String -> Int -> Int -> Row -> Col -> Escape
+eatEscape : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Escape
 eatEscape src pos end row col =
     if pos >= end then
         EscapeEndOfFile
@@ -363,7 +364,7 @@ eatEscape src pos end row col =
                 EscapeProblem row col E.EscapeUnknown
 
 
-eatUnicode : String -> Int -> Int -> Row -> Col -> Escape
+eatUnicode : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Escape
 eatUnicode src pos end row col =
     if pos >= end || P.unsafeIndex src pos /= '{' then
         EscapeProblem row col (E.BadUnicodeFormat 2)

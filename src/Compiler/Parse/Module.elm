@@ -6,25 +6,24 @@ module Compiler.Parse.Module exposing
     , isKernel
     )
 
-import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Imports as Imports
 import Compiler.Elm.Package as Pkg
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Keyword as Keyword
-import Compiler.Parse.Primitives as P exposing (Col, Row)
+import Compiler.Parse.Primitives as P
 import Compiler.Parse.Space as Space
 import Compiler.Parse.Symbol as Symbol
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
+import Types as T
 
 
 
 -- FROM BYTE STRING
 
 
-fromByteString : ProjectType -> String -> Result E.Error Src.CASTS_Module
+fromByteString : ProjectType -> String -> Result E.Error T.CASTS_Module
 fromByteString projectType source =
     case P.fromByteString (chompModule projectType) E.ModuleBadEnd source of
         Ok modul ->
@@ -39,7 +38,7 @@ fromByteString projectType source =
 
 
 type ProjectType
-    = Package Pkg.CEP_Name
+    = Package T.CEP_Name
     | Application
 
 
@@ -69,8 +68,8 @@ isKernel projectType =
 
 type alias Module =
     { header : Maybe Header
-    , imports : List Src.CASTS_Import
-    , infixes : List (A.CRA_Located Src.CASTS_Infix)
+    , imports : List T.CASTS_Import
+    , infixes : List (T.CRA_Located T.CASTS_Infix)
     , decls : List Decl.Decl
     }
 
@@ -115,7 +114,7 @@ chompModule projectType =
 -- CHECK MODULE
 
 
-checkModule : ProjectType -> Module -> Result E.Error Src.CASTS_Module
+checkModule : ProjectType -> Module -> Result E.Error T.CASTS_Module
 checkModule projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
@@ -125,7 +124,7 @@ checkModule projectType module_ =
         Just { name, effects, exports, docs } ->
             checkEffects projectType ports effects
                 |> Result.map
-                    (Src.CASTS_Module
+                    (T.CASTS_Module
                         (Just name)
                         exports
                         (toDocs docs module_.decls)
@@ -138,10 +137,10 @@ checkModule projectType module_ =
 
         Nothing ->
             Ok
-                (Src.CASTS_Module
+                (T.CASTS_Module
                     Nothing
-                    (A.CRA_At A.one Src.CASTS_Open)
-                    (Src.CASTS_NoDocs A.one)
+                    (T.CRA_At A.one T.CASTS_Open)
+                    (T.CASTS_NoDocs A.one)
                     module_.imports
                     values
                     unions
@@ -149,23 +148,23 @@ checkModule projectType module_ =
                     module_.infixes
                     (case ports of
                         [] ->
-                            Src.CASTS_NoEffects
+                            T.CASTS_NoEffects
 
                         _ ->
-                            Src.CASTS_Ports ports
+                            T.CASTS_Ports ports
                     )
                 )
 
 
-checkEffects : ProjectType -> List Src.CASTS_Port -> Effects -> Result E.Error Src.CASTS_Effects
+checkEffects : ProjectType -> List T.CASTS_Port -> Effects -> Result E.Error T.CASTS_Effects
 checkEffects projectType ports effects =
     case effects of
         NoEffects region ->
             case ports of
                 [] ->
-                    Ok Src.CASTS_NoEffects
+                    Ok T.CASTS_NoEffects
 
-                (Src.CASTS_Port name _) :: _ ->
+                (T.CASTS_Port name _) :: _ ->
                     case projectType of
                         Package _ ->
                             Err (E.NoPortsInPackage name)
@@ -184,13 +183,13 @@ checkEffects projectType ports effects =
                             Err (E.NoPorts region)
 
                         _ :: _ ->
-                            Ok (Src.CASTS_Ports ports)
+                            Ok (T.CASTS_Ports ports)
 
         Manager region manager ->
             if isKernel projectType then
                 case ports of
                     [] ->
-                        Ok (Src.CASTS_Manager region manager)
+                        Ok (T.CASTS_Manager region manager)
 
                     _ :: _ ->
                         Err (E.UnexpectedPort region)
@@ -199,7 +198,7 @@ checkEffects projectType ports effects =
                 Err (E.NoEffectsOutsideKernel region)
 
 
-categorizeDecls : List (A.CRA_Located Src.CASTS_Value) -> List (A.CRA_Located Src.CASTS_Union) -> List (A.CRA_Located Src.CASTS_Alias) -> List Src.CASTS_Port -> List Decl.Decl -> ( ( List (A.CRA_Located Src.CASTS_Value), List (A.CRA_Located Src.CASTS_Union) ), ( List (A.CRA_Located Src.CASTS_Alias), List Src.CASTS_Port ) )
+categorizeDecls : List (T.CRA_Located T.CASTS_Value) -> List (T.CRA_Located T.CASTS_Union) -> List (T.CRA_Located T.CASTS_Alias) -> List T.CASTS_Port -> List Decl.Decl -> ( ( List (T.CRA_Located T.CASTS_Value), List (T.CRA_Located T.CASTS_Union) ), ( List (T.CRA_Located T.CASTS_Alias), List T.CASTS_Port ) )
 categorizeDecls values unions aliases ports decls =
     case decls of
         [] ->
@@ -224,17 +223,17 @@ categorizeDecls values unions aliases ports decls =
 -- TO DOCS
 
 
-toDocs : Result A.CRA_Region Src.CASTS_Comment -> List Decl.Decl -> Src.CASTS_Docs
+toDocs : Result T.CRA_Region T.CASTS_Comment -> List Decl.Decl -> T.CASTS_Docs
 toDocs comment decls =
     case comment of
         Ok overview ->
-            Src.CASTS_YesDocs overview (getComments decls [])
+            T.CASTS_YesDocs overview (getComments decls [])
 
         Err region ->
-            Src.CASTS_NoDocs region
+            T.CASTS_NoDocs region
 
 
-getComments : List Decl.Decl -> List ( Name.CDN_Name, Src.CASTS_Comment ) -> List ( Name.CDN_Name, Src.CASTS_Comment )
+getComments : List Decl.Decl -> List ( T.CDN_Name, T.CASTS_Comment ) -> List ( T.CDN_Name, T.CASTS_Comment )
 getComments decls comments =
     case decls of
         [] ->
@@ -242,21 +241,21 @@ getComments decls comments =
 
         decl :: otherDecls ->
             case decl of
-                Decl.Value c (A.CRA_At _ (Src.CASTS_Value n _ _ _)) ->
+                Decl.Value c (T.CRA_At _ (T.CASTS_Value n _ _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Union c (A.CRA_At _ (Src.CASTS_Union n _ _)) ->
+                Decl.Union c (T.CRA_At _ (T.CASTS_Union n _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Alias c (A.CRA_At _ (Src.CASTS_Alias n _ _)) ->
+                Decl.Alias c (T.CRA_At _ (T.CASTS_Alias n _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Port c (Src.CASTS_Port n _) ->
+                Decl.Port c (T.CASTS_Port n _) ->
                     getComments otherDecls (addComment c n comments)
 
 
-addComment : Maybe Src.CASTS_Comment -> A.CRA_Located Name.CDN_Name -> List ( Name.CDN_Name, Src.CASTS_Comment ) -> List ( Name.CDN_Name, Src.CASTS_Comment )
-addComment maybeComment (A.CRA_At _ name) comments =
+addComment : Maybe T.CASTS_Comment -> T.CRA_Located T.CDN_Name -> List ( T.CDN_Name, T.CASTS_Comment ) -> List ( T.CDN_Name, T.CASTS_Comment )
+addComment maybeComment (T.CRA_At _ name) comments =
     case maybeComment of
         Just comment ->
             ( name, comment ) :: comments
@@ -269,7 +268,7 @@ addComment maybeComment (A.CRA_At _ name) comments =
 -- FRESH LINES
 
 
-freshLine : (Row -> Col -> E.Module) -> P.Parser E.Module ()
+freshLine : (T.CPP_Row -> T.CPP_Col -> E.Module) -> P.Parser E.Module ()
 freshLine toFreshLineError =
     Space.chomp E.ModuleSpace
         |> P.bind (\_ -> Space.checkFreshLine toFreshLineError)
@@ -292,7 +291,7 @@ chompDecls decls =
             )
 
 
-chompInfixes : List (A.CRA_Located Src.CASTS_Infix) -> P.Parser E.Module (List (A.CRA_Located Src.CASTS_Infix))
+chompInfixes : List (T.CRA_Located T.CASTS_Infix) -> P.Parser E.Module (List (T.CRA_Located T.CASTS_Infix))
 chompInfixes infixes =
     P.oneOfWithFallback
         [ Decl.infix_
@@ -305,11 +304,11 @@ chompInfixes infixes =
 -- MODULE DOC COMMENT
 
 
-chompModuleDocCommentSpace : P.Parser E.Module (Result A.CRA_Region Src.CASTS_Comment)
+chompModuleDocCommentSpace : P.Parser E.Module (Result T.CRA_Region T.CASTS_Comment)
 chompModuleDocCommentSpace =
     P.addLocation (freshLine E.FreshLine)
         |> P.bind
-            (\(A.CRA_At region ()) ->
+            (\(T.CRA_At region ()) ->
                 P.oneOfWithFallback
                     [ Space.docComment E.ImportStart E.ModuleSpace
                         |> P.bind
@@ -328,17 +327,17 @@ chompModuleDocCommentSpace =
 
 
 type alias Header =
-    { name : A.CRA_Located Name.CDN_Name
+    { name : T.CRA_Located T.CDN_Name
     , effects : Effects
-    , exports : A.CRA_Located Src.CASTS_Exposing
-    , docs : Result A.CRA_Region Src.CASTS_Comment
+    , exports : T.CRA_Located T.CASTS_Exposing
+    , docs : Result T.CRA_Region T.CASTS_Comment
     }
 
 
 type Effects
-    = NoEffects A.CRA_Region
-    | Ports A.CRA_Region
-    | Manager A.CRA_Region Src.CASTS_Manager
+    = NoEffects T.CRA_Region
+    | Ports T.CRA_Region
+    | Manager T.CRA_Region T.CASTS_Manager
 
 
 chompHeader : P.Parser E.Module (Maybe Header)
@@ -369,7 +368,7 @@ chompHeader =
                                                                     Just <|
                                                                         Header
                                                                             name
-                                                                            (NoEffects (A.CRA_Region start effectEnd))
+                                                                            (NoEffects (T.CRA_Region start effectEnd))
                                                                             exports
                                                                             comment
                                                                 )
@@ -399,7 +398,7 @@ chompHeader =
                                                                     Just <|
                                                                         Header
                                                                             name
-                                                                            (Ports (A.CRA_Region start effectEnd))
+                                                                            (Ports (T.CRA_Region start effectEnd))
                                                                             exports
                                                                             comment
                                                                 )
@@ -433,7 +432,7 @@ chompHeader =
                                                                         |> P.fmap
                                                                             (\comment ->
                                                                                 Just <|
-                                                                                    Header name (Manager (A.CRA_Region start effectEnd) manager) exports comment
+                                                                                    Header name (Manager (T.CRA_Region start effectEnd) manager) exports comment
                                                                             )
                                                                 )
                                                     )
@@ -445,7 +444,7 @@ chompHeader =
             )
 
 
-chompManager : P.Parser E.Module Src.CASTS_Manager
+chompManager : P.Parser E.Module T.CASTS_Manager
 chompManager =
     P.word1 '{' E.Effect
         |> P.bind (\_ -> spaces_em)
@@ -461,7 +460,7 @@ chompManager =
                                             P.oneOf E.Effect
                                                 [ P.word1 '}' E.Effect
                                                     |> P.bind (\_ -> spaces_em)
-                                                    |> P.fmap (\_ -> Src.CASTS_Cmd cmd)
+                                                    |> P.fmap (\_ -> T.CASTS_Cmd cmd)
                                                 , P.word1 ',' E.Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.bind (\_ -> chompSubscription)
@@ -470,7 +469,7 @@ chompManager =
                                                             spaces_em
                                                                 |> P.bind (\_ -> P.word1 '}' E.Effect)
                                                                 |> P.bind (\_ -> spaces_em)
-                                                                |> P.fmap (\_ -> Src.CASTS_Fx cmd sub)
+                                                                |> P.fmap (\_ -> T.CASTS_Fx cmd sub)
                                                         )
                                                 ]
                                         )
@@ -484,7 +483,7 @@ chompManager =
                                             P.oneOf E.Effect
                                                 [ P.word1 '}' E.Effect
                                                     |> P.bind (\_ -> spaces_em)
-                                                    |> P.fmap (\_ -> Src.CASTS_Sub sub)
+                                                    |> P.fmap (\_ -> T.CASTS_Sub sub)
                                                 , P.word1 ',' E.Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.bind (\_ -> chompCommand)
@@ -493,7 +492,7 @@ chompManager =
                                                             spaces_em
                                                                 |> P.bind (\_ -> P.word1 '}' E.Effect)
                                                                 |> P.bind (\_ -> spaces_em)
-                                                                |> P.fmap (\_ -> Src.CASTS_Fx cmd sub)
+                                                                |> P.fmap (\_ -> T.CASTS_Fx cmd sub)
                                                         )
                                                 ]
                                         )
@@ -502,7 +501,7 @@ chompManager =
             )
 
 
-chompCommand : P.Parser E.Module (A.CRA_Located Name.CDN_Name)
+chompCommand : P.Parser E.Module (T.CRA_Located T.CDN_Name)
 chompCommand =
     Keyword.command_ E.Effect
         |> P.bind (\_ -> spaces_em)
@@ -511,7 +510,7 @@ chompCommand =
         |> P.bind (\_ -> P.addLocation (Var.upper E.Effect))
 
 
-chompSubscription : P.Parser E.Module (A.CRA_Located Name.CDN_Name)
+chompSubscription : P.Parser E.Module (T.CRA_Located T.CDN_Name)
 chompSubscription =
     Keyword.subscription_ E.Effect
         |> P.bind (\_ -> spaces_em)
@@ -529,7 +528,7 @@ spaces_em =
 -- IMPORTS
 
 
-chompImports : List Src.CASTS_Import -> P.Parser E.Module (List Src.CASTS_Import)
+chompImports : List T.CASTS_Import -> P.Parser E.Module (List T.CASTS_Import)
 chompImports is =
     P.oneOfWithFallback
         [ chompImport
@@ -538,19 +537,19 @@ chompImports is =
         (List.reverse is)
 
 
-chompImport : P.Parser E.Module Src.CASTS_Import
+chompImport : P.Parser E.Module T.CASTS_Import
 chompImport =
     Keyword.import_ E.ImportStart
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
         |> P.bind (\_ -> P.addLocation (Var.moduleName E.ImportName))
         |> P.bind
-            (\((A.CRA_At (A.CRA_Region _ end) _) as name) ->
+            (\((T.CRA_At (T.CRA_Region _ end) _) as name) ->
                 Space.chomp E.ModuleSpace
                     |> P.bind
                         (\_ ->
                             P.oneOf E.ImportEnd
                                 [ Space.checkFreshLine E.ImportEnd
-                                    |> P.fmap (\_ -> Src.CASTS_Import name Nothing (Src.CASTS_Explicit []))
+                                    |> P.fmap (\_ -> T.CASTS_Import name Nothing (T.CASTS_Explicit []))
                                 , Space.checkIndent end E.ImportEnd
                                     |> P.bind
                                         (\_ ->
@@ -564,7 +563,7 @@ chompImport =
             )
 
 
-chompAs : A.CRA_Located Name.CDN_Name -> P.Parser E.Module Src.CASTS_Import
+chompAs : T.CRA_Located T.CDN_Name -> P.Parser E.Module T.CASTS_Import
 chompAs name =
     Keyword.as_ E.ImportAs
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
@@ -579,7 +578,7 @@ chompAs name =
                                     (\_ ->
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.CASTS_Import name (Just alias) (Src.CASTS_Explicit []))
+                                                |> P.fmap (\_ -> T.CASTS_Import name (Just alias) (T.CASTS_Explicit []))
                                             , Space.checkIndent end E.ImportEnd
                                                 |> P.bind (\_ -> chompExposing name (Just alias))
                                             ]
@@ -588,7 +587,7 @@ chompAs name =
             )
 
 
-chompExposing : A.CRA_Located Name.CDN_Name -> Maybe Name.CDN_Name -> P.Parser E.Module Src.CASTS_Import
+chompExposing : T.CRA_Located T.CDN_Name -> Maybe T.CDN_Name -> P.Parser E.Module T.CASTS_Import
 chompExposing name maybeAlias =
     Keyword.exposing_ E.ImportExposing
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
@@ -596,7 +595,7 @@ chompExposing name maybeAlias =
         |> P.bind
             (\exposed ->
                 freshLine E.ImportEnd
-                    |> P.fmap (\_ -> Src.CASTS_Import name maybeAlias exposed)
+                    |> P.fmap (\_ -> T.CASTS_Import name maybeAlias exposed)
             )
 
 
@@ -604,7 +603,7 @@ chompExposing name maybeAlias =
 -- LISTING
 
 
-exposing_ : P.Parser E.Exposing Src.CASTS_Exposing
+exposing_ : P.Parser E.Exposing T.CASTS_Exposing
 exposing_ =
     P.word1 '(' E.ExposingStart
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
@@ -614,7 +613,7 @@ exposing_ =
                     [ P.word2 '.' '.' E.ExposingValue
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
                         |> P.bind (\_ -> P.word1 ')' E.ExposingEnd)
-                        |> P.fmap (\_ -> Src.CASTS_Open)
+                        |> P.fmap (\_ -> T.CASTS_Open)
                     , chompExposed
                         |> P.bind
                             (\exposed ->
@@ -625,7 +624,7 @@ exposing_ =
             )
 
 
-exposingHelp : List Src.CASTS_Exposed -> P.Parser E.Exposing Src.CASTS_Exposing
+exposingHelp : List T.CASTS_Exposed -> P.Parser E.Exposing T.CASTS_Exposing
 exposingHelp revExposed =
     P.oneOf E.ExposingEnd
         [ P.word1 ',' E.ExposingEnd
@@ -637,11 +636,11 @@ exposingHelp revExposed =
                         |> P.bind (\_ -> exposingHelp (exposed :: revExposed))
                 )
         , P.word1 ')' E.ExposingEnd
-            |> P.fmap (\_ -> Src.CASTS_Explicit (List.reverse revExposed))
+            |> P.fmap (\_ -> T.CASTS_Explicit (List.reverse revExposed))
         ]
 
 
-chompExposed : P.Parser E.Exposing Src.CASTS_Exposed
+chompExposed : P.Parser E.Exposing T.CASTS_Exposed
 chompExposed =
     P.getPosition
         |> P.bind
@@ -651,7 +650,7 @@ chompExposed =
                         |> P.bind
                             (\name ->
                                 P.getPosition
-                                    |> P.fmap (\end -> Src.CASTS_Lower <| A.at start end name)
+                                    |> P.fmap (\end -> T.CASTS_Lower <| A.at start end name)
                             )
                     , P.word1 '(' E.ExposingValue
                         |> P.bind (\_ -> Symbol.operator E.ExposingOperator E.ExposingOperatorReserved)
@@ -659,7 +658,7 @@ chompExposed =
                             (\op ->
                                 P.word1 ')' E.ExposingOperatorRightParen
                                     |> P.bind (\_ -> P.getPosition)
-                                    |> P.fmap (\end -> Src.CASTS_Operator (A.CRA_Region start end) op)
+                                    |> P.fmap (\end -> T.CASTS_Operator (T.CRA_Region start end) op)
                             )
                     , Var.upper E.ExposingValue
                         |> P.bind
@@ -671,7 +670,7 @@ chompExposed =
                                                 |> P.bind
                                                     (\_ ->
                                                         privacy
-                                                            |> P.fmap (Src.CASTS_Upper (A.at start end name))
+                                                            |> P.fmap (T.CASTS_Upper (A.at start end name))
                                                     )
                                         )
                             )
@@ -679,7 +678,7 @@ chompExposed =
             )
 
 
-privacy : P.Parser E.Exposing Src.CASTS_Privacy
+privacy : P.Parser E.Exposing T.CASTS_Privacy
 privacy =
     P.oneOfWithFallback
         [ P.word1 '(' E.ExposingTypePrivacy
@@ -693,8 +692,8 @@ privacy =
                             (\end ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy
                                     |> P.bind (\_ -> P.word1 ')' E.ExposingTypePrivacy)
-                                    |> P.fmap (\_ -> Src.CASTS_Public (A.CRA_Region start end))
+                                    |> P.fmap (\_ -> T.CASTS_Public (T.CRA_Region start end))
                             )
                 )
         ]
-        Src.CASTS_Private
+        T.CASTS_Private

@@ -1,7 +1,7 @@
 module Compiler.Reporting.Report exposing (Report(..))
 
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
+import Types as T
 
 
 
@@ -9,4 +9,4 @@ import Compiler.Reporting.Doc as D
 
 
 type Report
-    = Report String A.CRA_Region (List String) D.Doc
+    = Report String T.CRA_Region (List String) D.Doc
