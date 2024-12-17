@@ -1,6 +1,6 @@
 module Compiler.Data.Index exposing
-    ( VerifiedList(..)
-    , ZeroBased
+    ( CDI_ZeroBased
+    , VerifiedList(..)
     , first
     , indexedMap
     , indexedZipWith
@@ -21,41 +21,41 @@ import Json.Encode as Encode
 -- ZERO BASED
 
 
-type ZeroBased
-    = ZeroBased Int
+type CDI_ZeroBased
+    = CDI_ZeroBased Int
 
 
-first : ZeroBased
+first : CDI_ZeroBased
 first =
-    ZeroBased 0
+    CDI_ZeroBased 0
 
 
-second : ZeroBased
+second : CDI_ZeroBased
 second =
-    ZeroBased 1
+    CDI_ZeroBased 1
 
 
-third : ZeroBased
+third : CDI_ZeroBased
 third =
-    ZeroBased 2
+    CDI_ZeroBased 2
 
 
-next : ZeroBased -> ZeroBased
-next (ZeroBased i) =
-    ZeroBased (i + 1)
+next : CDI_ZeroBased -> CDI_ZeroBased
+next (CDI_ZeroBased i) =
+    CDI_ZeroBased (i + 1)
 
 
 
 -- DESTRUCT
 
 
-toMachine : ZeroBased -> Int
-toMachine (ZeroBased index) =
+toMachine : CDI_ZeroBased -> Int
+toMachine (CDI_ZeroBased index) =
     index
 
 
-toHuman : ZeroBased -> Int
-toHuman (ZeroBased index) =
+toHuman : CDI_ZeroBased -> Int
+toHuman (CDI_ZeroBased index) =
     index + 1
 
 
@@ -63,9 +63,9 @@ toHuman (ZeroBased index) =
 -- INDEXED MAP
 
 
-indexedMap : (ZeroBased -> a -> b) -> List a -> List b
+indexedMap : (CDI_ZeroBased -> a -> b) -> List a -> List b
 indexedMap func xs =
-    List.map2 func (List.map ZeroBased (List.range 0 (List.length xs - 1))) xs
+    List.map2 func (List.map CDI_ZeroBased (List.range 0 (List.length xs - 1))) xs
 
 
 {-| indexedTraverse and indexedForA are defined on `Utils`
@@ -81,19 +81,19 @@ type VerifiedList a
     | LengthMismatch Int Int
 
 
-indexedZipWith : (ZeroBased -> a -> b -> c) -> List a -> List b -> VerifiedList c
+indexedZipWith : (CDI_ZeroBased -> a -> b -> c) -> List a -> List b -> VerifiedList c
 indexedZipWith func listX listY =
     indexedZipWithHelp func 0 listX listY []
 
 
-indexedZipWithHelp : (ZeroBased -> a -> b -> c) -> Int -> List a -> List b -> List c -> VerifiedList c
+indexedZipWithHelp : (CDI_ZeroBased -> a -> b -> c) -> Int -> List a -> List b -> List c -> VerifiedList c
 indexedZipWithHelp func index listX listY revListZ =
     case ( listX, listY ) of
         ( [], [] ) ->
             LengthMatch (List.reverse revListZ)
 
         ( x :: xs, y :: ys ) ->
-            indexedZipWithHelp func (index + 1) xs ys (func (ZeroBased index) x y :: revListZ)
+            indexedZipWithHelp func (index + 1) xs ys (func (CDI_ZeroBased index) x y :: revListZ)
 
         _ ->
             LengthMismatch (index + List.length listX) (index + List.length listY)
@@ -103,11 +103,11 @@ indexedZipWithHelp func index listX listY revListZ =
 -- ENCODERS and DECODERS
 
 
-zeroBasedEncoder : ZeroBased -> Encode.Value
-zeroBasedEncoder (ZeroBased zeroBased) =
+zeroBasedEncoder : CDI_ZeroBased -> Encode.Value
+zeroBasedEncoder (CDI_ZeroBased zeroBased) =
     Encode.int zeroBased
 
 
-zeroBasedDecoder : Decode.Decoder ZeroBased
+zeroBasedDecoder : Decode.Decoder CDI_ZeroBased
 zeroBasedDecoder =
-    Decode.map ZeroBased Decode.int
+    Decode.map CDI_ZeroBased Decode.int

@@ -27,7 +27,7 @@ import Utils.Main as Utils
 -- RUN SOLVER
 
 
-run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.Name Can.Annotation))
+run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.CDN_Name Can.CASTC_Annotation))
 run constraint =
     MVector.replicate 8 []
         |> IO.bind
@@ -56,7 +56,7 @@ emptyState =
 
 
 type alias Env =
-    Dict String Name.Name Variable
+    Dict String Name.CDN_Name Variable
 
 
 type alias Pools =
@@ -130,7 +130,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                 )
                     )
 
-        CForeign region name (Can.Forall freeVars srcType) expectation ->
+        CForeign region name (Can.CASTC_Forall freeVars srcType) expectation ->
             srcTypeToVariable rank pools freeVars srcType
                 |> IO.bind
                     (\actual ->
@@ -374,8 +374,8 @@ addError (State savedEnv rank errors) err =
 -- OCCURS CHECK
 
 
-occurs : State -> ( Name.Name, A.Located Variable ) -> IO State
-occurs state ( name, A.At region variable ) =
+occurs : State -> ( Name.CDN_Name, A.CRA_Located Variable ) -> IO State
+occurs state ( name, A.CRA_At region variable ) =
     Occurs.occurs variable
         |> IO.bind
             (\hasOccurred ->
@@ -648,7 +648,7 @@ typeToVariable rank pools tipe =
 --
 
 
-typeToVar : Int -> Pools -> Dict String Name.Name Variable -> Type -> IO Variable
+typeToVar : Int -> Pools -> Dict String Name.CDN_Name Variable -> Type -> IO Variable
 typeToVar rank pools aliasDict tipe =
     let
         go : Type -> IO Variable
@@ -748,10 +748,10 @@ unit1 =
 -- SOURCE TYPE TO VARIABLE
 
 
-srcTypeToVariable : Int -> Pools -> Dict String Name.Name () -> Can.Type -> IO Variable
+srcTypeToVariable : Int -> Pools -> Dict String Name.CDN_Name () -> Can.CASTC_Type -> IO Variable
 srcTypeToVariable rank pools freeVars srcType =
     let
-        nameToContent : Name.Name -> Content
+        nameToContent : Name.CDN_Name -> Content
         nameToContent name =
             if Name.isNumberType name then
                 IO.FlexSuper IO.Number (Just name)
@@ -768,7 +768,7 @@ srcTypeToVariable rank pools freeVars srcType =
             else
                 IO.FlexVar (Just name)
 
-        makeVar : Name.Name -> b -> IO Variable
+        makeVar : Name.CDN_Name -> b -> IO Variable
         makeVar name _ =
             UF.fresh (Descriptor (nameToContent name) rank Type.noMark Nothing)
     in
@@ -780,15 +780,15 @@ srcTypeToVariable rank pools freeVars srcType =
             )
 
 
-srcTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.Type -> IO Variable
+srcTypeToVar : Int -> Pools -> Dict String Name.CDN_Name Variable -> Can.CASTC_Type -> IO Variable
 srcTypeToVar rank pools flexVars srcType =
     let
-        go : Can.Type -> IO Variable
+        go : Can.CASTC_Type -> IO Variable
         go =
             srcTypeToVar rank pools flexVars
     in
     case srcType of
-        Can.TLambda argument result ->
+        Can.CASTC_TLambda argument result ->
             go argument
                 |> IO.bind
                     (\argVar ->
@@ -799,17 +799,17 @@ srcTypeToVar rank pools flexVars srcType =
                                 )
                     )
 
-        Can.TVar name ->
+        Can.CASTC_TVar name ->
             IO.pure (Utils.find identity name flexVars)
 
-        Can.TType home name args ->
+        Can.CASTC_TType home name args ->
             IO.traverseList go args
                 |> IO.bind
                     (\argVars ->
                         register rank pools (IO.Structure (IO.App1 home name argVars))
                     )
 
-        Can.TRecord fields maybeExt ->
+        Can.CASTC_TRecord fields maybeExt ->
             IO.traverseMap identity compare (srcFieldTypeToVar rank pools flexVars) fields
                 |> IO.bind
                     (\fieldVars ->
@@ -826,10 +826,10 @@ srcTypeToVar rank pools flexVars srcType =
                                 )
                     )
 
-        Can.TUnit ->
+        Can.CASTC_TUnit ->
             register rank pools unit1
 
-        Can.TTuple a b c ->
+        Can.CASTC_TTuple a b c ->
             go a
                 |> IO.bind
                     (\aVar ->
@@ -844,15 +844,15 @@ srcTypeToVar rank pools flexVars srcType =
                                 )
                     )
 
-        Can.TAlias home name args aliasType ->
+        Can.CASTC_TAlias home name args aliasType ->
             IO.traverseList (IO.traverseTuple go) args
                 |> IO.bind
                     (\argVars ->
                         (case aliasType of
-                            Can.Holey tipe ->
+                            Can.CASTC_Holey tipe ->
                                 srcTypeToVar rank pools (Dict.fromList identity argVars) tipe
 
-                            Can.Filled tipe ->
+                            Can.CASTC_Filled tipe ->
                                 go tipe
                         )
                             |> IO.bind
@@ -862,8 +862,8 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
 
-srcFieldTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.FieldType -> IO Variable
-srcFieldTypeToVar rank pools flexVars (Can.FieldType _ srcTipe) =
+srcFieldTypeToVar : Int -> Pools -> Dict String Name.CDN_Name Variable -> Can.CASTC_FieldType -> IO Variable
+srcFieldTypeToVar rank pools flexVars (Can.CASTC_FieldType _ srcTipe) =
     srcTypeToVar rank pools flexVars srcTipe
 
 

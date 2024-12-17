@@ -119,7 +119,7 @@ package =
         }
 
 
-parsePackage : String -> Maybe Pkg.Name
+parsePackage : String -> Maybe Pkg.CEP_Name
 parsePackage chars =
     case P.fromByteString Pkg.parser Tuple.pair chars of
         Ok pkg ->

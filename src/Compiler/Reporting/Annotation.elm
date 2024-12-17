@@ -1,7 +1,7 @@
 module Compiler.Reporting.Annotation exposing
-    ( Located(..)
-    , Position(..)
-    , Region(..)
+    ( CRA_Located(..)
+    , CRA_Position(..)
+    , CRA_Region(..)
     , at
     , locatedDecoder
     , locatedEncoder
@@ -25,72 +25,72 @@ import System.TypeCheck.IO as IO exposing (IO)
 -- LOCATED
 
 
-type Located a
-    = At Region a -- PERF see if unpacking region is helpful
+type CRA_Located a
+    = CRA_At CRA_Region a -- PERF see if unpacking region is helpful
 
 
-traverse : (a -> IO b) -> Located a -> IO (Located b)
-traverse func (At region value) =
-    IO.fmap (At region) (func value)
+traverse : (a -> IO b) -> CRA_Located a -> IO (CRA_Located b)
+traverse func (CRA_At region value) =
+    IO.fmap (CRA_At region) (func value)
 
 
-toValue : Located a -> a
-toValue (At _ value) =
+toValue : CRA_Located a -> a
+toValue (CRA_At _ value) =
     value
 
 
-merge : Located a -> Located b -> c -> Located c
-merge (At r1 _) (At r2 _) value =
-    At (mergeRegions r1 r2) value
+merge : CRA_Located a -> CRA_Located b -> c -> CRA_Located c
+merge (CRA_At r1 _) (CRA_At r2 _) value =
+    CRA_At (mergeRegions r1 r2) value
 
 
 
 -- POSITION
 
 
-type Position
-    = Position Int Int
+type CRA_Position
+    = CRA_Position Int Int
 
 
-at : Position -> Position -> a -> Located a
+at : CRA_Position -> CRA_Position -> a -> CRA_Located a
 at start end a =
-    At (Region start end) a
+    CRA_At (CRA_Region start end) a
 
 
 
 -- REGION
 
 
-type Region
-    = Region Position Position
+type CRA_Region
+    = CRA_Region CRA_Position CRA_Position
 
 
-toRegion : Located a -> Region
-toRegion (At region _) =
+toRegion : CRA_Located a -> CRA_Region
+toRegion (CRA_At region _) =
     region
 
 
-mergeRegions : Region -> Region -> Region
-mergeRegions (Region start _) (Region _ end) =
-    Region start end
+mergeRegions : CRA_Region -> CRA_Region -> CRA_Region
+mergeRegions (CRA_Region start _) (CRA_Region _ end) =
+    CRA_Region start end
 
 
-zero : Region
+zero : CRA_Region
 zero =
-    Region (Position 0 0) (Position 0 0)
+    CRA_Region (CRA_Position 0 0) (CRA_Position 0 0)
 
 
-one : Region
+one : CRA_Region
 one =
-    Region (Position 1 1) (Position 1 1)
+    CRA_Region (CRA_Position 1 1) (CRA_Position 1 1)
 
 
 
 -- ENCODERS and DECODERS
 
 
-regionEncoder : Region -> Encode.Value
-regionEncoder (Region start end) =
+regionEncoder : CRA_Region -> Encode.Value
+regionEncoder (CRA_Region start end) =
     Encode.object
         [ ( "type", Encode.string "Region" )
         , ( "start", positionEncoder start )
@@ -98,15 +98,15 @@ regionEncoder (Region start end) =
         ]
 
 
-regionDecoder : Decode.Decoder Region
+regionDecoder : Decode.Decoder CRA_Region
 regionDecoder =
-    Decode.map2 Region
+    Decode.map2 CRA_Region
         (Decode.field "start" positionDecoder)
         (Decode.field "end" positionDecoder)
 
 
-positionEncoder : Position -> Encode.Value
-positionEncoder (Position start end) =
+positionEncoder : CRA_Position -> Encode.Value
+positionEncoder (CRA_Position start end) =
     Encode.object
         [ ( "type", Encode.string "Position" )
         , ( "start", Encode.int start )
@@ -114,15 +114,15 @@ positionEncoder (Position start end) =
         ]
 
 
-positionDecoder : Decode.Decoder Position
+positionDecoder : Decode.Decoder CRA_Position
 positionDecoder =
-    Decode.map2 Position
+    Decode.map2 CRA_Position
         (Decode.field "start" Decode.int)
         (Decode.field "end" Decode.int)
 
 
-locatedEncoder : (a -> Encode.Value) -> Located a -> Encode.Value
-locatedEncoder encoder (At region value) =
+locatedEncoder : (a -> Encode.Value) -> CRA_Located a -> Encode.Value
+locatedEncoder encoder (CRA_At region value) =
     Encode.object
         [ ( "type", Encode.string "Located" )
         , ( "region", regionEncoder region )
@@ -130,8 +130,8 @@ locatedEncoder encoder (At region value) =
         ]
 
 
-locatedDecoder : Decode.Decoder a -> Decode.Decoder (Located a)
+locatedDecoder : Decode.Decoder a -> Decode.Decoder (CRA_Located a)
 locatedDecoder decoder =
-    Decode.map2 At
+    Decode.map2 CRA_At
         (Decode.field "region" regionDecoder)
         (Decode.field "value" (Decode.lazy (\_ -> decoder)))

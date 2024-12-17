@@ -306,7 +306,7 @@ foldM f b =
     List.foldl (\a -> R.bind (\acc -> f acc a)) (R.ok b)
 
 
-indexedZipWithA : (Index.ZeroBased -> a -> b -> R.RResult info warnings error c) -> List a -> List b -> R.RResult info warnings error (Index.VerifiedList c)
+indexedZipWithA : (Index.CDI_ZeroBased -> a -> b -> R.RResult info warnings error c) -> List a -> List b -> R.RResult info warnings error (Index.VerifiedList c)
 indexedZipWithA func listX listY =
     case Index.indexedZipWith func listX listY of
         Index.LengthMatch xs ->

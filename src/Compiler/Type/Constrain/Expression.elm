@@ -7,7 +7,7 @@ module Compiler.Type.Constrain.Expression exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E exposing (Category(..), Context(..), Expected(..), MaybeName(..), PContext(..), PExpected(..), SubContext(..))
@@ -32,11 +32,11 @@ dictionary will hold variables for `a` and `b`
 
 -}
 type alias RTV =
-    Dict String Name.Name Type
+    Dict String Name.CDN_Name Type
 
 
 constrain : RTV -> Can.Expr -> E.Expected Type -> IO Constraint
-constrain rtv (A.At region expression) expected =
+constrain rtv (A.CRA_At region expression) expected =
     case expression of
         Can.VarLocal name ->
             IO.pure (CLocal region name expected)
@@ -150,7 +150,7 @@ constrain rtv (A.At region expression) expected =
                                 )
                     )
 
-        Can.Access expr (A.At accessRegion field) ->
+        Can.Access expr (A.CRA_At accessRegion field) ->
             Type.mkFlexVar
                 |> IO.bind
                     (\extVar ->
@@ -202,7 +202,7 @@ constrain rtv (A.At region expression) expected =
 -- CONSTRAIN LAMBDA
 
 
-constrainLambda : RTV -> A.Region -> List Can.Pattern -> Can.Expr -> E.Expected Type -> IO Constraint
+constrainLambda : RTV -> A.CRA_Region -> List Can.Pattern -> Can.Expr -> E.Expected Type -> IO Constraint
 constrainLambda rtv region args body expected =
     constrainArgs args
         |> IO.bind
@@ -227,8 +227,8 @@ constrainLambda rtv region args body expected =
 -- CONSTRAIN CALL
 
 
-constrainCall : RTV -> A.Region -> Can.Expr -> List Can.Expr -> E.Expected Type -> IO Constraint
-constrainCall rtv region ((A.At funcRegion _) as func) args expected =
+constrainCall : RTV -> A.CRA_Region -> Can.Expr -> List Can.Expr -> E.Expected Type -> IO Constraint
+constrainCall rtv region ((A.CRA_At funcRegion _) as func) args expected =
     let
         maybeName : MaybeName
         maybeName =
@@ -278,7 +278,7 @@ constrainCall rtv region ((A.At funcRegion _) as func) args expected =
             )
 
 
-constrainArg : RTV -> A.Region -> E.MaybeName -> Index.ZeroBased -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
+constrainArg : RTV -> A.CRA_Region -> E.MaybeName -> Index.CDI_ZeroBased -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
     Type.mkFlexVar
         |> IO.bind
@@ -297,7 +297,7 @@ constrainArg rtv region maybeName index arg =
 
 
 getName : Can.Expr -> MaybeName
-getName (A.At _ expr) =
+getName (A.CRA_At _ expr) =
     case expr of
         Can.VarLocal name ->
             FuncName name
@@ -321,8 +321,8 @@ getName (A.At _ expr) =
             NoName
 
 
-getAccessName : Can.Expr -> Maybe Name.Name
-getAccessName (A.At _ expr) =
+getAccessName : Can.Expr -> Maybe Name.CDN_Name
+getAccessName (A.CRA_At _ expr) =
     case expr of
         Can.VarLocal name ->
             Just name
@@ -341,7 +341,7 @@ getAccessName (A.At _ expr) =
 -- CONSTRAIN BINOP
 
 
-constrainBinop : RTV -> A.Region -> Name.Name -> Can.Annotation -> Can.Expr -> Can.Expr -> E.Expected Type -> IO Constraint
+constrainBinop : RTV -> A.CRA_Region -> Name.CDN_Name -> Can.CASTC_Annotation -> Can.Expr -> Can.Expr -> E.Expected Type -> IO Constraint
 constrainBinop rtv region op annotation leftExpr rightExpr expected =
     Type.mkFlexVar
         |> IO.bind
@@ -398,7 +398,7 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
 -- CONSTRAIN LISTS
 
 
-constrainList : RTV -> A.Region -> List Can.Expr -> E.Expected Type -> IO Constraint
+constrainList : RTV -> A.CRA_Region -> List Can.Expr -> E.Expected Type -> IO Constraint
 constrainList rtv region entries expected =
     Type.mkFlexVar
         |> IO.bind
@@ -425,7 +425,7 @@ constrainList rtv region entries expected =
             )
 
 
-constrainListEntry : RTV -> A.Region -> Type -> Index.ZeroBased -> Can.Expr -> IO Constraint
+constrainListEntry : RTV -> A.CRA_Region -> Type -> Index.CDI_ZeroBased -> Can.Expr -> IO Constraint
 constrainListEntry rtv region tipe index expr =
     constrain rtv expr (FromContext region (ListEntry index) tipe)
 
@@ -434,7 +434,7 @@ constrainListEntry rtv region tipe index expr =
 -- CONSTRAIN IF EXPRESSIONS
 
 
-constrainIf : RTV -> A.Region -> List ( Can.Expr, Can.Expr ) -> Can.Expr -> E.Expected Type -> IO Constraint
+constrainIf : RTV -> A.CRA_Region -> List ( Can.Expr, Can.Expr ) -> Can.Expr -> E.Expected Type -> IO Constraint
 constrainIf rtv region branches final expected =
     let
         boolExpect : Expected Type
@@ -486,7 +486,7 @@ constrainIf rtv region branches final expected =
 -- CONSTRAIN CASE EXPRESSIONS
 
 
-constrainCase : RTV -> A.Region -> Can.Expr -> List Can.CaseBranch -> Expected Type -> IO Constraint
+constrainCase : RTV -> A.CRA_Region -> Can.Expr -> List Can.CaseBranch -> Expected Type -> IO Constraint
 constrainCase rtv region expr branches expected =
     Type.mkFlexVar
         |> IO.bind
@@ -558,7 +558,7 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 -- CONSTRAIN RECORD
 
 
-constrainRecord : RTV -> A.Region -> Dict String Name.Name Can.Expr -> Expected Type -> IO Constraint
+constrainRecord : RTV -> A.CRA_Region -> Dict String Name.CDN_Name Can.Expr -> Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
     IO.traverseMap identity compare (constrainField rtv) fields
         |> IO.fmap
@@ -610,7 +610,7 @@ constrainField rtv expr =
 -- CONSTRAIN RECORD UPDATE
 
 
-constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict String Name.Name Can.FieldUpdate -> Expected Type -> IO Constraint
+constrainUpdate : RTV -> A.CRA_Region -> Name.CDN_Name -> Can.Expr -> Dict String Name.CDN_Name Can.FieldUpdate -> Expected Type -> IO Constraint
 constrainUpdate rtv region name expr fields expected =
     Type.mkFlexVar
         |> IO.bind
@@ -654,7 +654,7 @@ constrainUpdate rtv region name expr fields expected =
             )
 
 
-constrainUpdateField : RTV -> A.Region -> Name.Name -> Can.FieldUpdate -> IO ( IO.Variable, Type, Constraint )
+constrainUpdateField : RTV -> A.CRA_Region -> Name.CDN_Name -> Can.FieldUpdate -> IO ( IO.Variable, Type, Constraint )
 constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
     Type.mkFlexVar
         |> IO.bind
@@ -673,7 +673,7 @@ constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
 -- CONSTRAIN TUPLE
 
 
-constrainTuple : RTV -> A.Region -> Can.Expr -> Can.Expr -> Maybe Can.Expr -> Expected Type -> IO Constraint
+constrainTuple : RTV -> A.CRA_Region -> Can.Expr -> Can.Expr -> Maybe Can.Expr -> Expected Type -> IO Constraint
 constrainTuple rtv region a b maybeC expected =
     Type.mkFlexVar
         |> IO.bind
@@ -743,8 +743,8 @@ constrainTuple rtv region a b maybeC expected =
 -- CONSTRAIN SHADER
 
 
-constrainShader : A.Region -> Shader.Types -> Expected Type -> IO Constraint
-constrainShader region (Shader.Types attributes uniforms varyings) expected =
+constrainShader : A.CRA_Region -> Shader.CASTUS_Types -> Expected Type -> IO Constraint
+constrainShader region (Shader.CASTUS_Types attributes uniforms varyings) expected =
     Type.mkFlexVar
         |> IO.bind
             (\attrVar ->
@@ -774,7 +774,7 @@ constrainShader region (Shader.Types attributes uniforms varyings) expected =
             )
 
 
-toShaderRecord : Dict String Name.Name Shader.Type -> Type -> Type
+toShaderRecord : Dict String Name.CDN_Name Shader.CASTUS_Type -> Type -> Type
 toShaderRecord types baseRecType =
     if Dict.isEmpty types then
         baseRecType
@@ -783,28 +783,28 @@ toShaderRecord types baseRecType =
         RecordN (Dict.map (\_ -> glToType) types) baseRecType
 
 
-glToType : Shader.Type -> Type
+glToType : Shader.CASTUS_Type -> Type
 glToType glType =
     case glType of
-        Shader.V2 ->
+        Shader.CASTUS_V2 ->
             Type.vec2
 
-        Shader.V3 ->
+        Shader.CASTUS_V3 ->
             Type.vec3
 
-        Shader.V4 ->
+        Shader.CASTUS_V4 ->
             Type.vec4
 
-        Shader.M4 ->
+        Shader.CASTUS_M4 ->
             Type.mat4
 
-        Shader.Int ->
+        Shader.CASTUS_Int ->
             Type.int
 
-        Shader.Float ->
+        Shader.CASTUS_Float ->
             Type.float
 
-        Shader.Texture ->
+        Shader.CASTUS_Texture ->
             Type.texture
 
 
@@ -812,7 +812,7 @@ glToType glType =
 -- CONSTRAIN DESTRUCTURES
 
 
-constrainDestruct : RTV -> A.Region -> Can.Pattern -> Can.Expr -> Constraint -> IO Constraint
+constrainDestruct : RTV -> A.CRA_Region -> Can.Pattern -> Can.Expr -> Constraint -> IO Constraint
 constrainDestruct rtv region pattern expr bodyCon =
     Type.mkFlexVar
         |> IO.bind
@@ -841,7 +841,7 @@ constrainDestruct rtv region pattern expr bodyCon =
 constrainDef : RTV -> Can.Def -> Constraint -> IO Constraint
 constrainDef rtv def bodyCon =
     case def of
-        Can.Def (A.At region name) args expr ->
+        Can.Def (A.CRA_At region name) args expr ->
             constrainArgs args
                 |> IO.bind
                     (\(Args vars tipe resultType (Pattern.State headers pvars revCons)) ->
@@ -850,7 +850,7 @@ constrainDef rtv def bodyCon =
                                 (\exprCon ->
                                     CLet []
                                         vars
-                                        (Dict.singleton identity name (A.At region tipe))
+                                        (Dict.singleton identity name (A.CRA_At region tipe))
                                         (CLet []
                                             pvars
                                             headers
@@ -861,9 +861,9 @@ constrainDef rtv def bodyCon =
                                 )
                     )
 
-        Can.TypedDef (A.At region name) freeVars typedArgs expr srcResultType ->
+        Can.TypedDef (A.CRA_At region name) freeVars typedArgs expr srcResultType ->
             let
-                newNames : Dict String Name ()
+                newNames : Dict String CDN_Name ()
                 newNames =
                     Dict.diff freeVars rtv
             in
@@ -871,7 +871,7 @@ constrainDef rtv def bodyCon =
                 |> IO.bind
                     (\newRigids ->
                         let
-                            newRtv : Dict String Name Type
+                            newRtv : Dict String CDN_Name Type
                             newRtv =
                                 Dict.union rtv (Dict.map (\_ -> VarN) newRigids)
                         in
@@ -888,7 +888,7 @@ constrainDef rtv def bodyCon =
                                             (\exprCon ->
                                                 CLet (Dict.values compare newRigids)
                                                     []
-                                                    (Dict.singleton identity name (A.At region tipe))
+                                                    (Dict.singleton identity name (A.CRA_At region tipe))
                                                     (CLet []
                                                         pvars
                                                         headers
@@ -906,7 +906,7 @@ constrainDef rtv def bodyCon =
 
 
 type Info
-    = Info (List IO.Variable) (List Constraint) (Dict String Name (A.Located Type))
+    = Info (List IO.Variable) (List Constraint) (Dict String CDN_Name (A.CRA_Located Type))
 
 
 emptyInfo : Info
@@ -937,7 +937,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
 
         def :: otherDefs ->
             case def of
-                Can.Def (A.At region name) args expr ->
+                Can.Def (A.CRA_At region name) args expr ->
                     let
                         (Info flexVars flexCons flexHeaders) =
                             flexInfo
@@ -960,13 +960,13 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                             recDefsHelp rtv otherDefs bodyCon rigidInfo <|
                                                 Info newFlexVars
                                                     (defCon :: flexCons)
-                                                    (Dict.insert identity name (A.At region tipe) flexHeaders)
+                                                    (Dict.insert identity name (A.CRA_At region tipe) flexHeaders)
                                         )
                             )
 
-                Can.TypedDef (A.At region name) freeVars typedArgs expr srcResultType ->
+                Can.TypedDef (A.CRA_At region name) freeVars typedArgs expr srcResultType ->
                     let
-                        newNames : Dict String Name ()
+                        newNames : Dict String CDN_Name ()
                         newNames =
                             Dict.diff freeVars rtv
                     in
@@ -974,7 +974,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                         |> IO.bind
                             (\newRigids ->
                                 let
-                                    newRtv : Dict String Name Type
+                                    newRtv : Dict String CDN_Name Type
                                     newRtv =
                                         Dict.union rtv (Dict.map (\_ -> VarN) newRigids)
                                 in
@@ -1002,7 +1002,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                                             (Info
                                                                 (Dict.foldr compare (\_ -> (::)) rigidVars newRigids)
                                                                 (CLet (Dict.values compare newRigids) [] Dict.empty defCon CTrue :: rigidCons)
-                                                                (Dict.insert identity name (A.At region tipe) rigidHeaders)
+                                                                (Dict.insert identity name (A.CRA_At region tipe) rigidHeaders)
                                                             )
                                                             flexInfo
                                                     )
@@ -1064,12 +1064,12 @@ type TypedArgs
     = TypedArgs Type Type Pattern.State
 
 
-constrainTypedArgs : Dict String Name.Name Type -> Name.Name -> List ( Can.Pattern, Can.Type ) -> Can.Type -> IO TypedArgs
+constrainTypedArgs : Dict String Name.CDN_Name Type -> Name.CDN_Name -> List ( Can.Pattern, Can.CASTC_Type ) -> Can.CASTC_Type -> IO TypedArgs
 constrainTypedArgs rtv name args srcResultType =
     typedArgsHelp rtv name Index.first args srcResultType Pattern.emptyState
 
 
-typedArgsHelp : Dict String Name.Name Type -> Name.Name -> Index.ZeroBased -> List ( Can.Pattern, Can.Type ) -> Can.Type -> Pattern.State -> IO TypedArgs
+typedArgsHelp : Dict String Name.CDN_Name Type -> Name.CDN_Name -> Index.CDI_ZeroBased -> List ( Can.Pattern, Can.CASTC_Type ) -> Can.CASTC_Type -> Pattern.State -> IO TypedArgs
 typedArgsHelp rtv name index args srcResultType state =
     case args of
         [] ->
@@ -1079,7 +1079,7 @@ typedArgsHelp rtv name index args srcResultType state =
                         TypedArgs resultType resultType state
                     )
 
-        ( (A.At region _) as pattern, srcType ) :: otherArgs ->
+        ( (A.CRA_At region _) as pattern, srcType ) :: otherArgs ->
             Instantiate.fromSrcType rtv srcType
                 |> IO.bind
                     (\argType ->

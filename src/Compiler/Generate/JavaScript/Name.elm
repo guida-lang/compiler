@@ -32,7 +32,7 @@ type alias Name =
 -- CONSTRUCTORS
 
 
-fromIndex : Index.ZeroBased -> Name
+fromIndex : Index.CDI_ZeroBased -> Name
 fromIndex index =
     fromInt (Index.toMachine index)
 
@@ -42,7 +42,7 @@ fromInt n =
     intToAscii n
 
 
-fromLocal : Name.Name -> Name
+fromLocal : Name.CDN_Name -> Name
 fromLocal name =
     if EverySet.member identity name reservedNames then
         "_" ++ name
@@ -51,23 +51,23 @@ fromLocal name =
         name
 
 
-fromGlobal : IO.Canonical -> Name.Name -> Name
+fromGlobal : IO.CEMN_Canonical -> Name.CDN_Name -> Name
 fromGlobal home name =
     homeToBuilder home ++ usd ++ name
 
 
-fromCycle : IO.Canonical -> Name.Name -> Name
+fromCycle : IO.CEMN_Canonical -> Name.CDN_Name -> Name
 fromCycle home name =
     homeToBuilder home ++ "$cyclic$" ++ name
 
 
-fromKernel : Name.Name -> Name.Name -> Name
+fromKernel : Name.CDN_Name -> Name.CDN_Name -> Name
 fromKernel home name =
     "_" ++ home ++ "_" ++ name
 
 
-homeToBuilder : IO.Canonical -> String
-homeToBuilder (IO.Canonical ( author, project ) home) =
+homeToBuilder : IO.CEMN_Canonical -> String
+homeToBuilder (IO.CEMN_Canonical ( author, project ) home) =
     usd
         ++ String.replace "-" "_" author
         ++ usd
@@ -218,7 +218,7 @@ elmReservedWords =
 -- INT TO ASCII
 
 
-intToAscii : Int -> Name.Name
+intToAscii : Int -> Name.CDN_Name
 intToAscii n =
     if n < 53 then
         -- skip $ as a standalone name
@@ -228,7 +228,7 @@ intToAscii n =
         intToAsciiHelp 2 (numStartBytes * numInnerBytes) allBadFields (n - 53)
 
 
-intToAsciiHelp : Int -> Int -> List BadFields -> Int -> Name.Name
+intToAsciiHelp : Int -> Int -> List BadFields -> Int -> Name.CDN_Name
 intToAsciiHelp width blockSize badFields n =
     case badFields of
         [] ->
@@ -246,7 +246,7 @@ intToAsciiHelp width blockSize badFields n =
             in
             if n < availableSize then
                 let
-                    name : Name.Name
+                    name : Name.CDN_Name
                     name =
                         unsafeIntToAscii width [] n
                 in
@@ -260,7 +260,7 @@ intToAsciiHelp width blockSize badFields n =
 -- UNSAFE INT TO ASCII
 
 
-unsafeIntToAscii : Int -> List Char -> Int -> Name.Name
+unsafeIntToAscii : Int -> List Char -> Int -> Name.CDN_Name
 unsafeIntToAscii width bytes n =
     if width <= 1 then
         Name.fromWords (toByte n :: bytes)
@@ -328,7 +328,7 @@ type BadFields
 
 
 type alias Renamings =
-    Dict String Name.Name Name.Name
+    Dict String Name.CDN_Name Name.CDN_Name
 
 
 allBadFields : List BadFields

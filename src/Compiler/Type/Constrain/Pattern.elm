@@ -28,11 +28,11 @@ type State
 
 
 type alias Header =
-    Dict String Name.Name (A.Located Type)
+    Dict String Name.CDN_Name (A.CRA_Located Type)
 
 
 add : Can.Pattern -> E.PExpected Type -> State -> IO State
-add (A.At region pattern) expectation state =
+add (A.CRA_At region pattern) expectation state =
     case pattern of
         Can.PAnything ->
             IO.pure state
@@ -59,7 +59,7 @@ add (A.At region pattern) expectation state =
 
         Can.PCtor { home, type_, union, name, args } ->
             let
-                (Can.Union typeVars _ _ _) =
+                (Can.CASTC_Union typeVars _ _ _) =
                     union
             in
             addCtor region home type_ typeVars name args expectation state
@@ -136,7 +136,7 @@ add (A.At region pattern) expectation state =
                             |> IO.fmap
                                 (\fieldVars ->
                                     let
-                                        fieldTypes : Dict String Name.Name Type
+                                        fieldTypes : Dict String Name.CDN_Name Type
                                         fieldTypes =
                                             Dict.fromList identity (List.map (Tuple.mapSecond Type.VarN) fieldVars)
 
@@ -152,7 +152,7 @@ add (A.At region pattern) expectation state =
                                             Type.CPattern region E.PRecord recordType expectation
                                     in
                                     State
-                                        (Dict.union headers (Dict.map (\_ v -> A.At region v) fieldTypes))
+                                        (Dict.union headers (Dict.map (\_ v -> A.CRA_At region v) fieldTypes))
                                         (List.map Tuple.second fieldVars ++ extVar :: vars)
                                         (recordCon :: revCons)
                                 )
@@ -212,16 +212,16 @@ emptyState =
     State Dict.empty [] []
 
 
-addToHeaders : A.Region -> Name.Name -> E.PExpected Type -> State -> State
+addToHeaders : A.CRA_Region -> Name.CDN_Name -> E.PExpected Type -> State -> State
 addToHeaders region name expectation (State headers vars revCons) =
     let
         tipe : Type
         tipe =
             getType expectation
 
-        newHeaders : Dict String Name.Name (A.Located Type)
+        newHeaders : Dict String Name.CDN_Name (A.CRA_Located Type)
         newHeaders =
-            Dict.insert identity name (A.At region tipe) headers
+            Dict.insert identity name (A.CRA_At region tipe) headers
     in
     State newHeaders vars revCons
 
@@ -240,7 +240,7 @@ getType expectation =
 -- CONSTRAIN LIST
 
 
-addEntry : A.Region -> Type -> State -> ( Index.ZeroBased, Can.Pattern ) -> IO State
+addEntry : A.CRA_Region -> Type -> State -> ( Index.CDI_ZeroBased, Can.Pattern ) -> IO State
 addEntry listRegion tipe state ( index, pattern ) =
     let
         expectation : E.PExpected Type
@@ -254,7 +254,7 @@ addEntry listRegion tipe state ( index, pattern ) =
 -- CONSTRAIN TUPLE
 
 
-addTuple : A.Region -> Can.Pattern -> Can.Pattern -> Maybe Can.Pattern -> E.PExpected Type -> State -> IO State
+addTuple : A.CRA_Region -> Can.Pattern -> Can.Pattern -> Maybe Can.Pattern -> E.PExpected Type -> State -> IO State
 addTuple region a b maybeC expectation state =
     Type.mkFlexVar
         |> IO.bind
@@ -320,17 +320,17 @@ simpleAdd pattern patternType state =
 -- CONSTRAIN CONSTRUCTORS
 
 
-addCtor : A.Region -> IO.Canonical -> Name.Name -> List Name.Name -> Name.Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
+addCtor : A.CRA_Region -> IO.CEMN_Canonical -> Name.CDN_Name -> List Name.CDN_Name -> Name.CDN_Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
 addCtor region home typeName typeVarNames ctorName args expectation state =
     IO.traverseList (\var -> IO.fmap (Tuple.pair var) (Type.nameToFlex var)) typeVarNames
         |> IO.bind
             (\varPairs ->
                 let
-                    typePairs : List ( Name.Name, Type )
+                    typePairs : List ( Name.CDN_Name, Type )
                     typePairs =
                         List.map (Tuple.mapSecond Type.VarN) varPairs
 
-                    freeVarDict : Dict String Name.Name Type
+                    freeVarDict : Dict String Name.CDN_Name Type
                     freeVarDict =
                         Dict.fromList identity typePairs
                 in
@@ -354,7 +354,7 @@ addCtor region home typeName typeVarNames ctorName args expectation state =
             )
 
 
-addCtorArg : A.Region -> Name.Name -> Dict String Name.Name Type -> State -> Can.PatternCtorArg -> IO State
+addCtorArg : A.CRA_Region -> Name.CDN_Name -> Dict String Name.CDN_Name Type -> State -> Can.PatternCtorArg -> IO State
 addCtorArg region ctorName freeVarDict state (Can.PatternCtorArg index srcType pattern) =
     Instantiate.fromSrcType freeVarDict srcType
         |> IO.bind

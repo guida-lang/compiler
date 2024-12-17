@@ -36,7 +36,7 @@ toSource source =
 -- CODE FORMATTING
 
 
-toSnippet : Source -> A.Region -> Maybe A.Region -> ( Doc, Doc ) -> Doc
+toSnippet : Source -> A.CRA_Region -> Maybe A.CRA_Region -> ( Doc, Doc ) -> Doc
 toSnippet source region highlight ( preHint, postHint ) =
     D.vcat
         [ preHint
@@ -46,7 +46,7 @@ toSnippet source region highlight ( preHint, postHint ) =
         ]
 
 
-toPair : Source -> A.Region -> A.Region -> ( Doc, Doc ) -> ( Doc, Doc, Doc ) -> Doc
+toPair : Source -> A.CRA_Region -> A.CRA_Region -> ( Doc, Doc ) -> ( Doc, Doc, Doc ) -> Doc
 toPair source r1 r2 ( oneStart, oneEnd ) ( twoStart, twoMiddle, twoEnd ) =
     case renderPair source r1 r2 of
         OneLine codeDocs ->
@@ -73,8 +73,8 @@ toPair source r1 r2 ( oneStart, oneEnd ) ( twoStart, twoMiddle, twoEnd ) =
 -- RENDER SNIPPET
 
 
-render : Source -> A.Region -> Maybe A.Region -> Doc
-render sourceLines ((A.Region (A.Position startLine _) (A.Position endLine _)) as region) maybeSubRegion =
+render : Source -> A.CRA_Region -> Maybe A.CRA_Region -> Doc
+render sourceLines ((A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position endLine _)) as region) maybeSubRegion =
     let
         relevantLines : List ( Int, String )
         relevantLines =
@@ -86,7 +86,7 @@ render sourceLines ((A.Region (A.Position startLine _) (A.Position endLine _)) a
         width =
             String.length (String.fromInt (Tuple.first (Prelude.last relevantLines)))
 
-        smallerRegion : A.Region
+        smallerRegion : A.CRA_Region
         smallerRegion =
             Maybe.withDefault region maybeSubRegion
     in
@@ -98,8 +98,8 @@ render sourceLines ((A.Region (A.Position startLine _) (A.Position endLine _)) a
             drawLines False width smallerRegion relevantLines underline
 
 
-makeUnderline : Int -> Int -> A.Region -> Maybe Doc
-makeUnderline width realEndLine (A.Region (A.Position start c1) (A.Position end c2)) =
+makeUnderline : Int -> Int -> A.CRA_Region -> Maybe Doc
+makeUnderline width realEndLine (A.CRA_Region (A.CRA_Position start c1) (A.CRA_Position end c2)) =
     if start /= end || end < realEndLine then
         Nothing
 
@@ -119,8 +119,8 @@ makeUnderline width realEndLine (A.Region (A.Position start c1) (A.Position end 
             )
 
 
-drawLines : Bool -> Int -> A.Region -> Source -> Doc -> Doc
-drawLines addZigZag width (A.Region (A.Position startLine _) (A.Position endLine _)) sourceLines finalLine =
+drawLines : Bool -> Int -> A.CRA_Region -> Source -> Doc -> Doc
+drawLines addZigZag width (A.CRA_Region (A.CRA_Position startLine _) (A.CRA_Position endLine _)) sourceLines finalLine =
     D.vcat <|
         List.map (drawLine addZigZag width startLine endLine) sourceLines
             ++ [ finalLine ]
@@ -162,13 +162,13 @@ type CodePair
     | TwoChunks Doc Doc
 
 
-renderPair : Source -> A.Region -> A.Region -> CodePair
+renderPair : Source -> A.CRA_Region -> A.CRA_Region -> CodePair
 renderPair source region1 region2 =
     let
-        (A.Region (A.Position startRow1 startCol1) (A.Position endRow1 endCol1)) =
+        (A.CRA_Region (A.CRA_Position startRow1 startCol1) (A.CRA_Position endRow1 endCol1)) =
             region1
 
-        (A.Region (A.Position startRow2 startCol2) (A.Position endRow2 endCol2)) =
+        (A.CRA_Region (A.CRA_Position startRow2 startCol2) (A.CRA_Position endRow2 endCol2)) =
             region2
     in
     if startRow1 == endRow1 && endRow1 == startRow2 && startRow2 == endRow2 then

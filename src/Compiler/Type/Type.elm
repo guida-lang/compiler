@@ -30,7 +30,7 @@ module Compiler.Type.Type exposing
 
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
@@ -50,12 +50,12 @@ import Utils.Crash exposing (crash)
 type Constraint
     = CTrue
     | CSaveTheEnvironment
-    | CEqual A.Region E.Category Type (E.Expected Type)
-    | CLocal A.Region Name (E.Expected Type)
-    | CForeign A.Region Name Can.Annotation (E.Expected Type)
-    | CPattern A.Region E.PCategory Type (E.PExpected Type)
+    | CEqual A.CRA_Region E.Category Type (E.Expected Type)
+    | CLocal A.CRA_Region CDN_Name (E.Expected Type)
+    | CForeign A.CRA_Region CDN_Name Can.CASTC_Annotation (E.Expected Type)
+    | CPattern A.CRA_Region E.PCategory Type (E.PExpected Type)
     | CAnd (List Constraint)
-    | CLet (List Variable) (List Variable) (Dict String Name (A.Located Type)) Constraint Constraint
+    | CLet (List Variable) (List Variable) (Dict String CDN_Name (A.CRA_Located Type)) Constraint Constraint
 
 
 exists : List Variable -> Constraint -> Constraint
@@ -68,13 +68,13 @@ exists flexVars constraint =
 
 
 type Type
-    = PlaceHolder Name
-    | AliasN IO.Canonical Name (List ( Name, Type )) Type
+    = PlaceHolder CDN_Name
+    | AliasN IO.CEMN_Canonical CDN_Name (List ( CDN_Name, Type )) Type
     | VarN Variable
-    | AppN IO.Canonical Name (List Type)
+    | AppN IO.CEMN_Canonical CDN_Name (List Type)
     | FunN Type Type
     | EmptyRecordN
-    | RecordN (Dict String Name Type) Type
+    | RecordN (Dict String CDN_Name Type) Type
     | UnitN
     | TupleN Type Type (Maybe Type)
 
@@ -240,21 +240,21 @@ unnamedFlexSuper super =
 -- MAKE NAMED VARIABLES
 
 
-nameToFlex : Name -> IO Variable
+nameToFlex : CDN_Name -> IO Variable
 nameToFlex name =
     UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap FlexVar FlexSuper (toSuper name) (Just name)
 
 
-nameToRigid : Name -> IO Variable
+nameToRigid : CDN_Name -> IO Variable
 nameToRigid name =
     UF.fresh <|
         makeDescriptor <|
             Maybe.unwrap RigidVar RigidSuper (toSuper name) name
 
 
-toSuper : Name -> Maybe SuperType
+toSuper : CDN_Name -> Maybe SuperType
 toSuper name =
     if Name.isNumberType name then
         Just Number
@@ -276,7 +276,7 @@ toSuper name =
 -- TO TYPE ANNOTATION
 
 
-toAnnotation : Variable -> IO Can.Annotation
+toAnnotation : Variable -> IO Can.CASTC_Annotation
 toAnnotation variable =
     getVarNames variable Dict.empty
         |> IO.bind
@@ -284,12 +284,12 @@ toAnnotation variable =
                 State.runStateT (variableToCanType variable) (makeNameState userNames)
                     |> IO.fmap
                         (\( tipe, NameState freeVars _ _ _ _ _ ) ->
-                            Can.Forall freeVars tipe
+                            Can.CASTC_Forall freeVars tipe
                         )
             )
 
 
-variableToCanType : Variable -> State.StateT NameState Can.Type
+variableToCanType : Variable -> State.StateT NameState Can.CASTC_Type
 variableToCanType variable =
     liftIO (UF.get variable)
         |> State.bind
@@ -301,7 +301,7 @@ variableToCanType variable =
                     FlexVar maybeName ->
                         case maybeName of
                             Just name ->
-                                State.pure (Can.TVar name)
+                                State.pure (Can.CASTC_TVar name)
 
                             Nothing ->
                                 getFreshVarName
@@ -313,13 +313,13 @@ variableToCanType variable =
                                                         Descriptor (FlexVar (Just name)) rank mark copy
                                                     )
                                                 )
-                                                |> State.fmap (\_ -> Can.TVar name)
+                                                |> State.fmap (\_ -> Can.CASTC_TVar name)
                                         )
 
                     FlexSuper super maybeName ->
                         case maybeName of
                             Just name ->
-                                State.pure (Can.TVar name)
+                                State.pure (Can.CASTC_TVar name)
 
                             Nothing ->
                                 getFreshSuperName super
@@ -331,14 +331,14 @@ variableToCanType variable =
                                                         Descriptor (FlexSuper super (Just name)) rank mark copy
                                                     )
                                                 )
-                                                |> State.fmap (\_ -> Can.TVar name)
+                                                |> State.fmap (\_ -> Can.CASTC_TVar name)
                                         )
 
                     RigidVar name ->
-                        State.pure (Can.TVar name)
+                        State.pure (Can.CASTC_TVar name)
 
                     RigidSuper _ name ->
-                        State.pure (Can.TVar name)
+                        State.pure (Can.CASTC_TVar name)
 
                     Alias home name args realVariable ->
                         State.traverseList (State.traverseTuple variableToCanType) args
@@ -347,7 +347,7 @@ variableToCanType variable =
                                     variableToCanType realVariable
                                         |> State.fmap
                                             (\canType ->
-                                                Can.TAlias home name canArgs (Can.Filled canType)
+                                                Can.CASTC_TAlias home name canArgs (Can.CASTC_Filled canType)
                                             )
                                 )
 
@@ -356,20 +356,20 @@ variableToCanType variable =
             )
 
 
-termToCanType : FlatType -> StateT NameState Can.Type
+termToCanType : FlatType -> StateT NameState Can.CASTC_Type
 termToCanType term =
     case term of
         App1 home name args ->
             State.traverseList variableToCanType args
-                |> State.fmap (Can.TType home name)
+                |> State.fmap (Can.CASTC_TType home name)
 
         Fun1 a b ->
-            State.pure Can.TLambda
+            State.pure Can.CASTC_TLambda
                 |> State.apply (variableToCanType a)
                 |> State.apply (variableToCanType b)
 
         EmptyRecord1 ->
-            State.pure (Can.TRecord Dict.empty Nothing)
+            State.pure (Can.CASTC_TRecord Dict.empty Nothing)
 
         Record1 fields extension ->
             State.traverseMap compare identity fieldToCanType fields
@@ -380,11 +380,11 @@ termToCanType term =
                             |> State.fmap
                                 (\canExt ->
                                     case canExt of
-                                        Can.TRecord subFields subExt ->
-                                            Can.TRecord (Dict.union subFields canFields) subExt
+                                        Can.CASTC_TRecord subFields subExt ->
+                                            Can.CASTC_TRecord (Dict.union subFields canFields) subExt
 
-                                        Can.TVar name ->
-                                            Can.TRecord canFields (Just name)
+                                        Can.CASTC_TVar name ->
+                                            Can.CASTC_TRecord canFields (Just name)
 
                                         _ ->
                                             crash "Used toAnnotation on a type that is not well-formed"
@@ -392,19 +392,19 @@ termToCanType term =
                     )
 
         Unit1 ->
-            State.pure Can.TUnit
+            State.pure Can.CASTC_TUnit
 
         Tuple1 a b maybeC ->
-            State.pure Can.TTuple
+            State.pure Can.CASTC_TTuple
                 |> State.apply (variableToCanType a)
                 |> State.apply (variableToCanType b)
                 |> State.apply (State.traverseMaybe variableToCanType maybeC)
 
 
-fieldToCanType : Variable -> StateT NameState Can.FieldType
+fieldToCanType : Variable -> StateT NameState Can.CASTC_FieldType
 fieldToCanType variable =
     variableToCanType variable
-        |> State.fmap (\tipe -> Can.FieldType 0 tipe)
+        |> State.fmap (\tipe -> Can.CASTC_FieldType 0 tipe)
 
 
 
@@ -585,10 +585,10 @@ termToErrorType term =
 
 
 type NameState
-    = NameState (Dict String Name ()) Int Int Int Int Int
+    = NameState (Dict String CDN_Name ()) Int Int Int Int Int
 
 
-makeNameState : Dict String Name Variable -> NameState
+makeNameState : Dict String CDN_Name Variable -> NameState
 makeNameState taken =
     NameState (Dict.map (\_ _ -> ()) taken) 0 0 0 0 0
 
@@ -597,7 +597,7 @@ makeNameState taken =
 -- FRESH VAR NAMES
 
 
-getFreshVarName : StateT NameState Name
+getFreshVarName : StateT NameState CDN_Name
 getFreshVarName =
     State.gets (\(NameState _ normals _ _ _ _) -> normals)
         |> State.bind
@@ -618,10 +618,10 @@ getFreshVarName =
             )
 
 
-getFreshVarNameHelp : Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
+getFreshVarNameHelp : Int -> Dict String CDN_Name () -> ( CDN_Name, Int, Dict String CDN_Name () )
 getFreshVarNameHelp index taken =
     let
-        name : Name
+        name : CDN_Name
         name =
             Name.fromTypeVariableScheme index
     in
@@ -636,7 +636,7 @@ getFreshVarNameHelp index taken =
 -- FRESH SUPER NAMES
 
 
-getFreshSuperName : SuperType -> StateT NameState Name
+getFreshSuperName : SuperType -> StateT NameState CDN_Name
 getFreshSuperName super =
     case super of
         Number ->
@@ -668,7 +668,7 @@ getFreshSuperName super =
                 )
 
 
-getFreshSuper : Name -> (NameState -> Int) -> (Int -> NameState -> NameState) -> StateT NameState Name
+getFreshSuper : CDN_Name -> (NameState -> Int) -> (Int -> NameState -> NameState) -> StateT NameState CDN_Name
 getFreshSuper prefix getter setter =
     State.gets getter
         |> State.bind
@@ -689,10 +689,10 @@ getFreshSuper prefix getter setter =
             )
 
 
-getFreshSuperHelp : Name -> Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
+getFreshSuperHelp : CDN_Name -> Int -> Dict String CDN_Name () -> ( CDN_Name, Int, Dict String CDN_Name () )
 getFreshSuperHelp prefix index taken =
     let
-        name : Name
+        name : CDN_Name
         name =
             Name.fromTypeVariable prefix index
     in
@@ -707,7 +707,7 @@ getFreshSuperHelp prefix index taken =
 -- GET ALL VARIABLE NAMES
 
 
-getVarNames : Variable -> Dict String Name Variable -> IO (Dict String Name Variable)
+getVarNames : Variable -> Dict String CDN_Name Variable -> IO (Dict String CDN_Name Variable)
 getVarNames var takenNames =
     UF.get var
         |> IO.bind
@@ -781,10 +781,10 @@ getVarNames var takenNames =
 -- REGISTER NAME / RENAME DUPLICATES
 
 
-addName : Int -> Name -> Variable -> (Name -> Content) -> Dict String Name Variable -> IO (Dict String Name Variable)
+addName : Int -> CDN_Name -> Variable -> (CDN_Name -> Content) -> Dict String CDN_Name Variable -> IO (Dict String CDN_Name Variable)
 addName index givenName var makeContent takenNames =
     let
-        indexedName : Name
+        indexedName : CDN_Name
         indexedName =
             Name.fromTypeVariable givenName index
     in

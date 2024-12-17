@@ -229,30 +229,30 @@ fromSnippet (Parser parser) toBadEnd (Snippet { fptr, offset, length, offRow, of
 -- POSITION
 
 
-getPosition : Parser x A.Position
+getPosition : Parser x A.CRA_Position
 getPosition =
     Parser <|
         \((State _ _ _ _ row col) as state) ->
-            Ok (POk Empty (A.Position row col) state)
+            Ok (POk Empty (A.CRA_Position row col) state)
 
 
-addLocation : Parser x a -> Parser x (A.Located a)
+addLocation : Parser x a -> Parser x (A.CRA_Located a)
 addLocation (Parser parser) =
     Parser <|
         \((State _ _ _ _ sr sc) as state) ->
             case parser state of
                 Ok (POk status a ((State _ _ _ _ er ec) as s)) ->
-                    Ok (POk status (A.At (A.Region (A.Position sr sc) (A.Position er ec)) a) s)
+                    Ok (POk status (A.CRA_At (A.CRA_Region (A.CRA_Position sr sc) (A.CRA_Position er ec)) a) s)
 
                 Err err ->
                     Err err
 
 
-addEnd : A.Position -> a -> Parser x (A.Located a)
+addEnd : A.CRA_Position -> a -> Parser x (A.CRA_Located a)
 addEnd start value =
     Parser <|
         \((State _ _ _ _ row col) as state) ->
-            Ok (POk Empty (A.at start (A.Position row col) value) state)
+            Ok (POk Empty (A.at start (A.CRA_Position row col) value) state)
 
 
 

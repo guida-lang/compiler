@@ -392,7 +392,7 @@ combineRigidSupers rigid flex =
         || (rigid == IO.CompAppend && (flex == IO.Comparable || flex == IO.Appendable))
 
 
-atomMatchesSuper : IO.SuperType -> IO.Canonical -> Name.Name -> Bool
+atomMatchesSuper : IO.SuperType -> IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 atomMatchesSuper super home name =
     case super of
         IO.Number ->
@@ -408,7 +408,7 @@ atomMatchesSuper super home name =
             Error.isString home name
 
 
-isNumber : IO.Canonical -> Name.Name -> Bool
+isNumber : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isNumber home name =
     (home == ModuleName.basics)
         && (name == Name.int || name == Name.float)
@@ -513,7 +513,7 @@ unifyComparableRecursive var =
 -- UNIFY ALIASES
 
 
-unifyAlias : Context -> IO.Canonical -> Name.Name -> List ( Name.Name, IO.Variable ) -> IO.Variable -> IO.Content -> Unify ()
+unifyAlias : Context -> IO.CEMN_Canonical -> Name.CDN_Name -> List ( Name.CDN_Name, IO.Variable ) -> IO.Variable -> IO.Content -> Unify ()
 unifyAlias ((Context _ _ second _) as context) home name args realVar otherContent =
     case otherContent of
         IO.FlexVar _ ->
@@ -556,7 +556,7 @@ unifyAlias ((Context _ _ second _) as context) home name args realVar otherConte
             merge context IO.Error
 
 
-unifyAliasArgs : List IO.Variable -> List ( Name.Name, IO.Variable ) -> List ( Name.Name, IO.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
+unifyAliasArgs : List IO.Variable -> List ( Name.CDN_Name, IO.Variable ) -> List ( Name.CDN_Name, IO.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
 unifyAliasArgs vars args1 args2 =
     case args1 of
         ( _, arg1 ) :: others1 ->
@@ -748,15 +748,15 @@ unifyArgs vars args1 args2 =
 unifyRecord : Context -> RecordStructure -> RecordStructure -> Unify ()
 unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2) =
     let
-        sharedFields : Dict String Name.Name ( IO.Variable, IO.Variable )
+        sharedFields : Dict String Name.CDN_Name ( IO.Variable, IO.Variable )
         sharedFields =
             Utils.mapIntersectionWith identity compare Tuple.pair fields1 fields2
 
-        uniqueFields1 : Dict String Name.Name IO.Variable
+        uniqueFields1 : Dict String Name.CDN_Name IO.Variable
         uniqueFields1 =
             Dict.diff fields1 fields2
 
-        uniqueFields2 : Dict String Name.Name IO.Variable
+        uniqueFields2 : Dict String Name.CDN_Name IO.Variable
         uniqueFields2 =
             Dict.diff fields2 fields1
     in
@@ -783,7 +783,7 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
 
     else
         let
-            otherFields : Dict String Name.Name IO.Variable
+            otherFields : Dict String Name.CDN_Name IO.Variable
             otherFields =
                 Dict.union uniqueFields1 uniqueFields2
         in
@@ -804,7 +804,7 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                 )
 
 
-unifySharedFields : Context -> Dict String Name.Name ( IO.Variable, IO.Variable ) -> Dict String Name.Name IO.Variable -> IO.Variable -> Unify ()
+unifySharedFields : Context -> Dict String Name.CDN_Name ( IO.Variable, IO.Variable ) -> Dict String Name.CDN_Name IO.Variable -> IO.Variable -> Unify ()
 unifySharedFields context sharedFields otherFields ext =
     traverseMaybe identity compare unifyField sharedFields
         |> bind
@@ -835,7 +835,7 @@ traverseMaybe toComparable keyComparison func =
         (pure Dict.empty)
 
 
-unifyField : Name.Name -> ( IO.Variable, IO.Variable ) -> Unify (Maybe IO.Variable)
+unifyField : Name.CDN_Name -> ( IO.Variable, IO.Variable ) -> Unify (Maybe IO.Variable)
 unifyField _ ( actual, expected ) =
     Unify
         (\vars ->
@@ -859,10 +859,10 @@ unifyField _ ( actual, expected ) =
 
 
 type RecordStructure
-    = RecordStructure (Dict String Name.Name IO.Variable) IO.Variable
+    = RecordStructure (Dict String Name.CDN_Name IO.Variable) IO.Variable
 
 
-gatherFields : Dict String Name.Name IO.Variable -> IO.Variable -> IO RecordStructure
+gatherFields : Dict String Name.CDN_Name IO.Variable -> IO.Variable -> IO RecordStructure
 gatherFields fields variable =
     UF.get variable
         |> IO.bind

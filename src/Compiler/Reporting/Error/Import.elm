@@ -28,14 +28,14 @@ import Json.Encode as Encode
 
 
 type Error
-    = Error A.Region ModuleName.Raw (EverySet String ModuleName.Raw) Problem
+    = Error A.CRA_Region ModuleName.CEMN_Raw (EverySet String ModuleName.CEMN_Raw) Problem
 
 
 type Problem
     = NotFound
-    | Ambiguous String (List String) Pkg.Name (List Pkg.Name)
+    | Ambiguous String (List String) Pkg.CEP_Name (List Pkg.CEP_Name)
     | AmbiguousLocal String String (List String)
-    | AmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
+    | AmbiguousForeign Pkg.CEP_Name Pkg.CEP_Name (List Pkg.CEP_Name)
 
 
 
@@ -176,7 +176,7 @@ toReport source (Error region name unimportedModules problem) =
                     )
 
 
-toSuggestions : ModuleName.Raw -> EverySet String ModuleName.Raw -> List ModuleName.Raw
+toSuggestions : ModuleName.CEMN_Raw -> EverySet String ModuleName.CEMN_Raw -> List ModuleName.CEMN_Raw
 toSuggestions name unimportedModules =
     List.take 4 <|
         Suggest.sort name identity (EverySet.toList compare unimportedModules)

@@ -4,7 +4,7 @@ module Compiler.Parse.Type exposing
     )
 
 import Compiler.AST.Source as Src
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Space as Space
 import Compiler.Parse.Variable as Var
@@ -16,7 +16,7 @@ import Compiler.Reporting.Error.Syntax as E
 -- TYPE TERMS
 
 
-term : P.Parser E.Type Src.Type
+term : P.Parser E.Type Src.CASTS_Type
 term =
     P.getPosition
         |> P.bind
@@ -30,30 +30,30 @@ term =
                                     |> P.fmap
                                         (\end ->
                                             let
-                                                region : A.Region
+                                                region : A.CRA_Region
                                                 region =
-                                                    A.Region start end
+                                                    A.CRA_Region start end
                                             in
-                                            A.At region <|
+                                            A.CRA_At region <|
                                                 case upper of
                                                     Var.Unqualified name ->
-                                                        Src.TType region name []
+                                                        Src.CASTS_TType region name []
 
                                                     Var.Qualified home name ->
-                                                        Src.TTypeQual region home name []
+                                                        Src.CASTS_TTypeQual region home name []
                                         )
                             )
                     , -- type variables
                       Var.lower E.TStart
                         |> P.bind
                             (\var ->
-                                P.addEnd start (Src.TVar var)
+                                P.addEnd start (Src.CASTS_TVar var)
                             )
                     , -- tuples
                       P.inContext E.TTuple (P.word1 '(' E.TStart) <|
                         P.oneOf E.TTupleOpen
                             [ P.word1 ')' E.TTupleOpen
-                                |> P.bind (\_ -> P.addEnd start Src.TUnit)
+                                |> P.bind (\_ -> P.addEnd start Src.CASTS_TUnit)
                             , Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentType1
                                 |> P.bind
                                     (\_ ->
@@ -72,7 +72,7 @@ term =
                                 (\_ ->
                                     P.oneOf E.TRecordOpen
                                         [ P.word1 '}' E.TRecordEnd
-                                            |> P.bind (\_ -> P.addEnd start (Src.TRecord [] Nothing))
+                                            |> P.bind (\_ -> P.addEnd start (Src.CASTS_TRecord [] Nothing))
                                         , P.addLocation (Var.lower E.TRecordField)
                                             |> P.bind
                                                 (\name ->
@@ -90,7 +90,7 @@ term =
                                                                                                 |> P.bind
                                                                                                     (\field ->
                                                                                                         chompRecordEnd [ field ]
-                                                                                                            |> P.bind (\fields -> P.addEnd start (Src.TRecord fields (Just name)))
+                                                                                                            |> P.bind (\fields -> P.addEnd start (Src.CASTS_TRecord fields (Just name)))
                                                                                                     )
                                                                                         )
                                                                             )
@@ -107,7 +107,7 @@ term =
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
                                                                                                                     chompRecordEnd [ ( name, tipe ) ]
-                                                                                                                        |> P.bind (\fields -> P.addEnd start (Src.TRecord fields Nothing))
+                                                                                                                        |> P.bind (\fields -> P.addEnd start (Src.CASTS_TRecord fields Nothing))
                                                                                                                 )
                                                                                                     )
                                                                                         )
@@ -126,7 +126,7 @@ term =
 -- TYPE EXPRESSIONS
 
 
-expression : Space.Parser E.Type Src.Type
+expression : Space.Parser E.Type Src.CASTS_Type
 expression =
     P.getPosition
         |> P.bind
@@ -162,9 +162,9 @@ expression =
                                                                         |> P.fmap
                                                                             (\( tipe2, end2 ) ->
                                                                                 let
-                                                                                    tipe : A.Located Src.Type_
+                                                                                    tipe : A.CRA_Located Src.CASTS_Type_
                                                                                     tipe =
-                                                                                        A.at start end2 (Src.TLambda tipe1 tipe2)
+                                                                                        A.at start end2 (Src.CASTS_TLambda tipe1 tipe2)
                                                                                 in
                                                                                 ( tipe, end2 )
                                                                             )
@@ -181,7 +181,7 @@ expression =
 -- TYPE CONSTRUCTORS
 
 
-app : A.Position -> Space.Parser E.Type Src.Type
+app : A.CRA_Position -> Space.Parser E.Type Src.CASTS_Type
 app start =
     Var.foreignUpper E.TStart
         |> P.bind
@@ -196,18 +196,18 @@ app start =
                                             |> P.fmap
                                                 (\( args, end ) ->
                                                     let
-                                                        region : A.Region
+                                                        region : A.CRA_Region
                                                         region =
-                                                            A.Region start upperEnd
+                                                            A.CRA_Region start upperEnd
 
-                                                        tipe : Src.Type_
+                                                        tipe : Src.CASTS_Type_
                                                         tipe =
                                                             case upper of
                                                                 Var.Unqualified name ->
-                                                                    Src.TType region name args
+                                                                    Src.CASTS_TType region name args
 
                                                                 Var.Qualified home name ->
-                                                                    Src.TTypeQual region home name args
+                                                                    Src.CASTS_TTypeQual region home name args
                                                     in
                                                     ( A.at start end tipe, end )
                                                 )
@@ -216,7 +216,7 @@ app start =
             )
 
 
-chompArgs : List Src.Type -> A.Position -> Space.Parser E.Type (List Src.Type)
+chompArgs : List Src.CASTS_Type -> A.CRA_Position -> Space.Parser E.Type (List Src.CASTS_Type)
 chompArgs args end =
     P.oneOfWithFallback
         [ Space.checkIndent end E.TIndentStart
@@ -244,7 +244,7 @@ chompArgs args end =
 -- TUPLES
 
 
-chompTupleEnd : A.Position -> Src.Type -> List Src.Type -> P.Parser E.TTuple Src.Type
+chompTupleEnd : A.CRA_Position -> Src.CASTS_Type -> List Src.CASTS_Type -> P.Parser E.TTuple Src.CASTS_Type
 chompTupleEnd start firstType revTypes =
     P.oneOf E.TTupleEnd
         [ P.word1 ',' E.TTupleEnd
@@ -272,7 +272,7 @@ chompTupleEnd start firstType revTypes =
                             P.pure firstType
 
                         secondType :: otherTypes ->
-                            P.addEnd start (Src.TTuple firstType secondType otherTypes)
+                            P.addEnd start (Src.CASTS_TTuple firstType secondType otherTypes)
                 )
         ]
 
@@ -282,7 +282,7 @@ chompTupleEnd start firstType revTypes =
 
 
 type alias Field =
-    ( A.Located Name, Src.Type )
+    ( A.CRA_Located CDN_Name, Src.CASTS_Type )
 
 
 chompRecordEnd : List Field -> P.Parser E.TRecord (List Field)
@@ -336,11 +336,11 @@ chompField =
 -- VARIANT
 
 
-variant : Space.Parser E.CustomType ( A.Located Name, List Src.Type )
+variant : Space.Parser E.CustomType ( A.CRA_Located CDN_Name, List Src.CASTS_Type )
 variant =
     P.addLocation (Var.upper E.CT_Variant)
         |> P.bind
-            (\((A.At (A.Region _ nameEnd) _) as name) ->
+            (\((A.CRA_At (A.CRA_Region _ nameEnd) _) as name) ->
                 Space.chomp E.CT_Space
                     |> P.bind
                         (\_ ->

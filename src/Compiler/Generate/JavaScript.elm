@@ -38,7 +38,7 @@ type alias Graph =
 
 
 type alias Mains =
-    Dict (List String) IO.Canonical Opt.Main
+    Dict (List String) IO.CEMN_Canonical Opt.Main
 
 
 generate : Mode.Mode -> Opt.GlobalGraph -> Mains -> String
@@ -56,7 +56,7 @@ generate mode (Opt.GlobalGraph graph _) mains =
         ++ "}(this));"
 
 
-addMain : Mode.Mode -> Graph -> IO.Canonical -> Opt.Main -> State -> State
+addMain : Mode.Mode -> Graph -> IO.CEMN_Canonical -> Opt.Main -> State -> State
 addMain mode graph home _ state =
     addGlobal mode graph state (Opt.Global home "main")
 
@@ -78,8 +78,8 @@ perfNote mode =
                 ++ " for better performance and smaller assets.');"
 
 
-generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Name.Name -> Can.Annotation -> String
-generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.Forall _ tipe) =
+generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> IO.CEMN_Canonical -> Name.CDN_Name -> Can.CASTC_Annotation -> String
+generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.CASTC_Forall _ tipe) =
     let
         mode : Mode.Mode
         mode =
@@ -99,7 +99,7 @@ generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.Forall _
         ++ print ansi localizer home name tipe
 
 
-print : Bool -> L.Localizer -> IO.Canonical -> Name.Name -> Can.Type -> String
+print : Bool -> L.Localizer -> IO.CEMN_Canonical -> Name.CDN_Name -> Can.CASTC_Type -> String
 print ansi localizer home name tipe =
     let
         value : JsName.Name
@@ -139,10 +139,10 @@ print ansi localizer home name tipe =
 -- GENERATE FOR REPL ENDPOINT
 
 
-generateForReplEndpoint : L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Maybe Name.Name -> Can.Annotation -> String
-generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.Forall _ tipe) =
+generateForReplEndpoint : L.Localizer -> Opt.GlobalGraph -> IO.CEMN_Canonical -> Maybe Name.CDN_Name -> Can.CASTC_Annotation -> String
+generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.CASTC_Forall _ tipe) =
     let
-        name : Name.Name
+        name : Name.CDN_Name
         name =
             Maybe.unwrap Name.replValueToPrint identity maybeName
 
@@ -163,10 +163,10 @@ generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.
         ++ postMessage localizer home maybeName tipe
 
 
-postMessage : L.Localizer -> IO.Canonical -> Maybe Name.Name -> Can.Type -> String
+postMessage : L.Localizer -> IO.CEMN_Canonical -> Maybe Name.CDN_Name -> Can.CASTC_Type -> String
 postMessage localizer home maybeName tipe =
     let
-        name : Name.Name
+        name : Name.CDN_Name
         name =
             Maybe.unwrap Name.replValueToPrint identity maybeName
 
@@ -312,7 +312,7 @@ var (Opt.Global home name) code =
 
 
 isDebugger : Opt.Global -> Bool
-isDebugger (Opt.Global (IO.Canonical _ home) _) =
+isDebugger (Opt.Global (IO.CEMN_Canonical _ home) _) =
     home == Name.debugger
 
 
@@ -320,8 +320,8 @@ isDebugger (Opt.Global (IO.Canonical _ home) _) =
 -- GENERATE CYCLES
 
 
-generateCycle : Mode.Mode -> Opt.Global -> List Name.Name -> List ( Name.Name, Opt.Expr ) -> List Opt.Def -> JS.Stmt
-generateCycle mode (Opt.Global ((IO.Canonical _ module_) as home) _) names values functions =
+generateCycle : Mode.Mode -> Opt.Global -> List Name.CDN_Name -> List ( Name.CDN_Name, Opt.Expr ) -> List Opt.Def -> JS.Stmt
+generateCycle mode (Opt.Global ((IO.CEMN_Canonical _ module_) as home) _) names values functions =
     JS.Block
         [ JS.Block <| List.map (generateCycleFunc mode home) functions
         , JS.Block <| List.map (generateSafeCycle mode home) values
@@ -348,7 +348,7 @@ generateCycle mode (Opt.Global ((IO.Canonical _ module_) as home) _) names value
         ]
 
 
-generateCycleFunc : Mode.Mode -> IO.Canonical -> Opt.Def -> JS.Stmt
+generateCycleFunc : Mode.Mode -> IO.CEMN_Canonical -> Opt.Def -> JS.Stmt
 generateCycleFunc mode home def =
     case def of
         Opt.Def name expr ->
@@ -358,13 +358,13 @@ generateCycleFunc mode home def =
             JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generateTailDef mode name args expr))
 
 
-generateSafeCycle : Mode.Mode -> IO.Canonical -> ( Name.Name, Opt.Expr ) -> JS.Stmt
+generateSafeCycle : Mode.Mode -> IO.CEMN_Canonical -> ( Name.CDN_Name, Opt.Expr ) -> JS.Stmt
 generateSafeCycle mode home ( name, expr ) =
     JS.FunctionStmt (JsName.fromCycle home name) [] <|
         Expr.codeToStmtList (Expr.generate mode expr)
 
 
-generateRealCycle : IO.Canonical -> ( Name.Name, expr ) -> JS.Stmt
+generateRealCycle : IO.CEMN_Canonical -> ( Name.CDN_Name, expr ) -> JS.Stmt
 generateRealCycle home ( name, _ ) =
     let
         safeName : JsName.Name
@@ -383,7 +383,7 @@ generateRealCycle home ( name, _ ) =
         ]
 
 
-drawCycle : List Name.Name -> String
+drawCycle : List Name.CDN_Name -> String
 drawCycle names =
     let
         topLine : String
@@ -405,33 +405,33 @@ drawCycle names =
     String.concat (topLine :: List.intersperse midLine (List.map nameLine names) ++ [ bottomLine ])
 
 
-generateKernel : Mode.Mode -> List K.Chunk -> String
+generateKernel : Mode.Mode -> List K.CEK_Chunk -> String
 generateKernel mode chunks =
     List.foldr (addChunk mode) "" chunks
 
 
-addChunk : Mode.Mode -> K.Chunk -> String -> String
+addChunk : Mode.Mode -> K.CEK_Chunk -> String -> String
 addChunk mode chunk builder =
     case chunk of
-        K.JS javascript ->
+        K.CEK_JS javascript ->
             javascript ++ builder
 
-        K.ElmVar home name ->
+        K.CEK_ElmVar home name ->
             JsName.fromGlobal home name ++ builder
 
-        K.JsVar home name ->
+        K.CEK_JsVar home name ->
             JsName.fromKernel home name ++ builder
 
-        K.ElmField name ->
+        K.CEK_ElmField name ->
             Expr.generateField mode name ++ builder
 
-        K.JsField int ->
+        K.CEK_JsField int ->
             JsName.fromInt int ++ builder
 
-        K.JsEnum int ->
+        K.CEK_JsEnum int ->
             String.fromInt int ++ builder
 
-        K.Debug ->
+        K.CEK_Debug ->
             case mode of
                 Mode.Dev _ ->
                     builder
@@ -439,7 +439,7 @@ addChunk mode chunk builder =
                 Mode.Prod _ ->
                     "_UNUSED" ++ builder
 
-        K.Prod ->
+        K.CEK_Prod ->
             case mode of
                 Mode.Dev _ ->
                     "_UNUSED" ++ builder
@@ -452,7 +452,7 @@ addChunk mode chunk builder =
 -- GENERATE ENUM
 
 
-generateEnum : Mode.Mode -> Opt.Global -> Index.ZeroBased -> JS.Stmt
+generateEnum : Mode.Mode -> Opt.Global -> Index.CDI_ZeroBased -> JS.Stmt
 generateEnum mode ((Opt.Global home name) as global) index =
     JS.Var (JsName.fromGlobal home name) <|
         case mode of
@@ -487,7 +487,7 @@ identity_ =
 -- GENERATE PORTS
 
 
-generatePort : Mode.Mode -> Opt.Global -> Name.Name -> Opt.Expr -> JS.Stmt
+generatePort : Mode.Mode -> Opt.Global -> Name.CDN_Name -> Opt.Expr -> JS.Stmt
 generatePort mode (Opt.Global home name) makePort converter =
     JS.Var (JsName.fromGlobal home name) <|
         JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.platform makePort))
@@ -501,7 +501,7 @@ generatePort mode (Opt.Global home name) makePort converter =
 
 
 generateManager : Mode.Mode -> Graph -> Opt.Global -> Opt.EffectsType -> State -> State
-generateManager mode graph (Opt.Global ((IO.Canonical _ moduleName) as home) _) effectsType state =
+generateManager mode graph (Opt.Global ((IO.CEMN_Canonical _ moduleName) as home) _) effectsType state =
     let
         managerLVar : JS.LValue
         managerLVar =
@@ -522,8 +522,8 @@ generateManager mode graph (Opt.Global ((IO.Canonical _ moduleName) as home) _) 
         JS.Block (createManager :: stmts)
 
 
-generateLeaf : IO.Canonical -> Name.Name -> JS.Stmt
-generateLeaf ((IO.Canonical _ moduleName) as home) name =
+generateLeaf : IO.CEMN_Canonical -> Name.CDN_Name -> JS.Stmt
+generateLeaf ((IO.CEMN_Canonical _ moduleName) as home) name =
     JS.Var (JsName.fromGlobal home name) <|
         JS.ExprCall leaf [ JS.ExprString moduleName ]
 
@@ -533,14 +533,14 @@ leaf =
     JS.ExprRef (JsName.fromKernel Name.platform "leaf")
 
 
-generateManagerHelp : IO.Canonical -> Opt.EffectsType -> ( List Opt.Global, List JS.Expr, List JS.Stmt )
+generateManagerHelp : IO.CEMN_Canonical -> Opt.EffectsType -> ( List Opt.Global, List JS.Expr, List JS.Stmt )
 generateManagerHelp home effectsType =
     let
-        dep : Name.Name -> Opt.Global
+        dep : Name.CDN_Name -> Opt.Global
         dep name =
             Opt.Global home name
 
-        ref : Name.Name -> JS.Expr
+        ref : Name.CDN_Name -> JS.Expr
         ref name =
             JS.ExprRef (JsName.fromGlobal home name)
     in
@@ -611,7 +611,7 @@ generateExports mode (Trie maybeMain subs) =
                 ++ List.foldl (flip (addSubTrie mode)) "}" otherSubTries
 
 
-addSubTrie : Mode.Mode -> String -> ( Name.Name, Trie ) -> String
+addSubTrie : Mode.Mode -> String -> ( Name.CDN_Name, Trie ) -> String
 addSubTrie mode end ( name, trie ) =
     ",'" ++ name ++ "':" ++ generateExports mode trie ++ end
 
@@ -621,7 +621,7 @@ addSubTrie mode end ( name, trie ) =
 
 
 type Trie
-    = Trie (Maybe ( IO.Canonical, Opt.Main )) (Dict String Name.Name Trie)
+    = Trie (Maybe ( IO.CEMN_Canonical, Opt.Main )) (Dict String Name.CDN_Name Trie)
 
 
 emptyTrie : Trie
@@ -629,12 +629,12 @@ emptyTrie =
     Trie Nothing Dict.empty
 
 
-addToTrie : IO.Canonical -> Opt.Main -> Trie -> Trie
-addToTrie ((IO.Canonical _ moduleName) as home) main trie =
+addToTrie : IO.CEMN_Canonical -> Opt.Main -> Trie -> Trie
+addToTrie ((IO.CEMN_Canonical _ moduleName) as home) main trie =
     merge trie <| segmentsToTrie home (Name.splitDots moduleName) main
 
 
-segmentsToTrie : IO.Canonical -> List Name.Name -> Opt.Main -> Trie
+segmentsToTrie : IO.CEMN_Canonical -> List Name.CDN_Name -> Opt.Main -> Trie
 segmentsToTrie home segments main =
     case segments of
         [] ->

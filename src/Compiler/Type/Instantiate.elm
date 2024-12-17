@@ -4,7 +4,7 @@ module Compiler.Type.Instantiate exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Type.Type exposing (Type(..))
 import Data.Map as Dict exposing (Dict)
 import System.TypeCheck.IO as IO exposing (IO)
@@ -16,52 +16,52 @@ import Utils.Main as Utils
 
 
 type alias FreeVars =
-    Dict String Name Type
+    Dict String CDN_Name Type
 
 
 
 -- FROM SOURCE TYPE
 
 
-fromSrcType : FreeVars -> Can.Type -> IO Type
+fromSrcType : FreeVars -> Can.CASTC_Type -> IO Type
 fromSrcType freeVars sourceType =
     case sourceType of
-        Can.TLambda arg result ->
+        Can.CASTC_TLambda arg result ->
             IO.pure FunN
                 |> IO.apply (fromSrcType freeVars arg)
                 |> IO.apply (fromSrcType freeVars result)
 
-        Can.TVar name ->
+        Can.CASTC_TVar name ->
             IO.pure (Utils.find identity name freeVars)
 
-        Can.TType home name args ->
+        Can.CASTC_TType home name args ->
             IO.fmap (AppN home name)
                 (IO.traverseList (fromSrcType freeVars) args)
 
-        Can.TAlias home name args aliasedType ->
+        Can.CASTC_TAlias home name args aliasedType ->
             IO.traverseList (IO.traverseTuple (fromSrcType freeVars)) args
                 |> IO.bind
                     (\targs ->
                         IO.fmap (AliasN home name targs)
                             (case aliasedType of
-                                Can.Filled realType ->
+                                Can.CASTC_Filled realType ->
                                     fromSrcType freeVars realType
 
-                                Can.Holey realType ->
+                                Can.CASTC_Holey realType ->
                                     fromSrcType (Dict.fromList identity targs) realType
                             )
                     )
 
-        Can.TTuple a b maybeC ->
+        Can.CASTC_TTuple a b maybeC ->
             IO.pure TupleN
                 |> IO.apply (fromSrcType freeVars a)
                 |> IO.apply (fromSrcType freeVars b)
                 |> IO.apply (IO.traverseMaybe (fromSrcType freeVars) maybeC)
 
-        Can.TUnit ->
+        Can.CASTC_TUnit ->
             IO.pure UnitN
 
-        Can.TRecord fields maybeExt ->
+        Can.CASTC_TRecord fields maybeExt ->
             IO.pure RecordN
                 |> IO.apply (IO.traverseMap identity compare (fromSrcFieldType freeVars) fields)
                 |> IO.apply
@@ -74,6 +74,6 @@ fromSrcType freeVars sourceType =
                     )
 
 
-fromSrcFieldType : Dict String Name Type -> Can.FieldType -> IO Type
-fromSrcFieldType freeVars (Can.FieldType _ tipe) =
+fromSrcFieldType : Dict String CDN_Name Type -> Can.CASTC_FieldType -> IO Type
+fromSrcFieldType freeVars (Can.CASTC_FieldType _ tipe) =
     fromSrcType freeVars tipe

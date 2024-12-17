@@ -40,7 +40,7 @@ isDebug mode =
 
 
 type alias ShortFieldNames =
-    Dict String Name.Name JsName.Name
+    Dict String Name.CDN_Name JsName.Name
 
 
 shortenFieldNames : Opt.GlobalGraph -> ShortFieldNames
@@ -49,17 +49,17 @@ shortenFieldNames (Opt.GlobalGraph _ frequencies) =
         Dict.foldr compare addToBuckets Dict.empty frequencies
 
 
-addToBuckets : Name.Name -> Int -> Dict Int Int (List Name.Name) -> Dict Int Int (List Name.Name)
+addToBuckets : Name.CDN_Name -> Int -> Dict Int Int (List Name.CDN_Name) -> Dict Int Int (List Name.CDN_Name)
 addToBuckets field frequency buckets =
     Utils.mapInsertWith identity (++) frequency [ field ] buckets
 
 
-addToShortNames : List Name.Name -> ShortFieldNames -> ShortFieldNames
+addToShortNames : List Name.CDN_Name -> ShortFieldNames -> ShortFieldNames
 addToShortNames fields shortNames =
     List.foldl addField shortNames fields
 
 
-addField : Name.Name -> ShortFieldNames -> ShortFieldNames
+addField : Name.CDN_Name -> ShortFieldNames -> ShortFieldNames
 addField field shortNames =
     let
         rename : JsName.Name

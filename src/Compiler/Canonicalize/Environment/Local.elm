@@ -6,7 +6,7 @@ import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -25,14 +25,14 @@ type alias LResult i w a =
 
 
 type alias Unions =
-    Dict String Name Can.Union
+    Dict String CDN_Name Can.CASTC_Union
 
 
 type alias Aliases =
-    Dict String Name Can.Alias
+    Dict String CDN_Name Can.CASTC_Alias
 
 
-add : Src.Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
+add : Src.CASTS_Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
 add module_ env =
     addTypes module_ env
         |> R.bind (addVars module_)
@@ -43,13 +43,13 @@ add module_ env =
 -- ADD VARS
 
 
-addVars : Src.Module -> Env.Env -> LResult i w Env.Env
+addVars : Src.CASTS_Module -> Env.Env -> LResult i w Env.Env
 addVars module_ env =
     collectVars module_
         |> R.fmap
             (\topLevelVars ->
                 let
-                    vs2 : Dict String Name Env.Var
+                    vs2 : Dict String CDN_Name Env.Var
                     vs2 =
                         Dict.union topLevelVars env.vars
                 in
@@ -58,40 +58,40 @@ addVars module_ env =
             )
 
 
-collectVars : Src.Module -> LResult i w (Dict String Name.Name Env.Var)
-collectVars (Src.Module _ _ _ _ values _ _ _ effects) =
+collectVars : Src.CASTS_Module -> LResult i w (Dict String Name.CDN_Name Env.Var)
+collectVars (Src.CASTS_Module _ _ _ _ values _ _ _ effects) =
     let
-        addDecl : A.Located Src.Value -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
-        addDecl (A.At _ (Src.Value (A.At region name) _ _ _)) =
+        addDecl : A.CRA_Located Src.CASTS_Value -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
+        addDecl (A.CRA_At _ (Src.CASTS_Value (A.CRA_At region name) _ _ _)) =
             Dups.insert name region (Env.TopLevel region)
     in
     Dups.detect Error.DuplicateDecl <|
         List.foldl addDecl (toEffectDups effects) values
 
 
-toEffectDups : Src.Effects -> Dups.Tracker Env.Var
+toEffectDups : Src.CASTS_Effects -> Dups.Tracker Env.Var
 toEffectDups effects =
     case effects of
-        Src.NoEffects ->
+        Src.CASTS_NoEffects ->
             Dups.none
 
-        Src.Ports ports ->
+        Src.CASTS_Ports ports ->
             let
-                addPort : Src.Port -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
-                addPort (Src.Port (A.At region name) _) =
+                addPort : Src.CASTS_Port -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
+                addPort (Src.CASTS_Port (A.CRA_At region name) _) =
                     Dups.insert name region (Env.TopLevel region)
             in
             List.foldl addPort Dups.none ports
 
-        Src.Manager _ manager ->
+        Src.CASTS_Manager _ manager ->
             case manager of
-                Src.Cmd (A.At region _) ->
+                Src.CASTS_Cmd (A.CRA_At region _) ->
                     Dups.one "command" region (Env.TopLevel region)
 
-                Src.Sub (A.At region _) ->
+                Src.CASTS_Sub (A.CRA_At region _) ->
                     Dups.one "subscription" region (Env.TopLevel region)
 
-                Src.Fx (A.At regionCmd _) (A.At regionSub _) ->
+                Src.CASTS_Fx (A.CRA_At regionCmd _) (A.CRA_At regionSub _) ->
                     Dups.union
                         (Dups.one "command" regionCmd (Env.TopLevel regionCmd))
                         (Dups.one "subscription" regionSub (Env.TopLevel regionSub))
@@ -101,15 +101,15 @@ toEffectDups effects =
 -- ADD TYPES
 
 
-addTypes : Src.Module -> Env.Env -> LResult i w Env.Env
-addTypes (Src.Module _ _ _ _ _ unions aliases _ _) env =
+addTypes : Src.CASTS_Module -> Env.Env -> LResult i w Env.Env
+addTypes (Src.CASTS_Module _ _ _ _ _ unions aliases _ _) env =
     let
-        addAliasDups : A.Located Src.Alias -> Dups.Tracker () -> Dups.Tracker ()
-        addAliasDups (A.At _ (Src.Alias (A.At region name) _ _)) =
+        addAliasDups : A.CRA_Located Src.CASTS_Alias -> Dups.Tracker () -> Dups.Tracker ()
+        addAliasDups (A.CRA_At _ (Src.CASTS_Alias (A.CRA_At region name) _ _)) =
             Dups.insert name region ()
 
-        addUnionDups : A.Located Src.Union -> Dups.Tracker () -> Dups.Tracker ()
-        addUnionDups (A.At _ (Src.Union (A.At region name) _ _)) =
+        addUnionDups : A.CRA_Located Src.CASTS_Union -> Dups.Tracker () -> Dups.Tracker ()
+        addUnionDups (A.CRA_At _ (Src.CASTS_Union (A.CRA_At region name) _ _)) =
             Dups.insert name region ()
 
         typeNameDups : Dups.Tracker ()
@@ -124,8 +124,8 @@ addTypes (Src.Module _ _ _ _ _ unions aliases _ _) env =
             )
 
 
-addUnion : IO.Canonical -> Env.Exposed Env.Type -> A.Located Src.Union -> LResult i w (Env.Exposed Env.Type)
-addUnion home types ((A.At _ (Src.Union (A.At _ name) _ _)) as union) =
+addUnion : IO.CEMN_Canonical -> Env.Exposed Env.Type -> A.CRA_Located Src.CASTS_Union -> LResult i w (Env.Exposed Env.Type)
+addUnion home types ((A.CRA_At _ (Src.CASTS_Union (A.CRA_At _ name) _ _)) as union) =
     R.fmap
         (\arity ->
             let
@@ -142,24 +142,24 @@ addUnion home types ((A.At _ (Src.Union (A.At _ name) _ _)) as union) =
 -- ADD TYPE ALIASES
 
 
-addAliases : List (A.Located Src.Alias) -> Env.Env -> LResult i w Env.Env
+addAliases : List (A.CRA_Located Src.CASTS_Alias) -> Env.Env -> LResult i w Env.Env
 addAliases aliases env =
     let
-        nodes : List ( A.Located Src.Alias, Name, List Name )
+        nodes : List ( A.CRA_Located Src.CASTS_Alias, CDN_Name, List CDN_Name )
         nodes =
             List.map toNode aliases
 
-        sccs : List (Graph.SCC (A.Located Src.Alias))
+        sccs : List (Graph.SCC (A.CRA_Located Src.CASTS_Alias))
         sccs =
             Graph.stronglyConnComp nodes
     in
     Utils.foldM addAlias env sccs
 
 
-addAlias : Env.Env -> Graph.SCC (A.Located Src.Alias) -> LResult i w Env.Env
+addAlias : Env.Env -> Graph.SCC (A.CRA_Located Src.CASTS_Alias) -> LResult i w Env.Env
 addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env) scc =
     case scc of
-        Graph.AcyclicSCC ((A.At _ (Src.Alias (A.At _ name) _ tipe)) as alias) ->
+        Graph.AcyclicSCC ((A.CRA_At _ (Src.CASTS_Alias (A.CRA_At _ name) _ tipe)) as alias) ->
             checkAliasFreeVars alias
                 |> R.bind
                     (\args ->
@@ -171,7 +171,7 @@ addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env)
                                         one =
                                             Env.Specific home (Env.Alias (List.length args) home args ctype)
 
-                                        ts1 : Dict String Name (Env.Info Env.Type)
+                                        ts1 : Dict String CDN_Name (Env.Info Env.Type)
                                         ts1 =
                                             Dict.insert identity name one types
                                     in
@@ -182,13 +182,13 @@ addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env)
         Graph.CyclicSCC [] ->
             R.ok env
 
-        Graph.CyclicSCC (((A.At _ (Src.Alias (A.At region name1) _ tipe)) as alias) :: others) ->
+        Graph.CyclicSCC (((A.CRA_At _ (Src.CASTS_Alias (A.CRA_At region name1) _ tipe)) as alias) :: others) ->
             checkAliasFreeVars alias
                 |> R.bind
                     (\args ->
                         let
-                            toName : A.Located Src.Alias -> Name
-                            toName (A.At _ (Src.Alias (A.At _ name) _ _)) =
+                            toName : A.CRA_Located Src.CASTS_Alias -> CDN_Name
+                            toName (A.CRA_At _ (Src.CASTS_Alias (A.CRA_At _ name) _ _)) =
                                 name
                         in
                         R.throw (Error.RecursiveAlias region name1 args tipe (List.map toName others))
@@ -199,33 +199,33 @@ addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env)
 -- DETECT TYPE ALIAS CYCLES
 
 
-toNode : A.Located Src.Alias -> ( A.Located Src.Alias, Name.Name, List Name.Name )
-toNode ((A.At _ (Src.Alias (A.At _ name) _ tipe)) as alias) =
+toNode : A.CRA_Located Src.CASTS_Alias -> ( A.CRA_Located Src.CASTS_Alias, Name.CDN_Name, List Name.CDN_Name )
+toNode ((A.CRA_At _ (Src.CASTS_Alias (A.CRA_At _ name) _ tipe)) as alias) =
     ( alias, name, getEdges tipe [] )
 
 
-getEdges : Src.Type -> List Name.Name -> List Name.Name
-getEdges (A.At _ tipe) edges =
+getEdges : Src.CASTS_Type -> List Name.CDN_Name -> List Name.CDN_Name
+getEdges (A.CRA_At _ tipe) edges =
     case tipe of
-        Src.TLambda arg result ->
+        Src.CASTS_TLambda arg result ->
             getEdges result (getEdges arg edges)
 
-        Src.TVar _ ->
+        Src.CASTS_TVar _ ->
             edges
 
-        Src.TType _ name args ->
+        Src.CASTS_TType _ name args ->
             List.foldl getEdges (name :: edges) args
 
-        Src.TTypeQual _ _ _ args ->
+        Src.CASTS_TTypeQual _ _ _ args ->
             List.foldl getEdges edges args
 
-        Src.TRecord fields _ ->
+        Src.CASTS_TRecord fields _ ->
             List.foldl (\( _, t ) es -> getEdges t es) edges fields
 
-        Src.TUnit ->
+        Src.CASTS_TUnit ->
             edges
 
-        Src.TTuple a b cs ->
+        Src.CASTS_TTuple a b cs ->
             List.foldl getEdges (getEdges b (getEdges a edges)) cs
 
 
@@ -233,14 +233,14 @@ getEdges (A.At _ tipe) edges =
 -- CHECK FREE VARIABLES
 
 
-checkUnionFreeVars : A.Located Src.Union -> LResult i w Int
-checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
+checkUnionFreeVars : A.CRA_Located Src.CASTS_Union -> LResult i w Int
+checkUnionFreeVars (A.CRA_At unionRegion (Src.CASTS_Union (A.CRA_At _ name) args ctors)) =
     let
-        addArg : A.Located Name -> Dups.Tracker A.Region -> Dups.Tracker A.Region
-        addArg (A.At region arg) dict =
+        addArg : A.CRA_Located CDN_Name -> Dups.Tracker A.CRA_Region -> Dups.Tracker A.CRA_Region
+        addArg (A.CRA_At region arg) dict =
             Dups.insert arg region region dict
 
-        addCtorFreeVars : ( a, List Src.Type ) -> Dict String Name A.Region -> Dict String Name A.Region
+        addCtorFreeVars : ( a, List Src.CASTS_Type ) -> Dict String CDN_Name A.CRA_Region -> Dict String CDN_Name A.CRA_Region
         addCtorFreeVars ( _, tipes ) freeVars =
             List.foldl addFreeVars freeVars tipes
     in
@@ -248,7 +248,7 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
         |> R.bind
             (\boundVars ->
                 let
-                    freeVars : Dict String Name A.Region
+                    freeVars : Dict String CDN_Name A.CRA_Region
                     freeVars =
                         List.foldr addCtorFreeVars Dict.empty ctors
                 in
@@ -262,18 +262,18 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
             )
 
 
-checkAliasFreeVars : A.Located Src.Alias -> LResult i w (List Name.Name)
-checkAliasFreeVars (A.At aliasRegion (Src.Alias (A.At _ name) args tipe)) =
+checkAliasFreeVars : A.CRA_Located Src.CASTS_Alias -> LResult i w (List Name.CDN_Name)
+checkAliasFreeVars (A.CRA_At aliasRegion (Src.CASTS_Alias (A.CRA_At _ name) args tipe)) =
     let
-        addArg : A.Located Name -> Dups.Tracker A.Region -> Dups.Tracker A.Region
-        addArg (A.At region arg) dict =
+        addArg : A.CRA_Located CDN_Name -> Dups.Tracker A.CRA_Region -> Dups.Tracker A.CRA_Region
+        addArg (A.CRA_At region arg) dict =
             Dups.insert arg region region dict
     in
     Dups.detect (Error.DuplicateAliasArg name) (List.foldr addArg Dups.none args)
         |> R.bind
             (\boundVars ->
                 let
-                    freeVars : Dict String Name A.Region
+                    freeVars : Dict String CDN_Name A.CRA_Region
                     freeVars =
                         addFreeVars tipe Dict.empty
 
@@ -294,38 +294,38 @@ checkAliasFreeVars (A.At aliasRegion (Src.Alias (A.At _ name) args tipe)) =
             )
 
 
-addFreeVars : Src.Type -> Dict String Name.Name A.Region -> Dict String Name.Name A.Region
-addFreeVars (A.At region tipe) freeVars =
+addFreeVars : Src.CASTS_Type -> Dict String Name.CDN_Name A.CRA_Region -> Dict String Name.CDN_Name A.CRA_Region
+addFreeVars (A.CRA_At region tipe) freeVars =
     case tipe of
-        Src.TLambda arg result ->
+        Src.CASTS_TLambda arg result ->
             addFreeVars result (addFreeVars arg freeVars)
 
-        Src.TVar name ->
+        Src.CASTS_TVar name ->
             Dict.insert identity name region freeVars
 
-        Src.TType _ _ args ->
+        Src.CASTS_TType _ _ args ->
             List.foldl addFreeVars freeVars args
 
-        Src.TTypeQual _ _ _ args ->
+        Src.CASTS_TTypeQual _ _ _ args ->
             List.foldl addFreeVars freeVars args
 
-        Src.TRecord fields maybeExt ->
+        Src.CASTS_TRecord fields maybeExt ->
             let
-                extFreeVars : Dict String Name A.Region
+                extFreeVars : Dict String CDN_Name A.CRA_Region
                 extFreeVars =
                     case maybeExt of
                         Nothing ->
                             freeVars
 
-                        Just (A.At extRegion ext) ->
+                        Just (A.CRA_At extRegion ext) ->
                             Dict.insert identity ext extRegion freeVars
             in
             List.foldl (\( _, t ) fvs -> addFreeVars t fvs) extFreeVars fields
 
-        Src.TUnit ->
+        Src.CASTS_TUnit ->
             freeVars
 
-        Src.TTuple a b cs ->
+        Src.CASTS_TTuple a b cs ->
             List.foldl addFreeVars (addFreeVars b (addFreeVars a freeVars)) cs
 
 
@@ -333,8 +333,8 @@ addFreeVars (A.At region tipe) freeVars =
 -- ADD CTORS
 
 
-addCtors : Src.Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
-addCtors (Src.Module _ _ _ _ _ unions aliases _ _) env =
+addCtors : Src.CASTS_Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
+addCtors (Src.CASTS_Module _ _ _ _ _ unions aliases _ _) env =
     R.traverse (canonicalizeUnion env) unions
         |> R.bind
             (\unionInfo ->
@@ -349,7 +349,7 @@ addCtors (Src.Module _ _ _ _ _ unions aliases _ _) env =
                                 |> R.bind
                                     (\ctors ->
                                         let
-                                            cs2 : Dict String Name (Env.Info Env.Ctor)
+                                            cs2 : Dict String CDN_Name (Env.Info Env.Ctor)
                                             cs2 =
                                                 Dict.union ctors env.ctors
                                         in
@@ -371,10 +371,10 @@ type alias CtorDups =
 -- CANONICALIZE ALIAS
 
 
-canonicalizeAlias : Env.Env -> A.Located Src.Alias -> LResult i w ( ( Name.Name, Can.Alias ), CtorDups )
-canonicalizeAlias ({ home } as env) (A.At _ (Src.Alias (A.At region name) args tipe)) =
+canonicalizeAlias : Env.Env -> A.CRA_Located Src.CASTS_Alias -> LResult i w ( ( Name.CDN_Name, Can.CASTC_Alias ), CtorDups )
+canonicalizeAlias ({ home } as env) (A.CRA_At _ (Src.CASTS_Alias (A.CRA_At region name) args tipe)) =
     let
-        vars : List Name
+        vars : List CDN_Name
         vars =
             List.map A.toValue args
     in
@@ -382,9 +382,9 @@ canonicalizeAlias ({ home } as env) (A.At _ (Src.Alias (A.At region name) args t
         |> R.bind
             (\ctipe ->
                 R.ok
-                    ( ( name, Can.Alias vars ctipe )
+                    ( ( name, Can.CASTC_Alias vars ctipe )
                     , case ctipe of
-                        Can.TRecord fields Nothing ->
+                        Can.CASTC_TRecord fields Nothing ->
                             Dups.one name region (Env.Specific home (toRecordCtor home name vars fields))
 
                         _ ->
@@ -393,18 +393,18 @@ canonicalizeAlias ({ home } as env) (A.At _ (Src.Alias (A.At region name) args t
             )
 
 
-toRecordCtor : IO.Canonical -> Name.Name -> List Name.Name -> Dict String Name.Name Can.FieldType -> Env.Ctor
+toRecordCtor : IO.CEMN_Canonical -> Name.CDN_Name -> List Name.CDN_Name -> Dict String Name.CDN_Name Can.CASTC_FieldType -> Env.Ctor
 toRecordCtor home name vars fields =
     let
-        avars : List ( Name, Can.Type )
+        avars : List ( CDN_Name, Can.CASTC_Type )
         avars =
-            List.map (\var -> ( var, Can.TVar var )) vars
+            List.map (\var -> ( var, Can.CASTC_TVar var )) vars
 
-        alias : Can.Type
+        alias : Can.CASTC_Type
         alias =
             List.foldr
-                (\( _, t1 ) t2 -> Can.TLambda t1 t2)
-                (Can.TAlias home name avars (Can.Filled (Can.TRecord fields Nothing)))
+                (\( _, t1 ) t2 -> Can.CASTC_TLambda t1 t2)
+                (Can.CASTC_TAlias home name avars (Can.CASTC_Filled (Can.CASTC_TRecord fields Nothing)))
                 (Can.fieldsToList fields)
     in
     Env.RecordCtor home vars alias
@@ -414,55 +414,55 @@ toRecordCtor home name vars fields =
 -- CANONICALIZE UNION
 
 
-canonicalizeUnion : Env.Env -> A.Located Src.Union -> LResult i w ( ( Name.Name, Can.Union ), CtorDups )
-canonicalizeUnion ({ home } as env) (A.At _ (Src.Union (A.At _ name) avars ctors)) =
+canonicalizeUnion : Env.Env -> A.CRA_Located Src.CASTS_Union -> LResult i w ( ( Name.CDN_Name, Can.CASTC_Union ), CtorDups )
+canonicalizeUnion ({ home } as env) (A.CRA_At _ (Src.CASTS_Union (A.CRA_At _ name) avars ctors)) =
     R.indexedTraverse (canonicalizeCtor env) ctors
         |> R.bind
             (\cctors ->
                 let
-                    vars : List Name
+                    vars : List CDN_Name
                     vars =
                         List.map A.toValue avars
 
-                    alts : List Can.Ctor
+                    alts : List Can.CASTC_Ctor
                     alts =
                         List.map A.toValue cctors
 
-                    union : Can.Union
+                    union : Can.CASTC_Union
                     union =
-                        Can.Union vars alts (List.length alts) (toOpts ctors)
+                        Can.CASTC_Union vars alts (List.length alts) (toOpts ctors)
                 in
                 R.ok ( ( name, union ), Dups.unions (List.map (toCtor home name union) cctors) )
             )
 
 
-canonicalizeCtor : Env.Env -> Index.ZeroBased -> ( A.Located Name.Name, List Src.Type ) -> LResult i w (A.Located Can.Ctor)
-canonicalizeCtor env index ( A.At region ctor, tipes ) =
+canonicalizeCtor : Env.Env -> Index.CDI_ZeroBased -> ( A.CRA_Located Name.CDN_Name, List Src.CASTS_Type ) -> LResult i w (A.CRA_Located Can.CASTC_Ctor)
+canonicalizeCtor env index ( A.CRA_At region ctor, tipes ) =
     R.traverse (Type.canonicalize env) tipes
         |> R.bind
             (\ctipes ->
                 R.ok <|
-                    A.At region <|
-                        Can.Ctor ctor index (List.length ctipes) ctipes
+                    A.CRA_At region <|
+                        Can.CASTC_Ctor ctor index (List.length ctipes) ctipes
             )
 
 
-toOpts : List ( A.Located Name.Name, List Src.Type ) -> Can.CtorOpts
+toOpts : List ( A.CRA_Located Name.CDN_Name, List Src.CASTS_Type ) -> Can.CASTC_CtorOpts
 toOpts ctors =
     case ctors of
         [ ( _, [ _ ] ) ] ->
-            Can.Unbox
+            Can.CASTC_Unbox
 
         _ ->
             if List.all (List.isEmpty << Tuple.second) ctors then
-                Can.Enum
+                Can.CASTC_Enum
 
             else
-                Can.Normal
+                Can.CASTC_Normal
 
 
-toCtor : IO.Canonical -> Name.Name -> Can.Union -> A.Located Can.Ctor -> CtorDups
-toCtor home typeName union (A.At region (Can.Ctor name index _ args)) =
+toCtor : IO.CEMN_Canonical -> Name.CDN_Name -> Can.CASTC_Union -> A.CRA_Located Can.CASTC_Ctor -> CtorDups
+toCtor home typeName union (A.CRA_At region (Can.CASTC_Ctor name index _ args)) =
     Dups.one name region <|
         Env.Specific home <|
             Env.Ctor home typeName union index args

@@ -12,7 +12,7 @@ module Compiler.Canonicalize.Environment.Dups exposing
     , unions
     )
 
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error exposing (Error)
@@ -26,11 +26,11 @@ import Utils.Main as Utils
 
 
 type alias Tracker value =
-    Dict String Name (OneOrMore (Info value))
+    Dict String CDN_Name (OneOrMore (Info value))
 
 
 type alias Info value =
-    { region : A.Region
+    { region : A.CRA_Region
     , value : value
     }
 
@@ -40,10 +40,10 @@ type alias Info value =
 
 
 type alias ToError =
-    Name -> A.Region -> A.Region -> Error
+    CDN_Name -> A.CRA_Region -> A.CRA_Region -> Error
 
 
-detect : ToError -> Tracker a -> R.RResult i w Error (Dict String Name a)
+detect : ToError -> Tracker a -> R.RResult i w Error (Dict String CDN_Name a)
 detect toError dict =
     Dict.foldl compare
         (\name values ->
@@ -57,7 +57,7 @@ detect toError dict =
         dict
 
 
-detectHelp : ToError -> Name -> OneOrMore (Info a) -> R.RResult i w Error a
+detectHelp : ToError -> CDN_Name -> OneOrMore (Info a) -> R.RResult i w Error a
 detectHelp toError name values =
     case values of
         OneOrMore.One { value } ->
@@ -75,23 +75,23 @@ detectHelp toError name values =
 -- CHECK FIELDS
 
 
-checkFields : List ( A.Located Name, a ) -> R.RResult i w Error (Dict String Name a)
+checkFields : List ( A.CRA_Located CDN_Name, a ) -> R.RResult i w Error (Dict String CDN_Name a)
 checkFields fields =
     detect Error.DuplicateField (List.foldr addField none fields)
 
 
-addField : ( A.Located Name, a ) -> Tracker a -> Tracker a
-addField ( A.At region name, value ) dups =
+addField : ( A.CRA_Located CDN_Name, a ) -> Tracker a -> Tracker a
+addField ( A.CRA_At region name, value ) dups =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one (Info region value)) dups
 
 
-checkFields_ : (A.Region -> a -> b) -> List ( A.Located Name, a ) -> R.RResult i w Error (Dict String Name b)
+checkFields_ : (A.CRA_Region -> a -> b) -> List ( A.CRA_Located CDN_Name, a ) -> R.RResult i w Error (Dict String CDN_Name b)
 checkFields_ toValue fields =
     detect Error.DuplicateField (List.foldr (addField_ toValue) none fields)
 
 
-addField_ : (A.Region -> a -> b) -> ( A.Located Name, a ) -> Tracker b -> Tracker b
-addField_ toValue ( A.At region name, value ) dups =
+addField_ : (A.CRA_Region -> a -> b) -> ( A.CRA_Located CDN_Name, a ) -> Tracker b -> Tracker b
+addField_ toValue ( A.CRA_At region name, value ) dups =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one (Info region (toValue region value))) dups
 
 
@@ -104,12 +104,12 @@ none =
     Dict.empty
 
 
-one : Name -> A.Region -> value -> Tracker value
+one : CDN_Name -> A.CRA_Region -> value -> Tracker value
 one name region value =
     Dict.singleton identity name (OneOrMore.one (Info region value))
 
 
-insert : Name -> A.Region -> a -> Tracker a -> Tracker a
+insert : CDN_Name -> A.CRA_Region -> a -> Tracker a -> Tracker a
 insert name region value dict =
     Utils.mapInsertWith identity (\new old -> OneOrMore.more old new) name (OneOrMore.one (Info region value)) dict
 

@@ -23,11 +23,11 @@ import Data.Set as EverySet exposing (EverySet)
 
 
 type alias Cycle =
-    EverySet String Name.Name
+    EverySet String Name.CDN_Name
 
 
 optimize : Cycle -> Can.Expr -> Names.Tracker Opt.Expr
-optimize cycle (A.At region expression) =
+optimize cycle (A.CRA_At region expression) =
     case expression of
         Can.VarLocal name ->
             Names.pure (Opt.VarLocal name)
@@ -172,7 +172,7 @@ optimize cycle (A.At region expression) =
 
         Can.Case expr branches ->
             let
-                optimizeBranch : Name.Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
+                optimizeBranch : Name.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
                 optimizeBranch root (Can.CaseBranch pattern branch) =
                     destructCase root pattern
                         |> Names.bind
@@ -207,7 +207,7 @@ optimize cycle (A.At region expression) =
         Can.Accessor field ->
             Names.registerField field (Opt.Accessor field)
 
-        Can.Access record (A.At _ field) ->
+        Can.Access record (A.CRA_At _ field) ->
             optimize cycle record
                 |> Names.bind
                     (\optRecord ->
@@ -256,7 +256,7 @@ optimize cycle (A.At region expression) =
                                 )
                     )
 
-        Can.Shader src (Shader.Types attributes uniforms _) ->
+        Can.Shader src (Shader.CASTUS_Types attributes uniforms _) ->
             Names.pure (Opt.Shader src (EverySet.fromList identity (Dict.keys compare attributes)) (EverySet.fromList identity (Dict.keys compare uniforms)))
 
 
@@ -276,14 +276,14 @@ optimizeUpdate cycle (Can.FieldUpdate _ expr) =
 optimizeDef : Cycle -> Can.Def -> Opt.Expr -> Names.Tracker Opt.Expr
 optimizeDef cycle def body =
     case def of
-        Can.Def (A.At _ name) args expr ->
+        Can.Def (A.CRA_At _ name) args expr ->
             optimizeDefHelp cycle name args expr body
 
-        Can.TypedDef (A.At _ name) _ typedArgs expr _ ->
+        Can.TypedDef (A.CRA_At _ name) _ typedArgs expr _ ->
             optimizeDefHelp cycle name (List.map Tuple.first typedArgs) expr body
 
 
-optimizeDefHelp : Cycle -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.Expr -> Names.Tracker Opt.Expr
+optimizeDefHelp : Cycle -> Name.CDN_Name -> List Can.Pattern -> Can.Expr -> Opt.Expr -> Names.Tracker Opt.Expr
 optimizeDefHelp cycle name args expr body =
     case args of
         [] ->
@@ -311,7 +311,7 @@ optimizeDefHelp cycle name args expr body =
 -- DESTRUCTURING
 
 
-destructArgs : List Can.Pattern -> Names.Tracker ( List Name.Name, List Opt.Destructor )
+destructArgs : List Can.Pattern -> Names.Tracker ( List Name.CDN_Name, List Opt.Destructor )
 destructArgs args =
     Names.traverse destruct args
         |> Names.fmap List.unzip
@@ -321,14 +321,14 @@ destructArgs args =
             )
 
 
-destructCase : Name.Name -> Can.Pattern -> Names.Tracker (List Opt.Destructor)
+destructCase : Name.CDN_Name -> Can.Pattern -> Names.Tracker (List Opt.Destructor)
 destructCase rootName pattern =
     destructHelp (Opt.Root rootName) pattern []
         |> Names.fmap List.reverse
 
 
-destruct : Can.Pattern -> Names.Tracker ( Name.Name, List Opt.Destructor )
-destruct ((A.At _ ptrn) as pattern) =
+destruct : Can.Pattern -> Names.Tracker ( Name.CDN_Name, List Opt.Destructor )
+destruct ((A.CRA_At _ ptrn) as pattern) =
     case ptrn of
         Can.PVar name ->
             Names.pure ( name, [] )
@@ -350,7 +350,7 @@ destruct ((A.At _ ptrn) as pattern) =
 
 
 destructHelp : Opt.Path -> Can.Pattern -> List Opt.Destructor -> Names.Tracker (List Opt.Destructor)
-destructHelp path (A.At region pattern) revDs =
+destructHelp path (A.CRA_At region pattern) revDs =
     case pattern of
         Can.PAnything ->
             Names.pure revDs
@@ -360,7 +360,7 @@ destructHelp path (A.At region pattern) revDs =
 
         Can.PRecord fields ->
             let
-                toDestruct : Name.Name -> Opt.Destructor
+                toDestruct : Name.CDN_Name -> Opt.Destructor
                 toDestruct name =
                     Opt.Destructor name (Opt.Field name path)
             in
@@ -401,7 +401,7 @@ destructHelp path (A.At region pattern) revDs =
             Names.pure revDs
 
         Can.PList (hd :: tl) ->
-            destructTwo path hd (A.At region (Can.PList tl)) revDs
+            destructTwo path hd (A.CRA_At region (Can.PList tl)) revDs
 
         Can.PCons hd tl ->
             destructTwo path hd tl revDs
@@ -422,17 +422,17 @@ destructHelp path (A.At region pattern) revDs =
             case args of
                 [ Can.PatternCtorArg _ _ arg ] ->
                     let
-                        (Can.Union _ _ _ opts) =
+                        (Can.CASTC_Union _ _ _ opts) =
                             union
                     in
                     case opts of
-                        Can.Normal ->
+                        Can.CASTC_Normal ->
                             destructHelp (Opt.Index Index.first path) arg revDs
 
-                        Can.Unbox ->
+                        Can.CASTC_Unbox ->
                             destructHelp (Opt.Unbox path) arg revDs
 
-                        Can.Enum ->
+                        Can.CASTC_Enum ->
                             destructHelp (Opt.Index Index.first path) arg revDs
 
                 _ ->
@@ -485,14 +485,14 @@ destructCtorArg path revDs (Can.PatternCtorArg index _ arg) =
 optimizePotentialTailCallDef : Cycle -> Can.Def -> Names.Tracker Opt.Def
 optimizePotentialTailCallDef cycle def =
     case def of
-        Can.Def (A.At _ name) args expr ->
+        Can.Def (A.CRA_At _ name) args expr ->
             optimizePotentialTailCall cycle name args expr
 
-        Can.TypedDef (A.At _ name) _ typedArgs expr _ ->
+        Can.TypedDef (A.CRA_At _ name) _ typedArgs expr _ ->
             optimizePotentialTailCall cycle name (List.map Tuple.first typedArgs) expr
 
 
-optimizePotentialTailCall : Cycle -> Name.Name -> List Can.Pattern -> Can.Expr -> Names.Tracker Opt.Def
+optimizePotentialTailCall : Cycle -> Name.CDN_Name -> List Can.Pattern -> Can.Expr -> Names.Tracker Opt.Def
 optimizePotentialTailCall cycle name args expr =
     destructArgs args
         |> Names.bind
@@ -502,8 +502,8 @@ optimizePotentialTailCall cycle name args expr =
             )
 
 
-optimizeTail : Cycle -> Name.Name -> List Name.Name -> Can.Expr -> Names.Tracker Opt.Expr
-optimizeTail cycle rootName argNames ((A.At _ expression) as locExpr) =
+optimizeTail : Cycle -> Name.CDN_Name -> List Name.CDN_Name -> Can.Expr -> Names.Tracker Opt.Expr
+optimizeTail cycle rootName argNames ((A.CRA_At _ expression) as locExpr) =
     case expression of
         Can.Call func args ->
             Names.traverse (optimize cycle) args
@@ -593,7 +593,7 @@ optimizeTail cycle rootName argNames ((A.At _ expression) as locExpr) =
 
         Can.Case expr branches ->
             let
-                optimizeBranch : Name.Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
+                optimizeBranch : Name.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
                 optimizeBranch root (Can.CaseBranch pattern branch) =
                     destructCase root pattern
                         |> Names.bind
@@ -633,7 +633,7 @@ optimizeTail cycle rootName argNames ((A.At _ expression) as locExpr) =
 -- DETECT TAIL CALLS
 
 
-toTailDef : Name.Name -> List Name.Name -> List Opt.Destructor -> Opt.Expr -> Opt.Def
+toTailDef : Name.CDN_Name -> List Name.CDN_Name -> List Opt.Destructor -> Opt.Expr -> Opt.Def
 toTailDef name argNames destructors body =
     if hasTailCall body then
         Opt.TailDef name argNames (List.foldr Opt.Destruct body destructors)

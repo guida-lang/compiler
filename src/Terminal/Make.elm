@@ -180,7 +180,7 @@ getMode debug optimize =
             Task.pure Prod
 
 
-getExposed : Details.Details -> Task (NE.Nonempty ModuleName.Raw)
+getExposed : Details.Details -> Task (NE.Nonempty ModuleName.CEMN_Raw)
 getExposed (Details.Details _ validOutline _ _ _ _) =
     case validOutline of
         Details.ValidApp _ ->
@@ -199,7 +199,7 @@ getExposed (Details.Details _ validOutline _ _ _ _) =
 -- BUILD PROJECTS
 
 
-buildExposed : Reporting.Style -> FilePath -> Details.Details -> Maybe FilePath -> NE.Nonempty ModuleName.Raw -> Task ()
+buildExposed : Reporting.Style -> FilePath -> Details.Details -> Maybe FilePath -> NE.Nonempty ModuleName.CEMN_Raw -> Task ()
 buildExposed style root details maybeDocs exposed =
     let
         docsGoal : Build.DocsGoal ()
@@ -220,12 +220,12 @@ buildPaths style root details paths =
 -- GET MAINS
 
 
-getMains : Build.Artifacts -> List ModuleName.Raw
+getMains : Build.Artifacts -> List ModuleName.CEMN_Raw
 getMains (Build.Artifacts _ _ roots modules) =
     List.filterMap (getMain modules) (NE.toList roots)
 
 
-getMain : List Build.Module -> Build.Root -> Maybe ModuleName.Raw
+getMain : List Build.Module -> Build.Root -> Maybe ModuleName.CEMN_Raw
 getMain modules root =
     case root of
         Build.Inside name ->
@@ -240,7 +240,7 @@ getMain modules root =
                 |> Maybe.map (\_ -> name)
 
 
-isMain : ModuleName.Raw -> Build.Module -> Bool
+isMain : ModuleName.CEMN_Raw -> Build.Module -> Bool
 isMain targetName modul =
     case modul of
         Build.Fresh name _ (Opt.LocalGraph maybeMain _ _) ->
@@ -254,7 +254,7 @@ isMain targetName modul =
 -- HAS ONE MAIN
 
 
-hasOneMain : Build.Artifacts -> Task ModuleName.Raw
+hasOneMain : Build.Artifacts -> Task ModuleName.CEMN_Raw
 hasOneMain (Build.Artifacts _ _ roots modules) =
     case roots of
         NE.Nonempty root [] ->
@@ -268,12 +268,12 @@ hasOneMain (Build.Artifacts _ _ roots modules) =
 -- GET MAINLESS
 
 
-getNoMains : Build.Artifacts -> List ModuleName.Raw
+getNoMains : Build.Artifacts -> List ModuleName.CEMN_Raw
 getNoMains (Build.Artifacts _ _ roots modules) =
     List.filterMap (getNoMain modules) (NE.toList roots)
 
 
-getNoMain : List Build.Module -> Build.Root -> Maybe ModuleName.Raw
+getNoMain : List Build.Module -> Build.Root -> Maybe ModuleName.CEMN_Raw
 getNoMain modules root =
     case root of
         Build.Inside name ->
@@ -296,7 +296,7 @@ getNoMain modules root =
 -- GENERATE
 
 
-generate : Reporting.Style -> FilePath -> String -> NE.Nonempty ModuleName.Raw -> Task ()
+generate : Reporting.Style -> FilePath -> String -> NE.Nonempty ModuleName.CEMN_Raw -> Task ()
 generate style target builder names =
     Task.io
         (Utils.dirCreateDirectoryIfMissing True (Utils.fpTakeDirectory target)

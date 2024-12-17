@@ -17,7 +17,7 @@ module Compiler.Reporting.Error.Type exposing
 
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
@@ -38,9 +38,9 @@ import Json.Encode as Encode
 
 
 type Error
-    = BadExpr A.Region Category T.Type (Expected T.Type)
-    | BadPattern A.Region PCategory T.Type (PExpected T.Type)
-    | InfiniteType A.Region Name T.Type
+    = BadExpr A.CRA_Region Category T.Type (Expected T.Type)
+    | BadPattern A.CRA_Region PCategory T.Type (PExpected T.Type)
+    | InfiniteType A.CRA_Region CDN_Name T.Type
 
 
 
@@ -49,36 +49,36 @@ type Error
 
 type Expected tipe
     = NoExpectation tipe
-    | FromContext A.Region Context tipe
-    | FromAnnotation Name Int SubContext tipe
+    | FromContext A.CRA_Region Context tipe
+    | FromAnnotation CDN_Name Int SubContext tipe
 
 
 type Context
-    = ListEntry Index.ZeroBased
+    = ListEntry Index.CDI_ZeroBased
     | Negate
-    | OpLeft Name
-    | OpRight Name
+    | OpLeft CDN_Name
+    | OpRight CDN_Name
     | IfCondition
-    | IfBranch Index.ZeroBased
-    | CaseBranch Index.ZeroBased
+    | IfBranch Index.CDI_ZeroBased
+    | CaseBranch Index.CDI_ZeroBased
     | CallArity MaybeName Int
-    | CallArg MaybeName Index.ZeroBased
-    | RecordAccess A.Region (Maybe Name) A.Region Name
-    | RecordUpdateKeys Name (Dict String Name Can.FieldUpdate)
-    | RecordUpdateValue Name
+    | CallArg MaybeName Index.CDI_ZeroBased
+    | RecordAccess A.CRA_Region (Maybe CDN_Name) A.CRA_Region CDN_Name
+    | RecordUpdateKeys CDN_Name (Dict String CDN_Name Can.FieldUpdate)
+    | RecordUpdateValue CDN_Name
     | Destructure
 
 
 type SubContext
-    = TypedIfBranch Index.ZeroBased
-    | TypedCaseBranch Index.ZeroBased
+    = TypedIfBranch Index.CDI_ZeroBased
+    | TypedCaseBranch Index.CDI_ZeroBased
     | TypedBody
 
 
 type MaybeName
-    = FuncName Name
-    | CtorName Name
-    | OpName Name
+    = FuncName CDN_Name
+    | CtorName CDN_Name
+    | OpName CDN_Name
     | NoName
 
 
@@ -92,15 +92,15 @@ type Category
     | Case
     | CallResult MaybeName
     | Lambda
-    | Accessor Name
-    | Access Name
+    | Accessor CDN_Name
+    | Access CDN_Name
     | Record
     | Tuple
     | Unit
     | Shader
     | Effects
-    | Local Name
-    | Foreign Name
+    | Local CDN_Name
+    | Foreign CDN_Name
 
 
 
@@ -109,14 +109,14 @@ type Category
 
 type PExpected tipe
     = PNoExpectation tipe
-    | PFromContext A.Region PContext tipe
+    | PFromContext A.CRA_Region PContext tipe
 
 
 type PContext
-    = PTypedArg Name Index.ZeroBased
-    | PCaseMatch Index.ZeroBased
-    | PCtorArg Name Index.ZeroBased
-    | PListEntry Index.ZeroBased
+    = PTypedArg CDN_Name Index.CDI_ZeroBased
+    | PCaseMatch Index.CDI_ZeroBased
+    | PCtorArg CDN_Name Index.CDI_ZeroBased
+    | PListEntry Index.CDI_ZeroBased
     | PTail
 
 
@@ -125,7 +125,7 @@ type PCategory
     | PUnit
     | PTuple
     | PList
-    | PCtor Name
+    | PCtor CDN_Name
     | PInt
     | PStr
     | PChr
@@ -180,7 +180,7 @@ toReport source localizer err =
 -- TO PATTERN REPORT
 
 
-toPatternReport : Code.Source -> L.Localizer -> A.Region -> PCategory -> T.Type -> PExpected T.Type -> Report.Report
+toPatternReport : Code.Source -> L.Localizer -> A.CRA_Region -> PCategory -> T.Type -> PExpected T.Type -> Report.Report
 toPatternReport source localizer patternRegion category tipe expected =
     Report.Report "TYPE MISMATCH" patternRegion [] <|
         case expected of
@@ -768,7 +768,7 @@ problemToHint problem =
 -- BAD RIGID HINTS
 
 
-badRigidVar : Name -> String -> List D.Doc
+badRigidVar : CDN_Name -> String -> List D.Doc
 badRigidVar name aThing =
     [ D.toSimpleHint <|
         "Your type annotation uses type variable `"
@@ -780,7 +780,7 @@ badRigidVar name aThing =
     ]
 
 
-badDoubleRigid : Name -> Name -> List D.Doc
+badDoubleRigid : CDN_Name -> CDN_Name -> List D.Doc
 badDoubleRigid x y =
     [ D.toSimpleHint <|
         "Your type annotation uses `"
@@ -963,7 +963,7 @@ badFlexFlexSuper s1 s2 =
 -- TO EXPR REPORT
 
 
-toExprReport : Code.Source -> L.Localizer -> A.Region -> Category -> T.Type -> Expected T.Type -> Report.Report
+toExprReport : Code.Source -> L.Localizer -> A.CRA_Region -> Category -> T.Type -> Expected T.Type -> Report.Report
 toExprReport source localizer exprRegion category tipe expected =
     case expected of
         NoExpectation expectedType ->
@@ -1019,7 +1019,7 @@ toExprReport source localizer exprRegion category tipe expected =
 
         FromContext region context expectedType ->
             let
-                mismatch : ( ( Maybe A.Region, String ), ( String, String, List D.Doc ) ) -> Report.Report
+                mismatch : ( ( Maybe A.CRA_Region, String ), ( String, String, List D.Doc ) ) -> Report.Report
                 mismatch ( ( maybeHighlight, problem ), ( thisIs, insteadOf, furtherDetails ) ) =
                     Report.Report "TYPE MISMATCH" exprRegion [] <|
                         Code.toSnippet source
@@ -1029,7 +1029,7 @@ toExprReport source localizer exprRegion category tipe expected =
                             , typeComparison localizer tipe expectedType (addCategory thisIs category) insteadOf furtherDetails
                             )
 
-                badType : ( ( Maybe A.Region, String ), ( String, List D.Doc ) ) -> Report.Report
+                badType : ( ( Maybe A.CRA_Region, String ), ( String, List D.Doc ) ) -> Report.Report
                 badType ( ( maybeHighlight, problem ), ( thisIs, furtherDetails ) ) =
                     Report.Report "TYPE MISMATCH" exprRegion [] <|
                         Code.toSnippet source
@@ -1039,7 +1039,7 @@ toExprReport source localizer exprRegion category tipe expected =
                             , loneType localizer tipe expectedType (D.reflow (addCategory thisIs category)) furtherDetails
                             )
 
-                custom : Maybe A.Region -> ( D.Doc, D.Doc ) -> Report.Report
+                custom : Maybe A.CRA_Region -> ( D.Doc, D.Doc ) -> Report.Report
                 custom maybeHighlight docPair =
                     Report.Report "TYPE MISMATCH" exprRegion [] <|
                         Code.toSnippet source region maybeHighlight docPair
@@ -1411,7 +1411,7 @@ countArgs tipe =
 -- FIELD NAME HELPERS
 
 
-toNearbyRecord : L.Localizer -> ( Name, T.Type ) -> List ( Name, T.Type ) -> T.Extension -> D.Doc
+toNearbyRecord : L.Localizer -> ( CDN_Name, T.Type ) -> List ( CDN_Name, T.Type ) -> T.Extension -> D.Doc
 toNearbyRecord localizer f fs ext =
     D.indent 4 <|
         if List.length fs <= 3 then
@@ -1421,7 +1421,7 @@ toNearbyRecord localizer f fs ext =
             RT.vrecordSnippet (fieldToDocs localizer f) (List.map (fieldToDocs localizer) (List.take 3 fs))
 
 
-fieldToDocs : L.Localizer -> ( Name, T.Type ) -> ( D.Doc, D.Doc )
+fieldToDocs : L.Localizer -> ( CDN_Name, T.Type ) -> ( D.Doc, D.Doc )
 fieldToDocs localizer ( name, tipe ) =
     ( D.fromName name
     , T.toDoc localizer RT.None tipe
@@ -1445,7 +1445,7 @@ extToDoc ext =
 -- OP LEFT
 
 
-opLeftToDocs : L.Localizer -> Category -> Name -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+opLeftToDocs : L.Localizer -> Category -> CDN_Name -> T.Type -> T.Type -> ( D.Doc, D.Doc )
 opLeftToDocs localizer category op tipe expected =
     case op of
         "+" ->
@@ -1527,7 +1527,7 @@ type RightDocs
     | EmphRight ( D.Doc, D.Doc )
 
 
-opRightToDocs : L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
+opRightToDocs : L.Localizer -> Category -> CDN_Name -> T.Type -> T.Type -> RightDocs
 opRightToDocs localizer category op tipe expected =
     case op of
         "+" ->
@@ -1653,7 +1653,7 @@ opRightToDocs localizer category op tipe expected =
             badOpRightFallback localizer category op tipe expected
 
 
-badOpRightFallback : L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
+badOpRightFallback : L.Localizer -> Category -> CDN_Name -> T.Type -> T.Type -> RightDocs
 badOpRightFallback localizer category op tipe expected =
     EmphRight
         ( D.reflow ("The right argument of (" ++ op ++ ") is causing problems.")
@@ -2061,7 +2061,7 @@ type ThisThenThat
     | IntFloat
 
 
-badCast : Name -> ThisThenThat -> RightDocs
+badCast : CDN_Name -> ThisThenThat -> RightDocs
 badCast op thisThenThat =
     EmphBoth
         ( D.reflow <|
@@ -2502,7 +2502,7 @@ badEquality localizer op tipe expected =
 -- INFINITE TYPES
 
 
-toInfiniteReport : Code.Source -> L.Localizer -> A.Region -> Name -> T.Type -> Report.Report
+toInfiniteReport : Code.Source -> L.Localizer -> A.CRA_Region -> CDN_Name -> T.Type -> Report.Report
 toInfiniteReport source localizer region name overallType =
     Report.Report "INFINITE TYPE" region [] <|
         Code.toSnippet source region Nothing <|
@@ -3107,7 +3107,7 @@ pExpectedDecoder decoder =
                     "PNoExpectation" ->
                         Decode.map PNoExpectation (Decode.field "expectedType" decoder)
 
-                    --     | PFromContext A.Region PContext tipe
+                    --     | PFromContext A.CRA_Region PContext tipe
                     "PFromContext" ->
                         Decode.map3 PFromContext
                             (Decode.field "region" A.regionDecoder)

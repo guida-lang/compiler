@@ -344,7 +344,7 @@ stepHex src pos end word acc =
 -- PRECEDENCE
 
 
-precedence : (Row -> Col -> x) -> P.Parser x Binop.Precedence
+precedence : (Row -> Col -> x) -> P.Parser x Binop.CASTU_Precedence
 precedence toExpectation =
     P.Parser <|
         \(P.State src pos end indent row col) ->

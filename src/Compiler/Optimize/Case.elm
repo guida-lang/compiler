@@ -14,7 +14,7 @@ import Utils.Main as Utils
 -- OPTIMIZE A CASE EXPRESSION
 
 
-optimize : Name.Name -> Name.Name -> List ( Can.Pattern, Opt.Expr ) -> Opt.Expr
+optimize : Name.CDN_Name -> Name.CDN_Name -> List ( Can.Pattern, Opt.Expr ) -> Opt.Expr
 optimize temp root optBranches =
     let
         ( patterns, indexedBranches ) =

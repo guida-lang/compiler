@@ -27,7 +27,7 @@ fromSnippet (P.Snippet { fptr, offset, length }) =
     String.slice offset (offset + length) fptr
 
 
-fromName : Name.Name -> String
+fromName : Name.CDN_Name -> String
 fromName =
     identity
 

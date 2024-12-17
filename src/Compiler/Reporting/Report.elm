@@ -9,4 +9,4 @@ import Compiler.Reporting.Doc as D
 
 
 type Report
-    = Report String A.Region (List String) D.Doc
+    = Report String A.CRA_Region (List String) D.Doc

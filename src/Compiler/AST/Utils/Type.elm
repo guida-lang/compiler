@@ -5,8 +5,8 @@ module Compiler.AST.Utils.Type exposing
     , iteratedDealias
     )
 
-import Compiler.AST.Canonical exposing (AliasType(..), FieldType(..), Type(..))
-import Compiler.Data.Name exposing (Name)
+import Compiler.AST.Canonical exposing (CASTC_AliasType(..), CASTC_FieldType(..), CASTC_Type(..))
+import Compiler.Data.Name exposing (CDN_Name)
 import Data.Map as Dict exposing (Dict)
 
 
@@ -14,10 +14,10 @@ import Data.Map as Dict exposing (Dict)
 -- DELAMBDA
 
 
-delambda : Type -> List Type
+delambda : CASTC_Type -> List CASTC_Type
 delambda tipe =
     case tipe of
-        TLambda arg result ->
+        CASTC_TLambda arg result ->
             arg :: delambda result
 
         _ ->
@@ -28,94 +28,94 @@ delambda tipe =
 -- DEALIAS
 
 
-dealias : List ( Name, Type ) -> AliasType -> Type
+dealias : List ( CDN_Name, CASTC_Type ) -> CASTC_AliasType -> CASTC_Type
 dealias args aliasType =
     case aliasType of
-        Holey tipe ->
+        CASTC_Holey tipe ->
             dealiasHelp (Dict.fromList identity args) tipe
 
-        Filled tipe ->
+        CASTC_Filled tipe ->
             tipe
 
 
-dealiasHelp : Dict String Name Type -> Type -> Type
+dealiasHelp : Dict String CDN_Name CASTC_Type -> CASTC_Type -> CASTC_Type
 dealiasHelp typeTable tipe =
     case tipe of
-        TLambda a b ->
-            TLambda
+        CASTC_TLambda a b ->
+            CASTC_TLambda
                 (dealiasHelp typeTable a)
                 (dealiasHelp typeTable b)
 
-        TVar x ->
+        CASTC_TVar x ->
             Dict.get identity x typeTable
                 |> Maybe.withDefault tipe
 
-        TRecord fields ext ->
-            TRecord (Dict.map (\_ -> dealiasField typeTable) fields) ext
+        CASTC_TRecord fields ext ->
+            CASTC_TRecord (Dict.map (\_ -> dealiasField typeTable) fields) ext
 
-        TAlias home name args t_ ->
-            TAlias home name (List.map (Tuple.mapSecond (dealiasHelp typeTable)) args) t_
+        CASTC_TAlias home name args t_ ->
+            CASTC_TAlias home name (List.map (Tuple.mapSecond (dealiasHelp typeTable)) args) t_
 
-        TType home name args ->
-            TType home name (List.map (dealiasHelp typeTable) args)
+        CASTC_TType home name args ->
+            CASTC_TType home name (List.map (dealiasHelp typeTable) args)
 
-        TUnit ->
-            TUnit
+        CASTC_TUnit ->
+            CASTC_TUnit
 
-        TTuple a b maybeC ->
-            TTuple
+        CASTC_TTuple a b maybeC ->
+            CASTC_TTuple
                 (dealiasHelp typeTable a)
                 (dealiasHelp typeTable b)
                 (Maybe.map (dealiasHelp typeTable) maybeC)
 
 
-dealiasField : Dict String Name Type -> FieldType -> FieldType
-dealiasField typeTable (FieldType index tipe) =
-    FieldType index (dealiasHelp typeTable tipe)
+dealiasField : Dict String CDN_Name CASTC_Type -> CASTC_FieldType -> CASTC_FieldType
+dealiasField typeTable (CASTC_FieldType index tipe) =
+    CASTC_FieldType index (dealiasHelp typeTable tipe)
 
 
 
 -- DEEP DEALIAS
 
 
-deepDealias : Type -> Type
+deepDealias : CASTC_Type -> CASTC_Type
 deepDealias tipe =
     case tipe of
-        TLambda a b ->
-            TLambda (deepDealias a) (deepDealias b)
+        CASTC_TLambda a b ->
+            CASTC_TLambda (deepDealias a) (deepDealias b)
 
-        TVar _ ->
+        CASTC_TVar _ ->
             tipe
 
-        TRecord fields ext ->
-            TRecord (Dict.map (\_ -> deepDealiasField) fields) ext
+        CASTC_TRecord fields ext ->
+            CASTC_TRecord (Dict.map (\_ -> deepDealiasField) fields) ext
 
-        TAlias _ _ args tipe_ ->
+        CASTC_TAlias _ _ args tipe_ ->
             deepDealias (dealias args tipe_)
 
-        TType home name args ->
-            TType home name (List.map deepDealias args)
+        CASTC_TType home name args ->
+            CASTC_TType home name (List.map deepDealias args)
 
-        TUnit ->
-            TUnit
+        CASTC_TUnit ->
+            CASTC_TUnit
 
-        TTuple a b c ->
-            TTuple (deepDealias a) (deepDealias b) (Maybe.map deepDealias c)
+        CASTC_TTuple a b c ->
+            CASTC_TTuple (deepDealias a) (deepDealias b) (Maybe.map deepDealias c)
 
 
-deepDealiasField : FieldType -> FieldType
-deepDealiasField (FieldType index tipe) =
-    FieldType index (deepDealias tipe)
+deepDealiasField : CASTC_FieldType -> CASTC_FieldType
+deepDealiasField (CASTC_FieldType index tipe) =
+    CASTC_FieldType index (deepDealias tipe)
 
 
 
 -- ITERATED DEALIAS
 
 
-iteratedDealias : Type -> Type
+iteratedDealias : CASTC_Type -> CASTC_Type
 iteratedDealias tipe =
     case tipe of
-        TAlias _ _ args realType ->
+        CASTC_TAlias _ _ args realType ->
             iteratedDealias (dealias args realType)
 
         _ ->

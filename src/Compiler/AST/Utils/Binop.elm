@@ -1,6 +1,6 @@
 module Compiler.AST.Utils.Binop exposing
-    ( Associativity(..)
-    , Precedence
+    ( CASTU_Associativity(..)
+    , CASTU_Precedence
     , associativityDecoder
     , associativityEncoder
     , precedenceDecoder
@@ -15,53 +15,53 @@ import Json.Encode as Encode
 -- BINOP STUFF
 
 
-type alias Precedence =
+type alias CASTU_Precedence =
     Int
 
 
-type Associativity
-    = Left
-    | Non
-    | Right
+type CASTU_Associativity
+    = CASTU_Left
+    | CASTU_Non
+    | CASTU_Right
 
 
-precedenceEncoder : Precedence -> Encode.Value
+precedenceEncoder : CASTU_Precedence -> Encode.Value
 precedenceEncoder =
     Encode.int
 
 
-precedenceDecoder : Decode.Decoder Precedence
+precedenceDecoder : Decode.Decoder CASTU_Precedence
 precedenceDecoder =
     Decode.int
 
 
-associativityEncoder : Associativity -> Encode.Value
+associativityEncoder : CASTU_Associativity -> Encode.Value
 associativityEncoder associativity =
     case associativity of
-        Left ->
+        CASTU_Left ->
             Encode.string "Left"
 
-        Non ->
+        CASTU_Non ->
             Encode.string "Non"
 
-        Right ->
+        CASTU_Right ->
             Encode.string "Right"
 
 
-associativityDecoder : Decode.Decoder Associativity
+associativityDecoder : Decode.Decoder CASTU_Associativity
 associativityDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "Left" ->
-                        Decode.succeed Left
+                        Decode.succeed CASTU_Left
 
                     "Non" ->
-                        Decode.succeed Non
+                        Decode.succeed CASTU_Non
 
                     "Right" ->
-                        Decode.succeed Right
+                        Decode.succeed CASTU_Right
 
                     _ ->
                         Decode.fail ("Unknown Associativity: " ++ str)

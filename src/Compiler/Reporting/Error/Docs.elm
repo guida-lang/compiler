@@ -24,8 +24,8 @@ import Json.Encode as Encode
 
 
 type Error
-    = NoDocs A.Region
-    | ImplicitExposing A.Region
+    = NoDocs A.CRA_Region
+    | ImplicitExposing A.CRA_Region
     | SyntaxProblem SyntaxProblem
     | NameProblems (NE.Nonempty NameProblem)
     | DefProblems (NE.Nonempty DefProblem)
@@ -41,14 +41,14 @@ type SyntaxProblem
 
 
 type NameProblem
-    = NameDuplicate Name.Name A.Region A.Region
-    | NameOnlyInDocs Name.Name A.Region
-    | NameOnlyInExports Name.Name A.Region
+    = NameDuplicate Name.CDN_Name A.CRA_Region A.CRA_Region
+    | NameOnlyInDocs Name.CDN_Name A.CRA_Region
+    | NameOnlyInExports Name.CDN_Name A.CRA_Region
 
 
 type DefProblem
-    = NoComment Name.Name A.Region
-    | NoAnnotation Name.Name A.Region
+    = NoComment Name.CDN_Name A.CRA_Region
+    | NoAnnotation Name.CDN_Name A.CRA_Region
 
 
 toReports : Code.Source -> Error -> NE.Nonempty Report.Report
@@ -91,7 +91,7 @@ toSyntaxProblemReport source problem =
         toSyntaxReport : Row -> Col -> String -> Report.Report
         toSyntaxReport row col details =
             let
-                region : A.Region
+                region : A.CRA_Region
                 region =
                     toRegion row col
             in
@@ -126,14 +126,14 @@ toSyntaxProblemReport source problem =
             toSyntaxReport row col "I am not really sure what I am getting stuck on though."
 
 
-toRegion : Row -> Col -> A.Region
+toRegion : Row -> Col -> A.CRA_Region
 toRegion row col =
     let
-        pos : A.Position
+        pos : A.CRA_Position
         pos =
-            A.Position row col
+            A.CRA_Position row col
     in
-    A.Region pos pos
+    A.CRA_Region pos pos
 
 
 toNameProblemReport : Code.Source -> NameProblem -> Report.Report

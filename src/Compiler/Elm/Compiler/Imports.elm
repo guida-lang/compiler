@@ -1,7 +1,7 @@
 module Compiler.Elm.Compiler.Imports exposing (defaults)
 
 import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import System.TypeCheck.IO as IO
@@ -11,9 +11,9 @@ import System.TypeCheck.IO as IO
 -- DEFAULTS
 
 
-defaults : List Src.Import
+defaults : List Src.CASTS_Import
 defaults =
-    [ import_ ModuleName.basics Nothing Src.Open
+    [ import_ ModuleName.basics Nothing Src.CASTS_Open
     , import_ ModuleName.debug Nothing closed
     , import_ ModuleName.list Nothing (operator "::")
     , import_ ModuleName.maybe Nothing (typeOpen Name.maybe)
@@ -27,30 +27,30 @@ defaults =
     ]
 
 
-import_ : IO.Canonical -> Maybe Name -> Src.Exposing -> Src.Import
-import_ (IO.Canonical _ name) maybeAlias exposing_ =
-    Src.Import (A.At A.zero name) maybeAlias exposing_
+import_ : IO.CEMN_Canonical -> Maybe CDN_Name -> Src.CASTS_Exposing -> Src.CASTS_Import
+import_ (IO.CEMN_Canonical _ name) maybeAlias exposing_ =
+    Src.CASTS_Import (A.CRA_At A.zero name) maybeAlias exposing_
 
 
 
 -- EXPOSING
 
 
-closed : Src.Exposing
+closed : Src.CASTS_Exposing
 closed =
-    Src.Explicit []
+    Src.CASTS_Explicit []
 
 
-typeOpen : Name -> Src.Exposing
+typeOpen : CDN_Name -> Src.CASTS_Exposing
 typeOpen name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) (Src.Public A.zero) ]
+    Src.CASTS_Explicit [ Src.CASTS_Upper (A.CRA_At A.zero name) (Src.CASTS_Public A.zero) ]
 
 
-typeClosed : Name -> Src.Exposing
+typeClosed : CDN_Name -> Src.CASTS_Exposing
 typeClosed name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) Src.Private ]
+    Src.CASTS_Explicit [ Src.CASTS_Upper (A.CRA_At A.zero name) Src.CASTS_Private ]
 
 
-operator : Name -> Src.Exposing
+operator : CDN_Name -> Src.CASTS_Exposing
 operator op =
-    Src.Explicit [ Src.Operator A.zero op ]
+    Src.CASTS_Explicit [ Src.CASTS_Operator A.zero op ]

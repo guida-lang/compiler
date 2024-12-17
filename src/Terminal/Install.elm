@@ -27,7 +27,7 @@ import Utils.Main as Utils exposing (FilePath)
 
 type Args
     = NoArgs
-    | Install Pkg.Name
+    | Install Pkg.CEP_Name
 
 
 run : Args -> () -> IO ()
@@ -77,7 +77,7 @@ type Changes vsn
     = AlreadyInstalled
     | PromoteTest Outline.Outline
     | PromoteIndirect Outline.Outline
-    | Changes (Dict ( String, String ) Pkg.Name (Change vsn)) Outline.Outline
+    | Changes (Dict ( String, String ) Pkg.CEP_Name (Change vsn)) Outline.Outline
 
 
 type alias Task a =
@@ -208,7 +208,7 @@ attemptChangesHelp root env oldOutline newOutline question =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task (Changes V.Version)
+makeAppPlan : Solver.Env -> Pkg.CEP_Name -> Outline.AppOutline -> Task (Changes V.Version)
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
         Task.pure AlreadyInstalled
@@ -289,7 +289,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
+makePkgPlan : Solver.Env -> Pkg.CEP_Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
 makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
     if Dict.member identity pkg deps then
         Task.pure AlreadyInstalled
@@ -323,11 +323,11 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
 
                     Ok (Registry.KnownVersions _ _) ->
                         let
-                            old : Dict ( String, String ) Pkg.Name C.Constraint
+                            old : Dict ( String, String ) Pkg.CEP_Name C.Constraint
                             old =
                                 Dict.union deps test
 
-                            cons : Dict ( String, String ) Pkg.Name C.Constraint
+                            cons : Dict ( String, String ) Pkg.CEP_Name C.Constraint
                             cons =
                                 Dict.insert identity pkg C.anything old
                         in
@@ -344,15 +344,15 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                                 con =
                                                     C.untilNextMajor vsn
 
-                                                new : Dict ( String, String ) Pkg.Name C.Constraint
+                                                new : Dict ( String, String ) Pkg.CEP_Name C.Constraint
                                                 new =
                                                     Dict.insert identity pkg con old
 
-                                                changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
+                                                changes : Dict ( String, String ) Pkg.CEP_Name (Change C.Constraint)
                                                 changes =
                                                     detectChanges old new
 
-                                                news : Dict ( String, String ) Pkg.Name C.Constraint
+                                                news : Dict ( String, String ) Pkg.CEP_Name C.Constraint
                                                 news =
                                                     Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                             in
@@ -379,7 +379,7 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                 )
 
 
-addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
+addNews : Maybe Pkg.CEP_Name -> Dict ( String, String ) Pkg.CEP_Name C.Constraint -> Dict ( String, String ) Pkg.CEP_Name C.Constraint -> Dict ( String, String ) Pkg.CEP_Name C.Constraint
 addNews pkg new old =
     Dict.merge compare
         (Dict.insert identity)
@@ -406,7 +406,7 @@ type Change a
     | Remove a
 
 
-detectChanges : Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name (Change a)
+detectChanges : Dict ( String, String ) Pkg.CEP_Name a -> Dict ( String, String ) Pkg.CEP_Name a -> Dict ( String, String ) Pkg.CEP_Name (Change a)
 detectChanges old new =
     Dict.merge compare
         (\k v -> Dict.insert identity k (Remove v))
@@ -481,7 +481,7 @@ viewNonZero title entries =
 -- VIEW CHANGE
 
 
-addChange : (a -> String) -> Widths -> Pkg.Name -> Change a -> ChangeDocs -> ChangeDocs
+addChange : (a -> String) -> Widths -> Pkg.CEP_Name -> Change a -> ChangeDocs -> ChangeDocs
 addChange toChars widths name change (Docs inserts changes removes) =
     case change of
         Insert new ->
@@ -494,13 +494,13 @@ addChange toChars widths name change (Docs inserts changes removes) =
             Docs inserts changes (viewRemove toChars widths name old :: removes)
 
 
-viewInsert : (a -> String) -> Widths -> Pkg.Name -> a -> D.Doc
+viewInsert : (a -> String) -> Widths -> Pkg.CEP_Name -> a -> D.Doc
 viewInsert toChars (Widths nameWidth leftWidth _) name new =
     viewName nameWidth name
         |> D.plus (pad leftWidth (toChars new))
 
 
-viewChange : (a -> String) -> Widths -> Pkg.Name -> a -> a -> D.Doc
+viewChange : (a -> String) -> Widths -> Pkg.CEP_Name -> a -> a -> D.Doc
 viewChange toChars (Widths nameWidth leftWidth rightWidth) name old new =
     D.hsep
         [ viewName nameWidth name
@@ -510,13 +510,13 @@ viewChange toChars (Widths nameWidth leftWidth rightWidth) name old new =
         ]
 
 
-viewRemove : (a -> String) -> Widths -> Pkg.Name -> a -> D.Doc
+viewRemove : (a -> String) -> Widths -> Pkg.CEP_Name -> a -> D.Doc
 viewRemove toChars (Widths nameWidth leftWidth _) name old =
     viewName nameWidth name
         |> D.plus (pad leftWidth (toChars old))
 
 
-viewName : Int -> Pkg.Name -> D.Doc
+viewName : Int -> Pkg.CEP_Name -> D.Doc
 viewName width name =
     D.fill (width + 3) (D.fromPackage name)
 
@@ -535,7 +535,7 @@ type Widths
     = Widths Int Int Int
 
 
-widen : (a -> String) -> Pkg.Name -> Change a -> Widths -> Widths
+widen : (a -> String) -> Pkg.CEP_Name -> Change a -> Widths -> Widths
 widen toChars pkg change (Widths name left right) =
     let
         toLength : a -> Int

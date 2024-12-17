@@ -38,7 +38,7 @@ import Utils.Main as Utils
 
 
 type alias Module =
-    { name : ModuleName.Raw
+    { name : ModuleName.CEMN_Raw
     , absolutePath : String
     , modificationTime : File.Time
     , source : String
@@ -127,7 +127,7 @@ toDocHelp root module1 modules =
 toSeparator : Module -> Module -> D.Doc
 toSeparator beforeModule afterModule =
     let
-        before : ModuleName.Raw
+        before : ModuleName.CEMN_Raw
         before =
             beforeModule.name ++ "  ↑    "
 
@@ -217,8 +217,8 @@ reportToJson (Report.Report title region _ message) =
         ]
 
 
-encodeRegion : A.Region -> E.Value
-encodeRegion (A.Region (A.Position sr sc) (A.Position er ec)) =
+encodeRegion : A.CRA_Region -> E.Value
+encodeRegion (A.CRA_Region (A.CRA_Position sr sc) (A.CRA_Position er ec)) =
     E.object
         [ ( "start"
           , E.object

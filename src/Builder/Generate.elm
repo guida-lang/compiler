@@ -60,7 +60,7 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                                             graph =
                                                 objectsToGlobalGraph objects
 
-                                            mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                            mains : Dict (List String) TypeCheck.CEMN_Canonical Opt.Main
                                             mains =
                                                 gatherMains pkg objects roots
                                         in
@@ -84,7 +84,7 @@ dev root details (Build.Artifacts pkg _ roots modules) =
                     graph =
                         objectsToGlobalGraph objects
 
-                    mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                    mains : Dict (List String) TypeCheck.CEMN_Canonical Opt.Main
                     mains =
                         gatherMains pkg objects roots
                 in
@@ -109,7 +109,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                                 mode =
                                     Mode.Prod (Mode.shortenFieldNames graph)
 
-                                mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                mains : Dict (List String) TypeCheck.CEMN_Canonical Opt.Main
                                 mains =
                                     gatherMains pkg objects roots
                             in
@@ -118,7 +118,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
             )
 
 
-repl : FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task String
+repl : FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.CDN_Name -> Task String
 repl root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.fmap
@@ -150,17 +150,17 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
-gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) TypeCheck.Canonical Opt.Main
+gatherMains : Pkg.CEP_Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) TypeCheck.CEMN_Canonical Opt.Main
 gatherMains pkg (Objects _ locals) roots =
     Dict.fromList ModuleName.toComparableCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
-lookupMain : Pkg.Name -> Dict String ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( TypeCheck.Canonical, Opt.Main )
+lookupMain : Pkg.CEP_Name -> Dict String ModuleName.CEMN_Raw Opt.LocalGraph -> Build.Root -> Maybe ( TypeCheck.CEMN_Canonical, Opt.Main )
 lookupMain pkg locals root =
     let
-        toPair : N.Name -> Opt.LocalGraph -> Maybe ( TypeCheck.Canonical, Opt.Main )
+        toPair : N.CDN_Name -> Opt.LocalGraph -> Maybe ( TypeCheck.CEMN_Canonical, Opt.Main )
         toPair name (Opt.LocalGraph maybeMain _ _) =
-            Maybe.map (Tuple.pair (TypeCheck.Canonical pkg name)) maybeMain
+            Maybe.map (Tuple.pair (TypeCheck.CEMN_Canonical pkg name)) maybeMain
     in
     case root of
         Build.Inside name ->
@@ -175,7 +175,7 @@ lookupMain pkg locals root =
 
 
 type LoadingObjects
-    = LoadingObjects (MVar (Maybe Opt.GlobalGraph)) (Dict String ModuleName.Raw (MVar (Maybe Opt.LocalGraph)))
+    = LoadingObjects (MVar (Maybe Opt.GlobalGraph)) (Dict String ModuleName.CEMN_Raw (MVar (Maybe Opt.LocalGraph)))
 
 
 loadObjects : FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
@@ -193,7 +193,7 @@ loadObjects root details modules =
         )
 
 
-loadObject : FilePath -> Build.Module -> IO ( ModuleName.Raw, MVar (Maybe Opt.LocalGraph) )
+loadObject : FilePath -> Build.Module -> IO ( ModuleName.CEMN_Raw, MVar (Maybe Opt.LocalGraph) )
 loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
@@ -214,7 +214,7 @@ loadObject root modul =
 
 
 type Objects
-    = Objects Opt.GlobalGraph (Dict String ModuleName.Raw Opt.LocalGraph)
+    = Objects Opt.GlobalGraph (Dict String ModuleName.CEMN_Raw Opt.LocalGraph)
 
 
 finalizeObjects : LoadingObjects -> Task Objects
@@ -246,7 +246,7 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
-loadTypes : FilePath -> Dict (List String) TypeCheck.Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
+loadTypes : FilePath -> Dict (List String) TypeCheck.CEMN_Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules

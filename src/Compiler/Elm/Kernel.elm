@@ -1,5 +1,5 @@
 module Compiler.Elm.Kernel exposing
-    ( Chunk(..)
+    ( CEK_Chunk(..)
     , Content(..)
     , Foreigns
     , chunkDecoder
@@ -9,7 +9,7 @@ module Compiler.Elm.Kernel exposing
     )
 
 import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Parse.Module as Module
@@ -28,39 +28,39 @@ import Utils.Crash exposing (crash)
 -- CHUNK
 
 
-type Chunk
-    = JS String
-    | ElmVar IO.Canonical Name
-    | JsVar Name Name
-    | ElmField Name
-    | JsField Int
-    | JsEnum Int
-    | Debug
-    | Prod
+type CEK_Chunk
+    = CEK_JS String
+    | CEK_ElmVar IO.CEMN_Canonical Name.CDN_Name
+    | CEK_JsVar Name.CDN_Name Name.CDN_Name
+    | CEK_ElmField Name.CDN_Name
+    | CEK_JsField Int
+    | CEK_JsEnum Int
+    | CEK_Debug
+    | CEK_Prod
 
 
 
 -- COUNT FIELDS
 
 
-countFields : List Chunk -> Dict String Name Int
+countFields : List CEK_Chunk -> Dict String Name.CDN_Name Int
 countFields chunks =
     List.foldr addField Dict.empty chunks
 
 
-addField : Chunk -> Dict String Name Int -> Dict String Name Int
+addField : CEK_Chunk -> Dict String Name.CDN_Name Int -> Dict String Name.CDN_Name Int
 addField chunk fields =
     case chunk of
-        JS _ ->
+        CEK_JS _ ->
             fields
 
-        ElmVar _ _ ->
+        CEK_ElmVar _ _ ->
             fields
 
-        JsVar _ _ ->
+        CEK_JsVar _ _ ->
             fields
 
-        ElmField f ->
+        CEK_ElmField f ->
             Dict.update identity
                 f
                 (Maybe.map ((+) 1)
@@ -69,16 +69,16 @@ addField chunk fields =
                 )
                 fields
 
-        JsField _ ->
+        CEK_JsField _ ->
             fields
 
-        JsEnum _ ->
+        CEK_JsEnum _ ->
             fields
 
-        Debug ->
+        CEK_Debug ->
             fields
 
-        Prod ->
+        CEK_Prod ->
             fields
 
 
@@ -87,14 +87,14 @@ addField chunk fields =
 
 
 type Content
-    = Content (List Src.Import) (List Chunk)
+    = Content (List Src.CASTS_Import) (List CEK_Chunk)
 
 
 type alias Foreigns =
-    Dict String ModuleName.Raw Pkg.Name
+    Dict String ModuleName.CEMN_Raw Pkg.CEP_Name
 
 
-fromByteString : Pkg.Name -> Foreigns -> String -> Maybe Content
+fromByteString : Pkg.CEP_Name -> Foreigns -> String -> Maybe Content
 fromByteString pkg foreigns bytes =
     case P.fromByteString (parser pkg foreigns) toError bytes of
         Ok content ->
@@ -104,7 +104,7 @@ fromByteString pkg foreigns bytes =
             Nothing
 
 
-parser : Pkg.Name -> Foreigns -> P.Parser () Content
+parser : Pkg.CEP_Name -> Foreigns -> P.Parser () Content
 parser pkg foreigns =
     P.word2 '/' '*' toError
         |> P.bind (\_ -> Space.chomp ignoreError)
@@ -132,7 +132,7 @@ ignoreError _ _ _ =
 -- PARSE CHUNKS
 
 
-parseChunks : VarTable -> Enums -> Fields -> P.Parser () (List Chunk)
+parseChunks : VarTable -> Enums -> Fields -> P.Parser () (List CEK_Chunk)
 parseChunks vtable enums fields =
     P.Parser
         (\(P.State src pos end indent row col) ->
@@ -148,7 +148,7 @@ parseChunks vtable enums fields =
         )
 
 
-chompChunks : VarTable -> Enums -> Fields -> String -> Int -> Int -> Row -> Col -> Int -> List Chunk -> ( ( List Chunk, Int ), ( Row, Col ) )
+chompChunks : VarTable -> Enums -> Fields -> String -> Int -> Int -> Row -> Col -> Int -> List CEK_Chunk -> ( ( List CEK_Chunk, Int ), ( Row, Col ) )
 chompChunks vs es fs src pos end row col lastPos revChunks =
     if pos >= end then
         let
@@ -156,7 +156,7 @@ chompChunks vs es fs src pos end row col lastPos revChunks =
             js =
                 toByteString src lastPos end
         in
-        ( ( List.reverse (JS js :: revChunks), pos ), ( row, col ) )
+        ( ( List.reverse (CEK_JS js :: revChunks), pos ), ( row, col ) )
 
     else
         let
@@ -180,7 +180,7 @@ chompChunks vs es fs src pos end row col lastPos revChunks =
                     js =
                         toByteString src lastPos pos
                 in
-                chompTag vs es fs src pos3 end row (col + 3) (JS js :: revChunks)
+                chompTag vs es fs src pos3 end row (col + 3) (CEK_JS js :: revChunks)
 
             else
                 chompChunks vs es fs src pos1 end row (col + 1) lastPos revChunks
@@ -198,11 +198,11 @@ chompChunks vs es fs src pos end row col lastPos revChunks =
 
 
 type alias Enums =
-    Dict Int Int (Dict String Name Int)
+    Dict Int Int (Dict String Name.CDN_Name Int)
 
 
 type alias Fields =
-    Dict String Name Int
+    Dict String Name.CDN_Name Int
 
 
 toByteString : String -> Int -> Int -> String
@@ -220,7 +220,7 @@ toByteString src pos end =
     String.slice off (off + len) src
 
 
-chompTag : VarTable -> Enums -> Fields -> String -> Int -> Int -> Row -> Col -> List Chunk -> ( ( List Chunk, Int ), ( Row, Col ) )
+chompTag : VarTable -> Enums -> Fields -> String -> Int -> Int -> Row -> Col -> List CEK_Chunk -> ( ( List CEK_Chunk, Int ), ( Row, Col ) )
 chompTag vs es fs src pos end row col revChunks =
     let
         ( newPos, newCol ) =
@@ -236,16 +236,16 @@ chompTag vs es fs src pos end row col revChunks =
     in
     if word == '$' then
         let
-            name : Name
+            name : Name.CDN_Name
             name =
                 Name.fromPtr src pos newPos
         in
         chompChunks vs es fs src newPos end row newCol newPos <|
-            (ElmField name :: revChunks)
+            (CEK_ElmField name :: revChunks)
 
     else
         let
-            name : Name
+            name : Name.CDN_Name
             name =
                 Name.fromPtr src tagPos newPos
 
@@ -259,7 +259,7 @@ chompTag vs es fs src pos end row col revChunks =
                     lookupEnum (Char.fromCode (code - 0x30)) name es
             in
             chompChunks vs newEnums fs src newPos end row newCol newPos <|
-                (JsEnum enum :: revChunks)
+                (CEK_JsEnum enum :: revChunks)
 
         else if code >= 0x61 && code <= 0x7A then
             let
@@ -267,13 +267,13 @@ chompTag vs es fs src pos end row col revChunks =
                     lookupField name fs
             in
             chompChunks vs es newFields src newPos end row newCol newPos <|
-                (JsField field :: revChunks)
+                (CEK_JsField field :: revChunks)
 
         else if name == "DEBUG" then
-            chompChunks vs es fs src newPos end row newCol newPos (Debug :: revChunks)
+            chompChunks vs es fs src newPos end row newCol newPos (CEK_Debug :: revChunks)
 
         else if name == "PROD" then
-            chompChunks vs es fs src newPos end row newCol newPos (Prod :: revChunks)
+            chompChunks vs es fs src newPos end row newCol newPos (CEK_Prod :: revChunks)
 
         else
             case Dict.get identity name vs of
@@ -284,7 +284,7 @@ chompTag vs es fs src pos end row col revChunks =
                     ( ( revChunks, pos ), ( row, col ) )
 
 
-lookupField : Name -> Fields -> ( Int, Fields )
+lookupField : Name.CDN_Name -> Fields -> ( Int, Fields )
 lookupField name fields =
     case Dict.get identity name fields of
         Just n ->
@@ -299,14 +299,14 @@ lookupField name fields =
             ( n, Dict.insert identity name n fields )
 
 
-lookupEnum : Char -> Name -> Enums -> ( Int, Enums )
+lookupEnum : Char -> Name.CDN_Name -> Enums -> ( Int, Enums )
 lookupEnum word var allEnums =
     let
         code : Int
         code =
             Char.toCode word
 
-        enums : Dict String Name Int
+        enums : Dict String Name.CDN_Name Int
         enums =
             Dict.get identity code allEnums
                 |> Maybe.withDefault Dict.empty
@@ -329,16 +329,16 @@ lookupEnum word var allEnums =
 
 
 type alias VarTable =
-    Dict String Name Chunk
+    Dict String Name.CDN_Name CEK_Chunk
 
 
-toVarTable : Pkg.Name -> Foreigns -> List Src.Import -> VarTable
+toVarTable : Pkg.CEP_Name -> Foreigns -> List Src.CASTS_Import -> VarTable
 toVarTable pkg foreigns imports =
     List.foldl (addImport pkg foreigns) Dict.empty imports
 
 
-addImport : Pkg.Name -> Foreigns -> Src.Import -> VarTable -> VarTable
-addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vtable =
+addImport : Pkg.CEP_Name -> Foreigns -> Src.CASTS_Import -> VarTable -> VarTable
+addImport pkg foreigns (Src.CASTS_Import (A.CRA_At _ importName) maybeAlias exposing_) vtable =
     if Name.isKernel importName then
         case maybeAlias of
             Just _ ->
@@ -346,34 +346,34 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
 
             Nothing ->
                 let
-                    home : Name
+                    home : Name.CDN_Name
                     home =
                         Name.getKernel importName
 
-                    add : Name -> Dict String Name Chunk -> Dict String Name Chunk
+                    add : Name.CDN_Name -> Dict String Name.CDN_Name CEK_Chunk -> Dict String Name.CDN_Name CEK_Chunk
                     add name table =
-                        Dict.insert identity (Name.sepBy '_' home name) (JsVar home name) table
+                        Dict.insert identity (Name.sepBy '_' home name) (CEK_JsVar home name) table
                 in
                 List.foldl add vtable (toNames exposing_)
 
     else
         let
-            home : IO.Canonical
+            home : IO.CEMN_Canonical
             home =
-                IO.Canonical (Dict.get identity importName foreigns |> Maybe.withDefault pkg) importName
+                IO.CEMN_Canonical (Dict.get identity importName foreigns |> Maybe.withDefault pkg) importName
 
-            prefix : Name
+            prefix : Name.CDN_Name
             prefix =
                 toPrefix importName maybeAlias
 
-            add : Name -> Dict String Name Chunk -> Dict String Name Chunk
+            add : Name.CDN_Name -> Dict String Name.CDN_Name CEK_Chunk -> Dict String Name.CDN_Name CEK_Chunk
             add name table =
-                Dict.insert identity (Name.sepBy '_' prefix name) (ElmVar home name) table
+                Dict.insert identity (Name.sepBy '_' prefix name) (CEK_ElmVar home name) table
         in
         List.foldl add vtable (toNames exposing_)
 
 
-toPrefix : Name -> Maybe Name -> Name
+toPrefix : Name.CDN_Name -> Maybe Name.CDN_Name -> Name.CDN_Name
 toPrefix home maybeAlias =
     case maybeAlias of
         Just alias ->
@@ -387,29 +387,29 @@ toPrefix home maybeAlias =
                 home
 
 
-toNames : Src.Exposing -> List Name
+toNames : Src.CASTS_Exposing -> List Name.CDN_Name
 toNames exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.CASTS_Open ->
             crash "cannot have `exposing (..)` in kernel code."
 
-        Src.Explicit exposedList ->
+        Src.CASTS_Explicit exposedList ->
             List.map toName exposedList
 
 
-toName : Src.Exposed -> Name
+toName : Src.CASTS_Exposed -> Name.CDN_Name
 toName exposed =
     case exposed of
-        Src.Lower (A.At _ name) ->
+        Src.CASTS_Lower (A.CRA_At _ name) ->
             name
 
-        Src.Upper (A.At _ name) Src.Private ->
+        Src.CASTS_Upper (A.CRA_At _ name) Src.CASTS_Private ->
             name
 
-        Src.Upper _ (Src.Public _) ->
+        Src.CASTS_Upper _ (Src.CASTS_Public _) ->
             crash "cannot have Maybe(..) syntax in kernel code header"
 
-        Src.Operator _ _ ->
+        Src.CASTS_Operator _ _ ->
             crash "cannot use binops in kernel code"
 
 
@@ -417,91 +417,91 @@ toName exposed =
 -- ENCODERS and DECODERS
 
 
-chunkEncoder : Chunk -> Encode.Value
+chunkEncoder : CEK_Chunk -> Encode.Value
 chunkEncoder chunk =
     case chunk of
-        JS javascript ->
+        CEK_JS javascript ->
             Encode.object
                 [ ( "type", Encode.string "JS" )
                 , ( "javascript", Encode.string javascript )
                 ]
 
-        ElmVar home name ->
+        CEK_ElmVar home name ->
             Encode.object
                 [ ( "type", Encode.string "ElmVar" )
                 , ( "home", ModuleName.canonicalEncoder home )
                 , ( "name", Encode.string name )
                 ]
 
-        JsVar home name ->
+        CEK_JsVar home name ->
             Encode.object
                 [ ( "type", Encode.string "JsVar" )
                 , ( "home", Encode.string home )
                 , ( "name", Encode.string name )
                 ]
 
-        ElmField name ->
+        CEK_ElmField name ->
             Encode.object
                 [ ( "type", Encode.string "ElmField" )
                 , ( "name", Encode.string name )
                 ]
 
-        JsField int ->
+        CEK_JsField int ->
             Encode.object
                 [ ( "type", Encode.string "JsField" )
                 , ( "int", Encode.int int )
                 ]
 
-        JsEnum int ->
+        CEK_JsEnum int ->
             Encode.object
                 [ ( "type", Encode.string "JsEnum" )
                 , ( "int", Encode.int int )
                 ]
 
-        Debug ->
+        CEK_Debug ->
             Encode.object
                 [ ( "type", Encode.string "Debug" )
                 ]
 
-        Prod ->
+        CEK_Prod ->
             Encode.object
                 [ ( "type", Encode.string "Prod" )
                 ]
 
 
-chunkDecoder : Decode.Decoder Chunk
+chunkDecoder : Decode.Decoder CEK_Chunk
 chunkDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "JS" ->
-                        Decode.map JS (Decode.field "javascript" Decode.string)
+                        Decode.map CEK_JS (Decode.field "javascript" Decode.string)
 
                     "ElmVar" ->
-                        Decode.map2 ElmVar
+                        Decode.map2 CEK_ElmVar
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
 
                     "JsVar" ->
-                        Decode.map2 JsVar
+                        Decode.map2 CEK_JsVar
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "ElmField" ->
-                        Decode.map ElmField (Decode.field "name" Decode.string)
+                        Decode.map CEK_ElmField (Decode.field "name" Decode.string)
 
                     "JsField" ->
-                        Decode.map JsField (Decode.field "int" Decode.int)
+                        Decode.map CEK_JsField (Decode.field "int" Decode.int)
 
                     "JsEnum" ->
-                        Decode.map JsEnum (Decode.field "int" Decode.int)
+                        Decode.map CEK_JsEnum (Decode.field "int" Decode.int)
 
                     "Debug" ->
-                        Decode.succeed Debug
+                        Decode.succeed CEK_Debug
 
                     "Prod" ->
-                        Decode.succeed Prod
+                        Decode.succeed CEK_Prod
 
                     _ ->
                         Decode.fail ("Unknown Chunk's type: " ++ type_)

@@ -1,13 +1,13 @@
 module Compiler.Generate.Html exposing (sandwich)
 
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 
 
 
 -- SANDWICH
 
 
-sandwich : Name -> String -> String
+sandwich : CDN_Name -> String -> String
 sandwich moduleName javascript =
     """<!DOCTYPE HTML>
 <html>

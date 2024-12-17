@@ -1,7 +1,7 @@
 module Compiler.Elm.Package exposing
-    ( Author
-    , Name
-    , Project
+    ( CEP_Author
+    , CEP_Name
+    , CEP_Project
     , browser
     , compareName
     , core
@@ -43,16 +43,16 @@ import Json.Encode as Encode
 {-| This has been simplified from `Name Author Project` as part of the work for
 `System.TypeCheck.IO`.
 -}
-type alias Name =
-    ( Author, Project )
+type alias CEP_Name =
+    ( CEP_Author, CEP_Project )
 
 
-toString : Name -> String
+toString : CEP_Name -> String
 toString ( author, project ) =
     author ++ "/" ++ project
 
 
-compareName : Name -> Name -> Order
+compareName : CEP_Name -> CEP_Name -> Order
 compareName ( name1, project1 ) ( name2, project2 ) =
     case compare name1 name2 of
         LT ->
@@ -65,11 +65,11 @@ compareName ( name1, project1 ) ( name2, project2 ) =
             GT
 
 
-type alias Author =
+type alias CEP_Author =
     String
 
 
-type alias Project =
+type alias CEP_Project =
     String
 
 
@@ -77,22 +77,22 @@ type alias Project =
 -- HELPERS
 
 
-isKernel : Name -> Bool
+isKernel : CEP_Name -> Bool
 isKernel ( author, _ ) =
     author == elm || author == elm_explorations
 
 
-toChars : Name -> String
+toChars : CEP_Name -> String
 toChars ( author, project ) =
     author ++ "/" ++ project
 
 
-toUrl : Name -> String
+toUrl : CEP_Name -> String
 toUrl ( author, project ) =
     author ++ "/" ++ project
 
 
-toJsonString : Name -> String
+toJsonString : CEP_Name -> String
 toJsonString ( author, project ) =
     String.join "/" [ author, project ]
 
@@ -101,72 +101,72 @@ toJsonString ( author, project ) =
 -- COMMON PACKAGE NAMES
 
 
-toName : Author -> Project -> Name
+toName : CEP_Author -> CEP_Project -> CEP_Name
 toName =
     Tuple.pair
 
 
-dummyName : Name
+dummyName : CEP_Name
 dummyName =
     toName "author" "project"
 
 
-kernel : Name
+kernel : CEP_Name
 kernel =
     toName elm "kernel"
 
 
-core : Name
+core : CEP_Name
 core =
     toName elm "core"
 
 
-browser : Name
+browser : CEP_Name
 browser =
     toName elm "browser"
 
 
-virtualDom : Name
+virtualDom : CEP_Name
 virtualDom =
     toName elm "virtual-dom"
 
 
-html : Name
+html : CEP_Name
 html =
     toName elm "html"
 
 
-json : Name
+json : CEP_Name
 json =
     toName elm "json"
 
 
-http : Name
+http : CEP_Name
 http =
     toName elm "http"
 
 
-url : Name
+url : CEP_Name
 url =
     toName elm "url"
 
 
-webgl : Name
+webgl : CEP_Name
 webgl =
     toName elm_explorations "webgl"
 
 
-linearAlgebra : Name
+linearAlgebra : CEP_Name
 linearAlgebra =
     toName elm_explorations "linear-algebra"
 
 
-elm : Author
+elm : CEP_Author
 elm =
     "elm"
 
 
-elm_explorations : Author
+elm_explorations : CEP_Author
 elm_explorations =
     "elm-explorations"
 
@@ -175,18 +175,18 @@ elm_explorations =
 -- PACKAGE SUGGESTIONS
 
 
-suggestions : Dict String String Name
+suggestions : Dict String String CEP_Name
 suggestions =
     let
-        random : Name
+        random : CEP_Name
         random =
             toName elm "random"
 
-        time : Name
+        time : CEP_Name
         time =
             toName elm "time"
 
-        file : Name
+        file : CEP_Name
         file =
             toName elm "file"
     in
@@ -212,25 +212,25 @@ suggestions =
 -- NEARBY NAMES
 
 
-nearbyNames : Name -> List Name -> List Name
+nearbyNames : CEP_Name -> List CEP_Name -> List CEP_Name
 nearbyNames ( author1, project1 ) possibleNames =
     let
-        authorDist : Author -> Int
+        authorDist : CEP_Author -> Int
         authorDist =
             authorDistance author1
 
-        projectDist : Project -> Int
+        projectDist : CEP_Project -> Int
         projectDist =
             projectDistance project1
 
-        nameDistance : Name -> Int
+        nameDistance : CEP_Name -> Int
         nameDistance ( author2, project2 ) =
             authorDist author2 + projectDist project2
     in
     List.take 4 (List.sortBy nameDistance possibleNames)
 
 
-authorDistance : String -> Author -> Int
+authorDistance : String -> CEP_Author -> Int
 authorDistance given possibility =
     if possibility == elm || possibility == elm_explorations then
         0
@@ -239,7 +239,7 @@ authorDistance given possibility =
         abs (Suggest.distance given possibility)
 
 
-projectDistance : String -> Project -> Int
+projectDistance : String -> CEP_Project -> Int
 projectDistance given possibility =
     abs (Suggest.distance given possibility)
 
@@ -248,20 +248,20 @@ projectDistance given possibility =
 -- JSON
 
 
-decoder : D.Decoder ( Row, Col ) Name
+decoder : D.Decoder ( Row, Col ) CEP_Name
 decoder =
     D.customString parser Tuple.pair
 
 
-encode : Name -> E.Value
+encode : CEP_Name -> E.Value
 encode name =
     E.string (toChars name)
 
 
-keyDecoder : (Row -> Col -> x) -> D.KeyDecoder x Name
+keyDecoder : (Row -> Col -> x) -> D.KeyDecoder x CEP_Name
 keyDecoder toError =
     let
-        keyParser : P.Parser x Name
+        keyParser : P.Parser x CEP_Name
         keyParser =
             P.specialize (\( r, c ) _ _ -> toError r c) parser
     in
@@ -272,7 +272,7 @@ keyDecoder toError =
 -- PARSER
 
 
-parser : P.Parser ( Row, Col ) Name
+parser : P.Parser ( Row, Col ) CEP_Name
 parser =
     parseName isAlphaOrDigit isAlphaOrDigit
         |> P.bind
@@ -369,7 +369,7 @@ chompName isGoodChar src pos end prevWasDash =
 -- ENCODERS and DECODERS
 
 
-nameEncoder : Name -> Encode.Value
+nameEncoder : CEP_Name -> Encode.Value
 nameEncoder ( author, project ) =
     Encode.object
         [ ( "author", Encode.string author )
@@ -377,7 +377,7 @@ nameEncoder ( author, project ) =
         ]
 
 
-nameDecoder : Decode.Decoder Name
+nameDecoder : Decode.Decoder CEP_Name
 nameDecoder =
     Decode.map2 Tuple.pair
         (Decode.field "author" Decode.string)

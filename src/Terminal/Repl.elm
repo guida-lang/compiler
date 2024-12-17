@@ -167,10 +167,10 @@ loop env state =
 
 
 type Input
-    = Import ModuleName.Raw String
-    | Type N.Name String
+    = Import ModuleName.CEMN_Raw String
+    | Type N.CDN_Name String
     | Port
-    | Decl N.Name String
+    | Decl N.CDN_Name String
     | Expr String
       --
     | Reset
@@ -251,7 +251,7 @@ stripLegacyBackslash chars =
 
 type Prefill
     = Indent
-    | DefStart N.Name
+    | DefStart N.CDN_Name
 
 
 renderPrefill : Prefill -> String
@@ -338,12 +338,12 @@ attemptImport lines =
         src =
             linesToByteString lines
 
-        parser : P.Parser () Src.Import
+        parser : P.Parser () Src.CASTS_Import
         parser =
             P.specialize (\_ _ _ -> ()) PM.chompImport
     in
     case P.fromByteString parser (\_ _ -> ()) src of
-        Ok (Src.Import (A.At _ name) _ _) ->
+        Ok (Src.CASTS_Import (A.CRA_At _ name) _ _) ->
             Done (Import name src)
 
         Err () ->
@@ -375,20 +375,20 @@ attemptDeclOrExpr lines =
         src =
             linesToByteString lines
 
-        declParser : P.Parser ( Row, Col ) ( PD.Decl, A.Position )
+        declParser : P.Parser ( Row, Col ) ( PD.Decl, A.CRA_Position )
         declParser =
             P.specialize (toDeclPosition src) PD.declaration
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
             case decl of
-                PD.Value _ (A.At _ (Src.Value (A.At _ name) _ _ _)) ->
+                PD.Value _ (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) ->
                     ifDone lines (Decl name src)
 
-                PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
+                PD.Union _ (A.CRA_At _ (Src.CASTS_Union (A.CRA_At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
-                PD.Alias _ (A.At _ (Src.Alias (A.At _ name) _ _)) ->
+                PD.Alias _ (A.CRA_At _ (Src.CASTS_Alias (A.CRA_At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Port _ _ ->
@@ -403,7 +403,7 @@ attemptDeclOrExpr lines =
 
             else
                 let
-                    exprParser : P.Parser ( Row, Col ) ( Src.Expr, A.Position )
+                    exprParser : P.Parser ( Row, Col ) ( Src.CASTS_Expr, A.CRA_Position )
                     exprParser =
                         P.specialize (toExprPosition src) PE.expression
                 in
@@ -491,13 +491,13 @@ toDeclPosition src decl r c =
         report =
             ES.toReport (Code.toSource src) err
 
-        (Report.Report _ (A.Region (A.Position row col) _) _ _) =
+        (Report.Report _ (A.CRA_Region (A.CRA_Position row col) _) _ _) =
             report
     in
     ( row, col )
 
 
-annotation : P.Parser () N.Name
+annotation : P.Parser () N.CDN_Name
 annotation =
     let
         err : Row -> Col -> ()
@@ -579,7 +579,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
 
 type Output
     = OutputNothing
-    | OutputDecl N.Name
+    | OutputDecl N.CDN_Name
     | OutputExpr String
 
 
@@ -684,7 +684,7 @@ outputToBuilder output =
 -- TO PRINT NAME
 
 
-toPrintName : Output -> Maybe N.Name
+toPrintName : Output -> Maybe N.CDN_Name
 toPrintName output =
     case output of
         OutputNothing ->
@@ -758,7 +758,7 @@ getRoot =
             )
 
 
-defaultDeps : Dict ( String, String ) Pkg.Name C.Constraint
+defaultDeps : Dict ( String, String ) Pkg.CEP_Name C.Constraint
 defaultDeps =
     Map.fromList identity
         [ ( Pkg.core, C.anything )
@@ -842,7 +842,7 @@ lookupCompletions string =
             )
 
 
-commands : Dict.Dict N.Name ()
+commands : Dict.Dict N.CDN_Name ()
 commands =
     Dict.fromList
         [ ( ":exit", () )
@@ -852,12 +852,12 @@ commands =
         ]
 
 
-addMatches : String -> Bool -> Dict.Dict N.Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
+addMatches : String -> Bool -> Dict.Dict N.CDN_Name v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
 addMatches string isFinished dict completions =
     Dict.foldr (addMatch string isFinished) completions dict
 
 
-addMatch : String -> Bool -> N.Name -> v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
+addMatch : String -> Bool -> N.CDN_Name -> v -> List Utils.ReplCompletion -> List Utils.ReplCompletion
 addMatch string isFinished name _ completions =
     let
         suggestion : String

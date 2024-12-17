@@ -263,8 +263,8 @@ type DMsg
     = DStart Int
     | DCached
     | DRequested
-    | DReceived Pkg.Name V.Version
-    | DFailed Pkg.Name V.Version
+    | DReceived Pkg.CEP_Name V.Version
+    | DFailed Pkg.CEP_Name V.Version
     | DBuilt
     | DBroken
 
@@ -302,7 +302,7 @@ detailsStep msg (DState total cached rqst rcvd failed built broken) =
             putBuilt (DState total cached rqst rcvd failed built (broken + 1))
 
 
-putDownload : D.Doc -> Pkg.Name -> V.Version -> IO ()
+putDownload : D.Doc -> Pkg.CEP_Name -> V.Version -> IO ()
 putDownload mark pkg vsn =
     Help.toStdout
         (D.indent 2
@@ -472,7 +472,7 @@ toFinalMessage done result =
 -- GENERATE
 
 
-reportGenerate : Style -> NE.Nonempty ModuleName.Raw -> String -> IO ()
+reportGenerate : Style -> NE.Nonempty ModuleName.CEMN_Raw -> String -> IO ()
 reportGenerate style names output =
     case style of
         Silent ->

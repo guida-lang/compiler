@@ -4,7 +4,7 @@ module System.TypeCheck.IO exposing
     , foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
     , Point(..), PointInfo(..)
     , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
-    , Canonical(..)
+    , CEMN_Canonical(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -163,12 +163,12 @@ mapM =
     traverseList
 
 
-traverseIndexed : (Index.ZeroBased -> a -> IO b) -> List a -> IO (List b)
+traverseIndexed : (Index.CDI_ZeroBased -> a -> IO b) -> List a -> IO (List b)
 traverseIndexed func xs =
     sequenceAList (Index.indexedMap func xs)
 
 
-indexedForA : List a -> (Index.ZeroBased -> a -> IO b) -> IO (List b)
+indexedForA : List a -> (Index.CDI_ZeroBased -> a -> IO b) -> IO (List b)
 indexedForA xs func =
     sequenceAList (Index.indexedMap func xs)
 
@@ -213,7 +213,7 @@ type Content
     | RigidVar String
     | RigidSuper SuperType String
     | Structure FlatType
-    | Alias Canonical String (List ( String, Variable )) Variable
+    | Alias CEMN_Canonical String (List ( String, Variable )) Variable
     | Error
 
 
@@ -249,7 +249,7 @@ type alias Variable =
 {-| FIXME Compiler.Type.Type
 -}
 type FlatType
-    = App1 Canonical String (List Variable)
+    = App1 CEMN_Canonical String (List Variable)
     | Fun1 Variable Variable
     | EmptyRecord1
     | Record1 (Dict String String Variable) Variable
@@ -263,5 +263,5 @@ type FlatType
 
 {-| FIXME Compiler.Elm.ModuleName
 -}
-type Canonical
-    = Canonical ( String, String ) String
+type CEMN_Canonical
+    = CEMN_Canonical ( String, String ) String

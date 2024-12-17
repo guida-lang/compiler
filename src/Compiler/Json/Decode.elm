@@ -147,8 +147,8 @@ type Problem x
     = Field String (Problem x)
     | Index Int (Problem x)
     | OneOf (Problem x) (List (Problem x))
-    | Failure A.Region x
-    | Expecting A.Region DecodeExpectation
+    | Failure A.CRA_Region x
+    | Expecting A.CRA_Region DecodeExpectation
 
 
 type DecodeExpectation
@@ -206,7 +206,7 @@ bind callback (Decoder decodeA) =
 string : Decoder x String
 string =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 String snippet ->
                     Ok (Json.fromSnippet snippet)
@@ -218,7 +218,7 @@ string =
 customString : P.Parser x a -> (Row -> Col -> x) -> Decoder x a
 customString parser toBadEnd =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 String snippet ->
                     P.fromSnippet parser toBadEnd snippet
@@ -235,7 +235,7 @@ customString parser toBadEnd =
 int : Decoder x Int
 int =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 Int n ->
                     Ok n
@@ -251,7 +251,7 @@ int =
 list : Decoder x a -> Decoder x (List a)
 list decoder =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 Array asts ->
                     listHelp decoder 0 asts []
@@ -282,7 +282,7 @@ listHelp ((Decoder decodeA) as decoder) i asts revs =
 nonEmptyList : Decoder x a -> x -> Decoder x (NE.Nonempty a)
 nonEmptyList decoder x =
     Decoder <|
-        \((A.At region _) as ast) ->
+        \((A.CRA_At region _) as ast) ->
             let
                 (Decoder values) =
                     list decoder
@@ -305,7 +305,7 @@ nonEmptyList decoder x =
 pair : Decoder x a -> Decoder x b -> Decoder x ( a, b )
 pair (Decoder decodeA) (Decoder decodeB) =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 Array vs ->
                     case vs of
@@ -339,7 +339,7 @@ dict toComparable keyDecoder valueDecoder =
 pairs : KeyDecoder x k -> Decoder x a -> Decoder x (List ( k, a ))
 pairs keyDecoder valueDecoder =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 Object kvs ->
                     pairsHelp keyDecoder valueDecoder kvs []
@@ -372,9 +372,9 @@ pairsHelp ((KeyDecoder keyParser toBadEnd) as keyDecoder) ((Decoder decodeA) as 
                             Err (Field (String.slice offset (offset + length) fptr) prob)
 
 
-snippetToRegion : P.Snippet -> A.Region
+snippetToRegion : P.Snippet -> A.CRA_Region
 snippetToRegion (P.Snippet { length, offRow, offCol }) =
-    A.Region (A.Position offRow offCol) (A.Position offRow (offCol + length))
+    A.CRA_Region (A.CRA_Position offRow offCol) (A.CRA_Position offRow (offCol + length))
 
 
 
@@ -384,7 +384,7 @@ snippetToRegion (P.Snippet { length, offRow, offCol }) =
 field : String -> Decoder x a -> Decoder x a
 field key (Decoder decodeA) =
     Decoder <|
-        \(A.At region ast) ->
+        \(A.CRA_At region ast) ->
             case ast of
                 Object kvs ->
                     case findField key kvs of
@@ -466,7 +466,7 @@ oneOfError problems prob ps =
 failure : x -> Decoder x a
 failure x =
     Decoder <|
-        \(A.At region _) ->
+        \(A.CRA_At region _) ->
             Err (Failure region x)
 
 
@@ -503,7 +503,7 @@ mapErrorHelp func problem =
 
 
 type alias AST =
-    A.Located AST_
+    A.CRA_Located AST_
 
 
 type AST_

@@ -32,26 +32,26 @@ type alias EResult i w a =
 
 canonicalize :
     Env.Env
-    -> List (A.Located Src.Value)
-    -> Dict String Name.Name union
-    -> Src.Effects
+    -> List (A.CRA_Located Src.CASTS_Value)
+    -> Dict String Name.CDN_Name union
+    -> Src.CASTS_Effects
     -> EResult i w Can.Effects
 canonicalize env values unions effects =
     case effects of
-        Src.NoEffects ->
+        Src.CASTS_NoEffects ->
             R.ok Can.NoEffects
 
-        Src.Ports ports ->
+        Src.CASTS_Ports ports ->
             let
-                pairs : R.RResult i w Error.Error (List ( Name.Name, Can.Port ))
+                pairs : R.RResult i w Error.Error (List ( Name.CDN_Name, Can.Port ))
                 pairs =
                     R.traverse (canonicalizePort env) ports
             in
             R.fmap (Can.Ports << Dict.fromList identity) pairs
 
-        Src.Manager region manager ->
+        Src.CASTS_Manager region manager ->
             let
-                dict : Dict String Name.Name A.Region
+                dict : Dict String Name.CDN_Name A.CRA_Region
                 dict =
                     Dict.fromList identity (List.map toNameRegion values)
             in
@@ -61,7 +61,7 @@ canonicalize env values unions effects =
                 |> R.apply (verifyManager region dict "onSelfMsg")
                 |> R.apply
                     (case manager of
-                        Src.Cmd cmdType ->
+                        Src.CASTS_Cmd cmdType ->
                             R.ok Can.Cmd
                                 |> R.apply (verifyEffectType cmdType unions)
                                 |> R.bind
@@ -70,7 +70,7 @@ canonicalize env values unions effects =
                                             |> R.fmap (\_ -> result)
                                     )
 
-                        Src.Sub subType ->
+                        Src.CASTS_Sub subType ->
                             R.ok Can.Sub
                                 |> R.apply (verifyEffectType subType unions)
                                 |> R.bind
@@ -79,7 +79,7 @@ canonicalize env values unions effects =
                                             |> R.fmap (\_ -> result)
                                     )
 
-                        Src.Fx cmdType subType ->
+                        Src.CASTS_Fx cmdType subType ->
                             R.ok Can.Fx
                                 |> R.apply (verifyEffectType cmdType unions)
                                 |> R.apply (verifyEffectType subType unions)
@@ -100,13 +100,13 @@ canonicalize env values unions effects =
 -- CANONICALIZE PORT
 
 
-canonicalizePort : Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
-canonicalizePort env (Src.Port (A.At region portName) tipe) =
+canonicalizePort : Env.Env -> Src.CASTS_Port -> EResult i w ( Name.CDN_Name, Can.Port )
+canonicalizePort env (Src.CASTS_Port (A.CRA_At region portName) tipe) =
     Type.toAnnotation env tipe
         |> R.bind
-            (\(Can.Forall freeVars ctipe) ->
+            (\(Can.CASTC_Forall freeVars ctipe) ->
                 case List.reverse (Type.delambda (Type.deepDealias ctipe)) of
-                    (Can.TType home name [ msg ]) :: revArgs ->
+                    (Can.CASTC_TType home name [ msg ]) :: revArgs ->
                         if home == ModuleName.cmd && name == Name.cmd then
                             case revArgs of
                                 [] ->
@@ -114,7 +114,7 @@ canonicalizePort env (Src.Port (A.At region portName) tipe) =
 
                                 [ outgoingType ] ->
                                     case msg of
-                                        Can.TVar _ ->
+                                        Can.CASTC_TVar _ ->
                                             case checkPayload outgoingType of
                                                 Ok () ->
                                                     R.ok
@@ -137,9 +137,9 @@ canonicalizePort env (Src.Port (A.At region portName) tipe) =
 
                         else if home == ModuleName.sub && name == Name.sub then
                             case revArgs of
-                                [ Can.TLambda incomingType (Can.TVar msg1) ] ->
+                                [ Can.CASTC_TLambda incomingType (Can.CASTC_TVar msg1) ] ->
                                     case msg of
-                                        Can.TVar msg2 ->
+                                        Can.CASTC_TVar msg2 ->
                                             if msg1 == msg2 then
                                                 case checkPayload incomingType of
                                                     Ok () ->
@@ -176,8 +176,8 @@ canonicalizePort env (Src.Port (A.At region portName) tipe) =
 -- VERIFY MANAGER
 
 
-verifyEffectType : A.Located Name.Name -> Dict String Name.Name a -> EResult i w Name.Name
-verifyEffectType (A.At region name) unions =
+verifyEffectType : A.CRA_Located Name.CDN_Name -> Dict String Name.CDN_Name a -> EResult i w Name.CDN_Name
+verifyEffectType (A.CRA_At region name) unions =
     if Dict.member identity name unions then
         R.ok name
 
@@ -185,12 +185,12 @@ verifyEffectType (A.At region name) unions =
         R.throw (Error.EffectNotFound region name)
 
 
-toNameRegion : A.Located Src.Value -> ( Name.Name, A.Region )
-toNameRegion (A.At _ (Src.Value (A.At region name) _ _ _)) =
+toNameRegion : A.CRA_Located Src.CASTS_Value -> ( Name.CDN_Name, A.CRA_Region )
+toNameRegion (A.CRA_At _ (Src.CASTS_Value (A.CRA_At region name) _ _ _)) =
     ( name, region )
 
 
-verifyManager : A.Region -> Dict String Name.Name A.Region -> Name.Name -> EResult i w A.Region
+verifyManager : A.CRA_Region -> Dict String Name.CDN_Name A.CRA_Region -> Name.CDN_Name -> EResult i w A.CRA_Region
 verifyManager tagRegion values name =
     case Dict.get identity name values of
         Just region ->
@@ -204,13 +204,13 @@ verifyManager tagRegion values name =
 -- CHECK PAYLOAD TYPES
 
 
-checkPayload : Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayload : Can.CASTC_Type -> Result ( Can.CASTC_Type, Error.InvalidPayload ) ()
 checkPayload tipe =
     case tipe of
-        Can.TAlias _ _ args aliasedType ->
+        Can.CASTC_TAlias _ _ args aliasedType ->
             checkPayload (Type.dealias args aliasedType)
 
-        Can.TType home name args ->
+        Can.CASTC_TType home name args ->
             case args of
                 [] ->
                     if isJson home name || isString home name || isIntFloatBool home name then
@@ -229,10 +229,10 @@ checkPayload tipe =
                 _ ->
                     Err ( tipe, Error.UnsupportedType name )
 
-        Can.TUnit ->
+        Can.CASTC_TUnit ->
             Ok ()
 
-        Can.TTuple a b maybeC ->
+        Can.CASTC_TTuple a b maybeC ->
             checkPayload a
                 |> Result.andThen (\_ -> checkPayload b)
                 |> Result.andThen
@@ -245,35 +245,35 @@ checkPayload tipe =
                                 checkPayload c
                     )
 
-        Can.TVar name ->
+        Can.CASTC_TVar name ->
             Err ( tipe, Error.TypeVariable name )
 
-        Can.TLambda _ _ ->
+        Can.CASTC_TLambda _ _ ->
             Err ( tipe, Error.Function )
 
-        Can.TRecord _ (Just _) ->
+        Can.CASTC_TRecord _ (Just _) ->
             Err ( tipe, Error.ExtendedRecord )
 
-        Can.TRecord fields Nothing ->
+        Can.CASTC_TRecord fields Nothing ->
             Dict.foldl compare
                 (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
                 (Ok ())
                 fields
 
 
-checkFieldPayload : Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkFieldPayload (Can.FieldType _ tipe) =
+checkFieldPayload : Can.CASTC_FieldType -> Result ( Can.CASTC_Type, Error.InvalidPayload ) ()
+checkFieldPayload (Can.CASTC_FieldType _ tipe) =
     checkPayload tipe
 
 
-isIntFloatBool : IO.Canonical -> Name.Name -> Bool
+isIntFloatBool : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isIntFloatBool home name =
     home
         == ModuleName.basics
         && (name == Name.int || name == Name.float || name == Name.bool)
 
 
-isString : IO.Canonical -> Name.Name -> Bool
+isString : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isString home name =
     home
         == ModuleName.string
@@ -281,13 +281,13 @@ isString home name =
         == Name.string
 
 
-isJson : IO.Canonical -> Name.Name -> Bool
+isJson : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isJson home name =
     (home == ModuleName.jsonEncode)
         && (name == Name.value)
 
 
-isList : IO.Canonical -> Name.Name -> Bool
+isList : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isList home name =
     home
         == ModuleName.list
@@ -295,7 +295,7 @@ isList home name =
         == Name.list
 
 
-isMaybe : IO.Canonical -> Name.Name -> Bool
+isMaybe : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isMaybe home name =
     home
         == ModuleName.maybe
@@ -303,7 +303,7 @@ isMaybe home name =
         == Name.maybe
 
 
-isArray : IO.Canonical -> Name.Name -> Bool
+isArray : IO.CEMN_Canonical -> Name.CDN_Name -> Bool
 isArray home name =
     home
         == ModuleName.array

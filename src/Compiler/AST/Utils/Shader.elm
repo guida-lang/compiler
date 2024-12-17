@@ -1,7 +1,7 @@
 module Compiler.AST.Utils.Shader exposing
-    ( Source(..)
-    , Type(..)
-    , Types(..)
+    ( CASTUS_Source(..)
+    , CASTUS_Type(..)
+    , CASTUS_Types(..)
     , fromString
     , sourceDecoder
     , sourceEncoder
@@ -10,7 +10,7 @@ module Compiler.AST.Utils.Shader exposing
     , typesEncoder
     )
 
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Json.Encode as E
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
@@ -21,34 +21,34 @@ import Json.Encode as Encode
 -- SOURCE
 
 
-type Source
-    = Source String
+type CASTUS_Source
+    = CASTUS_Source String
 
 
 
 -- TYPES
 
 
-type Types
-    = Types (Dict String Name Type) (Dict String Name Type) (Dict String Name Type)
+type CASTUS_Types
+    = CASTUS_Types (Dict String CDN_Name CASTUS_Type) (Dict String CDN_Name CASTUS_Type) (Dict String CDN_Name CASTUS_Type)
 
 
-type Type
-    = Int
-    | Float
-    | V2
-    | V3
-    | V4
-    | M4
-    | Texture
+type CASTUS_Type
+    = CASTUS_Int
+    | CASTUS_Float
+    | CASTUS_V2
+    | CASTUS_V3
+    | CASTUS_V4
+    | CASTUS_M4
+    | CASTUS_Texture
 
 
 
 -- TO BUILDER
 
 
-toJsStringBuilder : Source -> String
-toJsStringBuilder (Source src) =
+toJsStringBuilder : CASTUS_Source -> String
+toJsStringBuilder (CASTUS_Source src) =
     src
 
 
@@ -56,9 +56,9 @@ toJsStringBuilder (Source src) =
 -- FROM STRING
 
 
-fromString : String -> Source
+fromString : String -> CASTUS_Source
 fromString =
-    Source << escape
+    CASTUS_Source << escape
 
 
 escape : String -> String
@@ -99,18 +99,18 @@ escape =
 -- ENCODERS and DECODERS
 
 
-sourceEncoder : Source -> Encode.Value
-sourceEncoder (Source src) =
+sourceEncoder : CASTUS_Source -> Encode.Value
+sourceEncoder (CASTUS_Source src) =
     Encode.string src
 
 
-sourceDecoder : Decode.Decoder Source
+sourceDecoder : Decode.Decoder CASTUS_Source
 sourceDecoder =
-    Decode.map Source Decode.string
+    Decode.map CASTUS_Source Decode.string
 
 
-typesEncoder : Types -> Encode.Value
-typesEncoder (Types attribute uniform varying) =
+typesEncoder : CASTUS_Types -> Encode.Value
+typesEncoder (CASTUS_Types attribute uniform varying) =
     Encode.object
         [ ( "type", Encode.string "Types" )
         , ( "attribute", E.assocListDict compare Encode.string typeEncoder attribute )
@@ -119,65 +119,65 @@ typesEncoder (Types attribute uniform varying) =
         ]
 
 
-typesDecoder : Decode.Decoder Types
+typesDecoder : Decode.Decoder CASTUS_Types
 typesDecoder =
-    Decode.map3 Types
+    Decode.map3 CASTUS_Types
         (Decode.field "attribute" (assocListDict identity Decode.string typeDecoder))
         (Decode.field "uniform" (assocListDict identity Decode.string typeDecoder))
         (Decode.field "varying" (assocListDict identity Decode.string typeDecoder))
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : CASTUS_Type -> Encode.Value
 typeEncoder type_ =
     case type_ of
-        Int ->
+        CASTUS_Int ->
             Encode.string "Int"
 
-        Float ->
+        CASTUS_Float ->
             Encode.string "Float"
 
-        V2 ->
+        CASTUS_V2 ->
             Encode.string "V2"
 
-        V3 ->
+        CASTUS_V3 ->
             Encode.string "V3"
 
-        V4 ->
+        CASTUS_V4 ->
             Encode.string "V4"
 
-        M4 ->
+        CASTUS_M4 ->
             Encode.string "M4"
 
-        Texture ->
+        CASTUS_Texture ->
             Encode.string "Texture"
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : Decode.Decoder CASTUS_Type
 typeDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "Int" ->
-                        Decode.succeed Int
+                        Decode.succeed CASTUS_Int
 
                     "Float" ->
-                        Decode.succeed Float
+                        Decode.succeed CASTUS_Float
 
                     "V2" ->
-                        Decode.succeed V2
+                        Decode.succeed CASTUS_V2
 
                     "V3" ->
-                        Decode.succeed V3
+                        Decode.succeed CASTUS_V3
 
                     "V4" ->
-                        Decode.succeed V4
+                        Decode.succeed CASTUS_V4
 
                     "M4" ->
-                        Decode.succeed M4
+                        Decode.succeed CASTUS_M4
 
                     "Texture" ->
-                        Decode.succeed Texture
+                        Decode.succeed CASTUS_Texture
 
                     _ ->
                         Decode.fail ("Unknown Type: " ++ str)

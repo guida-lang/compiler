@@ -10,7 +10,7 @@ module Compiler.Reporting.Render.Type.Localizer exposing
     )
 
 import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as EncodeX
@@ -28,18 +28,18 @@ import System.TypeCheck.IO as IO
 
 
 type Localizer
-    = Localizer (Dict String Name Import)
+    = Localizer (Dict String CDN_Name Import)
 
 
 type alias Import =
-    { alias : Maybe Name
+    { alias : Maybe CDN_Name
     , exposing_ : Exposing
     }
 
 
 type Exposing
     = All
-    | Only (EverySet String Name)
+    | Only (EverySet String CDN_Name)
 
 
 empty : Localizer
@@ -51,13 +51,13 @@ empty =
 -- LOCALIZE
 
 
-toDoc : Localizer -> IO.Canonical -> Name -> D.Doc
+toDoc : Localizer -> IO.CEMN_Canonical -> CDN_Name -> D.Doc
 toDoc localizer home name =
     D.fromChars (toChars localizer home name)
 
 
-toChars : Localizer -> IO.Canonical -> Name -> String
-toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
+toChars : Localizer -> IO.CEMN_Canonical -> CDN_Name -> String
+toChars (Localizer localizer) ((IO.CEMN_Canonical _ home) as moduleName) name =
     case Dict.get identity home localizer of
         Nothing ->
             home ++ "." ++ name
@@ -82,7 +82,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
 -- FROM NAMES
 
 
-fromNames : Dict String Name a -> Localizer
+fromNames : Dict String CDN_Name a -> Localizer
 fromNames names =
     Localizer (Dict.map (\_ _ -> { alias = Nothing, exposing_ = All }) names)
 
@@ -91,40 +91,40 @@ fromNames names =
 -- FROM MODULE
 
 
-fromModule : Src.Module -> Localizer
-fromModule ((Src.Module _ _ _ imports _ _ _ _ _) as modul) =
+fromModule : Src.CASTS_Module -> Localizer
+fromModule ((Src.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) =
     Localizer <|
         Dict.fromList identity <|
             (( Src.getName modul, { alias = Nothing, exposing_ = All } ) :: List.map toPair imports)
 
 
-toPair : Src.Import -> ( Name, Import )
-toPair (Src.Import (A.At _ name) alias_ exposing_) =
+toPair : Src.CASTS_Import -> ( CDN_Name, Import )
+toPair (Src.CASTS_Import (A.CRA_At _ name) alias_ exposing_) =
     ( name
     , Import alias_ (toExposing exposing_)
     )
 
 
-toExposing : Src.Exposing -> Exposing
+toExposing : Src.CASTS_Exposing -> Exposing
 toExposing exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.CASTS_Open ->
             All
 
-        Src.Explicit exposedList ->
+        Src.CASTS_Explicit exposedList ->
             Only (List.foldr addType EverySet.empty exposedList)
 
 
-addType : Src.Exposed -> EverySet String Name -> EverySet String Name
+addType : Src.CASTS_Exposed -> EverySet String CDN_Name -> EverySet String CDN_Name
 addType exposed types =
     case exposed of
-        Src.Lower _ ->
+        Src.CASTS_Lower _ ->
             types
 
-        Src.Upper (A.At _ name) _ ->
+        Src.CASTS_Upper (A.CRA_At _ name) _ ->
             EverySet.insert identity name types
 
-        Src.Operator _ _ ->
+        Src.CASTS_Operator _ _ ->
             types
 
 

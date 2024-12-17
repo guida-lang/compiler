@@ -154,6 +154,6 @@ traverseDict toComparable keyComparison func =
     Dict.foldr keyComparison (\k a -> bind (\acc -> fmap (\b -> Dict.insert toComparable k b acc) (func a))) (ok Dict.empty)
 
 
-indexedTraverse : (Index.ZeroBased -> a -> RResult i w error b) -> List a -> RResult i w error (List b)
+indexedTraverse : (Index.CDI_ZeroBased -> a -> RResult i w error b) -> List a -> RResult i w error (List b)
 indexedTraverse func xs =
     List.foldr (\a -> bind (\acc -> fmap (\b -> b :: acc) a)) (ok []) (Index.indexedMap func xs)

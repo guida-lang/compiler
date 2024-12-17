@@ -103,15 +103,15 @@ init =
 
                                         Solver.SolverOk details ->
                                             let
-                                                solution : Dict ( String, String ) Pkg.Name V.Version
+                                                solution : Dict ( String, String ) Pkg.CEP_Name V.Version
                                                 solution =
                                                     Dict.map (\_ (Solver.Details vsn _) -> vsn) details
 
-                                                directs : Dict ( String, String ) Pkg.Name V.Version
+                                                directs : Dict ( String, String ) Pkg.CEP_Name V.Version
                                                 directs =
                                                     Dict.intersection compare solution defaults
 
-                                                indirects : Dict ( String, String ) Pkg.Name V.Version
+                                                indirects : Dict ( String, String ) Pkg.CEP_Name V.Version
                                                 indirects =
                                                     Dict.diff solution defaults
                                             in
@@ -128,7 +128,7 @@ init =
             )
 
 
-defaults : Dict ( String, String ) Pkg.Name Con.Constraint
+defaults : Dict ( String, String ) Pkg.CEP_Name Con.Constraint
 defaults =
     Dict.fromList identity
         [ ( Pkg.core, Con.anything )

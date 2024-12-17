@@ -159,44 +159,44 @@ vrecord entries maybeExt =
 -- SOURCE TYPE TO DOC
 
 
-srcToDoc : Context -> Src.Type -> D.Doc
-srcToDoc context (A.At _ tipe) =
+srcToDoc : Context -> Src.CASTS_Type -> D.Doc
+srcToDoc context (A.CRA_At _ tipe) =
     case tipe of
-        Src.TLambda arg1 result ->
+        Src.CASTS_TLambda arg1 result ->
             let
                 ( arg2, rest ) =
                     collectSrcArgs result
             in
             lambda context (srcToDoc Func arg1) (srcToDoc Func arg2) (List.map (srcToDoc Func) rest)
 
-        Src.TVar name ->
+        Src.CASTS_TVar name ->
             D.fromName name
 
-        Src.TType _ name args ->
+        Src.CASTS_TType _ name args ->
             apply context (D.fromName name) (List.map (srcToDoc App) args)
 
-        Src.TTypeQual _ home name args ->
+        Src.CASTS_TTypeQual _ home name args ->
             apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (srcToDoc App) args)
 
-        Src.TRecord fields ext ->
+        Src.CASTS_TRecord fields ext ->
             record (List.map srcFieldToDocs fields) (Maybe.map (D.fromName << A.toValue) ext)
 
-        Src.TUnit ->
+        Src.CASTS_TUnit ->
             D.fromChars "()"
 
-        Src.TTuple a b cs ->
+        Src.CASTS_TTuple a b cs ->
             tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) cs)
 
 
-srcFieldToDocs : ( A.Located Name.Name, Src.Type ) -> ( D.Doc, D.Doc )
-srcFieldToDocs ( A.At _ fieldName, fieldType ) =
+srcFieldToDocs : ( A.CRA_Located Name.CDN_Name, Src.CASTS_Type ) -> ( D.Doc, D.Doc )
+srcFieldToDocs ( A.CRA_At _ fieldName, fieldType ) =
     ( D.fromName fieldName, srcToDoc None fieldType )
 
 
-collectSrcArgs : Src.Type -> ( Src.Type, List Src.Type )
+collectSrcArgs : Src.CASTS_Type -> ( Src.CASTS_Type, List Src.CASTS_Type )
 collectSrcArgs tipe =
     case tipe of
-        A.At _ (Src.TLambda a result) ->
+        A.CRA_At _ (Src.CASTS_TLambda a result) ->
             let
                 ( b, cs ) =
                     collectSrcArgs result
@@ -211,44 +211,44 @@ collectSrcArgs tipe =
 -- CANONICAL TYPE TO DOC
 
 
-canToDoc : L.Localizer -> Context -> Can.Type -> D.Doc
+canToDoc : L.Localizer -> Context -> Can.CASTC_Type -> D.Doc
 canToDoc localizer context tipe =
     case tipe of
-        Can.TLambda arg1 result ->
+        Can.CASTC_TLambda arg1 result ->
             let
                 ( arg2, rest ) =
                     collectArgs result
             in
             lambda context (canToDoc localizer Func arg1) (canToDoc localizer Func arg2) (List.map (canToDoc localizer Func) rest)
 
-        Can.TVar name ->
+        Can.CASTC_TVar name ->
             D.fromName name
 
-        Can.TType home name args ->
+        Can.CASTC_TType home name args ->
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App) args)
 
-        Can.TRecord fields ext ->
+        Can.CASTC_TRecord fields ext ->
             record (List.map (canFieldToDoc localizer) (Can.fieldsToList fields)) (Maybe.map D.fromName ext)
 
-        Can.TUnit ->
+        Can.CASTC_TUnit ->
             D.fromChars "()"
 
-        Can.TTuple a b maybeC ->
+        Can.CASTC_TTuple a b maybeC ->
             tuple (canToDoc localizer None a) (canToDoc localizer None b) (List.map (canToDoc localizer None) (Maybe.toList maybeC))
 
-        Can.TAlias home name args _ ->
+        Can.CASTC_TAlias home name args _ ->
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App << Tuple.second) args)
 
 
-canFieldToDoc : L.Localizer -> ( Name.Name, Can.Type ) -> ( D.Doc, D.Doc )
+canFieldToDoc : L.Localizer -> ( Name.CDN_Name, Can.CASTC_Type ) -> ( D.Doc, D.Doc )
 canFieldToDoc localizer ( name, tipe ) =
     ( D.fromName name, canToDoc localizer None tipe )
 
 
-collectArgs : Can.Type -> ( Can.Type, List Can.Type )
+collectArgs : Can.CASTC_Type -> ( Can.CASTC_Type, List Can.CASTC_Type )
 collectArgs tipe =
     case tipe of
-        Can.TLambda a rest ->
+        Can.CASTC_TLambda a rest ->
             let
                 ( b, cs ) =
                     collectArgs rest

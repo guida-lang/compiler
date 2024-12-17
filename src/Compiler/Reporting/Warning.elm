@@ -6,7 +6,7 @@ module Compiler.Reporting.Warning exposing
 
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -20,9 +20,9 @@ import Compiler.Reporting.Report exposing (Report(..))
 
 
 type Warning
-    = UnusedImport A.Region Name
-    | UnusedVariable A.Region Context Name
-    | MissingTypeAnnotation A.Region Name Can.Type
+    = UnusedImport A.CRA_Region CDN_Name
+    | UnusedVariable A.CRA_Region Context CDN_Name
+    | MissingTypeAnnotation A.CRA_Region CDN_Name Can.CASTC_Type
 
 
 type Context
@@ -73,7 +73,7 @@ toReport localizer source warning =
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
                         case Type.deepDealias inferredType of
-                            Can.TLambda _ _ ->
+                            Can.CASTC_TLambda _ _ ->
                                 "The `" ++ name ++ "` function has no type annotation."
 
                             _ ->

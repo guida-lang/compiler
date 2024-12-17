@@ -30,11 +30,11 @@ import Utils.Main as Utils
 
 
 type PackageChanges
-    = PackageChanges (List ModuleName.Raw) (Dict String ModuleName.Raw ModuleChanges) (List ModuleName.Raw)
+    = PackageChanges (List ModuleName.CEMN_Raw) (Dict String ModuleName.CEMN_Raw ModuleChanges) (List ModuleName.CEMN_Raw)
 
 
 type ModuleChanges
-    = ModuleChanges (Changes String Name.Name Docs.Union) (Changes String Name.Name Docs.Alias) (Changes String Name.Name Docs.Value) (Changes String Name.Name Docs.Binop)
+    = ModuleChanges (Changes String Name.CDN_Name Docs.Union) (Changes String Name.CDN_Name Docs.Alias) (Changes String Name.CDN_Name Docs.Value) (Changes String Name.CDN_Name Docs.Binop)
 
 
 type Changes c k v
@@ -139,7 +139,7 @@ isEquivalentBinop (Docs.Binop c1 t1 a1 p1) (Docs.Binop c2 t2 a2 p2) =
 -- DIFF TYPES
 
 
-diffType : Type.Type -> Type.Type -> Maybe (List ( Name.Name, Name.Name ))
+diffType : Type.Type -> Type.Type -> Maybe (List ( Name.CDN_Name, Name.CDN_Name ))
 diffType oldType newType =
     case ( oldType, newType ) of
         ( Type.Var oldName, Type.Var newName ) ->
@@ -190,7 +190,7 @@ diffType oldType newType =
 -- handle very old docs that do not use qualified names
 
 
-isSameName : Name.Name -> Name.Name -> Bool
+isSameName : Name.CDN_Name -> Name.CDN_Name -> Bool
 isSameName oldFullName newFullName =
     let
         dedot : String -> List String
@@ -208,7 +208,7 @@ isSameName oldFullName newFullName =
             oldFullName == newFullName
 
 
-diffFields : List ( Name.Name, Type.Type ) -> List ( Name.Name, Type.Type ) -> Maybe (List ( Name.Name, Name.Name ))
+diffFields : List ( Name.CDN_Name, Type.Type ) -> List ( Name.CDN_Name, Type.Type ) -> Maybe (List ( Name.CDN_Name, Name.CDN_Name ))
 diffFields oldRawFields newRawFields =
     if List.length oldRawFields /= List.length newRawFields then
         Nothing
@@ -219,11 +219,11 @@ diffFields oldRawFields newRawFields =
             sort fields =
                 List.sortBy Tuple.first fields
 
-            oldFields : List ( Name.Name, Type.Type )
+            oldFields : List ( Name.CDN_Name, Type.Type )
             oldFields =
                 sort oldRawFields
 
-            newFields : List ( Name.Name, Type.Type )
+            newFields : List ( Name.CDN_Name, Type.Type )
             newFields =
                 sort newRawFields
         in
@@ -238,14 +238,14 @@ diffFields oldRawFields newRawFields =
 -- TYPE VARIABLES
 
 
-isEquivalentRenaming : List ( Name.Name, Name.Name ) -> Bool
+isEquivalentRenaming : List ( Name.CDN_Name, Name.CDN_Name ) -> Bool
 isEquivalentRenaming varPairs =
     let
-        renamings : List ( Name.Name, List Name.Name )
+        renamings : List ( Name.CDN_Name, List Name.CDN_Name )
         renamings =
             Dict.toList compare (List.foldr insert Dict.empty varPairs)
 
-        insert : ( Name.Name, Name.Name ) -> Dict String Name.Name (List Name.Name) -> Dict String Name.Name (List Name.Name)
+        insert : ( Name.CDN_Name, Name.CDN_Name ) -> Dict String Name.CDN_Name (List Name.CDN_Name) -> Dict String Name.CDN_Name (List Name.CDN_Name)
         insert ( old, new ) dict =
             Utils.mapInsertWith identity (++) old [ new ] dict
 
@@ -275,7 +275,7 @@ isEquivalentRenaming varPairs =
                 && allUnique (List.map Tuple.second verifiedRenamings)
 
 
-compatibleVars : ( Name.Name, Name.Name ) -> Bool
+compatibleVars : ( Name.CDN_Name, Name.CDN_Name ) -> Bool
 compatibleVars ( old, new ) =
     case ( categorizeVar old, categorizeVar new ) of
         ( CompAppend, CompAppend ) ->
@@ -308,7 +308,7 @@ type TypeVarCategory
     | Var
 
 
-categorizeVar : Name.Name -> TypeVarCategory
+categorizeVar : Name.CDN_Name -> TypeVarCategory
 categorizeVar name =
     if Name.isCompappendType name then
         CompAppend
@@ -395,7 +395,7 @@ changeMagnitude (Changes added changed removed) =
 -- GET DOCS
 
 
-getDocs : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
+getDocs : Stuff.PackageCache -> Http.Manager -> Pkg.CEP_Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
 getDocs cache manager name version =
     let
         home : String

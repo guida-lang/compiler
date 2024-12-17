@@ -11,7 +11,7 @@ import Compiler.Canonicalize.Expression as Expr
 import Compiler.Canonicalize.Pattern as Pattern
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name as Name
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
@@ -37,14 +37,14 @@ type alias MResult i w a =
 -- MODULES
 
 
-canonicalize : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
-canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops effects) as modul) =
+canonicalize : Pkg.CEP_Name -> Dict String ModuleName.CEMN_Raw I.CEI_Interface -> Src.CASTS_Module -> MResult i (List W.Warning) Can.Module
+canonicalize pkg ifaces ((Src.CASTS_Module _ exports docs imports values _ _ binops effects) as modul) =
     let
-        home : IO.Canonical
+        home : IO.CEMN_Canonical
         home =
-            IO.Canonical pkg (Src.getName modul)
+            IO.CEMN_Canonical pkg (Src.getName modul)
 
-        cbinops : Dict String Name Can.Binop
+        cbinops : Dict String Name.CDN_Name Can.Binop
         cbinops =
             Dict.fromList identity (List.map canonicalizeBinop binops)
     in
@@ -72,8 +72,8 @@ canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops ef
 -- CANONICALIZE BINOP
 
 
-canonicalizeBinop : A.Located Src.Infix -> ( Name, Can.Binop )
-canonicalizeBinop (A.At _ (Src.Infix op associativity precedence func)) =
+canonicalizeBinop : A.CRA_Located Src.CASTS_Infix -> ( Name.CDN_Name, Can.Binop )
+canonicalizeBinop (A.CRA_At _ (Src.CASTS_Infix op associativity precedence func)) =
     ( op, Can.Binop_ associativity precedence func )
 
 
@@ -86,7 +86,7 @@ canonicalizeBinop (A.At _ (Src.Infix op associativity precedence func)) =
 -- 2. Detect cycles using DIRECT dependencies => nonterminating recursion
 
 
-canonicalizeValues : Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
+canonicalizeValues : Env.Env -> List (A.CRA_Located Src.CASTS_Value) -> MResult i (List W.Warning) Can.Decls
 canonicalizeValues env values =
     R.traverse (toNodeOne env) values
         |> R.bind (\nodes -> detectCycles (Graph.stronglyConnComp nodes))
@@ -127,17 +127,17 @@ detectBadCycles scc =
 
         Graph.CyclicSCC (def :: defs) ->
             let
-                (A.At region name) =
+                (A.CRA_At region name) =
                     extractDefName def
 
-                names : List Name
+                names : List Name.CDN_Name
                 names =
                     List.map (A.toValue << extractDefName) defs
             in
             R.throw (Error.RecursiveDecl region name names)
 
 
-extractDefName : Can.Def -> A.Located Name
+extractDefName : Can.Def -> A.CRA_Located Name.CDN_Name
 extractDefName def =
     case def of
         Can.Def name _ _ ->
@@ -157,7 +157,7 @@ extractDefName def =
 
 
 type alias NodeOne =
-    ( NodeTwo, Name.Name, List Name.Name )
+    ( NodeTwo, Name.CDN_Name, List Name.CDN_Name )
 
 
 
@@ -166,11 +166,11 @@ type alias NodeOne =
 
 
 type alias NodeTwo =
-    ( Can.Def, Name, List Name )
+    ( Can.Def, Name.CDN_Name, List Name.CDN_Name )
 
 
-toNodeOne : Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType)) =
+toNodeOne : Env.Env -> A.CRA_Located Src.CASTS_Value -> MResult i (List W.Warning) NodeOne
+toNodeOne env (A.CRA_At _ (Src.CASTS_Value ((A.CRA_At _ name) as aname) srcArgs body maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
@@ -199,7 +199,7 @@ toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType
         Just srcType ->
             Type.toAnnotation env srcType
                 |> R.bind
-                    (\(Can.Forall freeVars tipe) ->
+                    (\(Can.CASTC_Forall freeVars tipe) ->
                         Pattern.verify (Error.DPFuncArgs name)
                             (Expr.gatherTypedArgs env name srcArgs tipe Index.first [])
                             |> R.bind
@@ -225,7 +225,7 @@ toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType
                     )
 
 
-toNodeTwo : Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
+toNodeTwo : Name.CDN_Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
 toNodeTwo name args def freeLocals =
     case args of
         [] ->
@@ -235,7 +235,7 @@ toNodeTwo name args def freeLocals =
             ( def, name, [] )
 
 
-addDirects : Name -> Expr.Uses -> List Name -> List Name
+addDirects : Name.CDN_Name -> Expr.Uses -> List Name.CDN_Name -> List Name.CDN_Name
 addDirects name (Expr.Uses { direct }) directDeps =
     if direct > 0 then
         name :: directDeps
@@ -249,21 +249,21 @@ addDirects name (Expr.Uses { direct }) directDeps =
 
 
 canonicalizeExports :
-    List (A.Located Src.Value)
-    -> Dict String Name union
-    -> Dict String Name alias
-    -> Dict String Name binop
+    List (A.CRA_Located Src.CASTS_Value)
+    -> Dict String Name.CDN_Name union
+    -> Dict String Name.CDN_Name alias
+    -> Dict String Name.CDN_Name binop
     -> Can.Effects
-    -> A.Located Src.Exposing
+    -> A.CRA_Located Src.CASTS_Exposing
     -> MResult i w Can.Exports
-canonicalizeExports values unions aliases binops effects (A.At region exposing_) =
+canonicalizeExports values unions aliases binops effects (A.CRA_At region exposing_) =
     case exposing_ of
-        Src.Open ->
+        Src.CASTS_Open ->
             R.ok (Can.ExportEverything region)
 
-        Src.Explicit exposeds ->
+        Src.CASTS_Explicit exposeds ->
             let
-                names : Dict String Name ()
+                names : Dict String Name.CDN_Name ()
                 names =
                     Dict.fromList identity (List.map valueToName values)
             in
@@ -275,22 +275,22 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
                     )
 
 
-valueToName : A.Located Src.Value -> ( Name, () )
-valueToName (A.At _ (Src.Value (A.At _ name) _ _ _)) =
+valueToName : A.CRA_Located Src.CASTS_Value -> ( Name.CDN_Name, () )
+valueToName (A.CRA_At _ (Src.CASTS_Value (A.CRA_At _ name) _ _ _)) =
     ( name, () )
 
 
 checkExposed :
-    Dict String Name value
-    -> Dict String Name union
-    -> Dict String Name alias
-    -> Dict String Name binop
+    Dict String Name.CDN_Name value
+    -> Dict String Name.CDN_Name union
+    -> Dict String Name.CDN_Name alias
+    -> Dict String Name.CDN_Name binop
     -> Can.Effects
-    -> Src.Exposed
-    -> MResult i w (Dups.Tracker (A.Located Can.Export))
+    -> Src.CASTS_Exposed
+    -> MResult i w (Dups.Tracker (A.CRA_Located Can.Export))
 checkExposed values unions aliases binops effects exposed =
     case exposed of
-        Src.Lower (A.At region name) ->
+        Src.CASTS_Lower (A.CRA_At region name) ->
             if Dict.member identity name values then
                 ok name region Can.ExportValue
 
@@ -302,14 +302,14 @@ checkExposed values unions aliases binops effects exposed =
                     Just ports ->
                         R.throw (Error.ExportNotFound region Error.BadVar name (ports ++ Dict.keys compare values))
 
-        Src.Operator region name ->
+        Src.CASTS_Operator region name ->
             if Dict.member identity name binops then
                 ok name region Can.ExportBinop
 
             else
                 R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys compare binops))
 
-        Src.Upper (A.At region name) (Src.Public dotDotRegion) ->
+        Src.CASTS_Upper (A.CRA_At region name) (Src.CASTS_Public dotDotRegion) ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionOpen
 
@@ -319,7 +319,7 @@ checkExposed values unions aliases binops effects exposed =
             else
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
-        Src.Upper (A.At region name) Src.Private ->
+        Src.CASTS_Upper (A.CRA_At region name) Src.CASTS_Private ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionClosed
 
@@ -330,7 +330,7 @@ checkExposed values unions aliases binops effects exposed =
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
 
-checkPorts : Can.Effects -> Name -> Maybe (List Name)
+checkPorts : Can.Effects -> Name.CDN_Name -> Maybe (List Name.CDN_Name)
 checkPorts effects name =
     case effects of
         Can.NoEffects ->
@@ -347,6 +347,6 @@ checkPorts effects name =
             Just []
 
 
-ok : Name -> A.Region -> Can.Export -> MResult i w (Dups.Tracker (A.Located Can.Export))
+ok : Name.CDN_Name -> A.CRA_Region -> Can.Export -> MResult i w (Dups.Tracker (A.CRA_Located Can.Export))
 ok name region export =
-    R.ok (Dups.one name region (A.At region export))
+    R.ok (Dups.one name region (A.CRA_At region export))

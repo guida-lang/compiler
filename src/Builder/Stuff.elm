@@ -66,17 +66,17 @@ compilerVersion =
 -- ELMI and ELMO
 
 
-elmi : String -> ModuleName.Raw -> String
+elmi : String -> ModuleName.CEMN_Raw -> String
 elmi root name =
     toArtifactPath root name "elmi"
 
 
-elmo : String -> ModuleName.Raw -> String
+elmo : String -> ModuleName.CEMN_Raw -> String
 elmo root name =
     toArtifactPath root name "elmo"
 
 
-toArtifactPath : String -> ModuleName.Raw -> String -> String
+toArtifactPath : String -> ModuleName.CEMN_Raw -> String -> String
 toArtifactPath root name ext =
     Utils.fpForwardSlash (stuff root) (Utils.fpAddExtension (ModuleName.toHyphenPath name) ext)
 
@@ -153,7 +153,7 @@ registry (PackageCache dir) =
     Utils.fpForwardSlash dir "registry.json"
 
 
-package : PackageCache -> Pkg.Name -> V.Version -> String
+package : PackageCache -> Pkg.CEP_Name -> V.Version -> String
 package (PackageCache dir) name version =
     Utils.fpForwardSlash dir (Utils.fpForwardSlash (Pkg.toString name) (V.toChars version))
 

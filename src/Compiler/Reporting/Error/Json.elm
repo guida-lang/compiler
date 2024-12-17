@@ -48,17 +48,17 @@ parseErrorToReport path source parseError reason =
         toSnippet : String -> Int -> Int -> ( String, D.Doc ) -> Help.Report
         toSnippet title row col ( problem, details ) =
             let
-                pos : A.Position
+                pos : A.CRA_Position
                 pos =
-                    A.Position row col
+                    A.CRA_Position row col
 
-                surroundings : A.Region
+                surroundings : A.CRA_Region
                 surroundings =
-                    A.Region (A.Position (max 1 (row - 2)) 1) pos
+                    A.CRA_Region (A.CRA_Position (max 1 (row - 2)) 1) pos
 
-                region : A.Region
+                region : A.CRA_Region
                 region =
-                    A.Region pos pos
+                    A.CRA_Region pos pos
             in
             Help.jsonReport title (Just path) <|
                 Code.toSnippet source
@@ -362,25 +362,25 @@ getMaxDepth problem =
 
 
 type FailureToReport x
-    = FailureToReport (String -> Code.Source -> Context -> A.Region -> x -> Help.Report)
+    = FailureToReport (String -> Code.Source -> Context -> A.CRA_Region -> x -> Help.Report)
 
 
-expectationToReport : String -> Code.Source -> Context -> A.Region -> DecodeExpectation -> Reason -> Help.Report
-expectationToReport path source context (A.Region start end) expectation reason =
+expectationToReport : String -> Code.Source -> Context -> A.CRA_Region -> DecodeExpectation -> Reason -> Help.Report
+expectationToReport path source context (A.CRA_Region start end) expectation reason =
     let
-        (A.Position sr _) =
+        (A.CRA_Position sr _) =
             start
 
-        (A.Position er _) =
+        (A.CRA_Position er _) =
             end
 
-        region : A.Region
+        region : A.CRA_Region
         region =
             if sr == er then
                 crash "region"
 
             else
-                A.Region start start
+                A.CRA_Region start start
 
         introduction : String
         introduction =

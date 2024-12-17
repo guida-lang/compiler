@@ -1,9 +1,9 @@
 module Compiler.Elm.Interface exposing
-    ( Alias(..)
-    , Binop(..)
+    ( CEI_Alias(..)
+    , CEI_Binop(..)
+    , CEI_Interface(..)
+    , CEI_Union(..)
     , DependencyInterface(..)
-    , Interface(..)
-    , Union(..)
     , dependencyInterfaceDecoder
     , dependencyInterfaceEncoder
     , extractAlias
@@ -36,39 +36,39 @@ import Utils.Main as Utils
 -- INTERFACE
 
 
-type Interface
-    = Interface Pkg.Name (Dict String Name.Name Can.Annotation) (Dict String Name.Name Union) (Dict String Name.Name Alias) (Dict String Name.Name Binop)
+type CEI_Interface
+    = CEI_Interface Pkg.CEP_Name (Dict String Name.CDN_Name Can.CASTC_Annotation) (Dict String Name.CDN_Name CEI_Union) (Dict String Name.CDN_Name CEI_Alias) (Dict String Name.CDN_Name CEI_Binop)
 
 
-type Union
-    = OpenUnion Can.Union
-    | ClosedUnion Can.Union
-    | PrivateUnion Can.Union
+type CEI_Union
+    = CEI_OpenUnion Can.CASTC_Union
+    | CEI_ClosedUnion Can.CASTC_Union
+    | CEI_PrivateUnion Can.CASTC_Union
 
 
-type Alias
-    = PublicAlias Can.Alias
-    | PrivateAlias Can.Alias
+type CEI_Alias
+    = CEI_PublicAlias Can.CASTC_Alias
+    | CEI_PrivateAlias Can.CASTC_Alias
 
 
-type Binop
-    = Binop Name.Name Can.Annotation Binop.Associativity Binop.Precedence
+type CEI_Binop
+    = CEI_Binop Name.CDN_Name Can.CASTC_Annotation Binop.CASTU_Associativity Binop.CASTU_Precedence
 
 
 
 -- FROM MODULE
 
 
-fromModule : Pkg.Name -> Can.Module -> Dict String Name.Name Can.Annotation -> Interface
+fromModule : Pkg.CEP_Name -> Can.Module -> Dict String Name.CDN_Name Can.CASTC_Annotation -> CEI_Interface
 fromModule home (Can.Module _ exports _ _ unions aliases binops _) annotations =
-    Interface home
+    CEI_Interface home
         (restrict exports annotations)
         (restrictUnions exports unions)
         (restrictAliases exports aliases)
         (restrict exports (Dict.map (\_ -> toOp annotations) binops))
 
 
-restrict : Can.Exports -> Dict String Name.Name a -> Dict String Name.Name a
+restrict : Can.Exports -> Dict String Name.CDN_Name a -> Dict String Name.CDN_Name a
 restrict exports dict =
     case exports of
         Can.ExportEverything _ ->
@@ -78,48 +78,48 @@ restrict exports dict =
             Dict.intersection compare dict explicitExports
 
 
-toOp : Dict String Name.Name Can.Annotation -> Can.Binop -> Binop
+toOp : Dict String Name.CDN_Name Can.CASTC_Annotation -> Can.Binop -> CEI_Binop
 toOp types (Can.Binop_ associativity precedence name) =
-    Binop name (Utils.find identity name types) associativity precedence
+    CEI_Binop name (Utils.find identity name types) associativity precedence
 
 
-restrictUnions : Can.Exports -> Dict String Name.Name Can.Union -> Dict String Name.Name Union
+restrictUnions : Can.Exports -> Dict String Name.CDN_Name Can.CASTC_Union -> Dict String Name.CDN_Name CEI_Union
 restrictUnions exports unions =
     case exports of
         Can.ExportEverything _ ->
-            Dict.map (\_ -> OpenUnion) unions
+            Dict.map (\_ -> CEI_OpenUnion) unions
 
         Can.Export explicitExports ->
             Dict.merge compare
                 (\_ _ result -> result)
-                (\k (A.At _ export) union result ->
+                (\k (A.CRA_At _ export) union result ->
                     case export of
                         Can.ExportUnionOpen ->
-                            Dict.insert identity k (OpenUnion union) result
+                            Dict.insert identity k (CEI_OpenUnion union) result
 
                         Can.ExportUnionClosed ->
-                            Dict.insert identity k (ClosedUnion union) result
+                            Dict.insert identity k (CEI_ClosedUnion union) result
 
                         _ ->
                             crash "impossible exports discovered in restrictUnions"
                 )
-                (\k union result -> Dict.insert identity k (PrivateUnion union) result)
+                (\k union result -> Dict.insert identity k (CEI_PrivateUnion union) result)
                 explicitExports
                 unions
                 Dict.empty
 
 
-restrictAliases : Can.Exports -> Dict String Name.Name Can.Alias -> Dict String Name.Name Alias
+restrictAliases : Can.Exports -> Dict String Name.CDN_Name Can.CASTC_Alias -> Dict String Name.CDN_Name CEI_Alias
 restrictAliases exports aliases =
     case exports of
         Can.ExportEverything _ ->
-            Dict.map (\_ alias -> PublicAlias alias) aliases
+            Dict.map (\_ alias -> CEI_PublicAlias alias) aliases
 
         Can.Export explicitExports ->
             Dict.merge compare
                 (\_ _ result -> result)
-                (\k _ alias result -> Dict.insert identity k (PublicAlias alias) result)
-                (\k alias result -> Dict.insert identity k (PrivateAlias alias) result)
+                (\k _ alias result -> Dict.insert identity k (CEI_PublicAlias alias) result)
+                (\k alias result -> Dict.insert identity k (CEI_PrivateAlias alias) result)
                 explicitExports
                 aliases
                 Dict.empty
@@ -129,26 +129,26 @@ restrictAliases exports aliases =
 -- TO PUBLIC
 
 
-toPublicUnion : Union -> Maybe Can.Union
+toPublicUnion : CEI_Union -> Maybe Can.CASTC_Union
 toPublicUnion iUnion =
     case iUnion of
-        OpenUnion union ->
+        CEI_OpenUnion union ->
             Just union
 
-        ClosedUnion (Can.Union vars _ _ opts) ->
-            Just (Can.Union vars [] 0 opts)
+        CEI_ClosedUnion (Can.CASTC_Union vars _ _ opts) ->
+            Just (Can.CASTC_Union vars [] 0 opts)
 
-        PrivateUnion _ ->
+        CEI_PrivateUnion _ ->
             Nothing
 
 
-toPublicAlias : Alias -> Maybe Can.Alias
+toPublicAlias : CEI_Alias -> Maybe Can.CASTC_Alias
 toPublicAlias iAlias =
     case iAlias of
-        PublicAlias alias ->
+        CEI_PublicAlias alias ->
             Just alias
 
-        PrivateAlias _ ->
+        CEI_PrivateAlias _ ->
             Nothing
 
 
@@ -157,40 +157,40 @@ toPublicAlias iAlias =
 
 
 type DependencyInterface
-    = Public Interface
-    | Private Pkg.Name (Dict String Name.Name Can.Union) (Dict String Name.Name Can.Alias)
+    = Public CEI_Interface
+    | Private Pkg.CEP_Name (Dict String Name.CDN_Name Can.CASTC_Union) (Dict String Name.CDN_Name Can.CASTC_Alias)
 
 
-public : Interface -> DependencyInterface
+public : CEI_Interface -> DependencyInterface
 public =
     Public
 
 
-private : Interface -> DependencyInterface
-private (Interface pkg _ unions aliases _) =
+private : CEI_Interface -> DependencyInterface
+private (CEI_Interface pkg _ unions aliases _) =
     Private pkg (Dict.map (\_ -> extractUnion) unions) (Dict.map (\_ -> extractAlias) aliases)
 
 
-extractUnion : Union -> Can.Union
+extractUnion : CEI_Union -> Can.CASTC_Union
 extractUnion iUnion =
     case iUnion of
-        OpenUnion union ->
+        CEI_OpenUnion union ->
             union
 
-        ClosedUnion union ->
+        CEI_ClosedUnion union ->
             union
 
-        PrivateUnion union ->
+        CEI_PrivateUnion union ->
             union
 
 
-extractAlias : Alias -> Can.Alias
+extractAlias : CEI_Alias -> Can.CASTC_Alias
 extractAlias iAlias =
     case iAlias of
-        PublicAlias alias ->
+        CEI_PublicAlias alias ->
             alias
 
-        PrivateAlias alias ->
+        CEI_PrivateAlias alias ->
             alias
 
 
@@ -208,8 +208,8 @@ privatize di =
 -- ENCODERS and DECODERS
 
 
-interfaceEncoder : Interface -> Encode.Value
-interfaceEncoder (Interface home values unions aliases binops) =
+interfaceEncoder : CEI_Interface -> Encode.Value
+interfaceEncoder (CEI_Interface home values unions aliases binops) =
     Encode.object
         [ ( "type", Encode.string "Interface" )
         , ( "home", Pkg.nameEncoder home )
@@ -220,9 +220,9 @@ interfaceEncoder (Interface home values unions aliases binops) =
         ]
 
 
-interfaceDecoder : Decode.Decoder Interface
+interfaceDecoder : Decode.Decoder CEI_Interface
 interfaceDecoder =
-    Decode.map5 Interface
+    Decode.map5 CEI_Interface
         (Decode.field "home" Pkg.nameDecoder)
         (Decode.field "values" (D.assocListDict identity Decode.string Can.annotationDecoder))
         (Decode.field "unions" (D.assocListDict identity Decode.string unionDecoder))
@@ -230,44 +230,44 @@ interfaceDecoder =
         (Decode.field "binops" (D.assocListDict identity Decode.string binopDecoder))
 
 
-unionEncoder : Union -> Encode.Value
+unionEncoder : CEI_Union -> Encode.Value
 unionEncoder union_ =
     case union_ of
-        OpenUnion union ->
+        CEI_OpenUnion union ->
             Encode.object
                 [ ( "type", Encode.string "OpenUnion" )
                 , ( "union", Can.unionEncoder union )
                 ]
 
-        ClosedUnion union ->
+        CEI_ClosedUnion union ->
             Encode.object
                 [ ( "type", Encode.string "ClosedUnion" )
                 , ( "union", Can.unionEncoder union )
                 ]
 
-        PrivateUnion union ->
+        CEI_PrivateUnion union ->
             Encode.object
                 [ ( "type", Encode.string "ClosedUnion" )
                 , ( "union", Can.unionEncoder union )
                 ]
 
 
-unionDecoder : Decode.Decoder Union
+unionDecoder : Decode.Decoder CEI_Union
 unionDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "OpenUnion" ->
-                        Decode.map OpenUnion
+                        Decode.map CEI_OpenUnion
                             (Decode.field "union" Can.unionDecoder)
 
                     "ClosedUnion" ->
-                        Decode.map ClosedUnion
+                        Decode.map CEI_ClosedUnion
                             (Decode.field "union" Can.unionDecoder)
 
                     "PrivateUnion" ->
-                        Decode.map ClosedUnion
+                        Decode.map CEI_ClosedUnion
                             (Decode.field "union" Can.unionDecoder)
 
                     _ ->
@@ -275,34 +275,34 @@ unionDecoder =
             )
 
 
-aliasEncoder : Alias -> Encode.Value
+aliasEncoder : CEI_Alias -> Encode.Value
 aliasEncoder aliasValue =
     case aliasValue of
-        PublicAlias alias_ ->
+        CEI_PublicAlias alias_ ->
             Encode.object
                 [ ( "type", Encode.string "PublicAlias" )
                 , ( "alias", Can.aliasEncoder alias_ )
                 ]
 
-        PrivateAlias alias_ ->
+        CEI_PrivateAlias alias_ ->
             Encode.object
                 [ ( "type", Encode.string "PrivateAlias" )
                 , ( "alias", Can.aliasEncoder alias_ )
                 ]
 
 
-aliasDecoder : Decode.Decoder Alias
+aliasDecoder : Decode.Decoder CEI_Alias
 aliasDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PublicAlias" ->
-                        Decode.map PublicAlias
+                        Decode.map CEI_PublicAlias
                             (Decode.field "alias" Can.aliasDecoder)
 
                     "PrivateAlias" ->
-                        Decode.map PrivateAlias
+                        Decode.map CEI_PrivateAlias
                             (Decode.field "alias" Can.aliasDecoder)
 
                     _ ->
@@ -310,8 +310,8 @@ aliasDecoder =
             )
 
 
-binopEncoder : Binop -> Encode.Value
-binopEncoder (Binop name annotation associativity precedence) =
+binopEncoder : CEI_Binop -> Encode.Value
+binopEncoder (CEI_Binop name annotation associativity precedence) =
     Encode.object
         [ ( "type", Encode.string "Binop" )
         , ( "name", Encode.string name )
@@ -321,9 +321,9 @@ binopEncoder (Binop name annotation associativity precedence) =
         ]
 
 
-binopDecoder : Decode.Decoder Binop
+binopDecoder : Decode.Decoder CEI_Binop
 binopDecoder =
-    Decode.map4 Binop
+    Decode.map4 CEI_Binop
         (Decode.field "name" Decode.string)
         (Decode.field "annotation" Can.annotationDecoder)
         (Decode.field "associativity" Binop.associativityDecoder)

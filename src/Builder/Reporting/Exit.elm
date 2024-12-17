@@ -82,8 +82,8 @@ toJson report =
 
 
 type Init
-    = InitNoSolution (List Pkg.Name)
-    | InitNoOfflineSolution (List Pkg.Name)
+    = InitNoSolution (List Pkg.CEP_Name)
+    | InitNoOfflineSolution (List Pkg.CEP_Name)
     | InitSolverProblem Solver
     | InitAlreadyExists
     | InitRegistryProblem RegistryProblem
@@ -149,7 +149,7 @@ type Diff
     | DiffApplication
     | DiffNoExposed
     | DiffUnpublished
-    | DiffUnknownPackage Pkg.Name (List Pkg.Name)
+    | DiffUnknownPackage Pkg.CEP_Name (List Pkg.CEP_Name)
     | DiffUnknownVersion V.Version (List V.Version)
     | DiffDocsProblem V.Version DocsProblem
     | DiffMustHaveLatestRegistry RegistryProblem
@@ -1027,13 +1027,13 @@ type Install
     | InstallBadOutline Outline
     | InstallBadRegistry RegistryProblem
     | InstallNoArgs FilePath
-    | InstallNoOnlineAppSolution Pkg.Name
-    | InstallNoOfflineAppSolution Pkg.Name
-    | InstallNoOnlinePkgSolution Pkg.Name
-    | InstallNoOfflinePkgSolution Pkg.Name
+    | InstallNoOnlineAppSolution Pkg.CEP_Name
+    | InstallNoOfflineAppSolution Pkg.CEP_Name
+    | InstallNoOnlinePkgSolution Pkg.CEP_Name
+    | InstallNoOfflinePkgSolution Pkg.CEP_Name
     | InstallHadSolverTrouble Solver
-    | InstallUnknownPackageOnline Pkg.Name (List Pkg.Name)
-    | InstallUnknownPackageOffline Pkg.Name (List Pkg.Name)
+    | InstallUnknownPackageOnline Pkg.CEP_Name (List Pkg.CEP_Name)
+    | InstallUnknownPackageOffline Pkg.CEP_Name (List Pkg.CEP_Name)
     | InstallBadDetails Details
 
 
@@ -1251,9 +1251,9 @@ installToReport exit =
 
 
 type Solver
-    = SolverBadCacheData Pkg.Name V.Version
-    | SolverBadHttpData Pkg.Name V.Version String
-    | SolverBadHttp Pkg.Name V.Version Http.Error
+    = SolverBadCacheData Pkg.CEP_Name V.Version
+    | SolverBadHttpData Pkg.CEP_Name V.Version String
+    | SolverBadHttp Pkg.CEP_Name V.Version Http.Error
 
 
 toSolverReport : Solver -> Help.Report
@@ -1391,14 +1391,14 @@ toOutlineReport problem =
                 ]
 
 
-toOutlineProblemReport : FilePath -> Code.Source -> Json.Context -> A.Region -> OutlineProblem -> Help.Report
+toOutlineProblemReport : FilePath -> Code.Source -> Json.Context -> A.CRA_Region -> OutlineProblem -> Help.Report
 toOutlineProblemReport path source _ region problem =
     let
-        toHighlight : Int -> Int -> Maybe A.Region
+        toHighlight : Int -> Int -> Maybe A.CRA_Region
         toHighlight row col =
-            Just <| A.Region (A.Position row col) (A.Position row col)
+            Just <| A.CRA_Region (A.CRA_Position row col) (A.CRA_Position row col)
 
-        toSnippet : String -> Maybe A.Region -> ( D.Doc, D.Doc ) -> Help.Report
+        toSnippet : String -> Maybe A.CRA_Region -> ( D.Doc, D.Doc ) -> Help.Report
         toSnippet title highlight pair =
             Help.jsonReport title (Just path) <|
                 Code.toSnippet source region highlight pair
@@ -1843,8 +1843,8 @@ type Details
 
 
 type DetailsBadDep
-    = BD_BadDownload Pkg.Name V.Version PackageProblem
-    | BD_BadBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
+    = BD_BadDownload Pkg.CEP_Name V.Version PackageProblem
+    | BD_BadBuild Pkg.CEP_Name V.Version (Dict ( String, String ) Pkg.CEP_Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2053,7 +2053,7 @@ type PackageProblem
     | PP_BadArchiveHash String String String
 
 
-toPackageProblemReport : Pkg.Name -> V.Version -> PackageProblem -> Help.Report
+toPackageProblemReport : Pkg.CEP_Name -> V.Version -> PackageProblem -> Help.Report
 toPackageProblemReport pkg vsn problem =
     let
         thePackage : String
@@ -2247,7 +2247,7 @@ type Make
     | MakePkgNeedsExposing
     | MakeMultipleFilesIntoHtml
     | MakeNoMain
-    | MakeNonMainFilesIntoJavaScript ModuleName.Raw (List ModuleName.Raw)
+    | MakeNonMainFilesIntoJavaScript ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
     | MakeCannotBuild BuildProblem
     | MakeBadGenerate Generate
 
@@ -2514,11 +2514,11 @@ type BuildProjectProblem
     | BP_WithBadExtension FilePath
     | BP_WithAmbiguousSrcDir FilePath FilePath FilePath
     | BP_MainPathDuplicate FilePath FilePath
-    | BP_RootNameDuplicate ModuleName.Raw FilePath FilePath
+    | BP_RootNameDuplicate ModuleName.CEMN_Raw FilePath FilePath
     | BP_RootNameInvalid FilePath FilePath (List String)
     | BP_CannotLoadDependencies
-    | BP_Cycle ModuleName.Raw (List ModuleName.Raw)
-    | BP_MissingExposed (NE.Nonempty ( ModuleName.Raw, Import.Problem ))
+    | BP_Cycle ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
+    | BP_MissingExposed (NE.Nonempty ( ModuleName.CEMN_Raw, Import.Problem ))
 
 
 toBuildProblemReport : BuildProblem -> Help.Report
@@ -2737,7 +2737,7 @@ toModuleNameConventionTable srcDir names =
 
 type Generate
     = GenerateCannotLoadArtifacts
-    | GenerateCannotOptimizeDebugValues ModuleName.Raw (List ModuleName.Raw)
+    | GenerateCannotOptimizeDebugValues ModuleName.CEMN_Raw (List ModuleName.CEMN_Raw)
 
 
 toGenerateReport : Generate -> Help.Report

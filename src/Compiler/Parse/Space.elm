@@ -19,7 +19,7 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type alias Parser x a =
-    P.Parser x ( a, A.Position )
+    P.Parser x ( a, A.CRA_Position )
 
 
 
@@ -54,8 +54,8 @@ chomp toError =
 -- CHECKS -- to be called right after a `chomp`
 
 
-checkIndent : A.Position -> (Int -> Int -> x) -> P.Parser x ()
-checkIndent (A.Position endRow endCol) toError =
+checkIndent : A.CRA_Position -> (Int -> Int -> x) -> P.Parser x ()
+checkIndent (A.CRA_Position endRow endCol) toError =
     P.Parser <|
         \((P.State _ _ _ indent _ col) as state) ->
             if col > indent && col > 1 then
@@ -284,7 +284,7 @@ eatMultiCommentHelp src pos end row col openComments =
 -- DOCUMENTATION COMMENT
 
 
-docComment : (Int -> Int -> x) -> (E.Space -> Int -> Int -> x) -> P.Parser x Src.Comment
+docComment : (Int -> Int -> x) -> (E.Space -> Int -> Int -> x) -> P.Parser x Src.CASTS_Comment
 docComment toExpectation toSpaceError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -328,9 +328,9 @@ docComment toExpectation toSpaceError =
                                     , offCol = col3
                                     }
 
-                            comment : Src.Comment
+                            comment : Src.CASTS_Comment
                             comment =
-                                Src.Comment snippet
+                                Src.CASTS_Comment snippet
 
                             newState : P.State
                             newState =

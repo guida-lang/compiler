@@ -1,11 +1,15 @@
 module Compiler.AST.Canonical exposing
-    ( Alias(..)
-    , AliasType(..)
-    , Annotation(..)
-    , Binop(..)
+    ( Binop(..)
+    , CASTC_Alias(..)
+    , CASTC_AliasType(..)
+    , CASTC_Annotation(..)
+    , CASTC_Ctor(..)
+    , CASTC_CtorOpts(..)
+    , CASTC_FieldType(..)
+    , CASTC_FreeVars
+    , CASTC_Type(..)
+    , CASTC_Union(..)
     , CaseBranch(..)
-    , Ctor(..)
-    , CtorOpts(..)
     , Decls(..)
     , Def(..)
     , Effects(..)
@@ -13,17 +17,13 @@ module Compiler.AST.Canonical exposing
     , Exports(..)
     , Expr
     , Expr_(..)
-    , FieldType(..)
     , FieldUpdate(..)
-    , FreeVars
     , Manager(..)
     , Module(..)
     , Pattern
     , PatternCtorArg(..)
     , Pattern_(..)
     , Port(..)
-    , Type(..)
-    , Union(..)
     , aliasDecoder
     , aliasEncoder
     , annotationDecoder
@@ -62,7 +62,7 @@ import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
@@ -78,7 +78,7 @@ import System.TypeCheck.IO as IO
 
 
 type alias Expr =
-    A.Located Expr_
+    A.CRA_Located Expr_
 
 
 
@@ -86,20 +86,20 @@ type alias Expr =
 
 
 type Expr_
-    = VarLocal Name
-    | VarTopLevel IO.Canonical Name
-    | VarKernel Name Name
-    | VarForeign IO.Canonical Name Annotation
-    | VarCtor CtorOpts IO.Canonical Name Index.ZeroBased Annotation
-    | VarDebug IO.Canonical Name Annotation
-    | VarOperator Name IO.Canonical Name Annotation -- CACHE real name for optimization
+    = VarLocal CDN_Name
+    | VarTopLevel IO.CEMN_Canonical CDN_Name
+    | VarKernel CDN_Name CDN_Name
+    | VarForeign IO.CEMN_Canonical CDN_Name CASTC_Annotation
+    | VarCtor CASTC_CtorOpts IO.CEMN_Canonical CDN_Name Index.CDI_ZeroBased CASTC_Annotation
+    | VarDebug IO.CEMN_Canonical CDN_Name CASTC_Annotation
+    | VarOperator CDN_Name IO.CEMN_Canonical CDN_Name CASTC_Annotation -- CACHE real name for optimization
     | Chr String
     | Str String
     | Int Int
     | Float Float
     | List (List Expr)
     | Negate Expr
-    | Binop Name IO.Canonical Name Annotation Expr Expr -- CACHE real name for optimization
+    | Binop CDN_Name IO.CEMN_Canonical CDN_Name CASTC_Annotation Expr Expr -- CACHE real name for optimization
     | Lambda (List Pattern) Expr
     | Call Expr (List Expr)
     | If (List ( Expr, Expr )) Expr
@@ -107,13 +107,13 @@ type Expr_
     | LetRec (List Def) Expr
     | LetDestruct Pattern Expr Expr
     | Case Expr (List CaseBranch)
-    | Accessor Name
-    | Access Expr (A.Located Name)
-    | Update Name Expr (Dict String Name FieldUpdate)
-    | Record (Dict String Name Expr)
+    | Accessor CDN_Name
+    | Access Expr (A.CRA_Located CDN_Name)
+    | Update CDN_Name Expr (Dict String CDN_Name FieldUpdate)
+    | Record (Dict String CDN_Name Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
-    | Shader Shader.Source Shader.Types
+    | Shader Shader.CASTUS_Source Shader.CASTUS_Types
 
 
 type CaseBranch
@@ -121,7 +121,7 @@ type CaseBranch
 
 
 type FieldUpdate
-    = FieldUpdate A.Region Expr
+    = FieldUpdate A.CRA_Region Expr
 
 
 
@@ -129,8 +129,8 @@ type FieldUpdate
 
 
 type Def
-    = Def (A.Located Name) (List Pattern) Expr
-    | TypedDef (A.Located Name) FreeVars (List ( Pattern, Type )) Expr Type
+    = Def (A.CRA_Located CDN_Name) (List Pattern) Expr
+    | TypedDef (A.CRA_Located CDN_Name) CASTC_FreeVars (List ( Pattern, CASTC_Type )) Expr CASTC_Type
 
 
 type Decls
@@ -144,19 +144,19 @@ type Decls
 
 
 type alias Pattern =
-    A.Located Pattern_
+    A.CRA_Located Pattern_
 
 
 type Pattern_
     = PAnything
-    | PVar Name
-    | PRecord (List Name)
-    | PAlias Pattern Name
+    | PVar CDN_Name
+    | PRecord (List CDN_Name)
+    | PAlias Pattern CDN_Name
     | PUnit
     | PTuple Pattern Pattern (Maybe Pattern)
     | PList (List Pattern)
     | PCons Pattern Pattern
-    | PBool Union Bool
+    | PBool CASTC_Union Bool
     | PChr String
     | PStr String
     | PInt Int
@@ -165,11 +165,11 @@ type Pattern_
         -- CACHE p_index to replace p_name in PROD code gen
         -- CACHE p_opts to allocate less in PROD code gen
         -- CACHE p_alts and p_numAlts for exhaustiveness checker
-        { home : IO.Canonical
-        , type_ : Name
-        , union : Union
-        , name : Name
-        , index : Index.ZeroBased
+        { home : IO.CEMN_Canonical
+        , type_ : CDN_Name
+        , union : CASTC_Union
+        , name : CDN_Name
+        , index : Index.CDI_ZeroBased
         , args : List PatternCtorArg
         }
 
@@ -177,9 +177,9 @@ type Pattern_
 type PatternCtorArg
     = PatternCtorArg
         -- CACHE for destructors/errors
-        Index.ZeroBased
+        Index.CDI_ZeroBased
         -- CACHE for type inference
-        Type
+        CASTC_Type
         Pattern
 
 
@@ -187,31 +187,31 @@ type PatternCtorArg
 -- TYPES
 
 
-type Annotation
-    = Forall FreeVars Type
+type CASTC_Annotation
+    = CASTC_Forall CASTC_FreeVars CASTC_Type
 
 
-type alias FreeVars =
-    Dict String Name ()
+type alias CASTC_FreeVars =
+    Dict String CDN_Name ()
 
 
-type Type
-    = TLambda Type Type
-    | TVar Name
-    | TType IO.Canonical Name (List Type)
-    | TRecord (Dict String Name FieldType) (Maybe Name)
-    | TUnit
-    | TTuple Type Type (Maybe Type)
-    | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
+type CASTC_Type
+    = CASTC_TLambda CASTC_Type CASTC_Type
+    | CASTC_TVar CDN_Name
+    | CASTC_TType IO.CEMN_Canonical CDN_Name (List CASTC_Type)
+    | CASTC_TRecord (Dict String CDN_Name CASTC_FieldType) (Maybe CDN_Name)
+    | CASTC_TUnit
+    | CASTC_TTuple CASTC_Type CASTC_Type (Maybe CASTC_Type)
+    | CASTC_TAlias IO.CEMN_Canonical CDN_Name (List ( CDN_Name, CASTC_Type )) CASTC_AliasType
 
 
-type AliasType
-    = Holey Type
-    | Filled Type
+type CASTC_AliasType
+    = CASTC_Holey CASTC_Type
+    | CASTC_Filled CASTC_Type
 
 
-type FieldType
-    = FieldType Int Type
+type CASTC_FieldType
+    = CASTC_FieldType Int CASTC_Type
 
 
 
@@ -220,15 +220,15 @@ type FieldType
 -- the orders will all be zeros.
 
 
-fieldsToList : Dict String Name FieldType -> List ( Name, Type )
+fieldsToList : Dict String CDN_Name CASTC_FieldType -> List ( CDN_Name, CASTC_Type )
 fieldsToList fields =
     let
-        getIndex : ( a, FieldType ) -> Int
-        getIndex ( _, FieldType index _ ) =
+        getIndex : ( a, CASTC_FieldType ) -> Int
+        getIndex ( _, CASTC_FieldType index _ ) =
             index
 
-        dropIndex : ( a, FieldType ) -> ( a, Type )
-        dropIndex ( name, FieldType _ tipe ) =
+        dropIndex : ( a, CASTC_FieldType ) -> ( a, CASTC_Type )
+        dropIndex ( name, CASTC_FieldType _ tipe ) =
             ( name, tipe )
     in
     Dict.toList compare fields
@@ -241,35 +241,35 @@ fieldsToList fields =
 
 
 type Module
-    = Module IO.Canonical Exports Src.Docs Decls (Dict String Name Union) (Dict String Name Alias) (Dict String Name Binop) Effects
+    = Module IO.CEMN_Canonical Exports Src.CASTS_Docs Decls (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias) (Dict String CDN_Name Binop) Effects
 
 
-type Alias
-    = Alias (List Name) Type
+type CASTC_Alias
+    = CASTC_Alias (List CDN_Name) CASTC_Type
 
 
 type Binop
-    = Binop_ Binop.Associativity Binop.Precedence Name
+    = Binop_ Binop.CASTU_Associativity Binop.CASTU_Precedence CDN_Name
 
 
-type Union
-    = Union
-        (List Name)
-        (List Ctor)
+type CASTC_Union
+    = CASTC_Union
+        (List CDN_Name)
+        (List CASTC_Ctor)
         -- CACHE numAlts for exhaustiveness checking
         Int
         -- CACHE which optimizations are available
-        CtorOpts
+        CASTC_CtorOpts
 
 
-type CtorOpts
-    = Normal
-    | Enum
-    | Unbox
+type CASTC_CtorOpts
+    = CASTC_Normal
+    | CASTC_Enum
+    | CASTC_Unbox
 
 
-type Ctor
-    = Ctor Name Index.ZeroBased Int (List Type) -- CACHE length args
+type CASTC_Ctor
+    = CASTC_Ctor CDN_Name Index.CDI_ZeroBased Int (List CASTC_Type) -- CACHE length args
 
 
 
@@ -277,8 +277,8 @@ type Ctor
 
 
 type Exports
-    = ExportEverything A.Region
-    | Export (Dict String Name (A.Located Export))
+    = ExportEverything A.CRA_Region
+    | Export (Dict String CDN_Name (A.CRA_Located Export))
 
 
 type Export
@@ -292,35 +292,35 @@ type Export
 
 type Effects
     = NoEffects
-    | Ports (Dict String Name Port)
-    | Manager A.Region A.Region A.Region Manager
+    | Ports (Dict String CDN_Name Port)
+    | Manager A.CRA_Region A.CRA_Region A.CRA_Region Manager
 
 
 type Port
     = Incoming
-        { freeVars : FreeVars
-        , payload : Type
-        , func : Type
+        { freeVars : CASTC_FreeVars
+        , payload : CASTC_Type
+        , func : CASTC_Type
         }
     | Outgoing
-        { freeVars : FreeVars
-        , payload : Type
-        , func : Type
+        { freeVars : CASTC_FreeVars
+        , payload : CASTC_Type
+        , func : CASTC_Type
         }
 
 
 type Manager
-    = Cmd Name
-    | Sub Name
-    | Fx Name Name
+    = Cmd CDN_Name
+    | Sub CDN_Name
+    | Fx CDN_Name CDN_Name
 
 
 
 -- ENCODERS and DECODERS
 
 
-annotationEncoder : Annotation -> Encode.Value
-annotationEncoder (Forall freeVars tipe) =
+annotationEncoder : CASTC_Annotation -> Encode.Value
+annotationEncoder (CASTC_Forall freeVars tipe) =
     Encode.object
         [ ( "type", Encode.string "Forall" )
         , ( "freeVars", freeVarsEncoder freeVars )
@@ -328,55 +328,55 @@ annotationEncoder (Forall freeVars tipe) =
         ]
 
 
-annotationDecoder : Decode.Decoder Annotation
+annotationDecoder : Decode.Decoder CASTC_Annotation
 annotationDecoder =
-    Decode.map2 Forall
+    Decode.map2 CASTC_Forall
         (Decode.field "freeVars" freeVarsDecoder)
         (Decode.field "tipe" typeDecoder)
 
 
-freeVarsEncoder : FreeVars -> Encode.Value
+freeVarsEncoder : CASTC_FreeVars -> Encode.Value
 freeVarsEncoder =
     E.assocListDict compare Encode.string (\_ -> Encode.object [])
 
 
-freeVarsDecoder : Decode.Decoder FreeVars
+freeVarsDecoder : Decode.Decoder CASTC_FreeVars
 freeVarsDecoder =
     D.assocListDict identity Decode.string (Decode.succeed ())
 
 
-aliasEncoder : Alias -> Encode.Value
-aliasEncoder (Alias vars tipe) =
+aliasEncoder : CASTC_Alias -> Encode.Value
+aliasEncoder (CASTC_Alias vars tipe) =
     Encode.object
         [ ( "vars", Encode.list Encode.string vars )
         , ( "tipe", typeEncoder tipe )
         ]
 
 
-aliasDecoder : Decode.Decoder Alias
+aliasDecoder : Decode.Decoder CASTC_Alias
 aliasDecoder =
-    Decode.map2 Alias
+    Decode.map2 CASTC_Alias
         (Decode.field "vars" (Decode.list Decode.string))
         (Decode.field "tipe" typeDecoder)
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : CASTC_Type -> Encode.Value
 typeEncoder type_ =
     case type_ of
-        TLambda a b ->
+        CASTC_TLambda a b ->
             Encode.object
                 [ ( "type", Encode.string "TLambda" )
                 , ( "a", typeEncoder a )
                 , ( "b", typeEncoder b )
                 ]
 
-        TVar name ->
+        CASTC_TVar name ->
             Encode.object
                 [ ( "type", Encode.string "TVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        TType home name args ->
+        CASTC_TType home name args ->
             Encode.object
                 [ ( "type", Encode.string "TType" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -384,19 +384,19 @@ typeEncoder type_ =
                 , ( "args", Encode.list typeEncoder args )
                 ]
 
-        TRecord fields ext ->
+        CASTC_TRecord fields ext ->
             Encode.object
                 [ ( "type", Encode.string "TRecord" )
                 , ( "fields", E.assocListDict compare Encode.string fieldTypeEncoder fields )
                 , ( "ext", E.maybe Encode.string ext )
                 ]
 
-        TUnit ->
+        CASTC_TUnit ->
             Encode.object
                 [ ( "type", Encode.string "TUnit" )
                 ]
 
-        TTuple a b maybeC ->
+        CASTC_TTuple a b maybeC ->
             Encode.object
                 [ ( "type", Encode.string "TTuple" )
                 , ( "a", typeEncoder a )
@@ -404,7 +404,7 @@ typeEncoder type_ =
                 , ( "maybeC", E.maybe typeEncoder maybeC )
                 ]
 
-        TAlias home name args tipe ->
+        CASTC_TAlias home name args tipe ->
             Encode.object
                 [ ( "type", Encode.string "TAlias" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -414,43 +414,43 @@ typeEncoder type_ =
                 ]
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : Decode.Decoder CASTC_Type
 typeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TLambda" ->
-                        Decode.map2 TLambda
+                        Decode.map2 CASTC_TLambda
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
 
                     "TVar" ->
-                        Decode.map TVar
+                        Decode.map CASTC_TVar
                             (Decode.field "name" Decode.string)
 
                     "TType" ->
-                        Decode.map3 TType
+                        Decode.map3 CASTC_TType
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list typeDecoder))
 
                     "TRecord" ->
-                        Decode.map2 TRecord
+                        Decode.map2 CASTC_TRecord
                             (Decode.field "fields" (D.assocListDict identity Decode.string fieldTypeDecoder))
                             (Decode.field "ext" (Decode.maybe Decode.string))
 
                     "TUnit" ->
-                        Decode.succeed TUnit
+                        Decode.succeed CASTC_TUnit
 
                     "TTuple" ->
-                        Decode.map3 TTuple
+                        Decode.map3 CASTC_TTuple
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
                             (Decode.field "maybeC" (Decode.maybe typeDecoder))
 
                     "TAlias" ->
-                        Decode.map4 TAlias
+                        Decode.map4 CASTC_TAlias
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list (D.jsonPair Decode.string typeDecoder)))
@@ -461,8 +461,8 @@ typeDecoder =
             )
 
 
-fieldTypeEncoder : FieldType -> Encode.Value
-fieldTypeEncoder (FieldType index tipe) =
+fieldTypeEncoder : CASTC_FieldType -> Encode.Value
+fieldTypeEncoder (CASTC_FieldType index tipe) =
     Encode.object
         [ ( "type", Encode.string "FieldType" )
         , ( "index", Encode.int index )
@@ -470,41 +470,41 @@ fieldTypeEncoder (FieldType index tipe) =
         ]
 
 
-aliasTypeEncoder : AliasType -> Encode.Value
+aliasTypeEncoder : CASTC_AliasType -> Encode.Value
 aliasTypeEncoder aliasType =
     case aliasType of
-        Holey tipe ->
+        CASTC_Holey tipe ->
             Encode.object
                 [ ( "type", Encode.string "Holey" )
                 , ( "tipe", typeEncoder tipe )
                 ]
 
-        Filled tipe ->
+        CASTC_Filled tipe ->
             Encode.object
                 [ ( "type", Encode.string "Filled" )
                 , ( "tipe", typeEncoder tipe )
                 ]
 
 
-fieldTypeDecoder : Decode.Decoder FieldType
+fieldTypeDecoder : Decode.Decoder CASTC_FieldType
 fieldTypeDecoder =
-    Decode.map2 FieldType
+    Decode.map2 CASTC_FieldType
         (Decode.field "index" Decode.int)
         (Decode.field "tipe" typeDecoder)
 
 
-aliasTypeDecoder : Decode.Decoder AliasType
+aliasTypeDecoder : Decode.Decoder CASTC_AliasType
 aliasTypeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Holey" ->
-                        Decode.map Holey
+                        Decode.map CASTC_Holey
                             (Decode.field "tipe" typeDecoder)
 
                     "Filled" ->
-                        Decode.map Filled
+                        Decode.map CASTC_Filled
                             (Decode.field "tipe" typeDecoder)
 
                     _ ->
@@ -512,8 +512,8 @@ aliasTypeDecoder =
             )
 
 
-unionEncoder : Union -> Encode.Value
-unionEncoder (Union vars ctors numAlts opts) =
+unionEncoder : CASTC_Union -> Encode.Value
+unionEncoder (CASTC_Union vars ctors numAlts opts) =
     Encode.object
         [ ( "type", Encode.string "Union" )
         , ( "vars", Encode.list Encode.string vars )
@@ -523,17 +523,17 @@ unionEncoder (Union vars ctors numAlts opts) =
         ]
 
 
-unionDecoder : Decode.Decoder Union
+unionDecoder : Decode.Decoder CASTC_Union
 unionDecoder =
-    Decode.map4 Union
+    Decode.map4 CASTC_Union
         (Decode.field "vars" (Decode.list Decode.string))
         (Decode.field "ctors" (Decode.list ctorDecoder))
         (Decode.field "numAlts" Decode.int)
         (Decode.field "opts" ctorOptsDecoder)
 
 
-ctorEncoder : Ctor -> Encode.Value
-ctorEncoder (Ctor ctor index numArgs args) =
+ctorEncoder : CASTC_Ctor -> Encode.Value
+ctorEncoder (CASTC_Ctor ctor index numArgs args) =
     Encode.object
         [ ( "type", Encode.string "Ctor" )
         , ( "ctor", Encode.string ctor )
@@ -543,42 +543,42 @@ ctorEncoder (Ctor ctor index numArgs args) =
         ]
 
 
-ctorDecoder : Decode.Decoder Ctor
+ctorDecoder : Decode.Decoder CASTC_Ctor
 ctorDecoder =
-    Decode.map4 Ctor
+    Decode.map4 CASTC_Ctor
         (Decode.field "ctor" Decode.string)
         (Decode.field "index" Index.zeroBasedDecoder)
         (Decode.field "numArgs" Decode.int)
         (Decode.field "args" (Decode.list typeDecoder))
 
 
-ctorOptsEncoder : CtorOpts -> Encode.Value
+ctorOptsEncoder : CASTC_CtorOpts -> Encode.Value
 ctorOptsEncoder ctorOpts =
     case ctorOpts of
-        Normal ->
+        CASTC_Normal ->
             Encode.string "Normal"
 
-        Enum ->
+        CASTC_Enum ->
             Encode.string "Enum"
 
-        Unbox ->
+        CASTC_Unbox ->
             Encode.string "Unbox"
 
 
-ctorOptsDecoder : Decode.Decoder CtorOpts
+ctorOptsDecoder : Decode.Decoder CASTC_CtorOpts
 ctorOptsDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "Normal" ->
-                        Decode.succeed Normal
+                        Decode.succeed CASTC_Normal
 
                     "Enum" ->
-                        Decode.succeed Enum
+                        Decode.succeed CASTC_Enum
 
                     "Unbox" ->
-                        Decode.succeed Unbox
+                        Decode.succeed CASTC_Unbox
 
                     _ ->
                         Decode.fail ("Unknown CtorOpts: " ++ str)

@@ -6,7 +6,7 @@ module Compiler.Reporting.Error.Main exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.Data.Name exposing (Name)
+import Compiler.Data.Name exposing (CDN_Name)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Canonicalize as E
@@ -23,9 +23,9 @@ import Json.Encode as Encode
 
 
 type Error
-    = BadType A.Region Can.Type
-    | BadCycle A.Region Name (List Name)
-    | BadFlags A.Region Can.Type E.InvalidPayload
+    = BadType A.CRA_Region Can.CASTC_Type
+    | BadCycle A.CRA_Region CDN_Name (List CDN_Name)
+    | BadFlags A.CRA_Region Can.CASTC_Type E.InvalidPayload
 
 
 

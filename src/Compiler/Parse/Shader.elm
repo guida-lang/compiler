@@ -15,8 +15,8 @@ import Utils.Crash as Crash
 -- SHADER
 
 
-shader : A.Position -> Parser E.Expr Src.Expr
-shader ((A.Position row col) as start) =
+shader : A.CRA_Position -> Parser E.Expr Src.CASTS_Expr
+shader ((A.CRA_Position row col) as start) =
     parseBlock
         |> P.bind
             (\block ->
@@ -26,7 +26,7 @@ shader ((A.Position row col) as start) =
                             P.getPosition
                                 |> P.fmap
                                     (\end ->
-                                        A.at start end (Src.Shader (Shader.fromString block) shdr)
+                                        A.at start end (Src.CASTS_Shader (Shader.fromString block) shdr)
                                     )
                         )
             )
@@ -121,7 +121,7 @@ eatShader src pos end row col =
 -- GLSL
 
 
-parseGlsl : Row -> Col -> String -> Parser E.Expr Shader.Types
+parseGlsl : Row -> Col -> String -> Parser E.Expr Shader.CASTUS_Types
 parseGlsl startRow startCol src =
     case GLP.parse src of
         Ok (GLS.TranslationUnit decls) ->
@@ -179,53 +179,53 @@ failure row col msg =
 -- INPUTS
 
 
-emptyTypes : Shader.Types
+emptyTypes : Shader.CASTUS_Types
 emptyTypes =
-    Shader.Types Dict.empty Dict.empty Dict.empty
+    Shader.CASTUS_Types Dict.empty Dict.empty Dict.empty
 
 
-addInput : ( GLS.StorageQualifier, Shader.Type, String ) -> Shader.Types -> Shader.Types
-addInput ( qual, tipe, name ) (Shader.Types attribute uniform varying) =
+addInput : ( GLS.StorageQualifier, Shader.CASTUS_Type, String ) -> Shader.CASTUS_Types -> Shader.CASTUS_Types
+addInput ( qual, tipe, name ) (Shader.CASTUS_Types attribute uniform varying) =
     case qual of
         GLS.Attribute ->
-            Shader.Types (Dict.insert identity name tipe attribute) uniform varying
+            Shader.CASTUS_Types (Dict.insert identity name tipe attribute) uniform varying
 
         GLS.Uniform ->
-            Shader.Types attribute (Dict.insert identity name tipe uniform) varying
+            Shader.CASTUS_Types attribute (Dict.insert identity name tipe uniform) varying
 
         GLS.Varying ->
-            Shader.Types attribute uniform (Dict.insert identity name tipe varying)
+            Shader.CASTUS_Types attribute uniform (Dict.insert identity name tipe varying)
 
         _ ->
             Crash.crash "Should never happen due to `extractInputs` function"
 
 
-extractInputs : GLS.ExternalDeclaration -> List ( GLS.StorageQualifier, Shader.Type, String )
+extractInputs : GLS.ExternalDeclaration -> List ( GLS.StorageQualifier, Shader.CASTUS_Type, String )
 extractInputs decl =
     case decl of
         GLS.Declaration (GLS.InitDeclaration (GLS.TypeDeclarator (GLS.FullType (Just (GLS.TypeQualSto qual)) (GLS.TypeSpec _ (GLS.TypeSpecNoPrecision tipe _)))) [ GLS.InitDecl name _ _ ]) ->
             if List.member qual [ GLS.Attribute, GLS.Varying, GLS.Uniform ] then
                 case tipe of
                     GLS.Vec2 ->
-                        [ ( qual, Shader.V2, name ) ]
+                        [ ( qual, Shader.CASTUS_V2, name ) ]
 
                     GLS.Vec3 ->
-                        [ ( qual, Shader.V3, name ) ]
+                        [ ( qual, Shader.CASTUS_V3, name ) ]
 
                     GLS.Vec4 ->
-                        [ ( qual, Shader.V4, name ) ]
+                        [ ( qual, Shader.CASTUS_V4, name ) ]
 
                     GLS.Mat4 ->
-                        [ ( qual, Shader.M4, name ) ]
+                        [ ( qual, Shader.CASTUS_M4, name ) ]
 
                     GLS.Int ->
-                        [ ( qual, Shader.Int, name ) ]
+                        [ ( qual, Shader.CASTUS_Int, name ) ]
 
                     GLS.Float ->
-                        [ ( qual, Shader.Float, name ) ]
+                        [ ( qual, Shader.CASTUS_Float, name ) ]
 
                     GLS.Sampler2D ->
-                        [ ( qual, Shader.Texture, name ) ]
+                        [ ( qual, Shader.CASTUS_Texture, name ) ]
 
                     _ ->
                         []
