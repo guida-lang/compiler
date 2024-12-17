@@ -76,7 +76,7 @@ port module System.IO exposing
 
 # MVar
 
-@docs RealWorldMVar
+@docs MVarSubscriber
 
 -}
 
@@ -245,7 +245,7 @@ update msg model =
                         ( updatedModel, updatedCmd ) =
                             update (PureMsg index (next ())) newRealWorld
                     in
-                    update (PureMsg (Dict.size model.next) forkIO) updatedModel
+                    update (PureMsg (Dict.size updatedModel.next) forkIO) updatedModel
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ updatedCmd, cmd ])
 
                 ( newRealWorld, GetLine next ) ->
@@ -811,31 +811,6 @@ port sendReplGetInputLineWithInitial : { index : Int, prompt : String, left : St
 
 
 port recvReplGetInputLineWithInitial : ({ index : Int, value : Maybe String } -> msg) -> Sub msg
-
-
-
--- MVARS
-
-
-port sendNewEmptyMVar : Int -> Cmd msg
-
-
-port recvNewEmptyMVar : ({ index : Int, value : Int } -> msg) -> Sub msg
-
-
-port sendReadMVar : { index : Int, id : Int } -> Cmd msg
-
-
-port recvReadMVar : ({ index : Int, value : Encode.Value } -> msg) -> Sub msg
-
-
-port sendTakeMVar : { index : Int, id : Int } -> Cmd msg
-
-
-port sendPutMVar : { index : Int, id : Int, value : Encode.Value } -> Cmd msg
-
-
-port recvPutMVar : (Int -> msg) -> Sub msg
 
 
 

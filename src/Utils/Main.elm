@@ -995,7 +995,7 @@ takeMVar decoder (MVar ref) =
                                     )
 
                                 _ ->
-                                    ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers, value = Nothing } s.mVars }
+                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
                                     , IO.TakeMVar IO.pure (Just value) Nothing
                                     )
 
@@ -1056,7 +1056,12 @@ putMVar encoder (MVar ref) value =
 
 newEmptyMVar : IO (MVar a)
 newEmptyMVar =
-    IO (\_ s -> ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }, IO.NewEmptyMVar IO.pure (Array.length s.mVars) ))
+    IO
+        (\_ s ->
+            ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
+            , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
+            )
+        )
         |> IO.fmap MVar
 
 
