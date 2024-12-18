@@ -1,10 +1,10 @@
 module Builder.Elm.Details exposing
-    ( BuildID
+    ( BED_BuildID
+    , BED_Local(..)
     , Details(..)
     , Extras
     , Foreign(..)
     , Interfaces
-    , Local(..)
     , ValidOutline(..)
     , detailsEncoder
     , load
@@ -50,7 +50,7 @@ import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Types as T
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -58,10 +58,10 @@ import Utils.Main as Utils exposing (FilePath)
 
 
 type Details
-    = Details File.Time ValidOutline BuildID (Dict String T.CEMN_Raw Local) (Dict String T.CEMN_Raw Foreign) Extras
+    = Details File.BF_Time ValidOutline BED_BuildID (Dict String T.CEMN_Raw BED_Local) (Dict String T.CEMN_Raw Foreign) Extras
 
 
-type alias BuildID =
+type alias BED_BuildID =
     Int
 
 
@@ -86,8 +86,8 @@ type ValidOutline
 --
 
 
-type Local
-    = Local FilePath File.Time (List T.CEMN_Raw) Bool BuildID BuildID
+type BED_Local
+    = BED_Local T.FilePath File.BF_Time (List T.CEMN_Raw) Bool BED_BuildID BED_BuildID
 
 
 type Foreign
@@ -96,7 +96,7 @@ type Foreign
 
 type Extras
     = ArtifactsCached
-    | ArtifactsFresh Interfaces Opt.GlobalGraph
+    | ArtifactsFresh Interfaces T.CASTO_GlobalGraph
 
 
 type alias Interfaces =
@@ -107,17 +107,17 @@ type alias Interfaces =
 -- LOAD ARTIFACTS
 
 
-loadObjects : FilePath -> Details -> IO (T.MVar (Maybe Opt.GlobalGraph))
+loadObjects : T.FilePath -> Details -> IO (T.MVar (Maybe T.CASTO_GlobalGraph))
 loadObjects root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh _ o ->
-            Utils.newMVar (Utils.maybeEncoder Opt.globalGraphEncoder) (Just o)
+            Utils.newMVar_Maybe_CASTO_GlobalGraph (Just o)
 
         ArtifactsCached ->
-            fork (Utils.maybeEncoder Opt.globalGraphEncoder) (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
+            fork_Maybe_CASTO_GlobalGraph (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
 
 
-loadInterfaces : FilePath -> Details -> IO (T.MVar (Maybe Interfaces))
+loadInterfaces : T.FilePath -> Details -> IO (T.MVar (Maybe Interfaces))
 loadInterfaces root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh i _ ->
@@ -131,7 +131,7 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 -- VERIFY INSTALL -- used by Install
 
 
-verifyInstall : BW.Scope -> FilePath -> Solver.Env -> Outline.Outline -> IO (Result Exit.Details ())
+verifyInstall : BW.Scope -> T.FilePath -> Solver.Env -> Outline.Outline -> IO (Result Exit.Details ())
 verifyInstall scope root (Solver.Env cache manager connection registry) outline =
     File.getTime (root ++ "/elm.json")
         |> IO.bind
@@ -158,7 +158,7 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 -- LOAD -- used by Make, Repl, Reactor
 
 
-load : Reporting.Style -> BW.Scope -> FilePath -> IO (Result Exit.Details Details)
+load : Reporting.Style -> BW.Scope -> T.FilePath -> IO (Result Exit.Details Details)
 load style scope root =
     File.getTime (root ++ "/elm.json")
         |> IO.bind
@@ -184,7 +184,7 @@ load style scope root =
 -- GENERATE
 
 
-generate : Reporting.Style -> BW.Scope -> FilePath -> File.Time -> IO (Result Exit.Details Details)
+generate : Reporting.Style -> BW.Scope -> T.FilePath -> File.BF_Time -> IO (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
         (\key ->
@@ -211,10 +211,10 @@ generate style scope root time =
 
 
 type Env
-    = Env Reporting.DKey BW.Scope FilePath Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
+    = Env Reporting.DKey BW.Scope T.FilePath Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
 
 
-initEnv : Reporting.DKey -> BW.Scope -> FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
+initEnv : Reporting.DKey -> BW.Scope -> T.FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork resultRegistryProblemEnvEncoder Solver.initEnv
         |> IO.bind
@@ -249,7 +249,7 @@ type alias Task a =
     Task.Task Exit.Details a
 
 
-verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Details
+verifyPkg : Env -> File.BF_Time -> Outline.PkgOutline -> Task Details
 verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
         union identity Pkg.compareName noDups direct testDirect
@@ -274,7 +274,7 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
         Task.throw (Exit.DetailsBadElmInPkg elm)
 
 
-verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Details
+verifyApp : Env -> File.BF_Time -> Outline.AppOutline -> Task Details
 verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outline) =
     if elmVersion == V.compiler then
         checkAppDeps outline
@@ -375,11 +375,31 @@ fork encoder work =
             )
 
 
+fork_Maybe_BED_Status : IO (Maybe T.BED_Status) -> IO (T.MVar (Maybe T.BED_Status))
+fork_Maybe_BED_Status work =
+    Utils.newEmptyMVar_Maybe_BED_Status
+        |> IO.bind
+            (\mvar ->
+                Utils.forkIO (IO.bind (Utils.putMVar_Maybe_BED_Status mvar) work)
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+fork_Maybe_CASTO_GlobalGraph : IO (Maybe T.CASTO_GlobalGraph) -> IO (T.MVar (Maybe T.CASTO_GlobalGraph))
+fork_Maybe_CASTO_GlobalGraph work =
+    Utils.newEmptyMVar_Maybe_CASTO_GlobalGraph
+        |> IO.bind
+            (\mvar ->
+                Utils.forkIO (IO.bind (Utils.putMVar_Maybe_CASTO_GlobalGraph mvar) work)
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
 
 -- VERIFY DEPENDENCIES
 
 
-verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
+verifyDependencies : Env -> File.BF_Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
@@ -409,7 +429,7 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
 
                                                             Ok artifacts ->
                                                                 let
-                                                                    objs : Opt.GlobalGraph
+                                                                    objs : T.CASTO_GlobalGraph
                                                                     objs =
                                                                         Dict.foldr compare (\_ -> addObjects) Opt.empty artifacts
 
@@ -436,7 +456,7 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
         )
 
 
-addObjects : Artifacts -> Opt.GlobalGraph -> Opt.GlobalGraph
+addObjects : Artifacts -> T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph
 addObjects (Artifacts _ objs) graph =
     Opt.addGlobalGraph objs graph
 
@@ -479,7 +499,7 @@ gatherForeigns pkg (Artifacts ifaces _) foreigns =
 
 
 type Artifacts
-    = Artifacts (Dict String T.CEMN_Raw I.DependencyInterface) Opt.GlobalGraph
+    = Artifacts (Dict String T.CEMN_Raw I.DependencyInterface) T.CASTO_GlobalGraph
 
 
 type alias Dep =
@@ -604,12 +624,12 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                     Utils.newEmptyMVar
                                                                         |> IO.bind
                                                                             (\mvar ->
-                                                                                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                Utils.mapTraverseWithKey identity compare (always << fork_Maybe_BED_Status << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                     |> IO.bind
                                                                                         (\mvars ->
                                                                                             Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare Utils.readMVar_Maybe_BED_Status mvars)
+                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare Utils.readMVar_Maybe_BED_Status) (Utils.readMVar statusDictDecoder mvar))
                                                                                                 |> IO.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
@@ -643,7 +663,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                 ifaces =
                                                                                                                                                                     gatherInterfaces exposedDict results
 
-                                                                                                                                                                objects : Opt.GlobalGraph
+                                                                                                                                                                objects : T.CASTO_GlobalGraph
                                                                                                                                                                 objects =
                                                                                                                                                                     gatherObjects results
 
@@ -675,12 +695,12 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 -- GATHER
 
 
-gatherObjects : Dict String T.CEMN_Raw DResult -> Opt.GlobalGraph
+gatherObjects : Dict String T.CEMN_Raw DResult -> T.CASTO_GlobalGraph
 gatherObjects results =
     Dict.foldr compare addLocalGraph Opt.empty results
 
 
-addLocalGraph : T.CEMN_Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
+addLocalGraph : T.CEMN_Raw -> DResult -> T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph
 addLocalGraph name status graph =
     case status of
         RLocal _ objs _ ->
@@ -776,10 +796,10 @@ gatherForeignInterfaces directArtifacts =
 -- CRAWL
 
 
-crawlModule : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
+crawlModule : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
-        path : FilePath
+        path : T.FilePath
         path =
             Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) "elm")
     in
@@ -809,7 +829,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> FilePath -> IO (Maybe T.BED_Status)
+crawlFile : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> T.FilePath -> IO (Maybe T.BED_Status)
 crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> IO.bind
@@ -828,7 +848,7 @@ crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
             )
 
 
-crawlImports : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> List T.CASTS_Import -> IO (Dict String T.CEMN_Raw ())
+crawlImports : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> List T.CASTS_Import -> IO (Dict String T.CEMN_Raw ())
 crawlImports foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
         |> IO.bind
@@ -842,20 +862,20 @@ crawlImports foreignDeps mvar pkg src imports =
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src T.BED_DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork_Maybe_BED_Status << crawlModule foreignDeps mvar pkg src T.BED_DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
+                                |> IO.bind (\_ -> Utils.dictMapM_ compare Utils.readMVar_Maybe_BED_Status mvars)
                                 |> IO.fmap (\_ -> deps)
                         )
             )
 
 
-crawlKernel : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> FilePath -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
+crawlKernel : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlKernel foreignDeps mvar pkg src name =
     let
-        path : FilePath
+        path : T.FilePath
         path =
             Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
     in
@@ -895,7 +915,7 @@ getDepHome fi =
 
 
 type DResult
-    = RLocal T.CEI_Interface Opt.LocalGraph (Maybe Docs.Module)
+    = RLocal T.CEI_Interface T.CASTO_LocalGraph (Maybe Docs.CED_Module)
     | RForeign T.CEI_Interface
     | RKernelLocal (List T.CEK_Chunk)
     | RKernelForeign
@@ -926,7 +946,7 @@ compile pkg mvar status =
                                                                     ifaces =
                                                                         I.fromModule pkg canonical annotations
 
-                                                                    docs : Maybe Docs.Module
+                                                                    docs : Maybe Docs.CED_Module
                                                                     docs =
                                                                         makeDocs docsStatus canonical
                                                                 in
@@ -981,7 +1001,7 @@ getDocsStatus cache pkg vsn =
             )
 
 
-makeDocs : T.BED_DocsStatus -> Can.Module -> Maybe Docs.Module
+makeDocs : T.BED_DocsStatus -> Can.Module -> Maybe Docs.CED_Module
 makeDocs status modul =
     case status of
         T.BED_DocsNeeded ->
@@ -1007,7 +1027,7 @@ writeDocs cache pkg vsn status results =
             IO.pure ()
 
 
-toDocs : DResult -> Maybe Docs.Module
+toDocs : DResult -> Maybe Docs.CED_Module
 toDocs result =
     case result of
         RLocal _ _ docs ->
@@ -1167,61 +1187,6 @@ dictPkgNameMVarDepDecoder =
     D.assocListDict identity Pkg.nameDecoder Utils.mVarDecoder
 
 
-statusEncoder : T.BED_Status -> Encode.Value
-statusEncoder status =
-    case status of
-        T.BED_SLocal docsStatus deps modul ->
-            Encode.object
-                [ ( "type", Encode.string "SLocal" )
-                , ( "docsStatus", docsStatusEncoder docsStatus )
-                , ( "deps", E.assocListDict compare ModuleName.rawEncoder (\_ -> Encode.object []) deps )
-                , ( "modul", Src.moduleEncoder modul )
-                ]
-
-        T.BED_SForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        T.BED_SKernelLocal chunks ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelLocal" )
-                , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
-                ]
-
-        T.BED_SKernelForeign ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelForeign" )
-                ]
-
-
-statusDecoder : Decode.Decoder T.BED_Status
-statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SLocal" ->
-                        Decode.map3 T.BED_SLocal
-                            (Decode.field "docsStatus" docsStatusDecoder)
-                            (Decode.field "deps" (D.assocListDict identity ModuleName.rawDecoder (Decode.succeed ())))
-                            (Decode.field "modul" Src.moduleDecoder)
-
-                    "SForeign" ->
-                        Decode.map T.BED_SForeign (Decode.field "iface" I.interfaceDecoder)
-
-                    "SKernelLocal" ->
-                        Decode.map T.BED_SKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
-
-                    "SKernelForeign" ->
-                        Decode.succeed T.BED_SKernelForeign
-
-                    _ ->
-                        Decode.fail ("Failed to decode Status' type: " ++ type_)
-            )
-
-
 dictRawMVarMaybeDResultEncoder : Dict String T.CEMN_Raw (T.MVar (Maybe DResult)) -> Encode.Value
 dictRawMVarMaybeDResultEncoder =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
@@ -1297,8 +1262,8 @@ statusDictDecoder =
     D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-localEncoder : Local -> Encode.Value
-localEncoder (Local path time deps hasMain lastChange lastCompile) =
+localEncoder : BED_Local -> Encode.Value
+localEncoder (BED_Local path time deps hasMain lastChange lastCompile) =
     Encode.object
         [ ( "type", Encode.string "Local" )
         , ( "path", Encode.string path )
@@ -1310,9 +1275,9 @@ localEncoder (Local path time deps hasMain lastChange lastCompile) =
         ]
 
 
-localDecoder : Decode.Decoder Local
+localDecoder : Decode.Decoder BED_Local
 localDecoder =
-    Decode.map6 Local
+    Decode.map6 BED_Local
         (Decode.field "path" Decode.string)
         (Decode.field "time" File.timeDecoder)
         (Decode.field "deps" (Decode.list ModuleName.rawDecoder))
@@ -1418,30 +1383,3 @@ fingerprintEncoder =
 fingerprintDecoder : Decode.Decoder Fingerprint
 fingerprintDecoder =
     D.assocListDict identity Pkg.nameDecoder V.versionDecoder
-
-
-docsStatusEncoder : T.BED_DocsStatus -> Encode.Value
-docsStatusEncoder docsStatus =
-    case docsStatus of
-        T.BED_DocsNeeded ->
-            Encode.string "DocsNeeded"
-
-        T.BED_DocsNotNeeded ->
-            Encode.string "DocsNotNeeded"
-
-
-docsStatusDecoder : Decode.Decoder T.BED_DocsStatus
-docsStatusDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "DocsNeeded" ->
-                        Decode.succeed T.BED_DocsNeeded
-
-                    "DocsNotNeeded" ->
-                        Decode.succeed T.BED_DocsNotNeeded
-
-                    _ ->
-                        Decode.fail ("Unknown DocsStatus: " ++ str)
-            )

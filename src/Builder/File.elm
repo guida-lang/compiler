@@ -1,5 +1,5 @@
 module Builder.File exposing
-    ( Time(..)
+    ( BF_Time(..)
     , exists
     , getTime
     , readBinary
@@ -19,35 +19,36 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO(..))
 import Time
-import Utils.Main as Utils exposing (FilePath)
+import Types as T
+import Utils.Main as Utils
 
 
 
 -- TIME
 
 
-type Time
-    = Time Time.Posix
+type BF_Time
+    = BF_Time Time.Posix
 
 
-getTime : FilePath -> IO Time
+getTime : T.FilePath -> IO BF_Time
 getTime path =
-    IO.fmap Time (Utils.dirGetModificationTime path)
+    IO.fmap BF_Time (Utils.dirGetModificationTime path)
 
 
-zeroTime : Time
+zeroTime : BF_Time
 zeroTime =
-    Time (Time.millisToPosix 0)
+    BF_Time (Time.millisToPosix 0)
 
 
 
 -- BINARY
 
 
-writeBinary : (a -> Encode.Value) -> FilePath -> a -> IO ()
+writeBinary : (a -> Encode.Value) -> T.FilePath -> a -> IO ()
 writeBinary encoder path value =
     let
-        dir : FilePath
+        dir : T.FilePath
         dir =
             Utils.fpDropFileName path
     in
@@ -55,7 +56,7 @@ writeBinary encoder path value =
         |> IO.bind (\_ -> Utils.binaryEncodeFile encoder path value)
 
 
-readBinary : Decode.Decoder a -> FilePath -> IO (Maybe a)
+readBinary : Decode.Decoder a -> T.FilePath -> IO (Maybe a)
 readBinary decoder path =
     Utils.dirDoesFileExist path
         |> IO.bind
@@ -93,7 +94,7 @@ readBinary decoder path =
 -- WRITE UTF-8
 
 
-writeUtf8 : FilePath -> String -> IO ()
+writeUtf8 : T.FilePath -> String -> IO ()
 writeUtf8 path content =
     IO (\_ s -> ( s, IO.WriteString IO.pure path content ))
 
@@ -102,7 +103,7 @@ writeUtf8 path content =
 -- READ UTF-8
 
 
-readUtf8 : FilePath -> IO String
+readUtf8 : T.FilePath -> IO String
 readUtf8 path =
     IO (\_ s -> ( s, IO.Read IO.pure path ))
 
@@ -111,7 +112,7 @@ readUtf8 path =
 -- WRITE BUILDER
 
 
-writeBuilder : FilePath -> String -> IO ()
+writeBuilder : T.FilePath -> String -> IO ()
 writeBuilder path builder =
     IO (\_ s -> ( s, IO.WriteString IO.pure path builder ))
 
@@ -120,7 +121,7 @@ writeBuilder path builder =
 -- WRITE PACKAGE
 
 
-writePackage : FilePath -> Zip.Archive -> IO ()
+writePackage : T.FilePath -> Zip.Archive -> IO ()
 writePackage destination archive =
     case Zip.zEntries archive of
         [] ->
@@ -135,7 +136,7 @@ writePackage destination archive =
             Utils.mapM_ (writeEntry destination root) entries
 
 
-writeEntry : FilePath -> Int -> Zip.Entry -> IO ()
+writeEntry : T.FilePath -> Int -> Zip.Entry -> IO ()
 writeEntry destination root entry =
     let
         path : String
@@ -162,7 +163,7 @@ writeEntry destination root entry =
 -- EXISTS
 
 
-exists : FilePath -> IO Bool
+exists : T.FilePath -> IO Bool
 exists path =
     Utils.dirDoesFileExist path
 
@@ -171,7 +172,7 @@ exists path =
 -- REMOVE FILES
 
 
-remove : FilePath -> IO ()
+remove : T.FilePath -> IO ()
 remove path =
     Utils.dirDoesFileExist path
         |> IO.bind
@@ -188,11 +189,11 @@ remove path =
 -- ENCODERS and DECODERS
 
 
-timeEncoder : Time -> Encode.Value
-timeEncoder (Time posix) =
+timeEncoder : BF_Time -> Encode.Value
+timeEncoder (BF_Time posix) =
     Encode.int (Time.posixToMillis posix)
 
 
-timeDecoder : Decode.Decoder Time
+timeDecoder : Decode.Decoder BF_Time
 timeDecoder =
-    Decode.map (Time << Time.millisToPosix) Decode.int
+    Decode.map (BF_Time << Time.millisToPosix) Decode.int

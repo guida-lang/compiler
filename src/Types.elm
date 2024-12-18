@@ -3,6 +3,15 @@ module Types exposing (..)
 {-| -}
 
 import Data.Map exposing (Dict)
+import Data.Set exposing (EverySet)
+
+
+
+-- GHC.IO
+
+
+type alias FilePath =
+    String
 
 
 
@@ -536,3 +545,166 @@ type CPP_Snippet
 -}
 type MVar a
     = MVar Int
+
+
+
+-- EXPRESSIONS
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Expr
+    = CASTO_Bool Bool
+    | CASTO_Chr String
+    | CASTO_Str String
+    | CASTO_Int Int
+    | CASTO_Float Float
+    | CASTO_VarLocal CDN_Name
+    | CASTO_VarGlobal CASTO_Global
+    | CASTO_VarEnum CASTO_Global CDI_ZeroBased
+    | CASTO_VarBox CASTO_Global
+    | CASTO_VarCycle CEMN_Canonical CDN_Name
+    | CASTO_VarDebug CDN_Name CEMN_Canonical CRA_Region (Maybe CDN_Name)
+    | CASTO_VarKernel CDN_Name CDN_Name
+    | CASTO_List (List CASTO_Expr)
+    | CASTO_Function (List CDN_Name) CASTO_Expr
+    | CASTO_Call CASTO_Expr (List CASTO_Expr)
+    | CASTO_TailCall CDN_Name (List ( CDN_Name, CASTO_Expr ))
+    | CASTO_If (List ( CASTO_Expr, CASTO_Expr )) CASTO_Expr
+    | CASTO_Let CASTO_Def CASTO_Expr
+    | CASTO_Destruct CASTO_Destructor CASTO_Expr
+    | CASTO_Case CDN_Name CDN_Name (CASTO_Decider CASTO_Choice) (List ( Int, CASTO_Expr ))
+    | CASTO_Accessor CDN_Name
+    | CASTO_Access CASTO_Expr CDN_Name
+    | CASTO_Update CASTO_Expr (Dict String CDN_Name CASTO_Expr)
+    | CASTO_Record (Dict String CDN_Name CASTO_Expr)
+    | CASTO_Unit
+    | CASTO_Tuple CASTO_Expr CASTO_Expr (Maybe CASTO_Expr)
+    | CASTO_Shader CASTUS_Source (EverySet String CDN_Name) (EverySet String CDN_Name)
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Global
+    = CASTO_Global CEMN_Canonical CDN_Name
+
+
+
+-- DEFINITIONS
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Def
+    = CASTO_Def CDN_Name CASTO_Expr
+    | CASTO_TailDef CDN_Name (List CDN_Name) CASTO_Expr
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Destructor
+    = CASTO_Destructor CDN_Name CASTO_Path
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Path
+    = CASTO_Index CDI_ZeroBased CASTO_Path
+    | CASTO_Field CDN_Name CASTO_Path
+    | CASTO_Unbox CASTO_Path
+    | CASTO_Root CDN_Name
+
+
+
+-- BRANCHING
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Decider a
+    = CASTO_Leaf a
+    | CASTO_Chain (List ( CODT_Path, CODT_Test )) (CASTO_Decider a) (CASTO_Decider a)
+    | CASTO_FanOut CODT_Path (List ( CODT_Test, CASTO_Decider a )) (CASTO_Decider a)
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Choice
+    = CASTO_Inline CASTO_Expr
+    | CASTO_Jump Int
+
+
+
+-- OBJECT GRAPH
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_GlobalGraph
+    = CASTO_GlobalGraph (Dict (List String) CASTO_Global CASTO_Node) (Dict String CDN_Name Int)
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_LocalGraph
+    = CASTO_LocalGraph
+        (Maybe CASTO_Main)
+        -- PERF profile switching Global to Name
+        (Dict (List String) CASTO_Global CASTO_Node)
+        (Dict String CDN_Name Int)
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Main
+    = CASTO_Static
+    | CASTO_Dynamic CASTC_Type CASTO_Expr
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_Node
+    = CASTO_Define CASTO_Expr (EverySet (List String) CASTO_Global)
+    | CASTO_DefineTailFunc (List CDN_Name) CASTO_Expr (EverySet (List String) CASTO_Global)
+    | CASTO_Ctor CDI_ZeroBased Int
+    | CASTO_Enum CDI_ZeroBased
+    | CASTO_Box
+    | CASTO_Link CASTO_Global
+    | CASTO_Cycle (List CDN_Name) (List ( CDN_Name, CASTO_Expr )) (List CASTO_Def) (EverySet (List String) CASTO_Global)
+    | CASTO_Manager CASTO_EffectsType
+    | CASTO_Kernel (List CEK_Chunk) (EverySet (List String) CASTO_Global)
+    | CASTO_PortIncoming CASTO_Expr (EverySet (List String) CASTO_Global)
+    | CASTO_PortOutgoing CASTO_Expr (EverySet (List String) CASTO_Global)
+
+
+{-| FIXME Compiler.AST.Optimized
+-}
+type CASTO_EffectsType
+    = CASTO_Cmd
+    | CASTO_Sub
+    | CASTO_Fx
+
+
+
+-- DECISION TREES
+
+
+{-| FIXME Compiler.Optimize.DecisionTree
+-}
+type CODT_Test
+    = CODT_IsCtor CEMN_Canonical CDN_Name CDI_ZeroBased Int CASTC_CtorOpts
+    | CODT_IsCons
+    | CODT_IsNil
+    | CODT_IsTuple
+    | CODT_IsInt Int
+    | CODT_IsChr String
+    | CODT_IsStr String
+    | CODT_IsBool Bool
+
+
+{-| FIXME Compiler.Optimize.DecisionTree
+-}
+type CODT_Path
+    = CODT_Index CDI_ZeroBased CODT_Path
+    | CODT_Unbox CODT_Path
+    | CODT_Empty

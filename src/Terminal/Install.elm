@@ -19,7 +19,7 @@ import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import System.IO as IO exposing (IO)
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -175,7 +175,7 @@ attemptChanges root env oldOutline toChars changes =
                     ]
 
 
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> D.Doc -> Task ()
+attemptChangesHelp : T.FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> D.Doc -> Task ()
 attemptChangesHelp root env oldOutline newOutline question =
     Task.eio Exit.InstallBadDetails <|
         BW.withScope

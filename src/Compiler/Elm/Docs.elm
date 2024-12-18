@@ -1,12 +1,12 @@
 module Compiler.Elm.Docs exposing
-    ( Alias(..)
-    , Binop(..)
-    , Comment
+    ( CED_Alias(..)
+    , CED_Binop(..)
+    , CED_Comment
+    , CED_Module(..)
+    , CED_Union(..)
+    , CED_Value(..)
     , Documentation
     , Error(..)
-    , Module(..)
-    , Union(..)
-    , Value(..)
     , decoder
     , encode
     , fromModule
@@ -46,31 +46,31 @@ import Utils.Main as Utils
 
 
 type alias Documentation =
-    Dict String T.CDN_Name Module
+    Dict String T.CDN_Name CED_Module
 
 
-type Module
-    = Module T.CDN_Name Comment (Dict String T.CDN_Name Union) (Dict String T.CDN_Name Alias) (Dict String T.CDN_Name Value) (Dict String T.CDN_Name Binop)
+type CED_Module
+    = CED_Module T.CDN_Name CED_Comment (Dict String T.CDN_Name CED_Union) (Dict String T.CDN_Name CED_Alias) (Dict String T.CDN_Name CED_Value) (Dict String T.CDN_Name CED_Binop)
 
 
-type alias Comment =
+type alias CED_Comment =
     String
 
 
-type Alias
-    = Alias Comment (List T.CDN_Name) Type.Type
+type CED_Alias
+    = CED_Alias CED_Comment (List T.CDN_Name) Type.CECT_Type
 
 
-type Union
-    = Union Comment (List T.CDN_Name) (List ( T.CDN_Name, List Type.Type ))
+type CED_Union
+    = CED_Union CED_Comment (List T.CDN_Name) (List ( T.CDN_Name, List Type.CECT_Type ))
 
 
-type Value
-    = Value Comment Type.Type
+type CED_Value
+    = CED_Value CED_Comment Type.CECT_Type
 
 
-type Binop
-    = Binop Comment Type.Type T.CASTUB_Associativity T.CASTUB_Precedence
+type CED_Binop
+    = CED_Binop CED_Comment Type.CECT_Type T.CASTUB_Associativity T.CASTUB_Precedence
 
 
 
@@ -82,8 +82,8 @@ encode docs =
     E.list encodeModule (Dict.values compare docs)
 
 
-encodeModule : Module -> E.Value
-encodeModule (Module name comment unions aliases values binops) =
+encodeModule : CED_Module -> E.Value
+encodeModule (CED_Module name comment unions aliases values binops) =
     E.object
         [ ( "name", ModuleName.encode name )
         , ( "comment", E.string comment )
@@ -105,19 +105,19 @@ decoder =
     D.fmap toDict (D.list moduleDecoder)
 
 
-toDict : List Module -> Documentation
+toDict : List CED_Module -> Documentation
 toDict modules =
     Dict.fromList identity (List.map toDictHelp modules)
 
 
-toDictHelp : Module -> ( T.CDN_Name, Module )
-toDictHelp ((Module name _ _ _ _ _) as modul) =
+toDictHelp : CED_Module -> ( T.CDN_Name, CED_Module )
+toDictHelp ((CED_Module name _ _ _ _ _) as modul) =
     ( name, modul )
 
 
-moduleDecoder : D.Decoder Error Module
+moduleDecoder : D.Decoder Error CED_Module
 moduleDecoder =
-    D.pure Module
+    D.pure CED_Module
         |> D.apply (D.field "name" moduleNameDecoder)
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "unions" (dictDecoder union))
@@ -148,7 +148,7 @@ moduleNameDecoder =
     D.mapError (always BadModuleName) ModuleName.decoder
 
 
-typeDecoder : D.Decoder Error Type.Type
+typeDecoder : D.Decoder Error Type.CECT_Type
 typeDecoder =
     D.mapError (always BadType) Type.decoder
 
@@ -157,8 +157,8 @@ typeDecoder =
 -- UNION JSON
 
 
-encodeUnion : ( T.CDN_Name, Union ) -> E.Value
-encodeUnion ( name, Union comment args cases ) =
+encodeUnion : ( T.CDN_Name, CED_Union ) -> E.Value
+encodeUnion ( name, CED_Union comment args cases ) =
     E.object
         [ ( "name", E.name name )
         , ( "comment", E.string comment )
@@ -167,20 +167,20 @@ encodeUnion ( name, Union comment args cases ) =
         ]
 
 
-union : D.Decoder Error Union
+union : D.Decoder Error CED_Union
 union =
-    D.pure Union
+    D.pure CED_Union
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "cases" (D.list caseDecoder))
 
 
-encodeCase : ( T.CDN_Name, List Type.Type ) -> E.Value
+encodeCase : ( T.CDN_Name, List Type.CECT_Type ) -> E.Value
 encodeCase ( tag, args ) =
     E.list identity [ E.name tag, E.list Type.encode args ]
 
 
-caseDecoder : D.Decoder Error ( T.CDN_Name, List Type.Type )
+caseDecoder : D.Decoder Error ( T.CDN_Name, List Type.CECT_Type )
 caseDecoder =
     D.pair nameDecoder (D.list typeDecoder)
 
@@ -189,8 +189,8 @@ caseDecoder =
 -- ALIAS JSON
 
 
-encodeAlias : ( T.CDN_Name, Alias ) -> E.Value
-encodeAlias ( name, Alias comment args tipe ) =
+encodeAlias : ( T.CDN_Name, CED_Alias ) -> E.Value
+encodeAlias ( name, CED_Alias comment args tipe ) =
     E.object
         [ ( "name", E.name name )
         , ( "comment", E.string comment )
@@ -199,9 +199,9 @@ encodeAlias ( name, Alias comment args tipe ) =
         ]
 
 
-alias_ : D.Decoder Error Alias
+alias_ : D.Decoder Error CED_Alias
 alias_ =
-    D.pure Alias
+    D.pure CED_Alias
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "type" typeDecoder)
@@ -211,8 +211,8 @@ alias_ =
 -- VALUE JSON
 
 
-encodeValue : ( T.CDN_Name, Value ) -> E.Value
-encodeValue ( name, Value comment tipe ) =
+encodeValue : ( T.CDN_Name, CED_Value ) -> E.Value
+encodeValue ( name, CED_Value comment tipe ) =
     E.object
         [ ( "name", E.name name )
         , ( "comment", E.string comment )
@@ -220,9 +220,9 @@ encodeValue ( name, Value comment tipe ) =
         ]
 
 
-value : D.Decoder Error Value
+value : D.Decoder Error CED_Value
 value =
-    D.pure Value
+    D.pure CED_Value
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
 
@@ -231,8 +231,8 @@ value =
 -- BINOP JSON
 
 
-encodeBinop : ( T.CDN_Name, Binop ) -> E.Value
-encodeBinop ( name, Binop comment tipe assoc prec ) =
+encodeBinop : ( T.CDN_Name, CED_Binop ) -> E.Value
+encodeBinop ( name, CED_Binop comment tipe assoc prec ) =
     E.object
         [ ( "name", E.name name )
         , ( "comment", E.string comment )
@@ -242,9 +242,9 @@ encodeBinop ( name, Binop comment tipe assoc prec ) =
         ]
 
 
-binop : D.Decoder Error Binop
+binop : D.Decoder Error CED_Binop
 binop =
-    D.pure Binop
+    D.pure CED_Binop
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
         |> D.apply (D.field "associativity" assocDecoder)
@@ -318,16 +318,16 @@ precDecoder =
 -- FROM MODULE
 
 
-fromModule : Can.Module -> Result E.Error Module
+fromModule : Can.Module -> Result E.CRED_Error CED_Module
 fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
     case exports of
         Can.ExportEverything region ->
-            Err (E.ImplicitExposing region)
+            Err (E.CRED_ImplicitExposing region)
 
         Can.Export exportDict ->
             case docs of
                 T.CASTS_NoDocs region ->
-                    Err (E.NoDocs region)
+                    Err (E.CRED_NoDocs region)
 
                 T.CASTS_YesDocs overview comments ->
                     parseOverview overview
@@ -339,18 +339,18 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 -- PARSE OVERVIEW
 
 
-parseOverview : T.CASTS_Comment -> Result E.Error (List (T.CRA_Located T.CDN_Name))
+parseOverview : T.CASTS_Comment -> Result E.CRED_Error (List (T.CRA_Located T.CDN_Name))
 parseOverview (T.CASTS_Comment snippet) =
-    case P.fromSnippet (chompOverview []) E.BadEnd snippet of
+    case P.fromSnippet (chompOverview []) E.CRED_BadEnd snippet of
         Err err ->
-            Err (E.SyntaxProblem err)
+            Err (E.CRED_SyntaxProblem err)
 
         Ok names ->
             Ok names
 
 
 type alias Parser a =
-    P.Parser E.SyntaxProblem a
+    P.Parser E.CRED_SyntaxProblem a
 
 
 chompOverview : List (T.CRA_Located T.CDN_Name) -> Parser (List (T.CRA_Located T.CDN_Name))
@@ -359,7 +359,7 @@ chompOverview names =
         |> P.bind
             (\isDocs ->
                 if isDocs then
-                    Space.chomp E.Space
+                    Space.chomp E.CRED_Space
                         |> P.bind (\_ -> P.bind chompOverview (chompDocs names))
 
                 else
@@ -370,28 +370,28 @@ chompOverview names =
 chompDocs : List (T.CRA_Located T.CDN_Name) -> Parser (List (T.CRA_Located T.CDN_Name))
 chompDocs names =
     P.addLocation
-        (P.oneOf E.Name
-            [ Var.lower E.Name
-            , Var.upper E.Name
+        (P.oneOf E.CRED_Name
+            [ Var.lower E.CRED_Name
+            , Var.upper E.CRED_Name
             , chompOperator
             ]
         )
         |> P.bind
             (\name ->
-                Space.chomp E.Space
+                Space.chomp E.CRED_Space
                     |> P.bind
                         (\_ ->
                             P.oneOfWithFallback
                                 [ P.getPosition
                                     |> P.bind
                                         (\pos ->
-                                            Space.checkIndent pos E.Comma
+                                            Space.checkIndent pos E.CRED_Comma
                                                 |> P.bind
                                                     (\_ ->
-                                                        P.word1 ',' E.Comma
+                                                        P.word1 ',' E.CRED_Comma
                                                             |> P.bind
                                                                 (\_ ->
-                                                                    Space.chomp E.Space
+                                                                    Space.chomp E.CRED_Space
                                                                         |> P.bind
                                                                             (\_ ->
                                                                                 chompDocs (name :: names)
@@ -407,13 +407,13 @@ chompDocs names =
 
 chompOperator : Parser T.CDN_Name
 chompOperator =
-    P.word1 '(' E.Op
+    P.word1 '(' E.CRED_Op
         |> P.bind
             (\_ ->
-                Symbol.operator E.Op E.OpBad
+                Symbol.operator E.CRED_Op E.CRED_OpBad
                     |> P.bind
                         (\op ->
-                            P.word1 ')' E.Op
+                            P.word1 ')' E.CRED_Op
                                 |> P.fmap (\_ -> op)
                         )
             )
@@ -484,22 +484,22 @@ untilDocs src pos end row col =
 -- CHECK NAMES
 
 
-checkNames : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> List (T.CRA_Located T.CDN_Name) -> Result E.Error ()
+checkNames : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> List (T.CRA_Located T.CDN_Name) -> Result E.CRED_Error ()
 checkNames exports names =
     let
         docs : DocNameRegions
         docs =
             List.foldl addName Dict.empty names
 
-        loneExport : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
+        loneExport : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.CRED_NameProblem T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region
         loneExport name export_ _ =
             onlyInExports name export_
 
-        checkBoth : T.CDN_Name -> T.CRA_Located Can.Export -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
+        checkBoth : T.CDN_Name -> T.CRA_Located Can.Export -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region
         checkBoth n _ r _ =
             isUnique n r
 
-        loneDoc : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
+        loneDoc : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region
         loneDoc name regions _ =
             onlyInDocs name regions
     in
@@ -508,7 +508,7 @@ checkNames exports names =
             Ok ()
 
         ( _, Err es ) ->
-            Err (E.NameProblems (OneOrMore.destruct NE.Nonempty es))
+            Err (E.CRED_NameProblems (OneOrMore.destruct NE.Nonempty es))
 
 
 type alias DocNameRegions =
@@ -520,7 +520,7 @@ addName (T.CRA_At region name) dict =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one region) dict
 
 
-isUnique : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem T.CRA_Region
+isUnique : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.CRED_NameProblem T.CRA_Region
 isUnique name regions =
     case regions of
         OneOrMore.One region ->
@@ -531,28 +531,28 @@ isUnique name regions =
                 ( r1, r2 ) =
                     OneOrMore.getFirstTwo left right
             in
-            Result.throw (E.NameDuplicate name r1 r2)
+            Result.throw (E.CRED_NameDuplicate name r1 r2)
 
 
-onlyInDocs : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.NameProblem a
+onlyInDocs : T.CDN_Name -> OneOrMore.OneOrMore T.CRA_Region -> Result.RResult i w E.CRED_NameProblem a
 onlyInDocs name regions =
     isUnique name regions
         |> Result.bind
             (\region ->
-                Result.throw (E.NameOnlyInDocs name region)
+                Result.throw (E.CRED_NameOnlyInDocs name region)
             )
 
 
-onlyInExports : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.NameProblem a
+onlyInExports : T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.CRED_NameProblem a
 onlyInExports name (T.CRA_At region _) =
-    Result.throw (E.NameOnlyInExports name region)
+    Result.throw (E.CRED_NameOnlyInExports name region)
 
 
 
 -- CHECK DEFS
 
 
-checkDefs : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> T.CASTS_Comment -> Dict String T.CDN_Name T.CASTS_Comment -> Can.Module -> Result E.Error Module
+checkDefs : Dict String T.CDN_Name (T.CRA_Located Can.Export) -> T.CASTS_Comment -> Dict String T.CDN_Name T.CASTS_Comment -> Can.Module -> Result E.CRED_Error CED_Module
 checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases infixes effects) =
     let
         types : Types
@@ -565,22 +565,22 @@ checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases
     in
     case Result.run (Result.mapTraverseWithKey identity compare (checkExport info) exportDict) of
         ( _, Err problems ) ->
-            Err (E.DefProblems (OneOrMore.destruct NE.Nonempty problems))
+            Err (E.CRED_DefProblems (OneOrMore.destruct NE.Nonempty problems))
 
         ( _, Ok inserters ) ->
             Ok (Dict.foldr compare (\_ -> (<|)) (emptyModule name overview) inserters)
 
 
-emptyModule : T.CEMN_Canonical -> T.CASTS_Comment -> Module
+emptyModule : T.CEMN_Canonical -> T.CASTS_Comment -> CED_Module
 emptyModule (T.CEMN_Canonical _ name) (T.CASTS_Comment overview) =
-    Module name (Json.fromComment overview) Dict.empty Dict.empty Dict.empty Dict.empty
+    CED_Module name (Json.fromComment overview) Dict.empty Dict.empty Dict.empty Dict.empty
 
 
 type Info
     = Info (Dict String T.CDN_Name T.CASTS_Comment) (Dict String T.CDN_Name (Result T.CRA_Region T.CASTC_Type)) (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias) (Dict String T.CDN_Name Can.Binop) Can.Effects
 
 
-checkExport : Info -> T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
+checkExport : Info -> T.CDN_Name -> T.CRA_Located Can.Export -> Result.RResult i w E.CRED_DefProblem (CED_Module -> CED_Module)
 checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At region export) =
     case export of
         Can.ExportValue ->
@@ -591,13 +591,13 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
-                                        (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                            Module
+                                        (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                            CED_Module
                                                 mName
                                                 mComment
                                                 mUnions
                                                 mAliases
-                                                (Dict.insert identity name (Value comment tipe) mValues)
+                                                (Dict.insert identity name (CED_Value comment tipe) mValues)
                                                 mBinops
                                         )
                                 )
@@ -615,14 +615,14 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
-                                        (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                            Module
+                                        (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                            CED_Module
                                                 mName
                                                 mComment
                                                 mUnions
                                                 mAliases
                                                 mValues
-                                                (Dict.insert identity name (Binop comment tipe assoc prec) mBinops)
+                                                (Dict.insert identity name (CED_Binop comment tipe assoc prec) mBinops)
                                         )
                                 )
                     )
@@ -636,11 +636,11 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                 |> Result.bind
                     (\comment ->
                         Result.ok
-                            (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                Module mName
+                            (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                CED_Module mName
                                     mComment
                                     mUnions
-                                    (Dict.insert identity name (Alias comment tvars (Extract.fromType tipe)) mAliases)
+                                    (Dict.insert identity name (CED_Alias comment tvars (Extract.fromType tipe)) mAliases)
                                     mValues
                                     mBinops
                             )
@@ -655,10 +655,10 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                 |> Result.bind
                     (\comment ->
                         Result.ok
-                            (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                Module mName
+                            (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                CED_Module mName
                                     mComment
-                                    (Dict.insert identity name (Union comment tvars (List.map dector ctors)) mUnions)
+                                    (Dict.insert identity name (CED_Union comment tvars (List.map dector ctors)) mUnions)
                                     mAliases
                                     mValues
                                     mBinops
@@ -674,10 +674,10 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                 |> Result.bind
                     (\comment ->
                         Result.ok
-                            (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                Module mName
+                            (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                CED_Module mName
                                     mComment
-                                    (Dict.insert identity name (Union comment tvars []) mUnions)
+                                    (Dict.insert identity name (CED_Union comment tvars []) mUnions)
                                     mAliases
                                     mValues
                                     mBinops
@@ -692,39 +692,39 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (T.CRA_At regio
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
-                                        (\(Module mName mComment mUnions mAliases mValues mBinops) ->
-                                            Module mName
+                                        (\(CED_Module mName mComment mUnions mAliases mValues mBinops) ->
+                                            CED_Module mName
                                                 mComment
                                                 mUnions
                                                 mAliases
-                                                (Dict.insert identity name (Value comment tipe) mValues)
+                                                (Dict.insert identity name (CED_Value comment tipe) mValues)
                                                 mBinops
                                         )
                                 )
                     )
 
 
-getComment : T.CRA_Region -> T.CDN_Name -> Info -> Result.RResult i w E.DefProblem Comment
+getComment : T.CRA_Region -> T.CDN_Name -> Info -> Result.RResult i w E.CRED_DefProblem CED_Comment
 getComment region name (Info iComments _ _ _ _ _) =
     case Dict.get identity name iComments of
         Nothing ->
-            Result.throw (E.NoComment name region)
+            Result.throw (E.CRED_NoComment name region)
 
         Just (T.CASTS_Comment snippet) ->
             Result.ok (Json.fromComment snippet)
 
 
-getType : T.CDN_Name -> Info -> Result.RResult i w E.DefProblem Type.Type
+getType : T.CDN_Name -> Info -> Result.RResult i w E.CRED_DefProblem Type.CECT_Type
 getType name (Info _ iValues _ _ _ _) =
     case Utils.find identity name iValues of
         Err region ->
-            Result.throw (E.NoAnnotation name region)
+            Result.throw (E.CRED_NoAnnotation name region)
 
         Ok tipe ->
             Result.ok (Extract.fromType tipe)
 
 
-dector : T.CASTC_Ctor -> ( T.CDN_Name, List Type.Type )
+dector : T.CASTC_Ctor -> ( T.CDN_Name, List Type.CECT_Type )
 dector (T.CASTC_Ctor name _ _ args) =
     ( name, List.map Extract.fromType args )
 
@@ -779,8 +779,8 @@ jsonDecoder =
     Decode.map toDict (Decode.list jsonModuleDecoder)
 
 
-jsonModuleEncoder : Module -> Encode.Value
-jsonModuleEncoder (Module name comment unions aliases values binops) =
+jsonModuleEncoder : CED_Module -> Encode.Value
+jsonModuleEncoder (CED_Module name comment unions aliases values binops) =
     Encode.object
         [ ( "name", Encode.string name )
         , ( "comment", Encode.string comment )
@@ -791,9 +791,9 @@ jsonModuleEncoder (Module name comment unions aliases values binops) =
         ]
 
 
-jsonModuleDecoder : Decode.Decoder Module
+jsonModuleDecoder : Decode.Decoder CED_Module
 jsonModuleDecoder =
-    Decode.map6 Module
+    Decode.map6 CED_Module
         (Decode.field "name" Decode.string)
         (Decode.field "comment" Decode.string)
         (Decode.field "unions" (D.assocListDict identity Decode.string jsonUnionDecoder))
@@ -802,8 +802,8 @@ jsonModuleDecoder =
         (Decode.field "binops" (D.assocListDict identity Decode.string jsonBinopDecoder))
 
 
-jsonUnionEncoder : Union -> Encode.Value
-jsonUnionEncoder (Union comment args cases) =
+jsonUnionEncoder : CED_Union -> Encode.Value
+jsonUnionEncoder (CED_Union comment args cases) =
     Encode.object
         [ ( "comment", Encode.string comment )
         , ( "args", Encode.list Encode.string args )
@@ -811,16 +811,16 @@ jsonUnionEncoder (Union comment args cases) =
         ]
 
 
-jsonUnionDecoder : Decode.Decoder Union
+jsonUnionDecoder : Decode.Decoder CED_Union
 jsonUnionDecoder =
-    Decode.map3 Union
+    Decode.map3 CED_Union
         (Decode.field "comment" Decode.string)
         (Decode.field "args" (Decode.list Decode.string))
         (Decode.field "cases" (Decode.list (D.jsonPair Decode.string (Decode.list Type.jsonDecoder))))
 
 
-jsonAliasEncoder : Alias -> Encode.Value
-jsonAliasEncoder (Alias comment args type_) =
+jsonAliasEncoder : CED_Alias -> Encode.Value
+jsonAliasEncoder (CED_Alias comment args type_) =
     Encode.object
         [ ( "comment", Encode.string comment )
         , ( "args", Encode.list Encode.string args )
@@ -828,31 +828,31 @@ jsonAliasEncoder (Alias comment args type_) =
         ]
 
 
-jsonAliasDecoder : Decode.Decoder Alias
+jsonAliasDecoder : Decode.Decoder CED_Alias
 jsonAliasDecoder =
-    Decode.map3 Alias
+    Decode.map3 CED_Alias
         (Decode.field "comment" Decode.string)
         (Decode.field "args" (Decode.list Decode.string))
         (Decode.field "type" Type.jsonDecoder)
 
 
-jsonValueEncoder : Value -> Encode.Value
-jsonValueEncoder (Value comment type_) =
+jsonValueEncoder : CED_Value -> Encode.Value
+jsonValueEncoder (CED_Value comment type_) =
     Encode.object
         [ ( "comment", Encode.string comment )
         , ( "type", Type.jsonEncoder type_ )
         ]
 
 
-jsonValueDecoder : Decode.Decoder Value
+jsonValueDecoder : Decode.Decoder CED_Value
 jsonValueDecoder =
-    Decode.map2 Value
+    Decode.map2 CED_Value
         (Decode.field "comment" Decode.string)
         (Decode.field "type" Type.jsonDecoder)
 
 
-jsonBinopEncoder : Binop -> Encode.Value
-jsonBinopEncoder (Binop comment type_ associativity precedence) =
+jsonBinopEncoder : CED_Binop -> Encode.Value
+jsonBinopEncoder (CED_Binop comment type_ associativity precedence) =
     Encode.object
         [ ( "comment", Encode.string comment )
         , ( "type", Type.jsonEncoder type_ )
@@ -861,9 +861,9 @@ jsonBinopEncoder (Binop comment type_ associativity precedence) =
         ]
 
 
-jsonBinopDecoder : Decode.Decoder Binop
+jsonBinopDecoder : Decode.Decoder CED_Binop
 jsonBinopDecoder =
-    Decode.map4 Binop
+    Decode.map4 CED_Binop
         (Decode.field "comment" Decode.string)
         (Decode.field "type" Type.jsonDecoder)
         (Decode.field "associativity" Binop.associativityDecoder)

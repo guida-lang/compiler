@@ -20,7 +20,8 @@ import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Prelude
 import System.IO as IO exposing (IO)
-import Utils.Main as Utils exposing (FilePath)
+import Types as T
+import Utils.Main as Utils
 
 
 
@@ -38,7 +39,7 @@ run () () =
 
 
 type Env
-    = Env FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.PkgOutline
+    = Env T.FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.PkgOutline
 
 
 getEnv : Task.Task Exit.Bump Env
@@ -105,7 +106,7 @@ bump ((Env root _ _ registry ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outlin
 -- CHECK NEW PACKAGE
 
 
-checkNewPackage : FilePath -> Outline.PkgOutline -> IO ()
+checkNewPackage : T.FilePath -> Outline.PkgOutline -> IO ()
 checkNewPackage root ((Outline.PkgOutline _ _ _ version _ _ _ _) as outline) =
     IO.putStrLn Exit.newPackageOverview
         |> IO.bind
@@ -176,7 +177,7 @@ suggestVersion (Env root cache manager _ ((Outline.PkgOutline pkg _ _ vsn _ _ _ 
             )
 
 
-generateDocs : FilePath -> Outline.PkgOutline -> Task.Task Exit.Bump Docs.Documentation
+generateDocs : T.FilePath -> Outline.PkgOutline -> Task.Task Exit.Bump Docs.Documentation
 generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
     Task.eio Exit.BumpBadDetails
         (BW.withScope (\scope -> Details.load Reporting.silent scope root))
@@ -196,7 +197,7 @@ generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
 -- CHANGE VERSION
 
 
-changeVersion : FilePath -> Outline.PkgOutline -> V.Version -> D.Doc -> IO ()
+changeVersion : T.FilePath -> Outline.PkgOutline -> V.Version -> D.Doc -> IO ()
 changeVersion root (Outline.PkgOutline name summary license _ exposed deps testDeps elmVersion) targetVersion question =
     Reporting.ask question
         |> IO.bind

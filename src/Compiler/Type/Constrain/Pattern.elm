@@ -31,7 +31,7 @@ type alias Header =
     Dict String T.CDN_Name (T.CRA_Located Type)
 
 
-add : Can.Pattern -> E.PExpected Type -> State -> IO State
+add : Can.Pattern -> E.CRET_PExpected Type -> State -> IO State
 add (T.CRA_At region pattern) expectation state =
     case pattern of
         Can.PAnything ->
@@ -50,7 +50,7 @@ add (T.CRA_At region pattern) expectation state =
 
                 unitCon : Type.Constraint
                 unitCon =
-                    Type.CPattern region E.PUnit Type.UnitN expectation
+                    Type.CPattern region E.CRET_PUnit Type.UnitN expectation
             in
             IO.pure (State headers vars (unitCon :: revCons))
 
@@ -83,7 +83,7 @@ add (T.CRA_At region pattern) expectation state =
                                     let
                                         listCon : Type.Constraint
                                         listCon =
-                                            Type.CPattern region E.PList listType expectation
+                                            Type.CPattern region E.CRET_PList listType expectation
                                     in
                                     State headers (entryVar :: vars) (listCon :: revCons)
                                 )
@@ -102,13 +102,13 @@ add (T.CRA_At region pattern) expectation state =
                             listType =
                                 Type.AppN ModuleName.list Name.list [ entryType ]
 
-                            headExpectation : E.PExpected Type
+                            headExpectation : E.CRET_PExpected Type
                             headExpectation =
-                                E.PNoExpectation entryType
+                                E.CRET_PNoExpectation entryType
 
-                            tailExpectation : E.PExpected Type
+                            tailExpectation : E.CRET_PExpected Type
                             tailExpectation =
-                                E.PFromContext region E.PTail listType
+                                E.CRET_PFromContext region E.CRET_PTail listType
                         in
                         add tailPattern tailExpectation state
                             |> IO.bind (add headPattern headExpectation)
@@ -117,7 +117,7 @@ add (T.CRA_At region pattern) expectation state =
                                     let
                                         listCon : Type.Constraint
                                         listCon =
-                                            Type.CPattern region E.PList listType expectation
+                                            Type.CPattern region E.CRET_PList listType expectation
                                     in
                                     State headers (entryVar :: vars) (listCon :: revCons)
                                 )
@@ -149,7 +149,7 @@ add (T.CRA_At region pattern) expectation state =
 
                                         recordCon : Type.Constraint
                                         recordCon =
-                                            Type.CPattern region E.PRecord recordType expectation
+                                            Type.CPattern region E.CRET_PRecord recordType expectation
                                     in
                                     State
                                         (Dict.union headers (Dict.map (\_ v -> T.CRA_At region v) fieldTypes))
@@ -165,7 +165,7 @@ add (T.CRA_At region pattern) expectation state =
 
                 intCon : Type.Constraint
                 intCon =
-                    Type.CPattern region E.PInt Type.int expectation
+                    Type.CPattern region E.CRET_PInt Type.int expectation
             in
             IO.pure (State headers vars (intCon :: revCons))
 
@@ -176,7 +176,7 @@ add (T.CRA_At region pattern) expectation state =
 
                 strCon : Type.Constraint
                 strCon =
-                    Type.CPattern region E.PStr Type.string expectation
+                    Type.CPattern region E.CRET_PStr Type.string expectation
             in
             IO.pure (State headers vars (strCon :: revCons))
 
@@ -187,7 +187,7 @@ add (T.CRA_At region pattern) expectation state =
 
                 chrCon : Type.Constraint
                 chrCon =
-                    Type.CPattern region E.PChr Type.char expectation
+                    Type.CPattern region E.CRET_PChr Type.char expectation
             in
             IO.pure (State headers vars (chrCon :: revCons))
 
@@ -198,7 +198,7 @@ add (T.CRA_At region pattern) expectation state =
 
                 boolCon : Type.Constraint
                 boolCon =
-                    Type.CPattern region E.PBool Type.bool expectation
+                    Type.CPattern region E.CRET_PBool Type.bool expectation
             in
             IO.pure (State headers vars (boolCon :: revCons))
 
@@ -212,7 +212,7 @@ emptyState =
     State Dict.empty [] []
 
 
-addToHeaders : T.CRA_Region -> T.CDN_Name -> E.PExpected Type -> State -> State
+addToHeaders : T.CRA_Region -> T.CDN_Name -> E.CRET_PExpected Type -> State -> State
 addToHeaders region name expectation (State headers vars revCons) =
     let
         tipe : Type
@@ -226,13 +226,13 @@ addToHeaders region name expectation (State headers vars revCons) =
     State newHeaders vars revCons
 
 
-getType : E.PExpected Type -> Type
+getType : E.CRET_PExpected Type -> Type
 getType expectation =
     case expectation of
-        E.PNoExpectation tipe ->
+        E.CRET_PNoExpectation tipe ->
             tipe
 
-        E.PFromContext _ _ tipe ->
+        E.CRET_PFromContext _ _ tipe ->
             tipe
 
 
@@ -243,9 +243,9 @@ getType expectation =
 addEntry : T.CRA_Region -> Type -> State -> ( T.CDI_ZeroBased, Can.Pattern ) -> IO State
 addEntry listRegion tipe state ( index, pattern ) =
     let
-        expectation : E.PExpected Type
+        expectation : E.CRET_PExpected Type
         expectation =
-            E.PFromContext listRegion (E.PListEntry index) tipe
+            E.CRET_PFromContext listRegion (E.CRET_PListEntry index) tipe
     in
     add pattern expectation state
 
@@ -254,7 +254,7 @@ addEntry listRegion tipe state ( index, pattern ) =
 -- CONSTRAIN TUPLE
 
 
-addTuple : T.CRA_Region -> Can.Pattern -> Can.Pattern -> Maybe Can.Pattern -> E.PExpected Type -> State -> IO State
+addTuple : T.CRA_Region -> Can.Pattern -> Can.Pattern -> Maybe Can.Pattern -> E.CRET_PExpected Type -> State -> IO State
 addTuple region a b maybeC expectation state =
     Type.mkFlexVar
         |> IO.bind
@@ -280,7 +280,7 @@ addTuple region a b maybeC expectation state =
                                                 let
                                                     tupleCon : Type.Constraint
                                                     tupleCon =
-                                                        Type.CPattern region E.PTuple (Type.TupleN aType bType Nothing) expectation
+                                                        Type.CPattern region E.CRET_PTuple (Type.TupleN aType bType Nothing) expectation
                                                 in
                                                 State headers (aVar :: bVar :: vars) (tupleCon :: revCons)
                                             )
@@ -302,7 +302,7 @@ addTuple region a b maybeC expectation state =
                                                             let
                                                                 tupleCon : Type.Constraint
                                                                 tupleCon =
-                                                                    Type.CPattern region E.PTuple (Type.TupleN aType bType (Just cType)) expectation
+                                                                    Type.CPattern region E.CRET_PTuple (Type.TupleN aType bType (Just cType)) expectation
                                                             in
                                                             State headers (aVar :: bVar :: cVar :: vars) (tupleCon :: revCons)
                                                         )
@@ -313,14 +313,14 @@ addTuple region a b maybeC expectation state =
 
 simpleAdd : Can.Pattern -> Type -> State -> IO State
 simpleAdd pattern patternType state =
-    add pattern (E.PNoExpectation patternType) state
+    add pattern (E.CRET_PNoExpectation patternType) state
 
 
 
 -- CONSTRAIN CONSTRUCTORS
 
 
-addCtor : T.CRA_Region -> T.CEMN_Canonical -> T.CDN_Name -> List T.CDN_Name -> T.CDN_Name -> List Can.PatternCtorArg -> E.PExpected Type -> State -> IO State
+addCtor : T.CRA_Region -> T.CEMN_Canonical -> T.CDN_Name -> List T.CDN_Name -> T.CDN_Name -> List Can.PatternCtorArg -> E.CRET_PExpected Type -> State -> IO State
 addCtor region home typeName typeVarNames ctorName args expectation state =
     IO.traverseList (\var -> IO.fmap (Tuple.pair var) (Type.nameToFlex var)) typeVarNames
         |> IO.bind
@@ -344,7 +344,7 @@ addCtor region home typeName typeVarNames ctorName args expectation state =
 
                                 ctorCon : Type.Constraint
                                 ctorCon =
-                                    Type.CPattern region (E.PCtor ctorName) ctorType expectation
+                                    Type.CPattern region (E.CRET_PCtor ctorName) ctorType expectation
                             in
                             IO.pure <|
                                 State headers
@@ -360,9 +360,9 @@ addCtorArg region ctorName freeVarDict state (Can.PatternCtorArg index srcType p
         |> IO.bind
             (\tipe ->
                 let
-                    expectation : E.PExpected Type
+                    expectation : E.CRET_PExpected Type
                     expectation =
-                        E.PFromContext region (E.PCtorArg ctorName index) tipe
+                        E.CRET_PFromContext region (E.CRET_PCtorArg ctorName index) tipe
                 in
                 add pattern expectation state
             )

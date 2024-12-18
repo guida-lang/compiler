@@ -1,7 +1,5 @@
 module Compiler.Optimize.DecisionTree exposing
     ( DecisionTree(..)
-    , Path(..)
-    , Test(..)
     , compile
     , pathDecoder
     , pathEncoder
@@ -51,7 +49,7 @@ compile rawBranches =
     let
         format : ( Can.Pattern, Int ) -> Branch
         format ( pattern, index ) =
-            Branch index [ ( Empty, pattern ) ]
+            Branch index [ ( T.CODT_Empty, pattern ) ]
     in
     toDecisionTree (List.map format rawBranches)
 
@@ -62,24 +60,7 @@ compile rawBranches =
 
 type DecisionTree
     = Match Int
-    | Decision Path (List ( Test, DecisionTree )) (Maybe DecisionTree)
-
-
-type Test
-    = IsCtor T.CEMN_Canonical T.CDN_Name T.CDI_ZeroBased Int T.CASTC_CtorOpts
-    | IsCons
-    | IsNil
-    | IsTuple
-    | IsInt Int
-    | IsChr String
-    | IsStr String
-    | IsBool Bool
-
-
-type Path
-    = Index T.CDI_ZeroBased Path
-    | Unbox Path
-    | Empty
+    | Decision T.CODT_Path (List ( T.CODT_Test, DecisionTree )) (Maybe DecisionTree)
 
 
 
@@ -87,7 +68,7 @@ type Path
 
 
 type Branch
-    = Branch Int (List ( Path, Can.Pattern ))
+    = Branch Int (List ( T.CODT_Path, Can.Pattern ))
 
 
 toDecisionTree : List Branch -> DecisionTree
@@ -103,14 +84,14 @@ toDecisionTree rawBranches =
 
         Nothing ->
             let
-                path : Path
+                path : T.CODT_Path
                 path =
                     pickPath branches
 
                 ( edges, fallback ) =
                     gatherEdges branches path
 
-                decisionEdges : List ( Test, DecisionTree )
+                decisionEdges : List ( T.CODT_Test, DecisionTree )
                 decisionEdges =
                     List.map (Tuple.mapSecond toDecisionTree) edges
             in
@@ -128,31 +109,31 @@ toDecisionTree rawBranches =
                     Decision path decisionEdges (Just (toDecisionTree fallback))
 
 
-isComplete : List Test -> Bool
+isComplete : List T.CODT_Test -> Bool
 isComplete tests =
     case Prelude.head tests of
-        IsCtor _ _ _ numAlts _ ->
+        T.CODT_IsCtor _ _ _ numAlts _ ->
             numAlts == List.length tests
 
-        IsCons ->
+        T.CODT_IsCons ->
             List.length tests == 2
 
-        IsNil ->
+        T.CODT_IsNil ->
             List.length tests == 2
 
-        IsTuple ->
+        T.CODT_IsTuple ->
             True
 
-        IsInt _ ->
+        T.CODT_IsInt _ ->
             False
 
-        IsChr _ ->
+        T.CODT_IsChr _ ->
             False
 
-        IsStr _ ->
+        T.CODT_IsStr _ ->
             False
 
-        IsBool _ ->
+        T.CODT_IsBool _ ->
             List.length tests == 2
 
 
@@ -168,7 +149,7 @@ flattenPatterns (Branch goal pathPatterns) =
     Branch goal (List.foldr flatten [] pathPatterns)
 
 
-flatten : ( Path, Can.Pattern ) -> List ( Path, Can.Pattern ) -> List ( Path, Can.Pattern )
+flatten : ( T.CODT_Path, Can.Pattern ) -> List ( T.CODT_Path, Can.Pattern ) -> List ( T.CODT_Path, Can.Pattern )
 flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
     case pattern of
         Can.PVar _ ->
@@ -185,7 +166,7 @@ flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
             if numAlts == 1 then
                 case List.map dearg args of
                     [ arg ] ->
-                        flatten ( Unbox path, arg ) otherPathPatterns
+                        flatten ( T.CODT_Unbox path, arg ) otherPathPatterns
 
                     args_ ->
                         List.foldr flatten otherPathPatterns (subPositions path args_)
@@ -194,14 +175,14 @@ flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
                 pathPattern :: otherPathPatterns
 
         Can.PTuple a b maybeC ->
-            flatten ( Index Index.first path, a ) <|
-                flatten ( Index Index.second path, b ) <|
+            flatten ( T.CODT_Index Index.first path, a ) <|
+                flatten ( T.CODT_Index Index.second path, b ) <|
                     case maybeC of
                         Nothing ->
                             otherPathPatterns
 
                         Just c ->
-                            flatten ( Index Index.third path, c ) otherPathPatterns
+                            flatten ( T.CODT_Index Index.third path, c ) otherPathPatterns
 
         Can.PUnit ->
             otherPathPatterns
@@ -233,9 +214,9 @@ flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
             pathPattern :: otherPathPatterns
 
 
-subPositions : Path -> List Can.Pattern -> List ( Path, Can.Pattern )
+subPositions : T.CODT_Path -> List Can.Pattern -> List ( T.CODT_Path, Can.Pattern )
 subPositions path patterns =
-    Index.indexedMap (\index pattern -> ( Index index path, pattern )) patterns
+    Index.indexedMap (\index pattern -> ( T.CODT_Index index path, pattern )) patterns
 
 
 dearg : Can.PatternCtorArg -> Can.Pattern
@@ -270,14 +251,14 @@ checkForMatch branches =
 -- GATHER OUTGOING EDGES
 
 
-gatherEdges : List Branch -> Path -> ( List ( Test, List Branch ), List Branch )
+gatherEdges : List Branch -> T.CODT_Path -> ( List ( T.CODT_Test, List Branch ), List Branch )
 gatherEdges branches path =
     let
-        relevantTests : List Test
+        relevantTests : List T.CODT_Test
         relevantTests =
             testsAtPath path branches
 
-        allEdges : List ( Test, List Branch )
+        allEdges : List ( T.CODT_Test, List Branch )
         allEdges =
             List.map (edgesFor path branches) relevantTests
 
@@ -296,14 +277,14 @@ gatherEdges branches path =
 -- FIND RELEVANT TESTS
 
 
-testsAtPath : Path -> List Branch -> List Test
+testsAtPath : T.CODT_Path -> List Branch -> List T.CODT_Test
 testsAtPath selectedPath branches =
     let
-        allTests : List Test
+        allTests : List T.CODT_Test
         allTests =
             List.filterMap (testAtPath selectedPath) branches
 
-        skipVisited : Test -> ( List Test, EverySet.EverySet String Test ) -> ( List Test, EverySet.EverySet String Test )
+        skipVisited : T.CODT_Test -> ( List T.CODT_Test, EverySet.EverySet String T.CODT_Test ) -> ( List T.CODT_Test, EverySet.EverySet String T.CODT_Test )
         skipVisited test (( uniqueTests, visitedTests ) as curr) =
             if EverySet.member (Encode.encode 0 << testEncoder) test visitedTests then
                 curr
@@ -316,7 +297,7 @@ testsAtPath selectedPath branches =
     Tuple.first (List.foldr skipVisited ( [], EverySet.empty ) allTests)
 
 
-testAtPath : Path -> Branch -> Maybe Test
+testAtPath : T.CODT_Path -> Branch -> Maybe T.CODT_Test
 testAtPath selectedPath (Branch _ pathPatterns) =
     Utils.listLookup selectedPath pathPatterns
         |> Maybe.andThen
@@ -327,26 +308,26 @@ testAtPath selectedPath (Branch _ pathPatterns) =
                             (T.CASTC_Union _ _ numAlts opts) =
                                 union
                         in
-                        Just (IsCtor home name index numAlts opts)
+                        Just (T.CODT_IsCtor home name index numAlts opts)
 
                     Can.PList ps ->
                         Just
                             (case ps of
                                 [] ->
-                                    IsNil
+                                    T.CODT_IsNil
 
                                 _ ->
-                                    IsCons
+                                    T.CODT_IsCons
                             )
 
                     Can.PCons _ _ ->
-                        Just IsCons
+                        Just T.CODT_IsCons
 
                     Can.PTuple _ _ _ ->
-                        Just IsTuple
+                        Just T.CODT_IsTuple
 
                     Can.PUnit ->
-                        Just IsTuple
+                        Just T.CODT_IsTuple
 
                     Can.PVar _ ->
                         Nothing
@@ -355,16 +336,16 @@ testAtPath selectedPath (Branch _ pathPatterns) =
                         Nothing
 
                     Can.PInt int ->
-                        Just (IsInt int)
+                        Just (T.CODT_IsInt int)
 
                     Can.PStr str ->
-                        Just (IsStr str)
+                        Just (T.CODT_IsStr str)
 
                     Can.PChr chr ->
-                        Just (IsChr chr)
+                        Just (T.CODT_IsChr chr)
 
                     Can.PBool _ bool ->
-                        Just (IsBool bool)
+                        Just (T.CODT_IsBool bool)
 
                     Can.PRecord _ ->
                         Nothing
@@ -378,21 +359,21 @@ testAtPath selectedPath (Branch _ pathPatterns) =
 -- BUILD EDGES
 
 
-edgesFor : Path -> List Branch -> Test -> ( Test, List Branch )
+edgesFor : T.CODT_Path -> List Branch -> T.CODT_Test -> ( T.CODT_Test, List Branch )
 edgesFor path branches test =
     ( test
     , List.filterMap (toRelevantBranch test path) branches
     )
 
 
-toRelevantBranch : Test -> Path -> Branch -> Maybe Branch
+toRelevantBranch : T.CODT_Test -> T.CODT_Path -> Branch -> Maybe Branch
 toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
     case extract path pathPatterns of
         Found start (T.CRA_At region pattern) end ->
             case pattern of
                 Can.PCtor { union, name, args } ->
                     case test of
-                        IsCtor _ testName _ _ _ ->
+                        T.CODT_IsCtor _ testName _ _ _ ->
                             if name == testName then
                                 Just
                                     (Branch goal <|
@@ -403,7 +384,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                                                         union
                                                 in
                                                 if numAlts == 1 then
-                                                    start ++ (( Unbox path, arg ) :: end)
+                                                    start ++ (( T.CODT_Unbox path, arg ) :: end)
 
                                                 else
                                                     start ++ subPositions path args_ ++ end
@@ -420,7 +401,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PList [] ->
                     case test of
-                        IsNil ->
+                        T.CODT_IsNil ->
                             Just (Branch goal (start ++ end))
 
                         _ ->
@@ -428,7 +409,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PList (hd :: tl) ->
                     case test of
-                        IsCons ->
+                        T.CODT_IsCons ->
                             let
                                 tl_ : T.CRA_Located Can.Pattern_
                                 tl_ =
@@ -441,7 +422,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PCons hd tl ->
                     case test of
-                        IsCons ->
+                        T.CODT_IsCons ->
                             Just (Branch goal (start ++ subPositions path [ hd, tl ] ++ end))
 
                         _ ->
@@ -449,7 +430,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PChr chr ->
                     case test of
-                        IsChr testChr ->
+                        T.CODT_IsChr testChr ->
                             if chr == testChr then
                                 Just (Branch goal (start ++ end))
 
@@ -461,7 +442,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PStr str ->
                     case test of
-                        IsStr testStr ->
+                        T.CODT_IsStr testStr ->
                             if str == testStr then
                                 Just (Branch goal (start ++ end))
 
@@ -473,7 +454,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PInt int ->
                     case test of
-                        IsInt testInt ->
+                        T.CODT_IsInt testInt ->
                             if int == testInt then
                                 Just (Branch goal (start ++ end))
 
@@ -485,7 +466,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
                 Can.PBool _ bool ->
                     case test of
-                        IsBool testBool ->
+                        T.CODT_IsBool testBool ->
                             if bool == testBool then
                                 Just (Branch goal (start ++ end))
 
@@ -531,10 +512,10 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
 type Extract
     = NotFound
-    | Found (List ( Path, Can.Pattern )) Can.Pattern (List ( Path, Can.Pattern ))
+    | Found (List ( T.CODT_Path, Can.Pattern )) Can.Pattern (List ( T.CODT_Path, Can.Pattern ))
 
 
-extract : Path -> List ( Path, Can.Pattern ) -> Extract
+extract : T.CODT_Path -> List ( T.CODT_Path, Can.Pattern ) -> Extract
 extract selectedPath pathPatterns =
     case pathPatterns of
         [] ->
@@ -557,7 +538,7 @@ extract selectedPath pathPatterns =
 -- FIND IRRELEVANT BRANCHES
 
 
-isIrrelevantTo : Path -> Branch -> Bool
+isIrrelevantTo : T.CODT_Path -> Branch -> Bool
 isIrrelevantTo selectedPath (Branch _ pathPatterns) =
     case Utils.listLookup selectedPath pathPatterns of
         Nothing ->
@@ -614,10 +595,10 @@ needsTests (T.CRA_At _ pattern) =
 -- PICK A PATH
 
 
-pickPath : List Branch -> Path
+pickPath : List Branch -> T.CODT_Path
 pickPath branches =
     let
-        allPaths : List Path
+        allPaths : List T.CODT_Path
         allPaths =
             List.filterMap isChoicePath (List.concatMap (\(Branch _ patterns) -> patterns) branches)
     in
@@ -629,7 +610,7 @@ pickPath branches =
             Prelude.head (bests (addWeights (smallBranchingFactor branches) tiedPaths))
 
 
-isChoicePath : ( Path, Can.Pattern ) -> Maybe Path
+isChoicePath : ( T.CODT_Path, Can.Pattern ) -> Maybe T.CODT_Path
 isChoicePath ( path, pattern ) =
     if needsTests pattern then
         Just path
@@ -638,12 +619,12 @@ isChoicePath ( path, pattern ) =
         Nothing
 
 
-addWeights : (Path -> Int) -> List Path -> List ( Path, Int )
+addWeights : (T.CODT_Path -> Int) -> List T.CODT_Path -> List ( T.CODT_Path, Int )
 addWeights toWeight paths =
     List.map (\path -> ( path, toWeight path )) paths
 
 
-bests : List ( Path, Int ) -> List Path
+bests : List ( T.CODT_Path, Int ) -> List T.CODT_Path
 bests allPaths =
     case allPaths of
         [] ->
@@ -669,12 +650,12 @@ bests allPaths =
 -- PATH PICKING HEURISTICS
 
 
-smallDefaults : List Branch -> Path -> Int
+smallDefaults : List Branch -> T.CODT_Path -> Int
 smallDefaults branches path =
     List.length (List.filter (isIrrelevantTo path) branches)
 
 
-smallBranchingFactor : List Branch -> Path -> Int
+smallBranchingFactor : List Branch -> T.CODT_Path -> Int
 smallBranchingFactor branches path =
     let
         ( edges, fallback ) =
@@ -693,54 +674,54 @@ smallBranchingFactor branches path =
 -- ENCODERS and DECODERS
 
 
-pathEncoder : Path -> Encode.Value
+pathEncoder : T.CODT_Path -> Encode.Value
 pathEncoder path_ =
     case path_ of
-        Index index path ->
+        T.CODT_Index index path ->
             Encode.object
                 [ ( "type", Encode.string "Index" )
                 , ( "index", Index.zeroBasedEncoder index )
                 , ( "path", pathEncoder path )
                 ]
 
-        Unbox path ->
+        T.CODT_Unbox path ->
             Encode.object
                 [ ( "type", Encode.string "Unbox" )
                 , ( "path", pathEncoder path )
                 ]
 
-        Empty ->
+        T.CODT_Empty ->
             Encode.object
                 [ ( "type", Encode.string "Empty" )
                 ]
 
 
-pathDecoder : Decode.Decoder Path
+pathDecoder : Decode.Decoder T.CODT_Path
 pathDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Index" ->
-                        Decode.map2 Index
+                        Decode.map2 T.CODT_Index
                             (Decode.field "index" Index.zeroBasedDecoder)
                             (Decode.field "path" pathDecoder)
 
                     "Unbox" ->
-                        Decode.map Unbox (Decode.field "path" pathDecoder)
+                        Decode.map T.CODT_Unbox (Decode.field "path" pathDecoder)
 
                     "Empty" ->
-                        Decode.succeed Empty
+                        Decode.succeed T.CODT_Empty
 
                     _ ->
                         Decode.fail ("Unknown Path's type: " ++ type_)
             )
 
 
-testEncoder : Test -> Encode.Value
+testEncoder : T.CODT_Test -> Encode.Value
 testEncoder test =
     case test of
-        IsCtor home name index numAlts opts ->
+        T.CODT_IsCtor home name index numAlts opts ->
             Encode.object
                 [ ( "type", Encode.string "IsCtor" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -750,54 +731,54 @@ testEncoder test =
                 , ( "opts", Can.ctorOptsEncoder opts )
                 ]
 
-        IsCons ->
+        T.CODT_IsCons ->
             Encode.object
                 [ ( "type", Encode.string "IsCons" )
                 ]
 
-        IsNil ->
+        T.CODT_IsNil ->
             Encode.object
                 [ ( "type", Encode.string "IsNil" )
                 ]
 
-        IsTuple ->
+        T.CODT_IsTuple ->
             Encode.object
                 [ ( "type", Encode.string "IsTuple" )
                 ]
 
-        IsInt value ->
+        T.CODT_IsInt value ->
             Encode.object
                 [ ( "type", Encode.string "IsInt" )
                 , ( "value", Encode.int value )
                 ]
 
-        IsChr value ->
+        T.CODT_IsChr value ->
             Encode.object
                 [ ( "type", Encode.string "IsChr" )
                 , ( "value", Encode.string value )
                 ]
 
-        IsStr value ->
+        T.CODT_IsStr value ->
             Encode.object
                 [ ( "type", Encode.string "IsStr" )
                 , ( "value", Encode.string value )
                 ]
 
-        IsBool value ->
+        T.CODT_IsBool value ->
             Encode.object
                 [ ( "type", Encode.string "IsBool" )
                 , ( "value", Encode.bool value )
                 ]
 
 
-testDecoder : Decode.Decoder Test
+testDecoder : Decode.Decoder T.CODT_Test
 testDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "IsCtor" ->
-                        Decode.map5 IsCtor
+                        Decode.map5 T.CODT_IsCtor
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "index" Index.zeroBasedDecoder)
@@ -805,25 +786,25 @@ testDecoder =
                             (Decode.field "opts" Can.ctorOptsDecoder)
 
                     "IsCons" ->
-                        Decode.succeed IsCons
+                        Decode.succeed T.CODT_IsCons
 
                     "IsNil" ->
-                        Decode.succeed IsNil
+                        Decode.succeed T.CODT_IsNil
 
                     "IsTuple" ->
-                        Decode.succeed IsTuple
+                        Decode.succeed T.CODT_IsTuple
 
                     "IsInt" ->
-                        Decode.map IsInt (Decode.field "value" Decode.int)
+                        Decode.map T.CODT_IsInt (Decode.field "value" Decode.int)
 
                     "IsChr" ->
-                        Decode.map IsChr (Decode.field "value" Decode.string)
+                        Decode.map T.CODT_IsChr (Decode.field "value" Decode.string)
 
                     "IsStr" ->
-                        Decode.map IsStr (Decode.field "value" Decode.string)
+                        Decode.map T.CODT_IsStr (Decode.field "value" Decode.string)
 
                     "IsBool" ->
-                        Decode.map IsBool (Decode.field "value" Decode.bool)
+                        Decode.map T.CODT_IsBool (Decode.field "value" Decode.bool)
 
                     _ ->
                         Decode.fail ("Unknown Test's type: " ++ type_)

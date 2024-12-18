@@ -32,7 +32,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -58,8 +58,8 @@ type Exposed
 
 
 type SrcDir
-    = AbsoluteSrcDir FilePath
-    | RelativeSrcDir FilePath
+    = AbsoluteSrcDir T.FilePath
+    | RelativeSrcDir T.FilePath
 
 
 
@@ -89,7 +89,7 @@ flattenExposed exposed =
 -- WRITE
 
 
-write : FilePath -> Outline -> IO ()
+write : T.FilePath -> Outline -> IO ()
 write root outline =
     E.write (root ++ "/elm.json") (encode outline)
 
@@ -168,7 +168,7 @@ encodeSrcDir srcDir =
 -- PARSE AND VERIFY
 
 
-read : FilePath -> IO (Result Exit.Outline Outline)
+read : T.FilePath -> IO (Result Exit.Outline Outline)
 read root =
     File.readUtf8 (root ++ "/elm.json")
         |> IO.bind
@@ -217,12 +217,12 @@ read root =
             )
 
 
-isSrcDirMissing : FilePath -> SrcDir -> IO Bool
+isSrcDirMissing : T.FilePath -> SrcDir -> IO Bool
 isSrcDirMissing root srcDir =
     IO.fmap not (Utils.dirDoesDirectoryExist (toAbsolute root srcDir))
 
 
-toGiven : SrcDir -> FilePath
+toGiven : SrcDir -> T.FilePath
 toGiven srcDir =
     case srcDir of
         AbsoluteSrcDir dir ->
@@ -232,7 +232,7 @@ toGiven srcDir =
             dir
 
 
-toAbsolute : FilePath -> SrcDir -> FilePath
+toAbsolute : T.FilePath -> SrcDir -> T.FilePath
 toAbsolute root srcDir =
     case srcDir of
         AbsoluteSrcDir dir ->
@@ -242,7 +242,7 @@ toAbsolute root srcDir =
             Utils.fpForwardSlash root dir
 
 
-detectDuplicates : FilePath -> List SrcDir -> IO (Maybe ( FilePath, ( FilePath, FilePath ) ))
+detectDuplicates : T.FilePath -> List SrcDir -> IO (Maybe ( T.FilePath, ( T.FilePath, T.FilePath ) ))
 detectDuplicates root srcDirs =
     Utils.listTraverse (toPair root) srcDirs
         |> IO.fmap
@@ -253,7 +253,7 @@ detectDuplicates root srcDirs =
             )
 
 
-toPair : FilePath -> SrcDir -> IO ( FilePath, OneOrMore.OneOrMore FilePath )
+toPair : T.FilePath -> SrcDir -> IO ( T.FilePath, OneOrMore.OneOrMore T.FilePath )
 toPair root srcDir =
     Utils.dirCanonicalizePath (toAbsolute root srcDir)
         |> IO.bind
@@ -262,7 +262,7 @@ toPair root srcDir =
             )
 
 
-isDup : OneOrMore.OneOrMore FilePath -> Maybe ( FilePath, FilePath )
+isDup : OneOrMore.OneOrMore T.FilePath -> Maybe ( T.FilePath, T.FilePath )
 isDup paths =
     case paths of
         OneOrMore.One _ ->
@@ -365,7 +365,7 @@ dirsDecoder =
     D.fmap (NE.map toSrcDir) (D.nonEmptyList D.string Exit.OP_NoSrcDirs)
 
 
-toSrcDir : FilePath -> SrcDir
+toSrcDir : T.FilePath -> SrcDir
 toSrcDir path =
     if Utils.fpIsRelative path then
         RelativeSrcDir path

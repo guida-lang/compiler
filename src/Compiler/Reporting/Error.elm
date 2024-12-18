@@ -1,6 +1,6 @@
 module Compiler.Reporting.Error exposing
-    ( Error(..)
-    , Module
+    ( CRE_Error(..)
+    , CRE_Module
     , jsonToJson
     , moduleDecoder
     , moduleEncoder
@@ -37,12 +37,12 @@ import Utils.Main as Utils
 -- MODULE
 
 
-type alias Module =
+type alias CRE_Module =
     { name : T.CEMN_Raw
     , absolutePath : String
-    , modificationTime : File.Time
+    , modificationTime : File.BF_Time
     , source : String
-    , error : Error
+    , error : CRE_Error
     }
 
 
@@ -50,42 +50,42 @@ type alias Module =
 -- ERRORS
 
 
-type Error
-    = BadSyntax Syntax.Error
-    | BadImports (NE.Nonempty Import.Error)
-    | BadNames (OneOrMore Canonicalize.Error)
-    | BadTypes L.Localizer (NE.Nonempty Type.Error)
-    | BadMains L.Localizer (OneOrMore Main.Error)
-    | BadPatterns (NE.Nonempty P.Error)
-    | BadDocs Docs.Error
+type CRE_Error
+    = CRE_BadSyntax Syntax.CRES_Error
+    | CRE_BadImports (NE.Nonempty Import.CREI_Error)
+    | CRE_BadNames (OneOrMore Canonicalize.CREC_Error)
+    | CRE_BadTypes L.CRRTL_Localizer (NE.Nonempty Type.CRET_Error)
+    | CRE_BadMains L.CRRTL_Localizer (OneOrMore Main.CREM_Error)
+    | CRE_BadPatterns (NE.Nonempty P.CNPM_Error)
+    | CRE_BadDocs Docs.CRED_Error
 
 
 
 -- TO REPORT
 
 
-toReports : Code.Source -> Error -> NE.Nonempty Report.Report
+toReports : Code.Source -> CRE_Error -> NE.Nonempty Report.Report
 toReports source err =
     case err of
-        BadSyntax syntaxError ->
+        CRE_BadSyntax syntaxError ->
             NE.singleton (Syntax.toReport source syntaxError)
 
-        BadImports errs ->
+        CRE_BadImports errs ->
             NE.map (Import.toReport source) errs
 
-        BadNames errs ->
+        CRE_BadNames errs ->
             NE.map (Canonicalize.toReport source) (OneOrMore.destruct NE.Nonempty errs)
 
-        BadTypes localizer errs ->
+        CRE_BadTypes localizer errs ->
             NE.map (Type.toReport source localizer) errs
 
-        BadMains localizer errs ->
+        CRE_BadMains localizer errs ->
             NE.map (Main.toReport localizer source) (OneOrMore.destruct NE.Nonempty errs)
 
-        BadPatterns errs ->
+        CRE_BadPatterns errs ->
             NE.map (Pattern.toReport source) errs
 
-        BadDocs docsErr ->
+        CRE_BadDocs docsErr ->
             Docs.toReports source docsErr
 
 
@@ -93,14 +93,14 @@ toReports source err =
 -- TO DOC
 
 
-toDoc : String -> Module -> List Module -> D.Doc
+toDoc : String -> CRE_Module -> List CRE_Module -> D.Doc
 toDoc root err errs =
     let
         (NE.Nonempty m ms) =
             NE.sortBy
                 (\{ modificationTime } ->
                     let
-                        (File.Time posix) =
+                        (File.BF_Time posix) =
                             modificationTime
                     in
                     Time.posixToMillis posix
@@ -110,7 +110,7 @@ toDoc root err errs =
     D.vcat (toDocHelp root m ms)
 
 
-toDocHelp : String -> Module -> List Module -> List D.Doc
+toDocHelp : String -> CRE_Module -> List CRE_Module -> List D.Doc
 toDocHelp root module1 modules =
     case modules of
         [] ->
@@ -124,7 +124,7 @@ toDocHelp root module1 modules =
                 :: toDocHelp root module2 otherModules
 
 
-toSeparator : Module -> Module -> D.Doc
+toSeparator : CRE_Module -> CRE_Module -> D.Doc
 toSeparator beforeModule afterModule =
     let
         before : T.CEMN_Raw
@@ -149,14 +149,14 @@ toSeparator beforeModule afterModule =
 -- MODULE TO DOC
 
 
-moduleToDoc : String -> Module -> D.Doc
+moduleToDoc : String -> CRE_Module -> D.Doc
 moduleToDoc root { absolutePath, source, error } =
     let
         reports : NE.Nonempty Report.Report
         reports =
             toReports (Code.toSource source) error
 
-        relativePath : Utils.FilePath
+        relativePath : T.FilePath
         relativePath =
             Utils.fpMakeRelative root absolutePath
     in
@@ -194,7 +194,7 @@ toMessageBar title filePath =
 -- TO JSON
 
 
-toJson : Module -> E.Value
+toJson : CRE_Module -> E.Value
 toJson { name, absolutePath, source, error } =
     let
         reports : NE.Nonempty Report.Report
@@ -239,12 +239,12 @@ encodeRegion (T.CRA_Region (T.CRA_Position sr sc) (T.CRA_Position er ec)) =
 -- ENCODERS and DECODERS
 
 
-jsonToJson : Module -> Encode.Value
+jsonToJson : CRE_Module -> Encode.Value
 jsonToJson =
     E.toJsonValue << toJson
 
 
-moduleEncoder : Module -> Encode.Value
+moduleEncoder : CRE_Module -> Encode.Value
 moduleEncoder modul =
     Encode.object
         [ ( "name", ModuleName.rawEncoder modul.name )
@@ -255,9 +255,9 @@ moduleEncoder modul =
         ]
 
 
-moduleDecoder : Decode.Decoder Module
+moduleDecoder : Decode.Decoder CRE_Module
 moduleDecoder =
-    Decode.map5 Module
+    Decode.map5 CRE_Module
         (Decode.field "name" ModuleName.rawDecoder)
         (Decode.field "absolutePath" Decode.string)
         (Decode.field "modificationTime" File.timeDecoder)
@@ -265,84 +265,84 @@ moduleDecoder =
         (Decode.field "error" errorDecoder)
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : CRE_Error -> Encode.Value
 errorEncoder error =
     case error of
-        BadSyntax syntaxError ->
+        CRE_BadSyntax syntaxError ->
             Encode.object
                 [ ( "type", Encode.string "BadSyntax" )
                 , ( "syntaxError", Syntax.errorEncoder syntaxError )
                 ]
 
-        BadImports errs ->
+        CRE_BadImports errs ->
             Encode.object
                 [ ( "type", Encode.string "BadImports" )
                 , ( "errs", E.nonempty Import.errorEncoder errs )
                 ]
 
-        BadNames errs ->
+        CRE_BadNames errs ->
             Encode.object
                 [ ( "type", Encode.string "BadNames" )
                 , ( "errs", E.oneOrMore Canonicalize.errorEncoder errs )
                 ]
 
-        BadTypes localizer errs ->
+        CRE_BadTypes localizer errs ->
             Encode.object
                 [ ( "type", Encode.string "BadTypes" )
                 , ( "localizer", L.localizerEncoder localizer )
                 , ( "errs", E.nonempty Type.errorEncoder errs )
                 ]
 
-        BadMains localizer errs ->
+        CRE_BadMains localizer errs ->
             Encode.object
                 [ ( "type", Encode.string "BadMains" )
                 , ( "localizer", L.localizerEncoder localizer )
                 , ( "errs", E.oneOrMore Main.errorEncoder errs )
                 ]
 
-        BadPatterns errs ->
+        CRE_BadPatterns errs ->
             Encode.object
                 [ ( "type", Encode.string "BadPatterns" )
                 , ( "errs", E.nonempty P.errorEncoder errs )
                 ]
 
-        BadDocs docsErr ->
+        CRE_BadDocs docsErr ->
             Encode.object
                 [ ( "type", Encode.string "BadDocs" )
                 , ( "docsErr", Docs.errorEncoder docsErr )
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : Decode.Decoder CRE_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "BadSyntax" ->
-                        Decode.map BadSyntax (Decode.field "syntaxError" Syntax.errorDecoder)
+                        Decode.map CRE_BadSyntax (Decode.field "syntaxError" Syntax.errorDecoder)
 
                     "BadImports" ->
-                        Decode.map BadImports (Decode.field "errs" (DecodeX.nonempty Import.errorDecoder))
+                        Decode.map CRE_BadImports (Decode.field "errs" (DecodeX.nonempty Import.errorDecoder))
 
                     "BadNames" ->
-                        Decode.map BadNames (Decode.field "errs" (DecodeX.oneOrMore Canonicalize.errorDecoder))
+                        Decode.map CRE_BadNames (Decode.field "errs" (DecodeX.oneOrMore Canonicalize.errorDecoder))
 
                     "BadTypes" ->
-                        Decode.map2 BadTypes
+                        Decode.map2 CRE_BadTypes
                             (Decode.field "localizer" L.localizerDecoder)
                             (Decode.field "errs" (DecodeX.nonempty Type.errorDecoder))
 
                     "BadMains" ->
-                        Decode.map2 BadMains
+                        Decode.map2 CRE_BadMains
                             (Decode.field "localizer" L.localizerDecoder)
                             (Decode.field "errs" (DecodeX.oneOrMore Main.errorDecoder))
 
                     "BadPatterns" ->
-                        Decode.map BadPatterns (Decode.field "errs" (DecodeX.nonempty P.errorDecoder))
+                        Decode.map CRE_BadPatterns (Decode.field "errs" (DecodeX.nonempty P.errorDecoder))
 
                     "BadDocs" ->
-                        Decode.map BadDocs (Decode.field "docsErr" Docs.errorDecoder)
+                        Decode.map CRE_BadDocs (Decode.field "docsErr" Docs.errorDecoder)
 
                     _ ->
                         Decode.fail ("Unknown Path's type: " ++ type_)

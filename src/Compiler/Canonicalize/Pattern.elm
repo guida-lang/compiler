@@ -25,7 +25,7 @@ import Utils.Main as Utils
 
 
 type alias PResult i w a =
-    R.RResult i w Error.Error a
+    R.RResult i w Error.CREC_Error a
 
 
 type alias Bindings =
@@ -36,7 +36,7 @@ type alias Bindings =
 -- VERIFY
 
 
-verify : Error.DuplicatePatternContext -> PResult DupsDict w a -> PResult i w ( a, Bindings )
+verify : Error.CREC_DuplicatePatternContext -> PResult DupsDict w a -> PResult i w ( a, Bindings )
 verify context (R.RResult k) =
     R.RResult <|
         \info warnings ->
@@ -45,7 +45,7 @@ verify context (R.RResult k) =
                     Err (R.RErr info warnings1 errors)
 
                 Ok (R.ROk bindings warnings1 value) ->
-                    case Dups.detect (Error.DuplicatePattern context) bindings of
+                    case Dups.detect (Error.CREC_DuplicatePattern context) bindings of
                         R.RResult k1 ->
                             case k1 () () of
                                 Err (R.RErr () () errs) ->
@@ -120,7 +120,7 @@ canonicalizeCtor env region name patterns ctor =
     case ctor of
         Env.Ctor home tipe union index args ->
             let
-                toCanonicalArg : T.CDI_ZeroBased -> T.CASTS_Pattern -> T.CASTC_Type -> R.RResult DupsDict w Error.Error Can.PatternCtorArg
+                toCanonicalArg : T.CDI_ZeroBased -> T.CASTS_Pattern -> T.CASTC_Type -> R.RResult DupsDict w Error.CREC_Error Can.PatternCtorArg
                 toCanonicalArg argIndex argPattern argTipe =
                     R.fmap (Can.PatternCtorArg argIndex argTipe)
                         (canonicalize env argPattern)
@@ -137,11 +137,11 @@ canonicalizeCtor env region name patterns ctor =
                                     R.ok (Can.PCtor { home = home, type_ = tipe, union = union, name = name, index = index, args = cargs })
 
                             Index.LengthMismatch actualLength expectedLength ->
-                                R.throw (Error.BadArity region Error.PatternArity name expectedLength actualLength)
+                                R.throw (Error.CREC_BadArity region Error.CREC_PatternArity name expectedLength actualLength)
                     )
 
         Env.RecordCtor _ _ _ ->
-            R.throw (Error.PatternHasRecordCtor region name)
+            R.throw (Error.CREC_PatternHasRecordCtor region name)
 
 
 canonicalizeTuple : T.CRA_Region -> Env.Env -> List T.CASTS_Pattern -> PResult DupsDict w (Maybe Can.Pattern)
@@ -154,7 +154,7 @@ canonicalizeTuple tupleRegion env extras =
             R.fmap Just (canonicalize env three)
 
         _ ->
-            R.throw (Error.TupleLargerThanThree tupleRegion)
+            R.throw (Error.CREC_TupleLargerThanThree tupleRegion)
 
 
 canonicalizeList : Env.Env -> List T.CASTS_Pattern -> PResult DupsDict w (List Can.Pattern)

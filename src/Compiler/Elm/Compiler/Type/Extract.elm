@@ -33,47 +33,47 @@ import Utils.Main as Utils
 -- EXTRACTION
 
 
-fromType : T.CASTC_Type -> T.Type
+fromType : T.CASTC_Type -> T.CECT_Type
 fromType astType =
     Tuple.second (run (extract astType))
 
 
-extract : T.CASTC_Type -> Extractor T.Type
+extract : T.CASTC_Type -> Extractor T.CECT_Type
 extract astType =
     case astType of
         T.CASTC_TLambda arg result ->
-            pure T.Lambda
+            pure T.CECT_Lambda
                 |> apply (extract arg)
                 |> apply (extract result)
 
         T.CASTC_TVar x ->
-            pure (T.Var x)
+            pure (T.CECT_Var x)
 
         T.CASTC_TType home name args ->
-            addUnion (Opt.Global home name) (T.Type (toPublicName home name))
+            addUnion (T.CASTO_Global home name) (T.CECT_Type (toPublicName home name))
                 |> apply (traverse extract args)
 
         T.CASTC_TRecord fields ext ->
             traverse (tupleTraverse extract) (Can.fieldsToList fields)
-                |> fmap (\efields -> T.Record efields ext)
+                |> fmap (\efields -> T.CECT_Record efields ext)
 
         T.CASTC_TUnit ->
-            pure T.Unit
+            pure T.CECT_Unit
 
         T.CASTC_TTuple a b maybeC ->
-            pure T.Tuple
+            pure T.CECT_Tuple
                 |> apply (extract a)
                 |> apply (extract b)
                 |> apply (traverse extract (Maybe.toList maybeC))
 
         T.CASTC_TAlias home name args aliasType ->
-            addAlias (Opt.Global home name) ()
+            addAlias (T.CASTO_Global home name) ()
                 |> bind
                     (\_ ->
                         extract (Type.dealias args aliasType)
                             |> bind
                                 (\_ ->
-                                    fmap (T.Type (toPublicName home name))
+                                    fmap (T.CECT_Type (toPublicName home name))
                                         (traverse (extract << Tuple.second) args)
                                 )
                     )
@@ -153,11 +153,11 @@ fromMsg types message =
 extractTransitive : Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
 extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnions) =
     let
-        aliases : EverySet (List String) Opt.Global
+        aliases : EverySet (List String) T.CASTO_Global
         aliases =
             EverySet.diff nextAliases seenAliases
 
-        unions : EverySet (List String) Opt.Global
+        unions : EverySet (List String) T.CASTO_Global
         unions =
             EverySet.diff nextUnions seenUnions
     in
@@ -183,8 +183,8 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
         ( resultAlias ++ remainingResultAlias, resultUnion ++ remainingResultUnion )
 
 
-extractAlias : Types -> Opt.Global -> Extractor T.Alias
-extractAlias (Types dict) (Opt.Global home name) =
+extractAlias : Types -> T.CASTO_Global -> Extractor T.Alias
+extractAlias (Types dict) (T.CASTO_Global home name) =
     let
         (T.CASTC_Alias args aliasType) =
             Utils.find ModuleName.toComparableCanonical home dict
@@ -194,8 +194,8 @@ extractAlias (Types dict) (Opt.Global home name) =
     fmap (T.Alias (toPublicName home name) args) (extract aliasType)
 
 
-extractUnion : Types -> Opt.Global -> Extractor T.Union
-extractUnion (Types dict) (Opt.Global home name) =
+extractUnion : Types -> T.CASTO_Global -> Extractor T.Union
+extractUnion (Types dict) (T.CASTO_Global home name) =
     if name == Name.list && home == ModuleName.list then
         pure <| T.Union (toPublicName home name) [ "a" ] []
 
@@ -213,7 +213,7 @@ extractUnion (Types dict) (Opt.Global home name) =
         fmap (T.Union pname vars) (traverse extractCtor ctors)
 
 
-extractCtor : T.CASTC_Ctor -> Extractor ( T.CDN_Name, List T.Type )
+extractCtor : T.CASTC_Ctor -> Extractor ( T.CDN_Name, List T.CECT_Type )
 extractCtor (T.CASTC_Ctor ctor _ _ args) =
     fmap (Tuple.pair ctor) (traverse extract args)
 
@@ -223,7 +223,7 @@ extractCtor (T.CASTC_Ctor ctor _ _ args) =
 
 
 type Deps
-    = Deps (EverySet (List String) Opt.Global) (EverySet (List String) Opt.Global)
+    = Deps (EverySet (List String) T.CASTO_Global) (EverySet (List String) T.CASTO_Global)
 
 
 noDeps : Deps
@@ -236,11 +236,11 @@ noDeps =
 
 
 type Extractor a
-    = Extractor (EverySet (List String) Opt.Global -> EverySet (List String) Opt.Global -> EResult a)
+    = Extractor (EverySet (List String) T.CASTO_Global -> EverySet (List String) T.CASTO_Global -> EResult a)
 
 
 type EResult a
-    = EResult (EverySet (List String) Opt.Global) (EverySet (List String) Opt.Global) a
+    = EResult (EverySet (List String) T.CASTO_Global) (EverySet (List String) T.CASTO_Global) a
 
 
 run : Extractor a -> ( Deps, a )
@@ -250,14 +250,14 @@ run (Extractor k) =
             ( Deps aliases unions, value )
 
 
-addAlias : Opt.Global -> a -> Extractor a
+addAlias : T.CASTO_Global -> a -> Extractor a
 addAlias alias value =
     Extractor <|
         \aliases unions ->
             EResult (EverySet.insert Opt.toComparableGlobal alias aliases) unions value
 
 
-addUnion : Opt.Global -> a -> Extractor a
+addUnion : T.CASTO_Global -> a -> Extractor a
 addUnion union value =
     Extractor <|
         \aliases unions ->

@@ -19,12 +19,12 @@ import Types as T
 -- TERMS
 
 
-term : P.Parser E.Expr T.CASTS_Expr
+term : P.Parser E.CRES_Expr T.CASTS_Expr
 term =
     P.getPosition
         |> P.bind
             (\start ->
-                P.oneOf E.Start
+                P.oneOf E.CRES_Start
                     [ variable start |> P.bind (accessible start)
                     , string start
                     , number start
@@ -38,21 +38,21 @@ term =
             )
 
 
-string : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+string : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 string start =
-    String.string E.Start E.String_
+    String.string E.CRES_Start E.CRES_String_
         |> P.bind (\str -> P.addEnd start (T.CASTS_Str str))
 
 
-character : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+character : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 character start =
-    String.character E.Start E.Char
+    String.character E.CRES_Start E.CRES_Char
         |> P.bind (\chr -> P.addEnd start (T.CASTS_Chr chr))
 
 
-number : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+number : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 number start =
-    Number.number E.Start E.Number
+    Number.number E.CRES_Start E.CRES_Number
         |> P.bind
             (\nmbr ->
                 P.addEnd start <|
@@ -65,27 +65,27 @@ number start =
             )
 
 
-accessor : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+accessor : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 accessor start =
-    P.word1 '.' E.Dot
-        |> P.bind (\_ -> Var.lower E.Access)
+    P.word1 '.' E.CRES_Dot
+        |> P.bind (\_ -> Var.lower E.CRES_Access)
         |> P.bind (\field -> P.addEnd start (T.CASTS_Accessor field))
 
 
-variable : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+variable : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 variable start =
-    Var.foreignAlpha E.Start
+    Var.foreignAlpha E.CRES_Start
         |> P.bind (\var -> P.addEnd start var)
 
 
-accessible : T.CRA_Position -> T.CASTS_Expr -> P.Parser E.Expr T.CASTS_Expr
+accessible : T.CRA_Position -> T.CASTS_Expr -> P.Parser E.CRES_Expr T.CASTS_Expr
 accessible start expr =
     P.oneOfWithFallback
-        [ P.word1 '.' E.Dot
+        [ P.word1 '.' E.CRES_Dot
             |> P.bind (\_ -> P.getPosition)
             |> P.bind
                 (\pos ->
-                    Var.lower E.Access
+                    Var.lower E.CRES_Access
                         |> P.bind
                             (\field ->
                                 P.getPosition
@@ -104,38 +104,38 @@ accessible start expr =
 -- LISTS
 
 
-list : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+list : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 list start =
-    P.inContext E.List (P.word1 '[' E.Start) <|
-        (Space.chompAndCheckIndent E.ListSpace E.ListIndentOpen
+    P.inContext E.CRES_List (P.word1 '[' E.CRES_Start) <|
+        (Space.chompAndCheckIndent E.CRES_ListSpace E.CRES_ListIndentOpen
             |> P.bind
                 (\_ ->
-                    P.oneOf E.ListOpen
-                        [ P.specialize E.ListExpr expression
+                    P.oneOf E.CRES_ListOpen
+                        [ P.specialize E.CRES_ListExpr expression
                             |> P.bind
                                 (\( entry, end ) ->
-                                    Space.checkIndent end E.ListIndentEnd
+                                    Space.checkIndent end E.CRES_ListIndentEnd
                                         |> P.bind (\_ -> chompListEnd start [ entry ])
                                 )
-                        , P.word1 ']' E.ListOpen
+                        , P.word1 ']' E.CRES_ListOpen
                             |> P.bind (\_ -> P.addEnd start (T.CASTS_List []))
                         ]
                 )
         )
 
 
-chompListEnd : T.CRA_Position -> List T.CASTS_Expr -> P.Parser E.List_ T.CASTS_Expr
+chompListEnd : T.CRA_Position -> List T.CASTS_Expr -> P.Parser E.CRES_List_ T.CASTS_Expr
 chompListEnd start entries =
-    P.oneOf E.ListEnd
-        [ P.word1 ',' E.ListEnd
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.ListSpace E.ListIndentExpr)
-            |> P.bind (\_ -> P.specialize E.ListExpr expression)
+    P.oneOf E.CRES_ListEnd
+        [ P.word1 ',' E.CRES_ListEnd
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ListSpace E.CRES_ListIndentExpr)
+            |> P.bind (\_ -> P.specialize E.CRES_ListExpr expression)
             |> P.bind
                 (\( entry, end ) ->
-                    Space.checkIndent end E.ListIndentEnd
+                    Space.checkIndent end E.CRES_ListIndentEnd
                         |> P.bind (\_ -> chompListEnd start (entry :: entries))
                 )
-        , P.word1 ']' E.ListEnd
+        , P.word1 ']' E.CRES_ListEnd
             |> P.bind (\_ -> P.addEnd start (T.CASTS_List (List.reverse entries)))
         ]
 
@@ -144,40 +144,40 @@ chompListEnd start entries =
 -- TUPLES
 
 
-tuple : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+tuple : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 tuple ((T.CRA_Position row col) as start) =
-    P.inContext E.Tuple (P.word1 '(' E.Start) <|
+    P.inContext E.CRES_Tuple (P.word1 '(' E.CRES_Start) <|
         (P.getPosition
             |> P.bind
                 (\before ->
-                    Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExpr1
+                    Space.chompAndCheckIndent E.CRES_TupleSpace E.CRES_TupleIndentExpr1
                         |> P.bind
                             (\_ ->
                                 P.getPosition
                                     |> P.bind
                                         (\after ->
                                             if before /= after then
-                                                P.specialize E.TupleExpr expression
+                                                P.specialize E.CRES_TupleExpr expression
                                                     |> P.bind
                                                         (\( entry, end ) ->
-                                                            Space.checkIndent end E.TupleIndentEnd
+                                                            Space.checkIndent end E.CRES_TupleIndentEnd
                                                                 |> P.bind (\_ -> chompTupleEnd start entry [])
                                                         )
 
                                             else
-                                                P.oneOf E.TupleIndentExpr1
-                                                    [ Symbol.operator E.TupleIndentExpr1 E.TupleOperatorReserved
+                                                P.oneOf E.CRES_TupleIndentExpr1
+                                                    [ Symbol.operator E.CRES_TupleIndentExpr1 E.CRES_TupleOperatorReserved
                                                         |> P.bind
                                                             (\op ->
                                                                 if op == "-" then
-                                                                    P.oneOf E.TupleOperatorClose
-                                                                        [ P.word1 ')' E.TupleOperatorClose
+                                                                    P.oneOf E.CRES_TupleOperatorClose
+                                                                        [ P.word1 ')' E.CRES_TupleOperatorClose
                                                                             |> P.bind (\_ -> P.addEnd start (T.CASTS_Op op))
-                                                                        , P.specialize E.TupleExpr
+                                                                        , P.specialize E.CRES_TupleExpr
                                                                             (term
                                                                                 |> P.bind
                                                                                     (\((T.CRA_At (T.CRA_Region _ end) _) as negatedExpr) ->
-                                                                                        Space.chomp E.Space
+                                                                                        Space.chomp E.CRES_Space
                                                                                             |> P.bind
                                                                                                 (\_ ->
                                                                                                     let
@@ -202,21 +202,21 @@ tuple ((T.CRA_Position row col) as start) =
                                                                             )
                                                                             |> P.bind
                                                                                 (\( entry, end ) ->
-                                                                                    Space.checkIndent end E.TupleIndentEnd
+                                                                                    Space.checkIndent end E.CRES_TupleIndentEnd
                                                                                         |> P.bind (\_ -> chompTupleEnd start entry [])
                                                                                 )
                                                                         ]
 
                                                                 else
-                                                                    P.word1 ')' E.TupleOperatorClose
+                                                                    P.word1 ')' E.CRES_TupleOperatorClose
                                                                         |> P.bind (\_ -> P.addEnd start (T.CASTS_Op op))
                                                             )
-                                                    , P.word1 ')' E.TupleIndentExpr1
+                                                    , P.word1 ')' E.CRES_TupleIndentExpr1
                                                         |> P.bind (\_ -> P.addEnd start T.CASTS_Unit)
-                                                    , P.specialize E.TupleExpr expression
+                                                    , P.specialize E.CRES_TupleExpr expression
                                                         |> P.bind
                                                             (\( entry, end ) ->
-                                                                Space.checkIndent end E.TupleIndentEnd
+                                                                Space.checkIndent end E.CRES_TupleIndentEnd
                                                                     |> P.bind (\_ -> chompTupleEnd start entry [])
                                                             )
                                                     ]
@@ -226,24 +226,24 @@ tuple ((T.CRA_Position row col) as start) =
         )
 
 
-chompTupleEnd : T.CRA_Position -> T.CASTS_Expr -> List T.CASTS_Expr -> P.Parser E.Tuple T.CASTS_Expr
+chompTupleEnd : T.CRA_Position -> T.CASTS_Expr -> List T.CASTS_Expr -> P.Parser E.CRES_Tuple T.CASTS_Expr
 chompTupleEnd start firstExpr revExprs =
-    P.oneOf E.TupleEnd
-        [ P.word1 ',' E.TupleEnd
+    P.oneOf E.CRES_TupleEnd
+        [ P.word1 ',' E.CRES_TupleEnd
             |> P.bind
                 (\_ ->
-                    Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExprN
+                    Space.chompAndCheckIndent E.CRES_TupleSpace E.CRES_TupleIndentExprN
                         |> P.bind
                             (\_ ->
-                                P.specialize E.TupleExpr expression
+                                P.specialize E.CRES_TupleExpr expression
                                     |> P.bind
                                         (\( entry, end ) ->
-                                            Space.checkIndent end E.TupleIndentEnd
+                                            Space.checkIndent end E.CRES_TupleIndentEnd
                                                 |> P.bind (\_ -> chompTupleEnd start firstExpr (entry :: revExprs))
                                         )
                             )
                 )
-        , P.word1 ')' E.TupleEnd
+        , P.word1 ')' E.CRES_TupleEnd
             |> P.bind
                 (\_ ->
                     case List.reverse revExprs of
@@ -260,33 +260,33 @@ chompTupleEnd start firstExpr revExprs =
 -- RECORDS
 
 
-record : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+record : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 record start =
-    P.inContext E.Record (P.word1 '{' E.Start) <|
-        (Space.chompAndCheckIndent E.RecordSpace E.RecordIndentOpen
+    P.inContext E.CRES_Record (P.word1 '{' E.CRES_Start) <|
+        (Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentOpen
             |> P.bind
                 (\_ ->
-                    P.oneOf E.RecordOpen
-                        [ P.word1 '}' E.RecordOpen
+                    P.oneOf E.CRES_RecordOpen
+                        [ P.word1 '}' E.CRES_RecordOpen
                             |> P.bind (\_ -> P.addEnd start (T.CASTS_Record []))
-                        , P.addLocation (Var.lower E.RecordField)
+                        , P.addLocation (Var.lower E.CRES_RecordField)
                             |> P.bind
                                 (\starter ->
-                                    Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
+                                    Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentEquals
                                         |> P.bind
                                             (\_ ->
-                                                P.oneOf E.RecordEquals
-                                                    [ P.word1 '|' E.RecordEquals
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
+                                                P.oneOf E.CRES_RecordEquals
+                                                    [ P.word1 '|' E.CRES_RecordEquals
+                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentField)
                                                         |> P.bind (\_ -> chompField)
                                                         |> P.bind (\firstField -> chompFields [ firstField ])
                                                         |> P.bind (\fields -> P.addEnd start (T.CASTS_Update starter fields))
-                                                    , P.word1 '=' E.RecordEquals
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                                                        |> P.bind (\_ -> P.specialize E.RecordExpr expression)
+                                                    , P.word1 '=' E.CRES_RecordEquals
+                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentExpr)
+                                                        |> P.bind (\_ -> P.specialize E.CRES_RecordExpr expression)
                                                         |> P.bind
                                                             (\( value, end ) ->
-                                                                Space.checkIndent end E.RecordIndentEnd
+                                                                Space.checkIndent end E.CRES_RecordIndentEnd
                                                                     |> P.bind (\_ -> chompFields [ ( starter, value ) ])
                                                                     |> P.bind (\fields -> P.addEnd start (T.CASTS_Record fields))
                                                             )
@@ -302,30 +302,30 @@ type alias Field =
     ( T.CRA_Located T.CDN_Name, T.CASTS_Expr )
 
 
-chompFields : List Field -> P.Parser E.Record (List Field)
+chompFields : List Field -> P.Parser E.CRES_Record (List Field)
 chompFields fields =
-    P.oneOf E.RecordEnd
-        [ P.word1 ',' E.RecordEnd
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
+    P.oneOf E.CRES_RecordEnd
+        [ P.word1 ',' E.CRES_RecordEnd
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentField)
             |> P.bind (\_ -> chompField)
             |> P.bind (\f -> chompFields (f :: fields))
-        , P.word1 '}' E.RecordEnd
+        , P.word1 '}' E.CRES_RecordEnd
             |> P.fmap (\_ -> List.reverse fields)
         ]
 
 
-chompField : P.Parser E.Record Field
+chompField : P.Parser E.CRES_Record Field
 chompField =
-    P.addLocation (Var.lower E.RecordField)
+    P.addLocation (Var.lower E.CRES_RecordField)
         |> P.bind
             (\key ->
-                Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
-                    |> P.bind (\_ -> P.word1 '=' E.RecordEquals)
-                    |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                    |> P.bind (\_ -> P.specialize E.RecordExpr expression)
+                Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentEquals
+                    |> P.bind (\_ -> P.word1 '=' E.CRES_RecordEquals)
+                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_RecordSpace E.CRES_RecordIndentExpr)
+                    |> P.bind (\_ -> P.specialize E.CRES_RecordExpr expression)
                     |> P.bind
                         (\( value, end ) ->
-                            Space.checkIndent end E.RecordIndentEnd
+                            Space.checkIndent end E.CRES_RecordIndentEnd
                                 |> P.fmap (\_ -> ( key, value ))
                         )
             )
@@ -335,12 +335,12 @@ chompField =
 -- EXPRESSIONS
 
 
-expression : Space.Parser E.Expr T.CASTS_Expr
+expression : Space.Parser E.CRES_Expr T.CASTS_Expr
 expression =
     P.getPosition
         |> P.bind
             (\start ->
-                P.oneOf E.Start
+                P.oneOf E.CRES_Start
                     [ let_ start
                     , if_ start
                     , case_ start
@@ -351,7 +351,7 @@ expression =
                                 P.getPosition
                                     |> P.bind
                                         (\end ->
-                                            Space.chomp E.Space
+                                            Space.chomp E.CRES_Space
                                                 |> P.bind
                                                     (\_ ->
                                                         chompExprEnd start
@@ -378,18 +378,18 @@ type State
         }
 
 
-chompExprEnd : T.CRA_Position -> State -> Space.Parser E.Expr T.CASTS_Expr
+chompExprEnd : T.CRA_Position -> State -> Space.Parser E.CRES_Expr T.CASTS_Expr
 chompExprEnd start (State { ops, expr, args, end }) =
     P.oneOfWithFallback
         [ -- argument
-          Space.checkIndent end E.Start
+          Space.checkIndent end E.CRES_Start
             |> P.bind (\_ -> term)
             |> P.bind
                 (\arg ->
                     P.getPosition
                         |> P.bind
                             (\newEnd ->
-                                Space.chomp E.Space
+                                Space.chomp E.CRES_Space
                                     |> P.bind
                                         (\_ ->
                                             chompExprEnd start
@@ -404,11 +404,11 @@ chompExprEnd start (State { ops, expr, args, end }) =
                             )
                 )
         , -- operator
-          Space.checkIndent end E.Start
-            |> P.bind (\_ -> P.addLocation (Symbol.operator E.Start E.OperatorReserved))
+          Space.checkIndent end E.CRES_Start
+            |> P.bind (\_ -> P.addLocation (Symbol.operator E.CRES_Start E.CRES_OperatorReserved))
             |> P.bind
                 (\((T.CRA_At (T.CRA_Region opStart opEnd) opName) as op) ->
-                    Space.chompAndCheckIndent E.Space (E.IndentOperatorRight opName)
+                    Space.chompAndCheckIndent E.CRES_Space (E.CRES_IndentOperatorRight opName)
                         |> P.bind (\_ -> P.getPosition)
                         |> P.bind
                             (\newStart ->
@@ -420,7 +420,7 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                                 P.getPosition
                                                     |> P.bind
                                                         (\newEnd ->
-                                                            Space.chomp E.Space
+                                                            Space.chomp E.CRES_Space
                                                                 |> P.bind
                                                                     (\_ ->
                                                                         let
@@ -442,9 +442,9 @@ chompExprEnd start (State { ops, expr, args, end }) =
 
                                 else
                                     let
-                                        err : T.CPP_Row -> T.CPP_Col -> E.Expr
+                                        err : T.CPP_Row -> T.CPP_Col -> E.CRES_Expr
                                         err =
-                                            E.OperatorRight opName
+                                            E.CRES_OperatorRight opName
                                     in
                                     P.oneOf err
                                         [ -- term
@@ -454,7 +454,7 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                                     P.getPosition
                                                         |> P.bind
                                                             (\newEnd ->
-                                                                Space.chomp E.Space
+                                                                Space.chomp E.CRES_Space
                                                                     |> P.bind
                                                                         (\_ ->
                                                                             let
@@ -511,10 +511,10 @@ chompExprEnd start (State { ops, expr, args, end }) =
         )
 
 
-possiblyNegativeTerm : T.CRA_Position -> P.Parser E.Expr T.CASTS_Expr
+possiblyNegativeTerm : T.CRA_Position -> P.Parser E.CRES_Expr T.CASTS_Expr
 possiblyNegativeTerm start =
-    P.oneOf E.Start
-        [ P.word1 '-' E.Start
+    P.oneOf E.CRES_Start
+        [ P.word1 '-' E.CRES_Start
             |> P.bind
                 (\_ ->
                     term
@@ -541,27 +541,27 @@ toCall func revArgs =
 -- IF EXPRESSION
 
 
-if_ : T.CRA_Position -> Space.Parser E.Expr T.CASTS_Expr
+if_ : T.CRA_Position -> Space.Parser E.CRES_Expr T.CASTS_Expr
 if_ start =
-    P.inContext E.If (Keyword.if_ E.Start) <|
+    P.inContext E.CRES_If (Keyword.if_ E.CRES_Start) <|
         chompIfEnd start []
 
 
-chompIfEnd : T.CRA_Position -> List ( T.CASTS_Expr, T.CASTS_Expr ) -> Space.Parser E.If T.CASTS_Expr
+chompIfEnd : T.CRA_Position -> List ( T.CASTS_Expr, T.CASTS_Expr ) -> Space.Parser E.CRES_If T.CASTS_Expr
 chompIfEnd start branches =
-    Space.chompAndCheckIndent E.IfSpace E.IfIndentCondition
-        |> P.bind (\_ -> P.specialize E.IfCondition expression)
+    Space.chompAndCheckIndent E.CRES_IfSpace E.CRES_IfIndentCondition
+        |> P.bind (\_ -> P.specialize E.CRES_IfCondition expression)
         |> P.bind
             (\( condition, condEnd ) ->
-                Space.checkIndent condEnd E.IfIndentThen
-                    |> P.bind (\_ -> Keyword.then_ E.IfThen)
-                    |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentThenBranch)
-                    |> P.bind (\_ -> P.specialize E.IfThenBranch expression)
+                Space.checkIndent condEnd E.CRES_IfIndentThen
+                    |> P.bind (\_ -> Keyword.then_ E.CRES_IfThen)
+                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_IfSpace E.CRES_IfIndentThenBranch)
+                    |> P.bind (\_ -> P.specialize E.CRES_IfThenBranch expression)
                     |> P.bind
                         (\( thenBranch, thenEnd ) ->
-                            Space.checkIndent thenEnd E.IfIndentElse
-                                |> P.bind (\_ -> Keyword.else_ E.IfElse)
-                                |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentElseBranch)
+                            Space.checkIndent thenEnd E.CRES_IfIndentElse
+                                |> P.bind (\_ -> Keyword.else_ E.CRES_IfElse)
+                                |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_IfSpace E.CRES_IfIndentElseBranch)
                                 |> P.bind
                                     (\_ ->
                                         let
@@ -569,10 +569,10 @@ chompIfEnd start branches =
                                             newBranches =
                                                 ( condition, thenBranch ) :: branches
                                         in
-                                        P.oneOf E.IfElseBranchStart
-                                            [ Keyword.if_ E.IfElseBranchStart
+                                        P.oneOf E.CRES_IfElseBranchStart
+                                            [ Keyword.if_ E.CRES_IfElseBranchStart
                                                 |> P.bind (\_ -> chompIfEnd start newBranches)
-                                            , P.specialize E.IfElseBranch expression
+                                            , P.specialize E.CRES_IfElseBranch expression
                                                 |> P.fmap
                                                     (\( elseBranch, elseEnd ) ->
                                                         let
@@ -592,19 +592,19 @@ chompIfEnd start branches =
 -- LAMBDA EXPRESSION
 
 
-function : T.CRA_Position -> Space.Parser E.Expr T.CASTS_Expr
+function : T.CRA_Position -> Space.Parser E.CRES_Expr T.CASTS_Expr
 function start =
-    P.inContext E.Func (P.word1 '\\' E.Start) <|
-        (Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArg
-            |> P.bind (\_ -> P.specialize E.FuncArg Pattern.term)
+    P.inContext E.CRES_Func (P.word1 '\\' E.CRES_Start) <|
+        (Space.chompAndCheckIndent E.CRES_FuncSpace E.CRES_FuncIndentArg
+            |> P.bind (\_ -> P.specialize E.CRES_FuncArg Pattern.term)
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
+                    Space.chompAndCheckIndent E.CRES_FuncSpace E.CRES_FuncIndentArrow
                         |> P.bind (\_ -> chompArgs [ arg ])
                         |> P.bind
                             (\revArgs ->
-                                Space.chompAndCheckIndent E.FuncSpace E.FuncIndentBody
-                                    |> P.bind (\_ -> P.specialize E.FuncBody expression)
+                                Space.chompAndCheckIndent E.CRES_FuncSpace E.CRES_FuncIndentBody
+                                    |> P.bind (\_ -> P.specialize E.CRES_FuncBody expression)
                                     |> P.fmap
                                         (\( body, end ) ->
                                             let
@@ -619,16 +619,16 @@ function start =
         )
 
 
-chompArgs : List T.CASTS_Pattern -> P.Parser E.Func (List T.CASTS_Pattern)
+chompArgs : List T.CASTS_Pattern -> P.Parser E.CRES_Func (List T.CASTS_Pattern)
 chompArgs revArgs =
-    P.oneOf E.FuncArrow
-        [ P.specialize E.FuncArg Pattern.term
+    P.oneOf E.CRES_FuncArrow
+        [ P.specialize E.CRES_FuncArg Pattern.term
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
+                    Space.chompAndCheckIndent E.CRES_FuncSpace E.CRES_FuncIndentArrow
                         |> P.bind (\_ -> chompArgs (arg :: revArgs))
                 )
-        , P.word2 '-' '>' E.FuncArrow
+        , P.word2 '-' '>' E.CRES_FuncArrow
             |> P.fmap (\_ -> revArgs)
         ]
 
@@ -637,16 +637,16 @@ chompArgs revArgs =
 -- CASE EXPRESSIONS
 
 
-case_ : T.CRA_Position -> Space.Parser E.Expr T.CASTS_Expr
+case_ : T.CRA_Position -> Space.Parser E.CRES_Expr T.CASTS_Expr
 case_ start =
-    P.inContext E.Case (Keyword.case_ E.Start) <|
-        (Space.chompAndCheckIndent E.CaseSpace E.CaseIndentExpr
-            |> P.bind (\_ -> P.specialize E.CaseExpr expression)
+    P.inContext E.CRES_Case (Keyword.case_ E.CRES_Start) <|
+        (Space.chompAndCheckIndent E.CRES_CaseSpace E.CRES_CaseIndentExpr
+            |> P.bind (\_ -> P.specialize E.CRES_CaseExpr expression)
             |> P.bind
                 (\( expr, exprEnd ) ->
-                    Space.checkIndent exprEnd E.CaseIndentOf
-                        |> P.bind (\_ -> Keyword.of_ E.CaseOf)
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CaseSpace E.CaseIndentPattern)
+                    Space.checkIndent exprEnd E.CRES_CaseIndentOf
+                        |> P.bind (\_ -> Keyword.of_ E.CRES_CaseOf)
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_CaseSpace E.CRES_CaseIndentPattern)
                         |> P.bind
                             (\_ ->
                                 P.withIndent <|
@@ -667,23 +667,23 @@ case_ start =
         )
 
 
-chompBranch : Space.Parser E.Case ( T.CASTS_Pattern, T.CASTS_Expr )
+chompBranch : Space.Parser E.CRES_Case ( T.CASTS_Pattern, T.CASTS_Expr )
 chompBranch =
-    P.specialize E.CasePattern Pattern.expression
+    P.specialize E.CRES_CasePattern Pattern.expression
         |> P.bind
             (\( pattern, patternEnd ) ->
-                Space.checkIndent patternEnd E.CaseIndentArrow
-                    |> P.bind (\_ -> P.word2 '-' '>' E.CaseArrow)
-                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CaseSpace E.CaseIndentBranch)
-                    |> P.bind (\_ -> P.specialize E.CaseBranch expression)
+                Space.checkIndent patternEnd E.CRES_CaseIndentArrow
+                    |> P.bind (\_ -> P.word2 '-' '>' E.CRES_CaseArrow)
+                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_CaseSpace E.CRES_CaseIndentBranch)
+                    |> P.bind (\_ -> P.specialize E.CRES_CaseBranch expression)
                     |> P.fmap (\( branchExpr, end ) -> ( ( pattern, branchExpr ), end ))
             )
 
 
-chompCaseEnd : List ( T.CASTS_Pattern, T.CASTS_Expr ) -> T.CRA_Position -> Space.Parser E.Case (List ( T.CASTS_Pattern, T.CASTS_Expr ))
+chompCaseEnd : List ( T.CASTS_Pattern, T.CASTS_Expr ) -> T.CRA_Position -> Space.Parser E.CRES_Case (List ( T.CASTS_Pattern, T.CASTS_Expr ))
 chompCaseEnd branches end =
     P.oneOfWithFallback
-        [ Space.checkAligned E.CasePatternAlignment
+        [ Space.checkAligned E.CRES_CasePatternAlignment
             |> P.bind (\_ -> chompBranch)
             |> P.bind (\( branch, newEnd ) -> chompCaseEnd (branch :: branches) newEnd)
         ]
@@ -694,11 +694,11 @@ chompCaseEnd branches end =
 -- LET EXPRESSION
 
 
-let_ : T.CRA_Position -> Space.Parser E.Expr T.CASTS_Expr
+let_ : T.CRA_Position -> Space.Parser E.CRES_Expr T.CASTS_Expr
 let_ start =
-    P.inContext E.Let (Keyword.let_ E.Start) <|
+    P.inContext E.CRES_Let (Keyword.let_ E.CRES_Start) <|
         ((P.withBacksetIndent 3 <|
-            (Space.chompAndCheckIndent E.LetSpace E.LetIndentDef
+            (Space.chompAndCheckIndent E.CRES_LetSpace E.CRES_LetIndentDef
                 |> P.bind
                     (\_ ->
                         P.withIndent <|
@@ -710,10 +710,10 @@ let_ start =
          )
             |> P.bind
                 (\( defs, defsEnd ) ->
-                    Space.checkIndent defsEnd E.LetIndentIn
-                        |> P.bind (\_ -> Keyword.in_ E.LetIn)
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.LetSpace E.LetIndentBody)
-                        |> P.bind (\_ -> P.specialize E.LetBody expression)
+                    Space.checkIndent defsEnd E.CRES_LetIndentIn
+                        |> P.bind (\_ -> Keyword.in_ E.CRES_LetIn)
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_LetSpace E.CRES_LetIndentBody)
+                        |> P.bind (\_ -> P.specialize E.CRES_LetBody expression)
                         |> P.fmap
                             (\( body, end ) ->
                                 ( A.at start end (T.CASTS_Let defs body), end )
@@ -722,10 +722,10 @@ let_ start =
         )
 
 
-chompLetDefs : List (T.CRA_Located T.CASTS_Def) -> T.CRA_Position -> Space.Parser E.Let (List (T.CRA_Located T.CASTS_Def))
+chompLetDefs : List (T.CRA_Located T.CASTS_Def) -> T.CRA_Position -> Space.Parser E.CRES_Let (List (T.CRA_Located T.CASTS_Def))
 chompLetDefs revDefs end =
     P.oneOfWithFallback
-        [ Space.checkAligned E.LetDefAlignment
+        [ Space.checkAligned E.CRES_LetDefAlignment
             |> P.bind (\_ -> chompLetDef)
             |> P.bind (\( def, newEnd ) -> chompLetDefs (def :: revDefs) newEnd)
         ]
@@ -736,9 +736,9 @@ chompLetDefs revDefs end =
 -- LET DEFINITIONS
 
 
-chompLetDef : Space.Parser E.Let (T.CRA_Located T.CASTS_Def)
+chompLetDef : Space.Parser E.CRES_Let (T.CRA_Located T.CASTS_Def)
 chompLetDef =
-    P.oneOf E.LetDefName
+    P.oneOf E.CRES_LetDefName
         [ definition
         , destructure
         ]
@@ -748,26 +748,26 @@ chompLetDef =
 -- DEFINITION
 
 
-definition : Space.Parser E.Let (T.CRA_Located T.CASTS_Def)
+definition : Space.Parser E.CRES_Let (T.CRA_Located T.CASTS_Def)
 definition =
-    P.addLocation (Var.lower E.LetDefName)
+    P.addLocation (Var.lower E.CRES_LetDefName)
         |> P.bind
             (\((T.CRA_At (T.CRA_Region start _) name) as aname) ->
-                P.specialize (E.LetDef name) <|
-                    (Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
+                P.specialize (E.CRES_LetDef name) <|
+                    (Space.chompAndCheckIndent E.CRES_DefSpace E.CRES_DefIndentEquals
                         |> P.bind
                             (\_ ->
-                                P.oneOf E.DefEquals
-                                    [ P.word1 ':' E.DefEquals
-                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentType)
-                                        |> P.bind (\_ -> P.specialize E.DefType Type.expression)
+                                P.oneOf E.CRES_DefEquals
+                                    [ P.word1 ':' E.CRES_DefEquals
+                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_DefSpace E.CRES_DefIndentType)
+                                        |> P.bind (\_ -> P.specialize E.CRES_DefType Type.expression)
                                         |> P.bind
                                             (\( tipe, _ ) ->
-                                                Space.checkAligned E.DefAlignment
+                                                Space.checkAligned E.CRES_DefAlignment
                                                     |> P.bind (\_ -> chompMatchingName name)
                                                     |> P.bind
                                                         (\defName ->
-                                                            Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
+                                                            Space.chompAndCheckIndent E.CRES_DefSpace E.CRES_DefIndentEquals
                                                                 |> P.bind (\_ -> chompDefArgsAndBody start defName (Just tipe) [])
                                                         )
                                             )
@@ -778,18 +778,18 @@ definition =
             )
 
 
-chompDefArgsAndBody : T.CRA_Position -> T.CRA_Located T.CDN_Name -> Maybe T.CASTS_Type -> List T.CASTS_Pattern -> Space.Parser E.Def (T.CRA_Located T.CASTS_Def)
+chompDefArgsAndBody : T.CRA_Position -> T.CRA_Located T.CDN_Name -> Maybe T.CASTS_Type -> List T.CASTS_Pattern -> Space.Parser E.CRES_Def (T.CRA_Located T.CASTS_Def)
 chompDefArgsAndBody start name tipe revArgs =
-    P.oneOf E.DefEquals
-        [ P.specialize E.DefArg Pattern.term
+    P.oneOf E.CRES_DefEquals
+        [ P.specialize E.CRES_DefArg Pattern.term
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
+                    Space.chompAndCheckIndent E.CRES_DefSpace E.CRES_DefIndentEquals
                         |> P.bind (\_ -> chompDefArgsAndBody start name tipe (arg :: revArgs))
                 )
-        , P.word1 '=' E.DefEquals
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DefBody expression)
+        , P.word1 '=' E.CRES_DefEquals
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_DefSpace E.CRES_DefIndentBody)
+            |> P.bind (\_ -> P.specialize E.CRES_DefBody expression)
             |> P.fmap
                 (\( body, end ) ->
                     ( A.at start end (T.CASTS_Define name (List.reverse revArgs) body tipe)
@@ -799,11 +799,11 @@ chompDefArgsAndBody start name tipe revArgs =
         ]
 
 
-chompMatchingName : T.CDN_Name -> P.Parser E.Def (T.CRA_Located T.CDN_Name)
+chompMatchingName : T.CDN_Name -> P.Parser E.CRES_Def (T.CRA_Located T.CDN_Name)
 chompMatchingName expectedName =
     let
         (P.Parser parserL) =
-            Var.lower E.DefNameRepeat
+            Var.lower E.CRES_DefNameRepeat
     in
     P.Parser <|
         \((P.State _ _ _ _ sr sc) as state) ->
@@ -813,7 +813,7 @@ chompMatchingName expectedName =
                         Ok (P.POk status (T.CRA_At (T.CRA_Region (T.CRA_Position sr sc) (T.CRA_Position er ec)) name) newState)
 
                     else
-                        Err (P.PErr status sr sc (E.DefNameMatch name))
+                        Err (P.PErr status sr sc (E.CRES_DefNameMatch name))
                 )
                 (parserL state)
 
@@ -822,19 +822,19 @@ chompMatchingName expectedName =
 -- DESTRUCTURE
 
 
-destructure : Space.Parser E.Let (T.CRA_Located T.CASTS_Def)
+destructure : Space.Parser E.CRES_Let (T.CRA_Located T.CASTS_Def)
 destructure =
-    P.specialize E.LetDestruct <|
+    P.specialize E.CRES_LetDestruct <|
         (P.getPosition
             |> P.bind
                 (\start ->
-                    P.specialize E.DestructPattern Pattern.term
+                    P.specialize E.CRES_DestructPattern Pattern.term
                         |> P.bind
                             (\pattern ->
-                                Space.chompAndCheckIndent E.DestructSpace E.DestructIndentEquals
-                                    |> P.bind (\_ -> P.word1 '=' E.DestructEquals)
-                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.DestructSpace E.DestructIndentBody)
-                                    |> P.bind (\_ -> P.specialize E.DestructBody expression)
+                                Space.chompAndCheckIndent E.CRES_DestructSpace E.CRES_DestructIndentEquals
+                                    |> P.bind (\_ -> P.word1 '=' E.CRES_DestructEquals)
+                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_DestructSpace E.CRES_DestructIndentBody)
+                                    |> P.bind (\_ -> P.specialize E.CRES_DestructBody expression)
                                     |> P.fmap
                                         (\( expr, end ) ->
                                             ( A.at start end (T.CASTS_Destruct pattern expr)

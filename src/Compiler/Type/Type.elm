@@ -49,10 +49,10 @@ import Utils.Crash exposing (crash)
 type Constraint
     = CTrue
     | CSaveTheEnvironment
-    | CEqual T.CRA_Region E.Category Type (E.Expected Type)
-    | CLocal T.CRA_Region T.CDN_Name (E.Expected Type)
-    | CForeign T.CRA_Region T.CDN_Name T.CASTC_Annotation (E.Expected Type)
-    | CPattern T.CRA_Region E.PCategory Type (E.PExpected Type)
+    | CEqual T.CRA_Region E.CRET_Category Type (E.CRET_Expected Type)
+    | CLocal T.CRA_Region T.CDN_Name (E.CRET_Expected Type)
+    | CForeign T.CRA_Region T.CDN_Name T.CASTC_Annotation (E.CRET_Expected Type)
+    | CPattern T.CRA_Region E.CRET_PCategory Type (E.CRET_PExpected Type)
     | CAnd (List Constraint)
     | CLet (List Variable) (List Variable) (Dict String T.CDN_Name (T.CRA_Located Type)) Constraint Constraint
 

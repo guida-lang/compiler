@@ -29,7 +29,7 @@ type Decl
     | Port (Maybe T.CASTS_Comment) T.CASTS_Port
 
 
-declaration : Space.Parser E.Decl Decl
+declaration : Space.Parser E.CRES_Decl Decl
 declaration =
     chompDocComment
         |> P.bind
@@ -37,7 +37,7 @@ declaration =
                 P.getPosition
                     |> P.bind
                         (\start ->
-                            P.oneOf E.DeclStart
+                            P.oneOf E.CRES_DeclStart
                                 [ typeDecl maybeDocs start
                                 , portDecl maybeDocs
                                 , valueDecl maybeDocs start
@@ -50,14 +50,14 @@ declaration =
 -- DOC COMMENT
 
 
-chompDocComment : P.Parser E.Decl (Maybe T.CASTS_Comment)
+chompDocComment : P.Parser E.CRES_Decl (Maybe T.CASTS_Comment)
 chompDocComment =
     P.oneOfWithFallback
-        [ Space.docComment E.DeclStart E.DeclSpace
+        [ Space.docComment E.CRES_DeclStart E.CRES_DeclSpace
             |> P.bind
                 (\docComment ->
-                    Space.chomp E.DeclSpace
-                        |> P.bind (\_ -> Space.checkFreshLine E.DeclFreshLineAfterDocComment)
+                    Space.chomp E.CRES_DeclSpace
+                        |> P.bind (\_ -> Space.checkFreshLine E.CRES_DeclFreshLineAfterDocComment)
                         |> P.fmap (\_ -> Just docComment)
                 )
         ]
@@ -68,29 +68,29 @@ chompDocComment =
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.Decl Decl
+valueDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.CRES_Decl Decl
 valueDecl maybeDocs start =
-    Var.lower E.DeclStart
+    Var.lower E.CRES_DeclStart
         |> P.bind
             (\name ->
                 P.getPosition
                     |> P.bind
                         (\end ->
-                            P.specialize (E.DeclDef name) <|
-                                (Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
+                            P.specialize (E.CRES_DeclDef name) <|
+                                (Space.chompAndCheckIndent E.CRES_DeclDefSpace E.CRES_DeclDefIndentEquals
                                     |> P.bind
                                         (\_ ->
-                                            P.oneOf E.DeclDefEquals
-                                                [ P.word1 ':' E.DeclDefEquals
-                                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentType)
-                                                    |> P.bind (\_ -> P.specialize E.DeclDefType Type.expression)
+                                            P.oneOf E.CRES_DeclDefEquals
+                                                [ P.word1 ':' E.CRES_DeclDefEquals
+                                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_DeclDefSpace E.CRES_DeclDefIndentType)
+                                                    |> P.bind (\_ -> P.specialize E.CRES_DeclDefType Type.expression)
                                                     |> P.bind
                                                         (\( tipe, _ ) ->
-                                                            Space.checkFreshLine E.DeclDefNameRepeat
+                                                            Space.checkFreshLine E.CRES_DeclDefNameRepeat
                                                                 |> P.bind (\_ -> chompMatchingName name)
                                                                 |> P.bind
                                                                     (\defName ->
-                                                                        Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
+                                                                        Space.chompAndCheckIndent E.CRES_DeclDefSpace E.CRES_DeclDefIndentEquals
                                                                             |> P.bind (\_ -> chompDefArgsAndBody maybeDocs start defName (Just tipe) [])
                                                                     )
                                                         )
@@ -102,18 +102,18 @@ valueDecl maybeDocs start =
             )
 
 
-chompDefArgsAndBody : Maybe T.CASTS_Comment -> T.CRA_Position -> T.CRA_Located T.CDN_Name -> Maybe T.CASTS_Type -> List T.CASTS_Pattern -> Space.Parser E.DeclDef Decl
+chompDefArgsAndBody : Maybe T.CASTS_Comment -> T.CRA_Position -> T.CRA_Located T.CDN_Name -> Maybe T.CASTS_Type -> List T.CASTS_Pattern -> Space.Parser E.CRES_DeclDef Decl
 chompDefArgsAndBody maybeDocs start name tipe revArgs =
-    P.oneOf E.DeclDefEquals
-        [ P.specialize E.DeclDefArg Pattern.term
+    P.oneOf E.CRES_DeclDefEquals
+        [ P.specialize E.CRES_DeclDefArg Pattern.term
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
+                    Space.chompAndCheckIndent E.CRES_DeclDefSpace E.CRES_DeclDefIndentEquals
                         |> P.bind (\_ -> chompDefArgsAndBody maybeDocs start name tipe (arg :: revArgs))
                 )
-        , P.word1 '=' E.DeclDefEquals
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DeclDefBody Expr.expression)
+        , P.word1 '=' E.CRES_DeclDefEquals
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_DeclDefSpace E.CRES_DeclDefIndentBody)
+            |> P.bind (\_ -> P.specialize E.CRES_DeclDefBody Expr.expression)
             |> P.fmap
                 (\( body, end ) ->
                     let
@@ -130,11 +130,11 @@ chompDefArgsAndBody maybeDocs start name tipe revArgs =
         ]
 
 
-chompMatchingName : T.CDN_Name -> P.Parser E.DeclDef (T.CRA_Located T.CDN_Name)
+chompMatchingName : T.CDN_Name -> P.Parser E.CRES_DeclDef (T.CRA_Located T.CDN_Name)
 chompMatchingName expectedName =
     let
         (P.Parser parserL) =
-            Var.lower E.DeclDefNameRepeat
+            Var.lower E.CRES_DeclDefNameRepeat
     in
     P.Parser <|
         \((P.State _ _ _ _ sr sc) as state) ->
@@ -144,7 +144,7 @@ chompMatchingName expectedName =
                         Ok (P.POk status (T.CRA_At (T.CRA_Region (T.CRA_Position sr sc) (T.CRA_Position er ec)) name) newState)
 
                     else
-                        Err (P.PErr status sr sc (E.DeclDefNameMatch name))
+                        Err (P.PErr status sr sc (E.CRES_DeclDefNameMatch name))
                 )
                 (parserL state)
 
@@ -153,19 +153,19 @@ chompMatchingName expectedName =
 -- TYPE DECLARATIONS
 
 
-typeDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.Decl Decl
+typeDecl : Maybe T.CASTS_Comment -> T.CRA_Position -> Space.Parser E.CRES_Decl Decl
 typeDecl maybeDocs start =
-    P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
-        (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
+    P.inContext E.CRES_DeclType (Keyword.type_ E.CRES_DeclStart) <|
+        (Space.chompAndCheckIndent E.CRES_DT_Space E.CRES_DT_IndentName
             |> P.bind
                 (\_ ->
-                    P.oneOf E.DT_Name
-                        [ P.inContext E.DT_Alias (Keyword.alias_ E.DT_Name) <|
-                            (Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
+                    P.oneOf E.CRES_DT_Name
+                        [ P.inContext E.CRES_DT_Alias (Keyword.alias_ E.CRES_DT_Name) <|
+                            (Space.chompAndCheckIndent E.CRES_AliasSpace E.CRES_AliasIndentEquals
                                 |> P.bind (\_ -> chompAliasNameToEquals)
                                 |> P.bind
                                     (\( name, args ) ->
-                                        P.specialize E.AliasBody Type.expression
+                                        P.specialize E.CRES_AliasBody Type.expression
                                             |> P.fmap
                                                 (\( tipe, end ) ->
                                                     let
@@ -177,7 +177,7 @@ typeDecl maybeDocs start =
                                                 )
                                     )
                             )
-                        , P.specialize E.DT_Union <|
+                        , P.specialize E.CRES_DT_Union <|
                             (chompCustomNameToEquals
                                 |> P.bind
                                     (\( name, args ) ->
@@ -206,27 +206,27 @@ typeDecl maybeDocs start =
 -- TYPE ALIASES
 
 
-chompAliasNameToEquals : P.Parser E.TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
+chompAliasNameToEquals : P.Parser E.CRES_TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompAliasNameToEquals =
-    P.addLocation (Var.upper E.AliasName)
+    P.addLocation (Var.upper E.CRES_AliasName)
         |> P.bind
             (\name ->
-                Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
+                Space.chompAndCheckIndent E.CRES_AliasSpace E.CRES_AliasIndentEquals
                     |> P.bind (\_ -> chompAliasNameToEqualsHelp name [])
             )
 
 
-chompAliasNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
+chompAliasNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.CRES_TypeAlias ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompAliasNameToEqualsHelp name args =
-    P.oneOf E.AliasEquals
-        [ P.addLocation (Var.lower E.AliasEquals)
+    P.oneOf E.CRES_AliasEquals
+        [ P.addLocation (Var.lower E.CRES_AliasEquals)
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
+                    Space.chompAndCheckIndent E.CRES_AliasSpace E.CRES_AliasIndentEquals
                         |> P.bind (\_ -> chompAliasNameToEqualsHelp name (arg :: args))
                 )
-        , P.word1 '=' E.AliasEquals
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.AliasSpace E.AliasIndentBody)
+        , P.word1 '=' E.CRES_AliasEquals
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_AliasSpace E.CRES_AliasIndentBody)
             |> P.fmap (\_ -> ( name, List.reverse args ))
         ]
 
@@ -235,37 +235,37 @@ chompAliasNameToEqualsHelp name args =
 -- CUSTOM TYPES
 
 
-chompCustomNameToEquals : P.Parser E.CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
+chompCustomNameToEquals : P.Parser E.CRES_CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompCustomNameToEquals =
-    P.addLocation (Var.upper E.CT_Name)
+    P.addLocation (Var.upper E.CRES_CT_Name)
         |> P.bind
             (\name ->
-                Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
+                Space.chompAndCheckIndent E.CRES_CT_Space E.CRES_CT_IndentEquals
                     |> P.bind (\_ -> chompCustomNameToEqualsHelp name [])
             )
 
 
-chompCustomNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
+chompCustomNameToEqualsHelp : T.CRA_Located T.CDN_Name -> List (T.CRA_Located T.CDN_Name) -> P.Parser E.CRES_CustomType ( T.CRA_Located T.CDN_Name, List (T.CRA_Located T.CDN_Name) )
 chompCustomNameToEqualsHelp name args =
-    P.oneOf E.CT_Equals
-        [ P.addLocation (Var.lower E.CT_Equals)
+    P.oneOf E.CRES_CT_Equals
+        [ P.addLocation (Var.lower E.CRES_CT_Equals)
             |> P.bind
                 (\arg ->
-                    Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
+                    Space.chompAndCheckIndent E.CRES_CT_Space E.CRES_CT_IndentEquals
                         |> P.bind (\_ -> chompCustomNameToEqualsHelp name (arg :: args))
                 )
-        , P.word1 '=' E.CT_Equals
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterEquals)
+        , P.word1 '=' E.CRES_CT_Equals
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_CT_Space E.CRES_CT_IndentAfterEquals)
             |> P.fmap (\_ -> ( name, List.reverse args ))
         ]
 
 
-chompVariants : List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ) -> T.CRA_Position -> Space.Parser E.CustomType (List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ))
+chompVariants : List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ) -> T.CRA_Position -> Space.Parser E.CRES_CustomType (List ( T.CRA_Located T.CDN_Name, List T.CASTS_Type ))
 chompVariants variants end =
     P.oneOfWithFallback
-        [ Space.checkIndent end E.CT_IndentBar
-            |> P.bind (\_ -> P.word1 '|' E.CT_Bar)
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterBar)
+        [ Space.checkIndent end E.CRES_CT_IndentBar
+            |> P.bind (\_ -> P.word1 '|' E.CRES_CT_Bar)
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_CT_Space E.CRES_CT_IndentAfterBar)
             |> P.bind (\_ -> Type.variant)
             |> P.bind (\( variant, newEnd ) -> chompVariants (variant :: variants) newEnd)
         ]
@@ -276,19 +276,19 @@ chompVariants variants end =
 -- PORT
 
 
-portDecl : Maybe T.CASTS_Comment -> Space.Parser E.Decl Decl
+portDecl : Maybe T.CASTS_Comment -> Space.Parser E.CRES_Decl Decl
 portDecl maybeDocs =
-    P.inContext E.Port (Keyword.port_ E.DeclStart) <|
-        (Space.chompAndCheckIndent E.PortSpace E.PortIndentName
-            |> P.bind (\_ -> P.addLocation (Var.lower E.PortName))
+    P.inContext E.CRES_Port (Keyword.port_ E.CRES_DeclStart) <|
+        (Space.chompAndCheckIndent E.CRES_PortSpace E.CRES_PortIndentName
+            |> P.bind (\_ -> P.addLocation (Var.lower E.CRES_PortName))
             |> P.bind
                 (\name ->
-                    Space.chompAndCheckIndent E.PortSpace E.PortIndentColon
-                        |> P.bind (\_ -> P.word1 ':' E.PortColon)
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.PortSpace E.PortIndentType)
+                    Space.chompAndCheckIndent E.CRES_PortSpace E.CRES_PortIndentColon
+                        |> P.bind (\_ -> P.word1 ':' E.CRES_PortColon)
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_PortSpace E.CRES_PortIndentType)
                         |> P.bind
                             (\_ ->
-                                P.specialize E.PortType Type.expression
+                                P.specialize E.CRES_PortType Type.expression
                                     |> P.fmap
                                         (\( tipe, end ) ->
                                             ( Port maybeDocs (T.CASTS_Port name tipe)
@@ -306,16 +306,16 @@ portDecl maybeDocs =
 --
 
 
-infix_ : P.Parser E.Module (T.CRA_Located T.CASTS_Infix)
+infix_ : P.Parser E.CRES_Module (T.CRA_Located T.CASTS_Infix)
 infix_ =
     let
-        err : T.CPP_Row -> T.CPP_Col -> E.Module
+        err : T.CPP_Row -> T.CPP_Col -> E.CRES_Module
         err =
-            E.Infix
+            E.CRES_Infix
 
-        err_ : a -> T.CPP_Row -> T.CPP_Col -> E.Module
+        err_ : a -> T.CPP_Row -> T.CPP_Col -> E.CRES_Module
         err_ =
-            \_ -> E.Infix
+            \_ -> E.CRES_Infix
     in
     P.getPosition
         |> P.bind

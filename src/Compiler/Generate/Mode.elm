@@ -5,7 +5,6 @@ module Compiler.Generate.Mode exposing
     , shortenFieldNames
     )
 
-import Compiler.AST.Optimized as Opt
 import Compiler.Elm.Compiler.Type.Extract as Extract
 import Compiler.Generate.JavaScript.Name as JsName
 import Data.Map as Dict exposing (Dict)
@@ -43,8 +42,8 @@ type alias ShortFieldNames =
     Dict String T.CDN_Name JsName.Name
 
 
-shortenFieldNames : Opt.GlobalGraph -> ShortFieldNames
-shortenFieldNames (Opt.GlobalGraph _ frequencies) =
+shortenFieldNames : T.CASTO_GlobalGraph -> ShortFieldNames
+shortenFieldNames (T.CASTO_GlobalGraph _ frequencies) =
     Dict.foldr compare (\_ -> addToShortNames) Dict.empty <|
         Dict.foldr compare addToBuckets Dict.empty frequencies
 

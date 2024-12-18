@@ -1,6 +1,6 @@
 module Compiler.Reporting.Error.Import exposing
-    ( Error(..)
-    , Problem(..)
+    ( CREI_Error(..)
+    , CREI_Problem(..)
     , errorDecoder
     , errorEncoder
     , problemDecoder
@@ -28,25 +28,25 @@ import Types as T
 -- ERROR
 
 
-type Error
-    = Error T.CRA_Region T.CEMN_Raw (EverySet String T.CEMN_Raw) Problem
+type CREI_Error
+    = CREI_Error T.CRA_Region T.CEMN_Raw (EverySet String T.CEMN_Raw) CREI_Problem
 
 
-type Problem
-    = NotFound
-    | Ambiguous String (List String) T.CEP_Name (List T.CEP_Name)
-    | AmbiguousLocal String String (List String)
-    | AmbiguousForeign T.CEP_Name T.CEP_Name (List T.CEP_Name)
+type CREI_Problem
+    = CREI_NotFound
+    | CREI_Ambiguous String (List String) T.CEP_Name (List T.CEP_Name)
+    | CREI_AmbiguousLocal String String (List String)
+    | CREI_AmbiguousForeign T.CEP_Name T.CEP_Name (List T.CEP_Name)
 
 
 
 -- TO REPORT
 
 
-toReport : Code.Source -> Error -> Report.Report
-toReport source (Error region name unimportedModules problem) =
+toReport : Code.Source -> CREI_Error -> Report.Report
+toReport source (CREI_Error region name unimportedModules problem) =
     case problem of
-        NotFound ->
+        CREI_NotFound ->
             Report.Report "MODULE NOT FOUND" region [] <|
                 Code.toSnippet source
                     region
@@ -90,7 +90,7 @@ toReport source (Error region name unimportedModules problem) =
                         ]
                     )
 
-        Ambiguous path _ pkg _ ->
+        CREI_Ambiguous path _ pkg _ ->
             Report.Report "AMBIGUOUS IMPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -136,7 +136,7 @@ toReport source (Error region name unimportedModules problem) =
                         ]
                     )
 
-        AmbiguousLocal path1 path2 paths ->
+        CREI_AmbiguousLocal path1 path2 paths ->
             Report.Report "AMBIGUOUS IMPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -155,7 +155,7 @@ toReport source (Error region name unimportedModules problem) =
                         ]
                     )
 
-        AmbiguousForeign pkg1 pkg2 pkgs ->
+        CREI_AmbiguousForeign pkg1 pkg2 pkgs ->
             Report.Report "AMBIGUOUS IMPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -187,15 +187,15 @@ toSuggestions name unimportedModules =
 -- ENCODERS and DECODERS
 
 
-problemEncoder : Problem -> Encode.Value
+problemEncoder : CREI_Problem -> Encode.Value
 problemEncoder problem =
     case problem of
-        NotFound ->
+        CREI_NotFound ->
             Encode.object
                 [ ( "type", Encode.string "NotFound" )
                 ]
 
-        Ambiguous path paths pkg pkgs ->
+        CREI_Ambiguous path paths pkg pkgs ->
             Encode.object
                 [ ( "type", Encode.string "Ambiguous" )
                 , ( "path", Encode.string path )
@@ -204,7 +204,7 @@ problemEncoder problem =
                 , ( "pkgs", Encode.list Pkg.nameEncoder pkgs )
                 ]
 
-        AmbiguousLocal path1 path2 paths ->
+        CREI_AmbiguousLocal path1 path2 paths ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousLocal" )
                 , ( "path1", Encode.string path1 )
@@ -212,7 +212,7 @@ problemEncoder problem =
                 , ( "paths", Encode.list Encode.string paths )
                 ]
 
-        AmbiguousForeign pkg1 pkg2 pkgs ->
+        CREI_AmbiguousForeign pkg1 pkg2 pkgs ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousForeign" )
                 , ( "pkg1", Pkg.nameEncoder pkg1 )
@@ -221,30 +221,30 @@ problemEncoder problem =
                 ]
 
 
-problemDecoder : Decode.Decoder Problem
+problemDecoder : Decode.Decoder CREI_Problem
 problemDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NotFound" ->
-                        Decode.succeed NotFound
+                        Decode.succeed CREI_NotFound
 
                     "Ambiguous" ->
-                        Decode.map4 Ambiguous
+                        Decode.map4 CREI_Ambiguous
                             (Decode.field "path" Decode.string)
                             (Decode.field "paths" (Decode.list Decode.string))
                             (Decode.field "pkg" Pkg.nameDecoder)
                             (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
 
                     "AmbiguousLocal" ->
-                        Decode.map3 AmbiguousLocal
+                        Decode.map3 CREI_AmbiguousLocal
                             (Decode.field "path1" Decode.string)
                             (Decode.field "path2" Decode.string)
                             (Decode.field "paths" (Decode.list Decode.string))
 
                     "AmbiguousForeign" ->
-                        Decode.map3 AmbiguousForeign
+                        Decode.map3 CREI_AmbiguousForeign
                             (Decode.field "pkg1" Pkg.nameDecoder)
                             (Decode.field "pkg2" Pkg.nameDecoder)
                             (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
@@ -254,8 +254,8 @@ problemDecoder =
             )
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder (Error region name unimportedModules problem) =
+errorEncoder : CREI_Error -> Encode.Value
+errorEncoder (CREI_Error region name unimportedModules problem) =
     Encode.object
         [ ( "type", Encode.string "Error" )
         , ( "region", A.regionEncoder region )
@@ -265,9 +265,9 @@ errorEncoder (Error region name unimportedModules problem) =
         ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : Decode.Decoder CREI_Error
 errorDecoder =
-    Decode.map4 Error
+    Decode.map4 CREI_Error
         (Decode.field "region" A.regionDecoder)
         (Decode.field "name" ModuleName.rawDecoder)
         (Decode.field "unimportedModules" (DecodeX.everySet identity ModuleName.rawDecoder))

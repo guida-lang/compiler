@@ -6,7 +6,6 @@ module Compiler.Optimize.Expression exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Optimized as Opt
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
@@ -26,21 +25,21 @@ type alias Cycle =
     EverySet String T.CDN_Name
 
 
-optimize : Cycle -> Can.Expr -> Names.Tracker Opt.Expr
+optimize : Cycle -> Can.Expr -> Names.Tracker T.CASTO_Expr
 optimize cycle (T.CRA_At region expression) =
     case expression of
         Can.VarLocal name ->
-            Names.pure (Opt.VarLocal name)
+            Names.pure (T.CASTO_VarLocal name)
 
         Can.VarTopLevel home name ->
             if EverySet.member identity name cycle then
-                Names.pure (Opt.VarCycle home name)
+                Names.pure (T.CASTO_VarCycle home name)
 
             else
                 Names.registerGlobal home name
 
         Can.VarKernel home name ->
-            Names.registerKernel home (Opt.VarKernel home name)
+            Names.registerKernel home (T.CASTO_VarKernel home name)
 
         Can.VarForeign home name _ ->
             Names.registerGlobal home name
@@ -55,20 +54,20 @@ optimize cycle (T.CRA_At region expression) =
             Names.registerGlobal home name
 
         Can.Chr chr ->
-            Names.registerKernel Name.utils (Opt.Chr chr)
+            Names.registerKernel Name.utils (T.CASTO_Chr chr)
 
         Can.Str str ->
-            Names.pure (Opt.Str str)
+            Names.pure (T.CASTO_Str str)
 
         Can.Int int ->
-            Names.pure (Opt.Int int)
+            Names.pure (T.CASTO_Int int)
 
         Can.Float float ->
-            Names.pure (Opt.Float float)
+            Names.pure (T.CASTO_Float float)
 
         Can.List entries ->
             Names.traverse (optimize cycle) entries
-                |> Names.bind (Names.registerKernel Name.list << Opt.List)
+                |> Names.bind (Names.registerKernel Name.list << T.CASTO_List)
 
         Can.Negate expr ->
             Names.registerGlobal ModuleName.basics Name.negate
@@ -77,7 +76,7 @@ optimize cycle (T.CRA_At region expression) =
                         optimize cycle expr
                             |> Names.fmap
                                 (\arg ->
-                                    Opt.Call func [ arg ]
+                                    T.CASTO_Call func [ arg ]
                                 )
                     )
 
@@ -91,7 +90,7 @@ optimize cycle (T.CRA_At region expression) =
                                     optimize cycle right
                                         |> Names.fmap
                                             (\optRight ->
-                                                Opt.Call optFunc [ optLeft, optRight ]
+                                                T.CASTO_Call optFunc [ optLeft, optRight ]
                                             )
                                 )
                     )
@@ -103,7 +102,7 @@ optimize cycle (T.CRA_At region expression) =
                         optimize cycle body
                             |> Names.fmap
                                 (\obody ->
-                                    Opt.Function argNames (List.foldr Opt.Destruct obody destructors)
+                                    T.CASTO_Function argNames (List.foldr T.CASTO_Destruct obody destructors)
                                 )
                     )
 
@@ -112,12 +111,12 @@ optimize cycle (T.CRA_At region expression) =
                 |> Names.bind
                     (\optimizeExpr ->
                         Names.traverse (optimize cycle) args
-                            |> Names.fmap (Opt.Call optimizeExpr)
+                            |> Names.fmap (T.CASTO_Call optimizeExpr)
                     )
 
         Can.If branches finally ->
             let
-                optimizeBranch : ( Can.Expr, Can.Expr ) -> Names.Tracker ( Opt.Expr, Opt.Expr )
+                optimizeBranch : ( Can.Expr, Can.Expr ) -> Names.Tracker ( T.CASTO_Expr, T.CASTO_Expr )
                 optimizeBranch ( condition, branch ) =
                     optimize cycle condition
                         |> Names.bind
@@ -130,7 +129,7 @@ optimize cycle (T.CRA_At region expression) =
                 |> Names.bind
                     (\optimizedBranches ->
                         optimize cycle finally
-                            |> Names.fmap (Opt.If optimizedBranches)
+                            |> Names.fmap (T.CASTO_If optimizedBranches)
                     )
 
         Can.Let def body ->
@@ -144,7 +143,7 @@ optimize cycle (T.CRA_At region expression) =
                         |> Names.bind
                             (\tailCallDef ->
                                 optimize cycle body
-                                    |> Names.fmap (Opt.Let tailCallDef)
+                                    |> Names.fmap (T.CASTO_Let tailCallDef)
                             )
 
                 _ ->
@@ -165,14 +164,14 @@ optimize cycle (T.CRA_At region expression) =
                                     optimize cycle body
                                         |> Names.fmap
                                             (\obody ->
-                                                Opt.Let (Opt.Def name oexpr) (List.foldr Opt.Destruct obody destructs)
+                                                T.CASTO_Let (T.CASTO_Def name oexpr) (List.foldr T.CASTO_Destruct obody destructs)
                                             )
                                 )
                     )
 
         Can.Case expr branches ->
             let
-                optimizeBranch : T.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
+                optimizeBranch : T.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, T.CASTO_Expr )
                 optimizeBranch root (Can.CaseBranch pattern branch) =
                     destructCase root pattern
                         |> Names.bind
@@ -180,7 +179,7 @@ optimize cycle (T.CRA_At region expression) =
                                 optimize cycle branch
                                     |> Names.fmap
                                         (\obranch ->
-                                            ( pattern, List.foldr Opt.Destruct obranch destructors )
+                                            ( pattern, List.foldr T.CASTO_Destruct obranch destructors )
                                         )
                             )
             in
@@ -191,7 +190,7 @@ optimize cycle (T.CRA_At region expression) =
                             |> Names.bind
                                 (\oexpr ->
                                     case oexpr of
-                                        Opt.VarLocal root ->
+                                        T.CASTO_VarLocal root ->
                                             Names.traverse (optimizeBranch root) branches
                                                 |> Names.fmap (Case.optimize temp root)
 
@@ -199,19 +198,19 @@ optimize cycle (T.CRA_At region expression) =
                                             Names.traverse (optimizeBranch temp) branches
                                                 |> Names.fmap
                                                     (\obranches ->
-                                                        Opt.Let (Opt.Def temp oexpr) (Case.optimize temp temp obranches)
+                                                        T.CASTO_Let (T.CASTO_Def temp oexpr) (Case.optimize temp temp obranches)
                                                     )
                                 )
                     )
 
         Can.Accessor field ->
-            Names.registerField field (Opt.Accessor field)
+            Names.registerField field (T.CASTO_Accessor field)
 
         Can.Access record (T.CRA_At _ field) ->
             optimize cycle record
                 |> Names.bind
                     (\optRecord ->
-                        Names.registerField field (Opt.Access optRecord field)
+                        Names.registerField field (T.CASTO_Access optRecord field)
                     )
 
         Can.Update _ record updates ->
@@ -221,7 +220,7 @@ optimize cycle (T.CRA_At region expression) =
                         optimize cycle record
                             |> Names.bind
                                 (\optRecord ->
-                                    Names.registerFieldDict updates (Opt.Update optRecord optUpdates)
+                                    Names.registerFieldDict updates (T.CASTO_Update optRecord optUpdates)
                                 )
                     )
 
@@ -229,11 +228,11 @@ optimize cycle (T.CRA_At region expression) =
             Names.mapTraverse identity compare (optimize cycle) fields
                 |> Names.bind
                     (\optFields ->
-                        Names.registerFieldDict fields (Opt.Record optFields)
+                        Names.registerFieldDict fields (T.CASTO_Record optFields)
                     )
 
         Can.Unit ->
-            Names.registerKernel Name.utils Opt.Unit
+            Names.registerKernel Name.utils T.CASTO_Unit
 
         Can.Tuple a b maybeC ->
             optimize cycle a
@@ -248,23 +247,23 @@ optimize cycle (T.CRA_At region expression) =
                                                 |> Names.bind
                                                     (\optC ->
                                                         Names.registerKernel Name.utils
-                                                            (Opt.Tuple optA optB (Just optC))
+                                                            (T.CASTO_Tuple optA optB (Just optC))
                                                     )
 
                                         Nothing ->
-                                            Names.registerKernel Name.utils (Opt.Tuple optA optB Nothing)
+                                            Names.registerKernel Name.utils (T.CASTO_Tuple optA optB Nothing)
                                 )
                     )
 
         Can.Shader src (T.CASTUS_Types attributes uniforms _) ->
-            Names.pure (Opt.Shader src (EverySet.fromList identity (Dict.keys compare attributes)) (EverySet.fromList identity (Dict.keys compare uniforms)))
+            Names.pure (T.CASTO_Shader src (EverySet.fromList identity (Dict.keys compare attributes)) (EverySet.fromList identity (Dict.keys compare uniforms)))
 
 
 
 -- UPDATE
 
 
-optimizeUpdate : Cycle -> Can.FieldUpdate -> Names.Tracker Opt.Expr
+optimizeUpdate : Cycle -> Can.FieldUpdate -> Names.Tracker T.CASTO_Expr
 optimizeUpdate cycle (Can.FieldUpdate _ expr) =
     optimize cycle expr
 
@@ -273,7 +272,7 @@ optimizeUpdate cycle (Can.FieldUpdate _ expr) =
 -- DEFINITION
 
 
-optimizeDef : Cycle -> Can.Def -> Opt.Expr -> Names.Tracker Opt.Expr
+optimizeDef : Cycle -> Can.Def -> T.CASTO_Expr -> Names.Tracker T.CASTO_Expr
 optimizeDef cycle def body =
     case def of
         Can.Def (T.CRA_At _ name) args expr ->
@@ -283,12 +282,12 @@ optimizeDef cycle def body =
             optimizeDefHelp cycle name (List.map Tuple.first typedArgs) expr body
 
 
-optimizeDefHelp : Cycle -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> Opt.Expr -> Names.Tracker Opt.Expr
+optimizeDefHelp : Cycle -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> T.CASTO_Expr -> Names.Tracker T.CASTO_Expr
 optimizeDefHelp cycle name args expr body =
     case args of
         [] ->
             optimize cycle expr
-                |> Names.fmap (\oexpr -> Opt.Let (Opt.Def name oexpr) body)
+                |> Names.fmap (\oexpr -> T.CASTO_Let (T.CASTO_Def name oexpr) body)
 
         _ ->
             optimize cycle expr
@@ -298,11 +297,11 @@ optimizeDefHelp cycle name args expr body =
                             |> Names.fmap
                                 (\( argNames, destructors ) ->
                                     let
-                                        ofunc : Opt.Expr
+                                        ofunc : T.CASTO_Expr
                                         ofunc =
-                                            Opt.Function argNames (List.foldr Opt.Destruct oexpr destructors)
+                                            T.CASTO_Function argNames (List.foldr T.CASTO_Destruct oexpr destructors)
                                     in
-                                    Opt.Let (Opt.Def name ofunc) body
+                                    T.CASTO_Let (T.CASTO_Def name ofunc) body
                                 )
                     )
 
@@ -311,7 +310,7 @@ optimizeDefHelp cycle name args expr body =
 -- DESTRUCTURING
 
 
-destructArgs : List Can.Pattern -> Names.Tracker ( List T.CDN_Name, List Opt.Destructor )
+destructArgs : List Can.Pattern -> Names.Tracker ( List T.CDN_Name, List T.CASTO_Destructor )
 destructArgs args =
     Names.traverse destruct args
         |> Names.fmap List.unzip
@@ -321,27 +320,27 @@ destructArgs args =
             )
 
 
-destructCase : T.CDN_Name -> Can.Pattern -> Names.Tracker (List Opt.Destructor)
+destructCase : T.CDN_Name -> Can.Pattern -> Names.Tracker (List T.CASTO_Destructor)
 destructCase rootName pattern =
-    destructHelp (Opt.Root rootName) pattern []
+    destructHelp (T.CASTO_Root rootName) pattern []
         |> Names.fmap List.reverse
 
 
-destruct : Can.Pattern -> Names.Tracker ( T.CDN_Name, List Opt.Destructor )
+destruct : Can.Pattern -> Names.Tracker ( T.CDN_Name, List T.CASTO_Destructor )
 destruct ((T.CRA_At _ ptrn) as pattern) =
     case ptrn of
         Can.PVar name ->
             Names.pure ( name, [] )
 
         Can.PAlias subPattern name ->
-            destructHelp (Opt.Root name) subPattern []
+            destructHelp (T.CASTO_Root name) subPattern []
                 |> Names.fmap (\revDs -> ( name, List.reverse revDs ))
 
         _ ->
             Names.generate
                 |> Names.bind
                     (\name ->
-                        destructHelp (Opt.Root name) pattern []
+                        destructHelp (T.CASTO_Root name) pattern []
                             |> Names.fmap
                                 (\revDs ->
                                     ( name, List.reverse revDs )
@@ -349,26 +348,26 @@ destruct ((T.CRA_At _ ptrn) as pattern) =
                     )
 
 
-destructHelp : Opt.Path -> Can.Pattern -> List Opt.Destructor -> Names.Tracker (List Opt.Destructor)
+destructHelp : T.CASTO_Path -> Can.Pattern -> List T.CASTO_Destructor -> Names.Tracker (List T.CASTO_Destructor)
 destructHelp path (T.CRA_At region pattern) revDs =
     case pattern of
         Can.PAnything ->
             Names.pure revDs
 
         Can.PVar name ->
-            Names.pure (Opt.Destructor name path :: revDs)
+            Names.pure (T.CASTO_Destructor name path :: revDs)
 
         Can.PRecord fields ->
             let
-                toDestruct : T.CDN_Name -> Opt.Destructor
+                toDestruct : T.CDN_Name -> T.CASTO_Destructor
                 toDestruct name =
-                    Opt.Destructor name (Opt.Field name path)
+                    T.CASTO_Destructor name (T.CASTO_Field name path)
             in
             Names.registerFieldList fields (List.map toDestruct fields ++ revDs)
 
         Can.PAlias subPattern name ->
-            destructHelp (Opt.Root name) subPattern <|
-                (Opt.Destructor name path :: revDs)
+            destructHelp (T.CASTO_Root name) subPattern <|
+                (T.CASTO_Destructor name path :: revDs)
 
         Can.PUnit ->
             Names.pure revDs
@@ -378,23 +377,23 @@ destructHelp path (T.CRA_At region pattern) revDs =
 
         Can.PTuple a b (Just c) ->
             case path of
-                Opt.Root _ ->
-                    destructHelp (Opt.Index Index.first path) a revDs
-                        |> Names.bind (destructHelp (Opt.Index Index.second path) b)
-                        |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+                T.CASTO_Root _ ->
+                    destructHelp (T.CASTO_Index Index.first path) a revDs
+                        |> Names.bind (destructHelp (T.CASTO_Index Index.second path) b)
+                        |> Names.bind (destructHelp (T.CASTO_Index Index.third path) c)
 
                 _ ->
                     Names.generate
                         |> Names.bind
                             (\name ->
                                 let
-                                    newRoot : Opt.Path
+                                    newRoot : T.CASTO_Path
                                     newRoot =
-                                        Opt.Root name
+                                        T.CASTO_Root name
                                 in
-                                destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
-                                    |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
-                                    |> Names.bind (destructHelp (Opt.Index Index.third newRoot) c)
+                                destructHelp (T.CASTO_Index Index.first newRoot) a (T.CASTO_Destructor name path :: revDs)
+                                    |> Names.bind (destructHelp (T.CASTO_Index Index.second newRoot) b)
+                                    |> Names.bind (destructHelp (T.CASTO_Index Index.third newRoot) c)
                             )
 
         Can.PList [] ->
@@ -427,17 +426,17 @@ destructHelp path (T.CRA_At region pattern) revDs =
                     in
                     case opts of
                         T.CASTC_Normal ->
-                            destructHelp (Opt.Index Index.first path) arg revDs
+                            destructHelp (T.CASTO_Index Index.first path) arg revDs
 
                         T.CASTC_Unbox ->
-                            destructHelp (Opt.Unbox path) arg revDs
+                            destructHelp (T.CASTO_Unbox path) arg revDs
 
                         T.CASTC_Enum ->
-                            destructHelp (Opt.Index Index.first path) arg revDs
+                            destructHelp (T.CASTO_Index Index.first path) arg revDs
 
                 _ ->
                     case path of
-                        Opt.Root _ ->
+                        T.CASTO_Root _ ->
                             List.foldl (\arg -> Names.bind (\revDs_ -> destructCtorArg path revDs_ arg))
                                 (Names.pure revDs)
                                 args
@@ -446,43 +445,43 @@ destructHelp path (T.CRA_At region pattern) revDs =
                             Names.generate
                                 |> Names.bind
                                     (\name ->
-                                        List.foldl (\arg -> Names.bind (\revDs_ -> destructCtorArg (Opt.Root name) revDs_ arg))
-                                            (Names.pure (Opt.Destructor name path :: revDs))
+                                        List.foldl (\arg -> Names.bind (\revDs_ -> destructCtorArg (T.CASTO_Root name) revDs_ arg))
+                                            (Names.pure (T.CASTO_Destructor name path :: revDs))
                                             args
                                     )
 
 
-destructTwo : Opt.Path -> Can.Pattern -> Can.Pattern -> List Opt.Destructor -> Names.Tracker (List Opt.Destructor)
+destructTwo : T.CASTO_Path -> Can.Pattern -> Can.Pattern -> List T.CASTO_Destructor -> Names.Tracker (List T.CASTO_Destructor)
 destructTwo path a b revDs =
     case path of
-        Opt.Root _ ->
-            destructHelp (Opt.Index Index.first path) a revDs
-                |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+        T.CASTO_Root _ ->
+            destructHelp (T.CASTO_Index Index.first path) a revDs
+                |> Names.bind (destructHelp (T.CASTO_Index Index.second path) b)
 
         _ ->
             Names.generate
                 |> Names.bind
                     (\name ->
                         let
-                            newRoot : Opt.Path
+                            newRoot : T.CASTO_Path
                             newRoot =
-                                Opt.Root name
+                                T.CASTO_Root name
                         in
-                        destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
-                            |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
+                        destructHelp (T.CASTO_Index Index.first newRoot) a (T.CASTO_Destructor name path :: revDs)
+                            |> Names.bind (destructHelp (T.CASTO_Index Index.second newRoot) b)
                     )
 
 
-destructCtorArg : Opt.Path -> List Opt.Destructor -> Can.PatternCtorArg -> Names.Tracker (List Opt.Destructor)
+destructCtorArg : T.CASTO_Path -> List T.CASTO_Destructor -> Can.PatternCtorArg -> Names.Tracker (List T.CASTO_Destructor)
 destructCtorArg path revDs (Can.PatternCtorArg index _ arg) =
-    destructHelp (Opt.Index index path) arg revDs
+    destructHelp (T.CASTO_Index index path) arg revDs
 
 
 
 -- TAIL CALL
 
 
-optimizePotentialTailCallDef : Cycle -> Can.Def -> Names.Tracker Opt.Def
+optimizePotentialTailCallDef : Cycle -> Can.Def -> Names.Tracker T.CASTO_Def
 optimizePotentialTailCallDef cycle def =
     case def of
         Can.Def (T.CRA_At _ name) args expr ->
@@ -492,7 +491,7 @@ optimizePotentialTailCallDef cycle def =
             optimizePotentialTailCall cycle name (List.map Tuple.first typedArgs) expr
 
 
-optimizePotentialTailCall : Cycle -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> Names.Tracker Opt.Def
+optimizePotentialTailCall : Cycle -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> Names.Tracker T.CASTO_Def
 optimizePotentialTailCall cycle name args expr =
     destructArgs args
         |> Names.bind
@@ -502,7 +501,7 @@ optimizePotentialTailCall cycle name args expr =
             )
 
 
-optimizeTail : Cycle -> T.CDN_Name -> List T.CDN_Name -> Can.Expr -> Names.Tracker Opt.Expr
+optimizeTail : Cycle -> T.CDN_Name -> List T.CDN_Name -> Can.Expr -> Names.Tracker T.CASTO_Expr
 optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
     case expression of
         Can.Call func args ->
@@ -525,20 +524,20 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                         if isMatchingName then
                             case Index.indexedZipWith (\_ a b -> ( a, b )) argNames oargs of
                                 Index.LengthMatch pairs ->
-                                    Names.pure (Opt.TailCall rootName pairs)
+                                    Names.pure (T.CASTO_TailCall rootName pairs)
 
                                 Index.LengthMismatch _ _ ->
                                     optimize cycle func
-                                        |> Names.fmap (\ofunc -> Opt.Call ofunc oargs)
+                                        |> Names.fmap (\ofunc -> T.CASTO_Call ofunc oargs)
 
                         else
                             optimize cycle func
-                                |> Names.fmap (\ofunc -> Opt.Call ofunc oargs)
+                                |> Names.fmap (\ofunc -> T.CASTO_Call ofunc oargs)
                     )
 
         Can.If branches finally ->
             let
-                optimizeBranch : ( Can.Expr, Can.Expr ) -> Names.Tracker ( Opt.Expr, Opt.Expr )
+                optimizeBranch : ( Can.Expr, Can.Expr ) -> Names.Tracker ( T.CASTO_Expr, T.CASTO_Expr )
                 optimizeBranch ( condition, branch ) =
                     optimize cycle condition
                         |> Names.bind
@@ -551,7 +550,7 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                 |> Names.bind
                     (\obranches ->
                         optimizeTail cycle rootName argNames finally
-                            |> Names.fmap (Opt.If obranches)
+                            |> Names.fmap (T.CASTO_If obranches)
                     )
 
         Can.Let def body ->
@@ -565,7 +564,7 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                         |> Names.bind
                             (\obody ->
                                 optimizeTail cycle rootName argNames body
-                                    |> Names.fmap (Opt.Let obody)
+                                    |> Names.fmap (T.CASTO_Let obody)
                             )
 
                 _ ->
@@ -586,14 +585,14 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                                     optimizeTail cycle rootName argNames body
                                         |> Names.fmap
                                             (\obody ->
-                                                Opt.Let (Opt.Def dname oexpr) (List.foldr Opt.Destruct obody destructors)
+                                                T.CASTO_Let (T.CASTO_Def dname oexpr) (List.foldr T.CASTO_Destruct obody destructors)
                                             )
                                 )
                     )
 
         Can.Case expr branches ->
             let
-                optimizeBranch : T.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, Opt.Expr )
+                optimizeBranch : T.CDN_Name -> Can.CaseBranch -> Names.Tracker ( Can.Pattern, T.CASTO_Expr )
                 optimizeBranch root (Can.CaseBranch pattern branch) =
                     destructCase root pattern
                         |> Names.bind
@@ -601,7 +600,7 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                                 optimizeTail cycle rootName argNames branch
                                     |> Names.fmap
                                         (\obranch ->
-                                            ( pattern, List.foldr Opt.Destruct obranch destructors )
+                                            ( pattern, List.foldr T.CASTO_Destruct obranch destructors )
                                         )
                             )
             in
@@ -612,7 +611,7 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                             |> Names.bind
                                 (\oexpr ->
                                     case oexpr of
-                                        Opt.VarLocal root ->
+                                        T.CASTO_VarLocal root ->
                                             Names.traverse (optimizeBranch root) branches
                                                 |> Names.fmap (Case.optimize temp root)
 
@@ -620,7 +619,7 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
                                             Names.traverse (optimizeBranch temp) branches
                                                 |> Names.fmap
                                                     (\obranches ->
-                                                        Opt.Let (Opt.Def temp oexpr) (Case.optimize temp temp obranches)
+                                                        T.CASTO_Let (T.CASTO_Def temp oexpr) (Case.optimize temp temp obranches)
                                                     )
                                 )
                     )
@@ -633,50 +632,50 @@ optimizeTail cycle rootName argNames ((T.CRA_At _ expression) as locExpr) =
 -- DETECT TAIL CALLS
 
 
-toTailDef : T.CDN_Name -> List T.CDN_Name -> List Opt.Destructor -> Opt.Expr -> Opt.Def
+toTailDef : T.CDN_Name -> List T.CDN_Name -> List T.CASTO_Destructor -> T.CASTO_Expr -> T.CASTO_Def
 toTailDef name argNames destructors body =
     if hasTailCall body then
-        Opt.TailDef name argNames (List.foldr Opt.Destruct body destructors)
+        T.CASTO_TailDef name argNames (List.foldr T.CASTO_Destruct body destructors)
 
     else
-        Opt.Def name (Opt.Function argNames (List.foldr Opt.Destruct body destructors))
+        T.CASTO_Def name (T.CASTO_Function argNames (List.foldr T.CASTO_Destruct body destructors))
 
 
-hasTailCall : Opt.Expr -> Bool
+hasTailCall : T.CASTO_Expr -> Bool
 hasTailCall expression =
     case expression of
-        Opt.TailCall _ _ ->
+        T.CASTO_TailCall _ _ ->
             True
 
-        Opt.If branches finally ->
+        T.CASTO_If branches finally ->
             hasTailCall finally || List.any (hasTailCall << Tuple.second) branches
 
-        Opt.Let _ body ->
+        T.CASTO_Let _ body ->
             hasTailCall body
 
-        Opt.Destruct _ body ->
+        T.CASTO_Destruct _ body ->
             hasTailCall body
 
-        Opt.Case _ _ decider jumps ->
+        T.CASTO_Case _ _ decider jumps ->
             decidecHasTailCall decider || List.any (hasTailCall << Tuple.second) jumps
 
         _ ->
             False
 
 
-decidecHasTailCall : Opt.Decider Opt.Choice -> Bool
+decidecHasTailCall : T.CASTO_Decider T.CASTO_Choice -> Bool
 decidecHasTailCall decider =
     case decider of
-        Opt.Leaf choice ->
+        T.CASTO_Leaf choice ->
             case choice of
-                Opt.Inline expr ->
+                T.CASTO_Inline expr ->
                     hasTailCall expr
 
-                Opt.Jump _ ->
+                T.CASTO_Jump _ ->
                     False
 
-        Opt.Chain _ success failure ->
+        T.CASTO_Chain _ success failure ->
             decidecHasTailCall success || decidecHasTailCall failure
 
-        Opt.FanOut _ tests fallback ->
+        T.CASTO_FanOut _ tests fallback ->
             decidecHasTailCall fallback || List.any (decidecHasTailCall << Tuple.second) tests

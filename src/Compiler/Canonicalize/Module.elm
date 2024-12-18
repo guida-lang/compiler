@@ -26,7 +26,7 @@ import Utils.Crash exposing (crash)
 
 
 type alias MResult i w a =
-    R.RResult i w Error.Error a
+    R.RResult i w Error.CREC_Error a
 
 
 
@@ -130,7 +130,7 @@ detectBadCycles scc =
                 names =
                     List.map (A.toValue << extractDefName) defs
             in
-            R.throw (Error.RecursiveDecl region name names)
+            R.throw (Error.CREC_RecursiveDecl region name names)
 
 
 extractDefName : Can.Def -> T.CRA_Located T.CDN_Name
@@ -169,7 +169,7 @@ toNodeOne : Env.Env -> T.CRA_Located T.CASTS_Value -> MResult i (List W.Warning)
 toNodeOne env (T.CRA_At _ (T.CASTS_Value ((T.CRA_At _ name) as aname) srcArgs body maybeType)) =
     case maybeType of
         Nothing ->
-            Pattern.verify (Error.DPFuncArgs name)
+            Pattern.verify (Error.CREC_DPFuncArgs name)
                 (R.traverse (Pattern.canonicalize env) srcArgs)
                 |> R.bind
                     (\( args, argBindings ) ->
@@ -196,7 +196,7 @@ toNodeOne env (T.CRA_At _ (T.CASTS_Value ((T.CRA_At _ name) as aname) srcArgs bo
             Type.toAnnotation env srcType
                 |> R.bind
                     (\(T.CASTC_Forall freeVars tipe) ->
-                        Pattern.verify (Error.DPFuncArgs name)
+                        Pattern.verify (Error.CREC_DPFuncArgs name)
                             (Expr.gatherTypedArgs env name srcArgs tipe Index.first [])
                             |> R.bind
                                 (\( ( args, resultType ), argBindings ) ->
@@ -266,7 +266,7 @@ canonicalizeExports values unions aliases binops effects (T.CRA_At region exposi
             R.traverse (checkExposed names unions aliases binops effects) exposeds
                 |> R.bind
                     (\infos ->
-                        Dups.detect Error.ExportDuplicate (Dups.unions infos)
+                        Dups.detect Error.CREC_ExportDuplicate (Dups.unions infos)
                             |> R.fmap Can.Export
                     )
 
@@ -296,24 +296,24 @@ checkExposed values unions aliases binops effects exposed =
                         ok name region Can.ExportPort
 
                     Just ports ->
-                        R.throw (Error.ExportNotFound region Error.BadVar name (ports ++ Dict.keys compare values))
+                        R.throw (Error.CREC_ExportNotFound region Error.CREC_BadVar name (ports ++ Dict.keys compare values))
 
         T.CASTS_Operator region name ->
             if Dict.member identity name binops then
                 ok name region Can.ExportBinop
 
             else
-                R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys compare binops))
+                R.throw (Error.CREC_ExportNotFound region Error.CREC_BadOp name (Dict.keys compare binops))
 
         T.CASTS_Upper (T.CRA_At region name) (T.CASTS_Public dotDotRegion) ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionOpen
 
             else if Dict.member identity name aliases then
-                R.throw (Error.ExportOpenAlias dotDotRegion name)
+                R.throw (Error.CREC_ExportOpenAlias dotDotRegion name)
 
             else
-                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
+                R.throw (Error.CREC_ExportNotFound region Error.CREC_BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
         T.CASTS_Upper (T.CRA_At region name) T.CASTS_Private ->
             if Dict.member identity name unions then
@@ -323,7 +323,7 @@ checkExposed values unions aliases binops effects exposed =
                 ok name region Can.ExportAlias
 
             else
-                R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
+                R.throw (Error.CREC_ExportNotFound region Error.CREC_BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
 
 checkPorts : Can.Effects -> T.CDN_Name -> Maybe (List T.CDN_Name)

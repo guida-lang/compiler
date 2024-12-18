@@ -4,7 +4,6 @@ module Compiler.Optimize.Port exposing
     , toFlagsDecoder
     )
 
-import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
@@ -19,7 +18,7 @@ import Utils.Crash exposing (crash)
 -- ENCODE
 
 
-toEncoder : T.CASTC_Type -> Names.Tracker Opt.Expr
+toEncoder : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 toEncoder tipe =
     case tipe of
         T.CASTC_TAlias _ _ args alias ->
@@ -32,7 +31,7 @@ toEncoder tipe =
             crash "toEncoder: type variable"
 
         T.CASTC_TUnit ->
-            Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
+            Names.fmap (T.CASTO_Function [ Name.dollar ]) (encode "null")
 
         T.CASTC_TTuple a b c ->
             encodeTuple a b c
@@ -79,17 +78,17 @@ toEncoder tipe =
 
         T.CASTC_TRecord fields Nothing ->
             let
-                encodeField : ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker Opt.Expr
+                encodeField : ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker T.CASTO_Expr
                 encodeField ( name, T.CASTC_FieldType _ fieldType ) =
                     toEncoder fieldType
                         |> Names.fmap
                             (\encoder ->
                                 let
-                                    value : Opt.Expr
+                                    value : T.CASTO_Expr
                                     value =
-                                        Opt.Call encoder [ Opt.Access (Opt.VarLocal Name.dollar) name ]
+                                        T.CASTO_Call encoder [ T.CASTO_Access (T.CASTO_VarLocal Name.dollar) name ]
                                 in
-                                Opt.Tuple (Opt.Str (Name.toElmString name)) value Nothing
+                                T.CASTO_Tuple (T.CASTO_Str (Name.toElmString name)) value Nothing
                             )
             in
             encode "object"
@@ -99,7 +98,7 @@ toEncoder tipe =
                             |> Names.bind
                                 (\keyValuePairs ->
                                     Names.registerFieldDict fields
-                                        (Opt.Function [ Name.dollar ] (Opt.Call object [ Opt.List keyValuePairs ]))
+                                        (T.CASTO_Function [ Name.dollar ] (T.CASTO_Call object [ T.CASTO_List keyValuePairs ]))
                                 )
                     )
 
@@ -108,7 +107,7 @@ toEncoder tipe =
 -- ENCODE HELPERS
 
 
-encodeMaybe : T.CASTC_Type -> Names.Tracker Opt.Expr
+encodeMaybe : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 encodeMaybe tipe =
     encode "null"
         |> Names.bind
@@ -119,11 +118,11 @@ encodeMaybe tipe =
                             Names.registerGlobal ModuleName.maybe "destruct"
                                 |> Names.fmap
                                     (\destruct ->
-                                        Opt.Function [ Name.dollar ]
-                                            (Opt.Call destruct
+                                        T.CASTO_Function [ Name.dollar ]
+                                            (T.CASTO_Call destruct
                                                 [ null
                                                 , encoder
-                                                , Opt.VarLocal Name.dollar
+                                                , T.CASTO_VarLocal Name.dollar
                                                 ]
                                             )
                                     )
@@ -131,37 +130,37 @@ encodeMaybe tipe =
             )
 
 
-encodeList : T.CASTC_Type -> Names.Tracker Opt.Expr
+encodeList : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 encodeList tipe =
     encode "list"
         |> Names.bind
             (\list ->
                 toEncoder tipe
-                    |> Names.fmap (Opt.Call list << List.singleton)
+                    |> Names.fmap (T.CASTO_Call list << List.singleton)
             )
 
 
-encodeArray : T.CASTC_Type -> Names.Tracker Opt.Expr
+encodeArray : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 encodeArray tipe =
     encode "array"
         |> Names.bind
             (\array ->
                 toEncoder tipe
-                    |> Names.fmap (Opt.Call array << List.singleton)
+                    |> Names.fmap (T.CASTO_Call array << List.singleton)
             )
 
 
-encodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker Opt.Expr
+encodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 encodeTuple a b maybeC =
     let
-        let_ : T.CDN_Name -> T.CDI_ZeroBased -> Opt.Expr -> Opt.Expr
+        let_ : T.CDN_Name -> T.CDI_ZeroBased -> T.CASTO_Expr -> T.CASTO_Expr
         let_ arg index body =
-            Opt.Destruct (Opt.Destructor arg (Opt.Index index (Opt.Root Name.dollar))) body
+            T.CASTO_Destruct (T.CASTO_Destructor arg (T.CASTO_Index index (T.CASTO_Root Name.dollar))) body
 
-        encodeArg : T.CDN_Name -> T.CASTC_Type -> Names.Tracker Opt.Expr
+        encodeArg : T.CDN_Name -> T.CASTC_Type -> Names.Tracker T.CASTO_Expr
         encodeArg arg tipe =
             toEncoder tipe
-                |> Names.fmap (\encoder -> Opt.Call encoder [ Opt.VarLocal arg ])
+                |> Names.fmap (\encoder -> T.CASTO_Call encoder [ T.CASTO_VarLocal arg ])
     in
     encode "list"
         |> Names.bind
@@ -176,14 +175,14 @@ encodeTuple a b maybeC =
                                             case maybeC of
                                                 Nothing ->
                                                     Names.pure
-                                                        (Opt.Function [ Name.dollar ]
+                                                        (T.CASTO_Function [ Name.dollar ]
                                                             (let_ "a"
                                                                 Index.first
                                                                 (let_ "b"
                                                                     Index.second
-                                                                    (Opt.Call list
+                                                                    (T.CASTO_Call list
                                                                         [ identity
-                                                                        , Opt.List [ arg1, arg2 ]
+                                                                        , T.CASTO_List [ arg1, arg2 ]
                                                                         ]
                                                                     )
                                                                 )
@@ -193,16 +192,16 @@ encodeTuple a b maybeC =
                                                 Just c ->
                                                     Names.fmap
                                                         (\arg3 ->
-                                                            Opt.Function [ Name.dollar ]
+                                                            T.CASTO_Function [ Name.dollar ]
                                                                 (let_ "a"
                                                                     Index.first
                                                                     (let_ "b"
                                                                         Index.second
                                                                         (let_ "c"
                                                                             Index.third
-                                                                            (Opt.Call list
+                                                                            (T.CASTO_Call list
                                                                                 [ identity
-                                                                                , Opt.List [ arg1, arg2, arg3 ]
+                                                                                , T.CASTO_List [ arg1, arg2, arg3 ]
                                                                                 ]
                                                                             )
                                                                         )
@@ -222,11 +221,11 @@ encodeTuple a b maybeC =
 -- FLAGS DECODER
 
 
-toFlagsDecoder : T.CASTC_Type -> Names.Tracker Opt.Expr
+toFlagsDecoder : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 toFlagsDecoder tipe =
     case tipe of
         T.CASTC_TUnit ->
-            Names.fmap (\succeed -> Opt.Call succeed [ Opt.Unit ])
+            Names.fmap (\succeed -> T.CASTO_Call succeed [ T.CASTO_Unit ])
                 (decode "succeed")
 
         _ ->
@@ -237,7 +236,7 @@ toFlagsDecoder tipe =
 -- DECODE
 
 
-toDecoder : T.CASTC_Type -> Names.Tracker Opt.Expr
+toDecoder : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 toDecoder tipe =
     case tipe of
         T.CASTC_TLambda _ _ ->
@@ -295,7 +294,7 @@ toDecoder tipe =
 -- DECODE MAYBE
 
 
-decodeMaybe : T.CASTC_Type -> Names.Tracker Opt.Expr
+decodeMaybe : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 decodeMaybe tipe =
     Names.bind
         (\nothing ->
@@ -309,10 +308,10 @@ decodeMaybe tipe =
                                         (\map_ ->
                                             Names.fmap
                                                 (\subDecoder ->
-                                                    Opt.Call oneOf
-                                                        [ Opt.List
-                                                            [ Opt.Call null [ nothing ]
-                                                            , Opt.Call map_ [ just, subDecoder ]
+                                                    T.CASTO_Call oneOf
+                                                        [ T.CASTO_List
+                                                            [ T.CASTO_Call null [ nothing ]
+                                                            , T.CASTO_Call map_ [ just, subDecoder ]
                                                             ]
                                                         ]
                                                 )
@@ -333,11 +332,11 @@ decodeMaybe tipe =
 -- DECODE LIST
 
 
-decodeList : T.CASTC_Type -> Names.Tracker Opt.Expr
+decodeList : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 decodeList tipe =
     Names.bind
         (\list ->
-            Names.fmap (Opt.Call list << List.singleton)
+            Names.fmap (T.CASTO_Call list << List.singleton)
                 (toDecoder tipe)
         )
         (decode "list")
@@ -347,11 +346,11 @@ decodeList tipe =
 -- DECODE ARRAY
 
 
-decodeArray : T.CASTC_Type -> Names.Tracker Opt.Expr
+decodeArray : T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 decodeArray tipe =
     Names.bind
         (\array ->
-            Names.fmap (Opt.Call array << List.singleton)
+            Names.fmap (T.CASTO_Call array << List.singleton)
                 (toDecoder tipe)
         )
         (decode "array")
@@ -361,45 +360,45 @@ decodeArray tipe =
 -- DECODE TUPLES
 
 
-decodeTuple0 : Names.Tracker Opt.Expr
+decodeTuple0 : Names.Tracker T.CASTO_Expr
 decodeTuple0 =
-    Names.fmap (\null -> Opt.Call null [ Opt.Unit ])
+    Names.fmap (\null -> T.CASTO_Call null [ T.CASTO_Unit ])
         (decode "null")
 
 
-decodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker Opt.Expr
+decodeTuple : T.CASTC_Type -> T.CASTC_Type -> Maybe T.CASTC_Type -> Names.Tracker T.CASTO_Expr
 decodeTuple a b maybeC =
     Names.bind
         (\succeed ->
             case maybeC of
                 Nothing ->
                     let
-                        tuple : Opt.Expr
+                        tuple : T.CASTO_Expr
                         tuple =
-                            Opt.Tuple (toLocal 0) (toLocal 1) Nothing
+                            T.CASTO_Tuple (toLocal 0) (toLocal 1) Nothing
                     in
-                    indexAndThen 1 b (Opt.Call succeed [ tuple ])
+                    indexAndThen 1 b (T.CASTO_Call succeed [ tuple ])
                         |> Names.bind (indexAndThen 0 a)
 
                 Just c ->
                     let
-                        tuple : Opt.Expr
+                        tuple : T.CASTO_Expr
                         tuple =
-                            Opt.Tuple (toLocal 0) (toLocal 1) (Just (toLocal 2))
+                            T.CASTO_Tuple (toLocal 0) (toLocal 1) (Just (toLocal 2))
                     in
-                    indexAndThen 2 c (Opt.Call succeed [ tuple ])
+                    indexAndThen 2 c (T.CASTO_Call succeed [ tuple ])
                         |> Names.bind (indexAndThen 1 b)
                         |> Names.bind (indexAndThen 0 a)
         )
         (decode "succeed")
 
 
-toLocal : Int -> Opt.Expr
+toLocal : Int -> T.CASTO_Expr
 toLocal index =
-    Opt.VarLocal (Name.fromVarIndex index)
+    T.CASTO_VarLocal (Name.fromVarIndex index)
 
 
-indexAndThen : Int -> T.CASTC_Type -> Opt.Expr -> Names.Tracker Opt.Expr
+indexAndThen : Int -> T.CASTC_Type -> T.CASTO_Expr -> Names.Tracker T.CASTO_Expr
 indexAndThen i tipe decoder =
     Names.bind
         (\andThen ->
@@ -407,9 +406,9 @@ indexAndThen i tipe decoder =
                 (\index ->
                     Names.fmap
                         (\typeDecoder ->
-                            Opt.Call andThen
-                                [ Opt.Function [ Name.fromVarIndex i ] decoder
-                                , Opt.Call index [ Opt.Int i, typeDecoder ]
+                            T.CASTO_Call andThen
+                                [ T.CASTO_Function [ Name.fromVarIndex i ] decoder
+                                , T.CASTO_Call index [ T.CASTO_Int i, typeDecoder ]
                                 ]
                         )
                         (toDecoder tipe)
@@ -423,16 +422,16 @@ indexAndThen i tipe decoder =
 -- DECODE RECORDS
 
 
-decodeRecord : Dict String T.CDN_Name T.CASTC_FieldType -> Names.Tracker Opt.Expr
+decodeRecord : Dict String T.CDN_Name T.CASTC_FieldType -> Names.Tracker T.CASTO_Expr
 decodeRecord fields =
     let
-        toFieldExpr : T.CDN_Name -> b -> Opt.Expr
+        toFieldExpr : T.CDN_Name -> b -> T.CASTO_Expr
         toFieldExpr name _ =
-            Opt.VarLocal name
+            T.CASTO_VarLocal name
 
-        record : Opt.Expr
+        record : T.CASTO_Expr
         record =
-            Opt.Record (Dict.map toFieldExpr fields)
+            T.CASTO_Record (Dict.map toFieldExpr fields)
     in
     Names.bind
         (\succeed ->
@@ -440,14 +439,14 @@ decodeRecord fields =
                 |> Names.bind
                     (\fieldDecoders ->
                         List.foldl (\fieldDecoder -> Names.bind (\optCall -> fieldAndThen optCall fieldDecoder))
-                            (Names.pure (Opt.Call succeed [ record ]))
+                            (Names.pure (T.CASTO_Call succeed [ record ]))
                             fieldDecoders
                     )
         )
         (decode "succeed")
 
 
-fieldAndThen : Opt.Expr -> ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker Opt.Expr
+fieldAndThen : T.CASTO_Expr -> ( T.CDN_Name, T.CASTC_FieldType ) -> Names.Tracker T.CASTO_Expr
 fieldAndThen decoder ( key, T.CASTC_FieldType _ tipe ) =
     Names.bind
         (\andThen ->
@@ -455,9 +454,9 @@ fieldAndThen decoder ( key, T.CASTC_FieldType _ tipe ) =
                 (\field ->
                     Names.fmap
                         (\typeDecoder ->
-                            Opt.Call andThen
-                                [ Opt.Function [ key ] decoder
-                                , Opt.Call field [ Opt.Str (Name.toElmString key), typeDecoder ]
+                            T.CASTO_Call andThen
+                                [ T.CASTO_Function [ key ] decoder
+                                , T.CASTO_Call field [ T.CASTO_Str (Name.toElmString key), typeDecoder ]
                                 ]
                         )
                         (toDecoder tipe)
@@ -471,11 +470,11 @@ fieldAndThen decoder ( key, T.CASTC_FieldType _ tipe ) =
 -- GLOBALS HELPERS
 
 
-encode : T.CDN_Name -> Names.Tracker Opt.Expr
+encode : T.CDN_Name -> Names.Tracker T.CASTO_Expr
 encode name =
     Names.registerGlobal ModuleName.jsonEncode name
 
 
-decode : T.CDN_Name -> Names.Tracker Opt.Expr
+decode : T.CDN_Name -> Names.Tracker T.CASTO_Expr
 decode name =
     Names.registerGlobal ModuleName.jsonDecode name

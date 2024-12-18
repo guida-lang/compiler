@@ -23,14 +23,14 @@ import Types as T
 -- FROM BYTE STRING
 
 
-fromByteString : ProjectType -> String -> Result E.Error T.CASTS_Module
+fromByteString : ProjectType -> String -> Result E.CRES_Error T.CASTS_Module
 fromByteString projectType source =
-    case P.fromByteString (chompModule projectType) E.ModuleBadEnd source of
+    case P.fromByteString (chompModule projectType) E.CRES_ModuleBadEnd source of
         Ok modul ->
             checkModule projectType modul
 
         Err err ->
-            Err (E.ParseError err)
+            Err (E.CRES_ParseError err)
 
 
 
@@ -74,7 +74,7 @@ type alias Module =
     }
 
 
-chompModule : ProjectType -> P.Parser E.Module Module
+chompModule : ProjectType -> P.Parser E.CRES_Module Module
 chompModule projectType =
     chompHeader
         |> P.bind
@@ -96,7 +96,7 @@ chompModule projectType =
                             )
                                 |> P.bind
                                     (\infixes ->
-                                        P.specialize E.Declarations (chompDecls [])
+                                        P.specialize E.CRES_Declarations (chompDecls [])
                                             |> P.fmap
                                                 (\decls ->
                                                     Module
@@ -114,7 +114,7 @@ chompModule projectType =
 -- CHECK MODULE
 
 
-checkModule : ProjectType -> Module -> Result E.Error T.CASTS_Module
+checkModule : ProjectType -> Module -> Result E.CRES_Error T.CASTS_Module
 checkModule projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
@@ -156,7 +156,7 @@ checkModule projectType module_ =
                 )
 
 
-checkEffects : ProjectType -> List T.CASTS_Port -> Effects -> Result E.Error T.CASTS_Effects
+checkEffects : ProjectType -> List T.CASTS_Port -> Effects -> Result E.CRES_Error T.CASTS_Effects
 checkEffects projectType ports effects =
     case effects of
         NoEffects region ->
@@ -167,20 +167,20 @@ checkEffects projectType ports effects =
                 (T.CASTS_Port name _) :: _ ->
                     case projectType of
                         Package _ ->
-                            Err (E.NoPortsInPackage name)
+                            Err (E.CRES_NoPortsInPackage name)
 
                         Application ->
-                            Err (E.UnexpectedPort region)
+                            Err (E.CRES_UnexpectedPort region)
 
         Ports region ->
             case projectType of
                 Package _ ->
-                    Err (E.NoPortModulesInPackage region)
+                    Err (E.CRES_NoPortModulesInPackage region)
 
                 Application ->
                     case ports of
                         [] ->
-                            Err (E.NoPorts region)
+                            Err (E.CRES_NoPorts region)
 
                         _ :: _ ->
                             Ok (T.CASTS_Ports ports)
@@ -192,10 +192,10 @@ checkEffects projectType ports effects =
                         Ok (T.CASTS_Manager region manager)
 
                     _ :: _ ->
-                        Err (E.UnexpectedPort region)
+                        Err (E.CRES_UnexpectedPort region)
 
             else
-                Err (E.NoEffectsOutsideKernel region)
+                Err (E.CRES_NoEffectsOutsideKernel region)
 
 
 categorizeDecls : List (T.CRA_Located T.CASTS_Value) -> List (T.CRA_Located T.CASTS_Union) -> List (T.CRA_Located T.CASTS_Alias) -> List T.CASTS_Port -> List Decl.Decl -> ( ( List (T.CRA_Located T.CASTS_Value), List (T.CRA_Located T.CASTS_Union) ), ( List (T.CRA_Located T.CASTS_Alias), List T.CASTS_Port ) )
@@ -268,9 +268,9 @@ addComment maybeComment (T.CRA_At _ name) comments =
 -- FRESH LINES
 
 
-freshLine : (T.CPP_Row -> T.CPP_Col -> E.Module) -> P.Parser E.Module ()
+freshLine : (T.CPP_Row -> T.CPP_Col -> E.CRES_Module) -> P.Parser E.CRES_Module ()
 freshLine toFreshLineError =
-    Space.chomp E.ModuleSpace
+    Space.chomp E.CRES_ModuleSpace
         |> P.bind (\_ -> Space.checkFreshLine toFreshLineError)
 
 
@@ -278,20 +278,20 @@ freshLine toFreshLineError =
 -- CHOMP DECLARATIONS
 
 
-chompDecls : List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
+chompDecls : List Decl.Decl -> P.Parser E.CRES_Decl (List Decl.Decl)
 chompDecls decls =
     Decl.declaration
         |> P.bind
             (\( decl, _ ) ->
                 P.oneOfWithFallback
-                    [ Space.checkFreshLine E.DeclStart
+                    [ Space.checkFreshLine E.CRES_DeclStart
                         |> P.bind (\_ -> chompDecls (decl :: decls))
                     ]
                     (List.reverse (decl :: decls))
             )
 
 
-chompInfixes : List (T.CRA_Located T.CASTS_Infix) -> P.Parser E.Module (List (T.CRA_Located T.CASTS_Infix))
+chompInfixes : List (T.CRA_Located T.CASTS_Infix) -> P.Parser E.CRES_Module (List (T.CRA_Located T.CASTS_Infix))
 chompInfixes infixes =
     P.oneOfWithFallback
         [ Decl.infix_
@@ -304,17 +304,17 @@ chompInfixes infixes =
 -- MODULE DOC COMMENT
 
 
-chompModuleDocCommentSpace : P.Parser E.Module (Result T.CRA_Region T.CASTS_Comment)
+chompModuleDocCommentSpace : P.Parser E.CRES_Module (Result T.CRA_Region T.CASTS_Comment)
 chompModuleDocCommentSpace =
-    P.addLocation (freshLine E.FreshLine)
+    P.addLocation (freshLine E.CRES_FreshLine)
         |> P.bind
             (\(T.CRA_At region ()) ->
                 P.oneOfWithFallback
-                    [ Space.docComment E.ImportStart E.ModuleSpace
+                    [ Space.docComment E.CRES_ImportStart E.CRES_ModuleSpace
                         |> P.bind
                             (\docComment ->
-                                Space.chomp E.ModuleSpace
-                                    |> P.bind (\_ -> Space.checkFreshLine E.FreshLine)
+                                Space.chomp E.CRES_ModuleSpace
+                                    |> P.bind (\_ -> Space.checkFreshLine E.CRES_FreshLine)
                                     |> P.fmap (\_ -> Ok docComment)
                             )
                     ]
@@ -340,26 +340,26 @@ type Effects
     | Manager T.CRA_Region T.CASTS_Manager
 
 
-chompHeader : P.Parser E.Module (Maybe Header)
+chompHeader : P.Parser E.CRES_Module (Maybe Header)
 chompHeader =
-    freshLine E.FreshLine
+    freshLine E.CRES_FreshLine
         |> P.bind (\_ -> P.getPosition)
         |> P.bind
             (\start ->
                 P.oneOfWithFallback
                     [ -- module MyThing exposing (..)
-                      Keyword.module_ E.ModuleProblem
+                      Keyword.module_ E.CRES_ModuleProblem
                         |> P.bind (\_ -> P.getPosition)
                         |> P.bind
                             (\effectEnd ->
-                                Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem
-                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.ModuleName))
+                                Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ModuleProblem
+                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.CRES_ModuleName))
                                     |> P.bind
                                         (\name ->
-                                            Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem
-                                                |> P.bind (\_ -> Keyword.exposing_ E.ModuleProblem)
-                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem)
-                                                |> P.bind (\_ -> P.addLocation (P.specialize E.ModuleExposing exposing_))
+                                            Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ModuleProblem
+                                                |> P.bind (\_ -> Keyword.exposing_ E.CRES_ModuleProblem)
+                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ModuleProblem)
+                                                |> P.bind (\_ -> P.addLocation (P.specialize E.CRES_ModuleExposing exposing_))
                                                 |> P.bind
                                                     (\exports ->
                                                         chompModuleDocCommentSpace
@@ -376,20 +376,20 @@ chompHeader =
                                         )
                             )
                     , -- port module MyThing exposing (..)
-                      Keyword.port_ E.PortModuleProblem
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
-                        |> P.bind (\_ -> Keyword.module_ E.PortModuleProblem)
+                      Keyword.port_ E.CRES_PortModuleProblem
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_PortModuleProblem)
+                        |> P.bind (\_ -> Keyword.module_ E.CRES_PortModuleProblem)
                         |> P.bind (\_ -> P.getPosition)
                         |> P.bind
                             (\effectEnd ->
-                                Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
-                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.PortModuleName))
+                                Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_PortModuleProblem
+                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.CRES_PortModuleName))
                                     |> P.bind
                                         (\name ->
-                                            Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
-                                                |> P.bind (\_ -> Keyword.exposing_ E.PortModuleProblem)
-                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
-                                                |> P.bind (\_ -> P.addLocation (P.specialize E.PortModuleExposing exposing_))
+                                            Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_PortModuleProblem
+                                                |> P.bind (\_ -> Keyword.exposing_ E.CRES_PortModuleProblem)
+                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_PortModuleProblem)
+                                                |> P.bind (\_ -> P.addLocation (P.specialize E.CRES_PortModuleExposing exposing_))
                                                 |> P.bind
                                                     (\exports ->
                                                         chompModuleDocCommentSpace
@@ -406,26 +406,26 @@ chompHeader =
                                         )
                             )
                     , -- effect module MyThing where { command = MyCmd } exposing (..)
-                      Keyword.effect_ E.Effect
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
-                        |> P.bind (\_ -> Keyword.module_ E.Effect)
+                      Keyword.effect_ E.CRES_Effect
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect)
+                        |> P.bind (\_ -> Keyword.module_ E.CRES_Effect)
                         |> P.bind (\_ -> P.getPosition)
                         |> P.bind
                             (\effectEnd ->
-                                Space.chompAndCheckIndent E.ModuleSpace E.Effect
-                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.ModuleName))
+                                Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect
+                                    |> P.bind (\_ -> P.addLocation (Var.moduleName E.CRES_ModuleName))
                                     |> P.bind
                                         (\name ->
-                                            Space.chompAndCheckIndent E.ModuleSpace E.Effect
-                                                |> P.bind (\_ -> Keyword.where_ E.Effect)
-                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
+                                            Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect
+                                                |> P.bind (\_ -> Keyword.where_ E.CRES_Effect)
+                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect)
                                                 |> P.bind (\_ -> chompManager)
                                                 |> P.bind
                                                     (\manager ->
-                                                        Space.chompAndCheckIndent E.ModuleSpace E.Effect
-                                                            |> P.bind (\_ -> Keyword.exposing_ E.Effect)
-                                                            |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
-                                                            |> P.bind (\_ -> P.addLocation (P.specialize (\_ -> E.Effect) exposing_))
+                                                        Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect
+                                                            |> P.bind (\_ -> Keyword.exposing_ E.CRES_Effect)
+                                                            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect)
+                                                            |> P.bind (\_ -> P.addLocation (P.specialize (\_ -> E.CRES_Effect) exposing_))
                                                             |> P.bind
                                                                 (\exports ->
                                                                     chompModuleDocCommentSpace
@@ -444,30 +444,30 @@ chompHeader =
             )
 
 
-chompManager : P.Parser E.Module T.CASTS_Manager
+chompManager : P.Parser E.CRES_Module T.CASTS_Manager
 chompManager =
-    P.word1 '{' E.Effect
+    P.word1 '{' E.CRES_Effect
         |> P.bind (\_ -> spaces_em)
         |> P.bind
             (\_ ->
-                P.oneOf E.Effect
+                P.oneOf E.CRES_Effect
                     [ chompCommand
                         |> P.bind
                             (\cmd ->
                                 spaces_em
                                     |> P.bind
                                         (\_ ->
-                                            P.oneOf E.Effect
-                                                [ P.word1 '}' E.Effect
+                                            P.oneOf E.CRES_Effect
+                                                [ P.word1 '}' E.CRES_Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.fmap (\_ -> T.CASTS_Cmd cmd)
-                                                , P.word1 ',' E.Effect
+                                                , P.word1 ',' E.CRES_Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.bind (\_ -> chompSubscription)
                                                     |> P.bind
                                                         (\sub ->
                                                             spaces_em
-                                                                |> P.bind (\_ -> P.word1 '}' E.Effect)
+                                                                |> P.bind (\_ -> P.word1 '}' E.CRES_Effect)
                                                                 |> P.bind (\_ -> spaces_em)
                                                                 |> P.fmap (\_ -> T.CASTS_Fx cmd sub)
                                                         )
@@ -480,17 +480,17 @@ chompManager =
                                 spaces_em
                                     |> P.bind
                                         (\_ ->
-                                            P.oneOf E.Effect
-                                                [ P.word1 '}' E.Effect
+                                            P.oneOf E.CRES_Effect
+                                                [ P.word1 '}' E.CRES_Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.fmap (\_ -> T.CASTS_Sub sub)
-                                                , P.word1 ',' E.Effect
+                                                , P.word1 ',' E.CRES_Effect
                                                     |> P.bind (\_ -> spaces_em)
                                                     |> P.bind (\_ -> chompCommand)
                                                     |> P.bind
                                                         (\cmd ->
                                                             spaces_em
-                                                                |> P.bind (\_ -> P.word1 '}' E.Effect)
+                                                                |> P.bind (\_ -> P.word1 '}' E.CRES_Effect)
                                                                 |> P.bind (\_ -> spaces_em)
                                                                 |> P.fmap (\_ -> T.CASTS_Fx cmd sub)
                                                         )
@@ -501,34 +501,34 @@ chompManager =
             )
 
 
-chompCommand : P.Parser E.Module (T.CRA_Located T.CDN_Name)
+chompCommand : P.Parser E.CRES_Module (T.CRA_Located T.CDN_Name)
 chompCommand =
-    Keyword.command_ E.Effect
+    Keyword.command_ E.CRES_Effect
         |> P.bind (\_ -> spaces_em)
-        |> P.bind (\_ -> P.word1 '=' E.Effect)
+        |> P.bind (\_ -> P.word1 '=' E.CRES_Effect)
         |> P.bind (\_ -> spaces_em)
-        |> P.bind (\_ -> P.addLocation (Var.upper E.Effect))
+        |> P.bind (\_ -> P.addLocation (Var.upper E.CRES_Effect))
 
 
-chompSubscription : P.Parser E.Module (T.CRA_Located T.CDN_Name)
+chompSubscription : P.Parser E.CRES_Module (T.CRA_Located T.CDN_Name)
 chompSubscription =
-    Keyword.subscription_ E.Effect
+    Keyword.subscription_ E.CRES_Effect
         |> P.bind (\_ -> spaces_em)
-        |> P.bind (\_ -> P.word1 '=' E.Effect)
+        |> P.bind (\_ -> P.word1 '=' E.CRES_Effect)
         |> P.bind (\_ -> spaces_em)
-        |> P.bind (\_ -> P.addLocation (Var.upper E.Effect))
+        |> P.bind (\_ -> P.addLocation (Var.upper E.CRES_Effect))
 
 
-spaces_em : P.Parser E.Module ()
+spaces_em : P.Parser E.CRES_Module ()
 spaces_em =
-    Space.chompAndCheckIndent E.ModuleSpace E.Effect
+    Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_Effect
 
 
 
 -- IMPORTS
 
 
-chompImports : List T.CASTS_Import -> P.Parser E.Module (List T.CASTS_Import)
+chompImports : List T.CASTS_Import -> P.Parser E.CRES_Module (List T.CASTS_Import)
 chompImports is =
     P.oneOfWithFallback
         [ chompImport
@@ -537,23 +537,23 @@ chompImports is =
         (List.reverse is)
 
 
-chompImport : P.Parser E.Module T.CASTS_Import
+chompImport : P.Parser E.CRES_Module T.CASTS_Import
 chompImport =
-    Keyword.import_ E.ImportStart
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
-        |> P.bind (\_ -> P.addLocation (Var.moduleName E.ImportName))
+    Keyword.import_ E.CRES_ImportStart
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ImportIndentName)
+        |> P.bind (\_ -> P.addLocation (Var.moduleName E.CRES_ImportName))
         |> P.bind
             (\((T.CRA_At (T.CRA_Region _ end) _) as name) ->
-                Space.chomp E.ModuleSpace
+                Space.chomp E.CRES_ModuleSpace
                     |> P.bind
                         (\_ ->
-                            P.oneOf E.ImportEnd
-                                [ Space.checkFreshLine E.ImportEnd
+                            P.oneOf E.CRES_ImportEnd
+                                [ Space.checkFreshLine E.CRES_ImportEnd
                                     |> P.fmap (\_ -> T.CASTS_Import name Nothing (T.CASTS_Explicit []))
-                                , Space.checkIndent end E.ImportEnd
+                                , Space.checkIndent end E.CRES_ImportEnd
                                     |> P.bind
                                         (\_ ->
-                                            P.oneOf E.ImportAs
+                                            P.oneOf E.CRES_ImportAs
                                                 [ chompAs name
                                                 , chompExposing name Nothing
                                                 ]
@@ -563,23 +563,23 @@ chompImport =
             )
 
 
-chompAs : T.CRA_Located T.CDN_Name -> P.Parser E.Module T.CASTS_Import
+chompAs : T.CRA_Located T.CDN_Name -> P.Parser E.CRES_Module T.CASTS_Import
 chompAs name =
-    Keyword.as_ E.ImportAs
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
-        |> P.bind (\_ -> Var.upper E.ImportAlias)
+    Keyword.as_ E.CRES_ImportAs
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ImportIndentAlias)
+        |> P.bind (\_ -> Var.upper E.CRES_ImportAlias)
         |> P.bind
             (\alias ->
                 P.getPosition
                     |> P.bind
                         (\end ->
-                            Space.chomp E.ModuleSpace
+                            Space.chomp E.CRES_ModuleSpace
                                 |> P.bind
                                     (\_ ->
-                                        P.oneOf E.ImportEnd
-                                            [ Space.checkFreshLine E.ImportEnd
+                                        P.oneOf E.CRES_ImportEnd
+                                            [ Space.checkFreshLine E.CRES_ImportEnd
                                                 |> P.fmap (\_ -> T.CASTS_Import name (Just alias) (T.CASTS_Explicit []))
-                                            , Space.checkIndent end E.ImportEnd
+                                            , Space.checkIndent end E.CRES_ImportEnd
                                                 |> P.bind (\_ -> chompExposing name (Just alias))
                                             ]
                                     )
@@ -587,14 +587,14 @@ chompAs name =
             )
 
 
-chompExposing : T.CRA_Located T.CDN_Name -> Maybe T.CDN_Name -> P.Parser E.Module T.CASTS_Import
+chompExposing : T.CRA_Located T.CDN_Name -> Maybe T.CDN_Name -> P.Parser E.CRES_Module T.CASTS_Import
 chompExposing name maybeAlias =
-    Keyword.exposing_ E.ImportExposing
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
-        |> P.bind (\_ -> P.specialize E.ImportExposingList exposing_)
+    Keyword.exposing_ E.CRES_ImportExposing
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ModuleSpace E.CRES_ImportIndentExposingList)
+        |> P.bind (\_ -> P.specialize E.CRES_ImportExposingList exposing_)
         |> P.bind
             (\exposed ->
-                freshLine E.ImportEnd
+                freshLine E.CRES_ImportEnd
                     |> P.fmap (\_ -> T.CASTS_Import name maybeAlias exposed)
             )
 
@@ -603,70 +603,70 @@ chompExposing name maybeAlias =
 -- LISTING
 
 
-exposing_ : P.Parser E.Exposing T.CASTS_Exposing
+exposing_ : P.Parser E.CRES_Exposing T.CASTS_Exposing
 exposing_ =
-    P.word1 '(' E.ExposingStart
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
+    P.word1 '(' E.CRES_ExposingStart
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentValue)
         |> P.bind
             (\_ ->
-                P.oneOf E.ExposingValue
-                    [ P.word2 '.' '.' E.ExposingValue
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
-                        |> P.bind (\_ -> P.word1 ')' E.ExposingEnd)
+                P.oneOf E.CRES_ExposingValue
+                    [ P.word2 '.' '.' E.CRES_ExposingValue
+                        |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentEnd)
+                        |> P.bind (\_ -> P.word1 ')' E.CRES_ExposingEnd)
                         |> P.fmap (\_ -> T.CASTS_Open)
                     , chompExposed
                         |> P.bind
                             (\exposed ->
-                                Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+                                Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentEnd
                                     |> P.bind (\_ -> exposingHelp [ exposed ])
                             )
                     ]
             )
 
 
-exposingHelp : List T.CASTS_Exposed -> P.Parser E.Exposing T.CASTS_Exposing
+exposingHelp : List T.CASTS_Exposed -> P.Parser E.CRES_Exposing T.CASTS_Exposing
 exposingHelp revExposed =
-    P.oneOf E.ExposingEnd
-        [ P.word1 ',' E.ExposingEnd
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
+    P.oneOf E.CRES_ExposingEnd
+        [ P.word1 ',' E.CRES_ExposingEnd
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentValue)
             |> P.bind (\_ -> chompExposed)
             |> P.bind
                 (\exposed ->
-                    Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+                    Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentEnd
                         |> P.bind (\_ -> exposingHelp (exposed :: revExposed))
                 )
-        , P.word1 ')' E.ExposingEnd
+        , P.word1 ')' E.CRES_ExposingEnd
             |> P.fmap (\_ -> T.CASTS_Explicit (List.reverse revExposed))
         ]
 
 
-chompExposed : P.Parser E.Exposing T.CASTS_Exposed
+chompExposed : P.Parser E.CRES_Exposing T.CASTS_Exposed
 chompExposed =
     P.getPosition
         |> P.bind
             (\start ->
-                P.oneOf E.ExposingValue
-                    [ Var.lower E.ExposingValue
+                P.oneOf E.CRES_ExposingValue
+                    [ Var.lower E.CRES_ExposingValue
                         |> P.bind
                             (\name ->
                                 P.getPosition
                                     |> P.fmap (\end -> T.CASTS_Lower <| A.at start end name)
                             )
-                    , P.word1 '(' E.ExposingValue
-                        |> P.bind (\_ -> Symbol.operator E.ExposingOperator E.ExposingOperatorReserved)
+                    , P.word1 '(' E.CRES_ExposingValue
+                        |> P.bind (\_ -> Symbol.operator E.CRES_ExposingOperator E.CRES_ExposingOperatorReserved)
                         |> P.bind
                             (\op ->
-                                P.word1 ')' E.ExposingOperatorRightParen
+                                P.word1 ')' E.CRES_ExposingOperatorRightParen
                                     |> P.bind (\_ -> P.getPosition)
                                     |> P.fmap (\end -> T.CASTS_Operator (T.CRA_Region start end) op)
                             )
-                    , Var.upper E.ExposingValue
+                    , Var.upper E.CRES_ExposingValue
                         |> P.bind
                             (\name ->
                                 P.getPosition
                                     |> P.bind
                                         (\end ->
-                                            Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+                                            Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingIndentEnd
                                                 |> P.bind
                                                     (\_ ->
                                                         privacy
@@ -678,20 +678,20 @@ chompExposed =
             )
 
 
-privacy : P.Parser E.Exposing T.CASTS_Privacy
+privacy : P.Parser E.CRES_Exposing T.CASTS_Privacy
 privacy =
     P.oneOfWithFallback
-        [ P.word1 '(' E.ExposingTypePrivacy
-            |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy)
+        [ P.word1 '(' E.CRES_ExposingTypePrivacy
+            |> P.bind (\_ -> Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingTypePrivacy)
             |> P.bind (\_ -> P.getPosition)
             |> P.bind
                 (\start ->
-                    P.word2 '.' '.' E.ExposingTypePrivacy
+                    P.word2 '.' '.' E.CRES_ExposingTypePrivacy
                         |> P.bind (\_ -> P.getPosition)
                         |> P.bind
                             (\end ->
-                                Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy
-                                    |> P.bind (\_ -> P.word1 ')' E.ExposingTypePrivacy)
+                                Space.chompAndCheckIndent E.CRES_ExposingSpace E.CRES_ExposingTypePrivacy
+                                    |> P.bind (\_ -> P.word1 ')' E.CRES_ExposingTypePrivacy)
                                     |> P.fmap (\_ -> T.CASTS_Public (T.CRA_Region start end))
                             )
                 )

@@ -2,7 +2,6 @@ module Utils.Main exposing
     ( AsyncException(..)
     , ChItem
     , Chan
-    , FilePath
     , HttpExceptionContent(..)
     , HttpResponse(..)
     , HttpResponseHeaders
@@ -97,11 +96,22 @@ module Utils.Main exposing
     , maybeTraverseTask
     , newChan
     , newEmptyMVar
+    , newEmptyMVar_Maybe_BED_Status
+    , newEmptyMVar_Maybe_CASTO_GlobalGraph
+    , newEmptyMVar_Maybe_CASTO_LocalGraph
     , newMVar
+    , newMVar_Maybe_CASTO_GlobalGraph
+    , newMVar_Maybe_CASTO_LocalGraph
     , nonEmptyListTraverse
     , putMVar
+    , putMVar_Maybe_BED_Status
+    , putMVar_Maybe_CASTO_GlobalGraph
+    , putMVar_Maybe_CASTO_LocalGraph
     , readChan
     , readMVar
+    , readMVar_Maybe_BED_Status
+    , readMVar_Maybe_CASTO_GlobalGraph
+    , readMVar_Maybe_CASTO_LocalGraph
     , replCompleteWord
     , replGetInputLine
     , replGetInputLineWithInitial
@@ -155,7 +165,7 @@ liftIOInputT =
     identity
 
 
-fpDropFileName : FilePath -> FilePath
+fpDropFileName : T.FilePath -> T.FilePath
 fpDropFileName path =
     case List.reverse (String.split "/" path) of
         _ :: tail ->
@@ -166,7 +176,7 @@ fpDropFileName path =
             ""
 
 
-fpForwardSlash : FilePath -> FilePath -> FilePath
+fpForwardSlash : T.FilePath -> T.FilePath -> T.FilePath
 fpForwardSlash path1 path2 =
     if String.startsWith path1 path2 then
         path2
@@ -175,7 +185,7 @@ fpForwardSlash path1 path2 =
         path1 ++ "/" ++ path2
 
 
-fpAddExtension : FilePath -> String -> FilePath
+fpAddExtension : T.FilePath -> String -> T.FilePath
 fpAddExtension path extension =
     if String.startsWith "." extension then
         path ++ extension
@@ -582,14 +592,6 @@ unlines xs =
 
 
 
--- GHC.IO
-
-
-type alias FilePath =
-    String
-
-
-
 -- System.FilePath
 
 
@@ -637,7 +639,7 @@ fpJoinPath paths =
             String.join "/" paths
 
 
-fpMakeRelative : FilePath -> FilePath -> FilePath
+fpMakeRelative : T.FilePath -> T.FilePath -> T.FilePath
 fpMakeRelative root path =
     if String.startsWith path root then
         String.dropLeft (String.length root) path
@@ -646,7 +648,7 @@ fpMakeRelative root path =
         path
 
 
-fpAddTrailingPathSeparator : FilePath -> FilePath
+fpAddTrailingPathSeparator : T.FilePath -> T.FilePath
 fpAddTrailingPathSeparator path =
     if String.endsWith "/" path then
         path
@@ -660,17 +662,17 @@ fpPathSeparator =
     '/'
 
 
-fpIsRelative : FilePath -> Bool
+fpIsRelative : T.FilePath -> Bool
 fpIsRelative =
     String.startsWith "/"
 
 
-fpTakeFileName : FilePath -> FilePath
+fpTakeFileName : T.FilePath -> T.FilePath
 fpTakeFileName filename =
     Prelude.last (String.split "/" filename)
 
 
-fpSplitFileName : FilePath -> ( String, String )
+fpSplitFileName : T.FilePath -> ( String, String )
 fpSplitFileName filename =
     case List.reverse (String.indexes "/" filename) of
         index :: _ ->
@@ -680,12 +682,12 @@ fpSplitFileName filename =
             ( "./", filename )
 
 
-fpTakeExtension : FilePath -> String
+fpTakeExtension : T.FilePath -> String
 fpTakeExtension =
     Tuple.second << fpSplitExtension
 
 
-fpTakeDirectory : FilePath -> FilePath
+fpTakeDirectory : T.FilePath -> T.FilePath
 fpTakeDirectory filename =
     case List.reverse (String.split "/" filename) of
         [] ->
@@ -722,12 +724,12 @@ lockWithFileLock path mode ioFunc =
                     )
 
 
-lockFile : FilePath -> IO ()
+lockFile : T.FilePath -> IO ()
 lockFile path =
     IO (\_ s -> ( s, IO.LockFile IO.pure path ))
 
 
-unlockFile : FilePath -> IO ()
+unlockFile : T.FilePath -> IO ()
 unlockFile path =
     IO (\_ s -> ( s, IO.UnlockFile IO.pure path ))
 
@@ -736,17 +738,17 @@ unlockFile path =
 -- System.Directory
 
 
-dirDoesFileExist : FilePath -> IO Bool
+dirDoesFileExist : T.FilePath -> IO Bool
 dirDoesFileExist filename =
     IO (\_ s -> ( s, IO.DirDoesFileExist IO.pure filename ))
 
 
-dirFindExecutable : FilePath -> IO (Maybe FilePath)
+dirFindExecutable : T.FilePath -> IO (Maybe T.FilePath)
 dirFindExecutable filename =
     IO (\_ s -> ( s, IO.DirFindExecutable IO.pure filename ))
 
 
-dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
+dirCreateDirectoryIfMissing : Bool -> T.FilePath -> IO ()
 dirCreateDirectoryIfMissing createParents filename =
     IO (\_ s -> ( s, IO.DirCreateDirectoryIfMissing IO.pure createParents filename ))
 
@@ -756,38 +758,38 @@ dirGetCurrentDirectory =
     IO (\_ s -> ( s, IO.Pure s.currentDirectory ))
 
 
-dirGetAppUserDataDirectory : FilePath -> IO FilePath
+dirGetAppUserDataDirectory : T.FilePath -> IO T.FilePath
 dirGetAppUserDataDirectory filename =
     IO (\_ s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) ))
 
 
-dirGetModificationTime : FilePath -> IO Time.Posix
+dirGetModificationTime : T.FilePath -> IO Time.Posix
 dirGetModificationTime filename =
     IO (\_ s -> ( s, IO.DirGetModificationTime IO.pure filename ))
         |> IO.fmap Time.millisToPosix
 
 
-dirRemoveFile : FilePath -> IO ()
+dirRemoveFile : T.FilePath -> IO ()
 dirRemoveFile path =
     IO (\_ s -> ( s, IO.DirRemoveFile IO.pure path ))
 
 
-dirRemoveDirectoryRecursive : FilePath -> IO ()
+dirRemoveDirectoryRecursive : T.FilePath -> IO ()
 dirRemoveDirectoryRecursive path =
     IO (\_ s -> ( s, IO.DirRemoveDirectoryRecursive IO.pure path ))
 
 
-dirDoesDirectoryExist : FilePath -> IO Bool
+dirDoesDirectoryExist : T.FilePath -> IO Bool
 dirDoesDirectoryExist path =
     IO (\_ s -> ( s, IO.DirDoesDirectoryExist IO.pure path ))
 
 
-dirCanonicalizePath : FilePath -> IO FilePath
+dirCanonicalizePath : T.FilePath -> IO T.FilePath
 dirCanonicalizePath path =
     IO (\_ s -> ( s, IO.DirCanonicalizePath IO.pure path ))
 
 
-dirWithCurrentDirectory : FilePath -> IO a -> IO a
+dirWithCurrentDirectory : T.FilePath -> IO a -> IO a
 dirWithCurrentDirectory dir action =
     dirGetCurrentDirectory
         |> IO.bind
@@ -828,7 +830,7 @@ type ZipArchive
 
 type ZipEntry
     = ZipEntry
-        { eRelativePath : FilePath
+        { eRelativePath : T.FilePath
         , eData : String
         }
 
@@ -1023,7 +1025,7 @@ putMVar encoder (T.MVar ref) value =
                     case mVar.value of
                         Just _ ->
                             ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber index (encoder value) ] } s.mVars }
-                            , IO.PutMVar IO.pure [] Encode.null
+                            , IO.PutMVar IO.pure [] Nothing
                             )
 
                         Nothing ->
@@ -1042,7 +1044,7 @@ putMVar encoder (T.MVar ref) value =
                                         mVar.subscribers
                             in
                             ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just (encoder value) } s.mVars }
-                            , IO.PutMVar IO.pure readIndexes (encoder value)
+                            , IO.PutMVar IO.pure readIndexes (Just (encoder value))
                             )
 
                 Nothing ->
@@ -1056,6 +1058,239 @@ newEmptyMVar =
         (\_ s ->
             ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
             , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
+            )
+        )
+        |> IO.fmap T.MVar
+
+
+
+-- Control.Concurrent.MVar (Maybe T.BED_Status)
+
+
+readMVar_Maybe_BED_Status : T.MVar (Maybe T.BED_Status) -> IO (Maybe T.BED_Status)
+readMVar_Maybe_BED_Status (T.MVar ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BED_Status of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_BED_Status IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BED_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_BED_Status index ] } s.mVars_Maybe_BED_Status }
+                            , IO.ReadMVar_Maybe_BED_Status IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar: invalid ref"
+        )
+
+
+putMVar_Maybe_BED_Status : T.MVar (Maybe T.BED_Status) -> Maybe T.BED_Status -> IO ()
+putMVar_Maybe_BED_Status (T.MVar ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BED_Status of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_BED_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_BED_Status index value ] } s.mVars_Maybe_BED_Status }
+                            , IO.PutMVar_Maybe_BED_Status IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_BED_Status readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_BED_Status = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_BED_Status }
+                            , IO.PutMVar_Maybe_BED_Status IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_BED_Status : IO (T.MVar (Maybe T.BED_Status))
+newEmptyMVar_Maybe_BED_Status =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_BED_Status = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_BED_Status }
+            , IO.NewEmptyMVar_Maybe_BED_Status IO.pure (Array.length s.mVars_Maybe_BED_Status)
+            )
+        )
+        |> IO.fmap T.MVar
+
+
+
+-- Control.Concurrent.MVar (Maybe T.CASTO_LocalGraph)
+
+
+newMVar_Maybe_CASTO_LocalGraph : Maybe T.CASTO_LocalGraph -> IO (T.MVar (Maybe T.CASTO_LocalGraph))
+newMVar_Maybe_CASTO_LocalGraph value =
+    newEmptyMVar_Maybe_CASTO_LocalGraph
+        |> IO.bind
+            (\mvar ->
+                putMVar_Maybe_CASTO_LocalGraph mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_Maybe_CASTO_LocalGraph : T.MVar (Maybe T.CASTO_LocalGraph) -> IO (Maybe T.CASTO_LocalGraph)
+readMVar_Maybe_CASTO_LocalGraph (T.MVar ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CASTO_LocalGraph of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_CASTO_LocalGraph IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_CASTO_LocalGraph index ] } s.mVars_Maybe_CASTO_LocalGraph }
+                            , IO.ReadMVar_Maybe_CASTO_LocalGraph IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar: invalid ref"
+        )
+
+
+putMVar_Maybe_CASTO_LocalGraph : T.MVar (Maybe T.CASTO_LocalGraph) -> Maybe T.CASTO_LocalGraph -> IO ()
+putMVar_Maybe_CASTO_LocalGraph (T.MVar ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CASTO_LocalGraph of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_CASTO_LocalGraph index value ] } s.mVars_Maybe_CASTO_LocalGraph }
+                            , IO.PutMVar_Maybe_CASTO_LocalGraph IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_CASTO_LocalGraph readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_CASTO_LocalGraph }
+                            , IO.PutMVar_Maybe_CASTO_LocalGraph IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_CASTO_LocalGraph : IO (T.MVar (Maybe T.CASTO_LocalGraph))
+newEmptyMVar_Maybe_CASTO_LocalGraph =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_CASTO_LocalGraph }
+            , IO.NewEmptyMVar_Maybe_CASTO_LocalGraph IO.pure (Array.length s.mVars_Maybe_CASTO_LocalGraph)
+            )
+        )
+        |> IO.fmap T.MVar
+
+
+
+-- Control.Concurrent.MVar (Maybe T.CASTO_GlobalGraph)
+
+
+newMVar_Maybe_CASTO_GlobalGraph : Maybe T.CASTO_GlobalGraph -> IO (T.MVar (Maybe T.CASTO_GlobalGraph))
+newMVar_Maybe_CASTO_GlobalGraph value =
+    newEmptyMVar_Maybe_CASTO_GlobalGraph
+        |> IO.bind
+            (\mvar ->
+                putMVar_Maybe_CASTO_GlobalGraph mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_Maybe_CASTO_GlobalGraph : T.MVar (Maybe T.CASTO_GlobalGraph) -> IO (Maybe T.CASTO_GlobalGraph)
+readMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CASTO_GlobalGraph of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_CASTO_GlobalGraph IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_CASTO_GlobalGraph index ] } s.mVars_Maybe_CASTO_GlobalGraph }
+                            , IO.ReadMVar_Maybe_CASTO_GlobalGraph IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar: invalid ref"
+        )
+
+
+putMVar_Maybe_CASTO_GlobalGraph : T.MVar (Maybe T.CASTO_GlobalGraph) -> Maybe T.CASTO_GlobalGraph -> IO ()
+putMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CASTO_GlobalGraph of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_CASTO_GlobalGraph index value ] } s.mVars_Maybe_CASTO_GlobalGraph }
+                            , IO.PutMVar_Maybe_CASTO_GlobalGraph IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_CASTO_GlobalGraph readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_CASTO_GlobalGraph }
+                            , IO.PutMVar_Maybe_CASTO_GlobalGraph IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_CASTO_GlobalGraph : IO (T.MVar (Maybe T.CASTO_GlobalGraph))
+newEmptyMVar_Maybe_CASTO_GlobalGraph =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_CASTO_GlobalGraph }
+            , IO.NewEmptyMVar_Maybe_CASTO_GlobalGraph IO.pure (Array.length s.mVars_Maybe_CASTO_GlobalGraph)
             )
         )
         |> IO.fmap T.MVar
@@ -1134,7 +1369,7 @@ builderHPutBuilder handle str =
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail : Decode.Decoder a -> T.FilePath -> IO (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
     IO (\_ s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
         |> IO.fmap
@@ -1143,7 +1378,7 @@ binaryDecodeFileOrFail decoder filename =
             )
 
 
-binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
+binaryEncodeFile : (a -> Encode.Value) -> T.FilePath -> a -> IO ()
 binaryEncodeFile encoder path value =
     IO (\_ s -> ( s, IO.Write IO.pure path (encoder value) ))
 

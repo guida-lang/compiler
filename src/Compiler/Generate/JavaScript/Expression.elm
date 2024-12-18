@@ -9,7 +9,6 @@ module Compiler.Generate.JavaScript.Expression exposing
     , generateTailDef
     )
 
-import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
@@ -22,7 +21,6 @@ import Compiler.Generate.JavaScript.Builder as JS
 import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Generate.Mode as Mode
 import Compiler.Json.Encode as Encode
-import Compiler.Optimize.DecisionTree as DT
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Prelude
@@ -31,18 +29,18 @@ import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
 
-generateJsExpr : Mode.Mode -> Opt.Expr -> JS.Expr
+generateJsExpr : Mode.Mode -> T.CASTO_Expr -> JS.Expr
 generateJsExpr mode expression =
     codeToExpr (generate mode expression)
 
 
-generate : Mode.Mode -> Opt.Expr -> Code
+generate : Mode.Mode -> T.CASTO_Expr -> Code
 generate mode expression =
     case expression of
-        Opt.Bool bool ->
+        T.CASTO_Bool bool ->
             JsExpr <| JS.ExprBool bool
 
-        Opt.Chr char ->
+        T.CASTO_Chr char ->
             JsExpr <|
                 case mode of
                     Mode.Dev _ ->
@@ -51,13 +49,13 @@ generate mode expression =
                     Mode.Prod _ ->
                         JS.ExprString char
 
-        Opt.Str string ->
+        T.CASTO_Str string ->
             JsExpr <| JS.ExprString string
 
-        Opt.Int int ->
+        T.CASTO_Int int ->
             JsExpr <| JS.ExprInt int
 
-        Opt.Float float ->
+        T.CASTO_Float float ->
             JsExpr <|
                 JS.ExprFloat
                     (if float == toFloat (floor float) then
@@ -67,13 +65,13 @@ generate mode expression =
                         String.fromFloat float
                     )
 
-        Opt.VarLocal name ->
+        T.CASTO_VarLocal name ->
             JsExpr <| JS.ExprRef (JsName.fromLocal name)
 
-        Opt.VarGlobal (Opt.Global home name) ->
+        T.CASTO_VarGlobal (T.CASTO_Global home name) ->
             JsExpr <| JS.ExprRef (JsName.fromGlobal home name)
 
-        Opt.VarEnum (Opt.Global home name) index ->
+        T.CASTO_VarEnum (T.CASTO_Global home name) index ->
             case mode of
                 Mode.Dev _ ->
                     JsExpr <| JS.ExprRef (JsName.fromGlobal home name)
@@ -81,7 +79,7 @@ generate mode expression =
                 Mode.Prod _ ->
                     JsExpr <| JS.ExprInt (Index.toMachine index)
 
-        Opt.VarBox (Opt.Global home name) ->
+        T.CASTO_VarBox (T.CASTO_Global home name) ->
             JsExpr <|
                 JS.ExprRef <|
                     case mode of
@@ -91,16 +89,16 @@ generate mode expression =
                         Mode.Prod _ ->
                             JsName.fromGlobal ModuleName.basics Name.identity_
 
-        Opt.VarCycle home name ->
+        T.CASTO_VarCycle home name ->
             JsExpr <| JS.ExprCall (JS.ExprRef (JsName.fromCycle home name)) []
 
-        Opt.VarDebug name home region unhandledValueName ->
+        T.CASTO_VarDebug name home region unhandledValueName ->
             JsExpr <| generateDebug name home region unhandledValueName
 
-        Opt.VarKernel home name ->
+        T.CASTO_VarKernel home name ->
             JsExpr <| JS.ExprRef (JsName.fromKernel home name)
 
-        Opt.List entries ->
+        T.CASTO_List entries ->
             case entries of
                 [] ->
                     JsExpr <| JS.ExprRef (JsName.fromKernel Name.list "Nil")
@@ -111,22 +109,22 @@ generate mode expression =
                             [ JS.ExprArray <| List.map (generateJsExpr mode) entries
                             ]
 
-        Opt.Function args body ->
+        T.CASTO_Function args body ->
             generateFunction (List.map JsName.fromLocal args) (generate mode body)
 
-        Opt.Call func args ->
+        T.CASTO_Call func args ->
             JsExpr <| generateCall mode func args
 
-        Opt.TailCall name args ->
+        T.CASTO_TailCall name args ->
             JsBlock <| generateTailCall mode name args
 
-        Opt.If branches final ->
+        T.CASTO_If branches final ->
             generateIf mode branches final
 
-        Opt.Let def body ->
+        T.CASTO_Let def body ->
             JsBlock <| generateDef mode def :: codeToStmtList (generate mode body)
 
-        Opt.Destruct (Opt.Destructor name path) body ->
+        T.CASTO_Destruct (T.CASTO_Destructor name path) body ->
             let
                 pathDef : JS.Stmt
                 pathDef =
@@ -134,10 +132,10 @@ generate mode expression =
             in
             JsBlock <| pathDef :: codeToStmtList (generate mode body)
 
-        Opt.Case label root decider jumps ->
+        T.CASTO_Case label root decider jumps ->
             JsBlock <| generateCase mode label root decider jumps
 
-        Opt.Accessor field ->
+        T.CASTO_Accessor field ->
             JsExpr <|
                 JS.ExprFunction Nothing
                     [ JsName.dollar ]
@@ -145,20 +143,20 @@ generate mode expression =
                         JS.ExprAccess (JS.ExprRef JsName.dollar) (generateField mode field)
                     ]
 
-        Opt.Access record field ->
+        T.CASTO_Access record field ->
             JsExpr <| JS.ExprAccess (generateJsExpr mode record) (generateField mode field)
 
-        Opt.Update record fields ->
+        T.CASTO_Update record fields ->
             JsExpr <|
                 JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "update"))
                     [ generateJsExpr mode record
                     , generateRecord mode fields
                     ]
 
-        Opt.Record fields ->
+        T.CASTO_Record fields ->
             JsExpr <| generateRecord mode fields
 
-        Opt.Unit ->
+        T.CASTO_Unit ->
             case mode of
                 Mode.Dev _ ->
                     JsExpr <| JS.ExprRef (JsName.fromKernel Name.utils "Tuple0")
@@ -166,7 +164,7 @@ generate mode expression =
                 Mode.Prod _ ->
                     JsExpr <| JS.ExprInt 0
 
-        Opt.Tuple a b maybeC ->
+        T.CASTO_Tuple a b maybeC ->
             JsExpr <|
                 case maybeC of
                     Nothing ->
@@ -182,7 +180,7 @@ generate mode expression =
                             , generateJsExpr mode c
                             ]
 
-        Opt.Shader src attributes uniforms ->
+        T.CASTO_Shader src attributes uniforms ->
             let
                 toTranlation : T.CDN_Name -> ( JsName.Name, JS.Expr )
                 toTranlation field =
@@ -266,8 +264,8 @@ toChar =
 -- CTOR
 
 
-generateCtor : Mode.Mode -> Opt.Global -> T.CDI_ZeroBased -> Int -> Code
-generateCtor mode (Opt.Global home name) index arity =
+generateCtor : Mode.Mode -> T.CASTO_Global -> T.CDI_ZeroBased -> Int -> Code
+generateCtor mode (T.CASTO_Global home name) index arity =
     let
         argNames : List JsName.Name
         argNames =
@@ -301,10 +299,10 @@ ctorToInt home name index =
 -- RECORDS
 
 
-generateRecord : Mode.Mode -> Dict String T.CDN_Name Opt.Expr -> JS.Expr
+generateRecord : Mode.Mode -> Dict String T.CDN_Name T.CASTO_Expr -> JS.Expr
 generateRecord mode fields =
     let
-        toPair : ( T.CDN_Name, Opt.Expr ) -> ( JsName.Name, JS.Expr )
+        toPair : ( T.CDN_Name, T.CASTO_Expr ) -> ( JsName.Name, JS.Expr )
         toPair ( field, value ) =
             ( generateField mode field, generateJsExpr mode value )
     in
@@ -397,17 +395,17 @@ funcHelpers =
 -- CALLS
 
 
-generateCall : Mode.Mode -> Opt.Expr -> List Opt.Expr -> JS.Expr
+generateCall : Mode.Mode -> T.CASTO_Expr -> List T.CASTO_Expr -> JS.Expr
 generateCall mode func args =
     case func of
-        Opt.VarGlobal ((Opt.Global (T.CEMN_Canonical pkg _) _) as global) ->
+        T.CASTO_VarGlobal ((T.CASTO_Global (T.CEMN_Canonical pkg _) _) as global) ->
             if pkg == Pkg.core then
                 generateCoreCall mode global args
 
             else
                 generateCallHelp mode func args
 
-        Opt.VarBox _ ->
+        T.CASTO_VarBox _ ->
             case mode of
                 Mode.Dev _ ->
                     generateCallHelp mode func args
@@ -424,7 +422,7 @@ generateCall mode func args =
             generateCallHelp mode func args
 
 
-generateCallHelp : Mode.Mode -> Opt.Expr -> List Opt.Expr -> JS.Expr
+generateCallHelp : Mode.Mode -> T.CASTO_Expr -> List T.CASTO_Expr -> JS.Expr
 generateCallHelp mode func args =
     generateNormalCall
         (generateJsExpr mode func)
@@ -456,8 +454,8 @@ callHelpers =
 -- CORE CALLS
 
 
-generateCoreCall : Mode.Mode -> Opt.Global -> List Opt.Expr -> JS.Expr
-generateCoreCall mode (Opt.Global ((T.CEMN_Canonical _ moduleName) as home) name) args =
+generateCoreCall : Mode.Mode -> T.CASTO_Global -> List T.CASTO_Expr -> JS.Expr
+generateCoreCall mode (T.CASTO_Global ((T.CEMN_Canonical _ moduleName) as home) name) args =
     if moduleName == Name.basics then
         generateBasicsCall mode home name args
 
@@ -543,7 +541,7 @@ generateBitwiseCall home name args =
             generateGlobalCall home name args
 
 
-generateBasicsCall : Mode.Mode -> T.CEMN_Canonical -> T.CDN_Name -> List Opt.Expr -> JS.Expr
+generateBasicsCall : Mode.Mode -> T.CEMN_Canonical -> T.CDN_Name -> List T.CASTO_Expr -> JS.Expr
 generateBasicsCall mode home name args =
     case args of
         [ elmArg ] ->
@@ -692,20 +690,20 @@ isLiteral expr =
             False
 
 
-apply : Opt.Expr -> Opt.Expr -> Opt.Expr
+apply : T.CASTO_Expr -> T.CASTO_Expr -> T.CASTO_Expr
 apply func value =
     case func of
-        Opt.Accessor field ->
-            Opt.Access value field
+        T.CASTO_Accessor field ->
+            T.CASTO_Access value field
 
-        Opt.Call f args ->
-            Opt.Call f (args ++ [ value ])
+        T.CASTO_Call f args ->
+            T.CASTO_Call f (args ++ [ value ])
 
         _ ->
-            Opt.Call func [ value ]
+            T.CASTO_Call func [ value ]
 
 
-append : Mode.Mode -> Opt.Expr -> Opt.Expr -> JS.Expr
+append : Mode.Mode -> T.CASTO_Expr -> T.CASTO_Expr -> JS.Expr
 append mode left right =
     let
         seqs : List JS.Expr
@@ -724,10 +722,10 @@ jsAppend a b =
     JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "ap")) [ a, b ]
 
 
-toSeqs : Mode.Mode -> Opt.Expr -> List JS.Expr
+toSeqs : Mode.Mode -> T.CASTO_Expr -> List JS.Expr
 toSeqs mode expr =
     case expr of
-        Opt.Call (Opt.VarGlobal (Opt.Global home "append")) [ left, right ] ->
+        T.CASTO_Call (T.CASTO_VarGlobal (T.CASTO_Global home "append")) [ left, right ] ->
             if home == ModuleName.basics then
                 generateJsExpr mode left :: toSeqs mode right
 
@@ -816,10 +814,10 @@ strictNEq left right =
 
 {-| TODO check if JS minifiers collapse unnecessary temporary variables
 -}
-generateTailCall : Mode.Mode -> T.CDN_Name -> List ( T.CDN_Name, Opt.Expr ) -> List JS.Stmt
+generateTailCall : Mode.Mode -> T.CDN_Name -> List ( T.CDN_Name, T.CASTO_Expr ) -> List JS.Stmt
 generateTailCall mode name args =
     let
-        toTempVars : ( String, Opt.Expr ) -> ( JsName.Name, JS.Expr )
+        toTempVars : ( String, T.CASTO_Expr ) -> ( JsName.Name, JS.Expr )
         toTempVars ( argName, arg ) =
             ( JsName.makeTemp argName, generateJsExpr mode arg )
 
@@ -836,17 +834,17 @@ generateTailCall mode name args =
 -- DEFINITIONS
 
 
-generateDef : Mode.Mode -> Opt.Def -> JS.Stmt
+generateDef : Mode.Mode -> T.CASTO_Def -> JS.Stmt
 generateDef mode def =
     case def of
-        Opt.Def name body ->
+        T.CASTO_Def name body ->
             JS.Var (JsName.fromLocal name) (generateJsExpr mode body)
 
-        Opt.TailDef name argNames body ->
+        T.CASTO_TailDef name argNames body ->
             JS.Var (JsName.fromLocal name) (codeToExpr (generateTailDef mode name argNames body))
 
 
-generateTailDef : Mode.Mode -> T.CDN_Name -> List T.CDN_Name -> Opt.Expr -> Code
+generateTailDef : Mode.Mode -> T.CDN_Name -> List T.CDN_Name -> T.CASTO_Expr -> Code
 generateTailDef mode name argNames body =
     generateFunction (List.map JsName.fromLocal argNames) <|
         JsBlock
@@ -861,19 +859,19 @@ generateTailDef mode name argNames body =
 -- PATHS
 
 
-generatePath : Mode.Mode -> Opt.Path -> JS.Expr
+generatePath : Mode.Mode -> T.CASTO_Path -> JS.Expr
 generatePath mode path =
     case path of
-        Opt.Index index subPath ->
+        T.CASTO_Index index subPath ->
             JS.ExprAccess (generatePath mode subPath) (JsName.fromIndex index)
 
-        Opt.Root name ->
+        T.CASTO_Root name ->
             JS.ExprRef (JsName.fromLocal name)
 
-        Opt.Field field subPath ->
+        T.CASTO_Field field subPath ->
             JS.ExprAccess (generatePath mode subPath) (generateField mode field)
 
-        Opt.Unbox subPath ->
+        T.CASTO_Unbox subPath ->
             case mode of
                 Mode.Dev _ ->
                     JS.ExprAccess (generatePath mode subPath) (JsName.fromIndex Index.first)
@@ -886,13 +884,13 @@ generatePath mode path =
 -- GENERATE IFS
 
 
-generateIf : Mode.Mode -> List ( Opt.Expr, Opt.Expr ) -> Opt.Expr -> Code
+generateIf : Mode.Mode -> List ( T.CASTO_Expr, T.CASTO_Expr ) -> T.CASTO_Expr -> Code
 generateIf mode givenBranches givenFinal =
     let
         ( branches, final ) =
             crushIfs givenBranches givenFinal
 
-        convertBranch : ( Opt.Expr, Opt.Expr ) -> ( JS.Expr, Code )
+        convertBranch : ( T.CASTO_Expr, T.CASTO_Expr ) -> ( JS.Expr, Code )
         convertBranch ( condition, expr ) =
             ( generateJsExpr mode condition
             , generate mode expr
@@ -933,21 +931,21 @@ isBlock code =
             False
 
 
-crushIfs : List ( Opt.Expr, Opt.Expr ) -> Opt.Expr -> ( List ( Opt.Expr, Opt.Expr ), Opt.Expr )
+crushIfs : List ( T.CASTO_Expr, T.CASTO_Expr ) -> T.CASTO_Expr -> ( List ( T.CASTO_Expr, T.CASTO_Expr ), T.CASTO_Expr )
 crushIfs branches final =
     crushIfsHelp [] branches final
 
 
 crushIfsHelp :
-    List ( Opt.Expr, Opt.Expr )
-    -> List ( Opt.Expr, Opt.Expr )
-    -> Opt.Expr
-    -> ( List ( Opt.Expr, Opt.Expr ), Opt.Expr )
+    List ( T.CASTO_Expr, T.CASTO_Expr )
+    -> List ( T.CASTO_Expr, T.CASTO_Expr )
+    -> T.CASTO_Expr
+    -> ( List ( T.CASTO_Expr, T.CASTO_Expr ), T.CASTO_Expr )
 crushIfsHelp visitedBranches unvisitedBranches final =
     case unvisitedBranches of
         [] ->
             case final of
-                Opt.If subBranches subFinal ->
+                T.CASTO_If subBranches subFinal ->
                     crushIfsHelp visitedBranches subBranches subFinal
 
                 _ ->
@@ -961,12 +959,12 @@ crushIfsHelp visitedBranches unvisitedBranches final =
 -- CASE EXPRESSIONS
 
 
-generateCase : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> Opt.Decider Opt.Choice -> List ( Int, Opt.Expr ) -> List JS.Stmt
+generateCase : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> T.CASTO_Decider T.CASTO_Choice -> List ( Int, T.CASTO_Expr ) -> List JS.Stmt
 generateCase mode label root decider jumps =
     List.foldr (goto mode label) (generateDecider mode label root decider) jumps
 
 
-goto : Mode.Mode -> T.CDN_Name -> ( Int, Opt.Expr ) -> List JS.Stmt -> List JS.Stmt
+goto : Mode.Mode -> T.CDN_Name -> ( Int, T.CASTO_Expr ) -> List JS.Stmt -> List JS.Stmt
 goto mode label ( index, branch ) stmts =
     let
         labeledDeciderStmt : JS.Stmt
@@ -978,23 +976,23 @@ goto mode label ( index, branch ) stmts =
     labeledDeciderStmt :: codeToStmtList (generate mode branch)
 
 
-generateDecider : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> Opt.Decider Opt.Choice -> List JS.Stmt
+generateDecider : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> T.CASTO_Decider T.CASTO_Choice -> List JS.Stmt
 generateDecider mode label root decisionTree =
     case decisionTree of
-        Opt.Leaf (Opt.Inline branch) ->
+        T.CASTO_Leaf (T.CASTO_Inline branch) ->
             codeToStmtList (generate mode branch)
 
-        Opt.Leaf (Opt.Jump index) ->
+        T.CASTO_Leaf (T.CASTO_Jump index) ->
             [ JS.Break (Just (JsName.makeLabel label index)) ]
 
-        Opt.Chain testChain success failure ->
+        T.CASTO_Chain testChain success failure ->
             [ JS.IfStmt
                 (Utils.foldl1_ (JS.ExprInfix JS.OpAnd) (List.map (generateIfTest mode root) testChain))
                 (JS.Block (generateDecider mode label root success))
                 (JS.Block (generateDecider mode label root failure))
             ]
 
-        Opt.FanOut path edges fallback ->
+        T.CASTO_FanOut path edges fallback ->
             [ JS.Switch
                 (generateCaseTest mode root path (Tuple.first (Prelude.head edges)))
                 (List.foldr
@@ -1005,7 +1003,7 @@ generateDecider mode label root decisionTree =
             ]
 
 
-generateIfTest : Mode.Mode -> T.CDN_Name -> ( DT.Path, DT.Test ) -> JS.Expr
+generateIfTest : Mode.Mode -> T.CDN_Name -> ( T.CODT_Path, T.CODT_Test ) -> JS.Expr
 generateIfTest mode root ( path, test ) =
     let
         value : JS.Expr
@@ -1013,7 +1011,7 @@ generateIfTest mode root ( path, test ) =
             pathToJsExpr mode root path
     in
     case test of
-        DT.IsCtor home name index _ opts ->
+        T.CODT_IsCtor home name index _ opts ->
             let
                 tag : JS.Expr
                 tag =
@@ -1041,16 +1039,16 @@ generateIfTest mode root ( path, test ) =
                         JS.ExprInt (ctorToInt home name index)
                 )
 
-        DT.IsBool True ->
+        T.CODT_IsBool True ->
             value
 
-        DT.IsBool False ->
+        T.CODT_IsBool False ->
             JS.ExprPrefix JS.PrefixNot value
 
-        DT.IsInt int ->
+        T.CODT_IsInt int ->
             strictEq value (JS.ExprInt int)
 
-        DT.IsChr char ->
+        T.CODT_IsChr char ->
             strictEq (JS.ExprString char)
                 (case mode of
                     Mode.Dev _ ->
@@ -1060,31 +1058,31 @@ generateIfTest mode root ( path, test ) =
                         value
                 )
 
-        DT.IsStr string ->
+        T.CODT_IsStr string ->
             strictEq value (JS.ExprString string)
 
-        DT.IsCons ->
+        T.CODT_IsCons ->
             JS.ExprAccess value (JsName.fromLocal "b")
 
-        DT.IsNil ->
+        T.CODT_IsNil ->
             JS.ExprPrefix JS.PrefixNot <|
                 JS.ExprAccess value (JsName.fromLocal "b")
 
-        DT.IsTuple ->
+        T.CODT_IsTuple ->
             crash "COMPILER BUG - there should never be tests on a tuple"
 
 
-generateCaseBranch : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> ( DT.Test, Opt.Decider Opt.Choice ) -> JS.Case
+generateCaseBranch : Mode.Mode -> T.CDN_Name -> T.CDN_Name -> ( T.CODT_Test, T.CASTO_Decider T.CASTO_Choice ) -> JS.Case
 generateCaseBranch mode label root ( test, subTree ) =
     JS.Case
         (generateCaseValue mode test)
         (generateDecider mode label root subTree)
 
 
-generateCaseValue : Mode.Mode -> DT.Test -> JS.Expr
+generateCaseValue : Mode.Mode -> T.CODT_Test -> JS.Expr
 generateCaseValue mode test =
     case test of
-        DT.IsCtor home name index _ _ ->
+        T.CODT_IsCtor home name index _ _ ->
             case mode of
                 Mode.Dev _ ->
                     JS.ExprString name
@@ -1092,29 +1090,29 @@ generateCaseValue mode test =
                 Mode.Prod _ ->
                     JS.ExprInt (ctorToInt home name index)
 
-        DT.IsInt int ->
+        T.CODT_IsInt int ->
             JS.ExprInt int
 
-        DT.IsChr char ->
+        T.CODT_IsChr char ->
             JS.ExprString char
 
-        DT.IsStr string ->
+        T.CODT_IsStr string ->
             JS.ExprString string
 
-        DT.IsBool _ ->
+        T.CODT_IsBool _ ->
             crash "COMPILER BUG - there should never be three tests on a boolean"
 
-        DT.IsCons ->
+        T.CODT_IsCons ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
-        DT.IsNil ->
+        T.CODT_IsNil ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
-        DT.IsTuple ->
+        T.CODT_IsTuple ->
             crash "COMPILER BUG - there should never be three tests on a tuple"
 
 
-generateCaseTest : Mode.Mode -> T.CDN_Name -> DT.Path -> DT.Test -> JS.Expr
+generateCaseTest : Mode.Mode -> T.CDN_Name -> T.CODT_Path -> T.CODT_Test -> JS.Expr
 generateCaseTest mode root path exampleTest =
     let
         value : JS.Expr
@@ -1122,7 +1120,7 @@ generateCaseTest mode root path exampleTest =
             pathToJsExpr mode root path
     in
     case exampleTest of
-        DT.IsCtor home name _ _ opts ->
+        T.CODT_IsCtor home name _ _ opts ->
             if name == Name.bool && home == ModuleName.basics then
                 value
 
@@ -1142,13 +1140,13 @@ generateCaseTest mode root path exampleTest =
                             T.CASTC_Unbox ->
                                 value
 
-        DT.IsInt _ ->
+        T.CODT_IsInt _ ->
             value
 
-        DT.IsStr _ ->
+        T.CODT_IsStr _ ->
             value
 
-        DT.IsChr _ ->
+        T.CODT_IsChr _ ->
             case mode of
                 Mode.Dev _ ->
                     JS.ExprCall (JS.ExprAccess value (JsName.fromLocal "valueOf")) []
@@ -1156,16 +1154,16 @@ generateCaseTest mode root path exampleTest =
                 Mode.Prod _ ->
                     value
 
-        DT.IsBool _ ->
+        T.CODT_IsBool _ ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
-        DT.IsCons ->
+        T.CODT_IsCons ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
-        DT.IsNil ->
+        T.CODT_IsNil ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
-        DT.IsTuple ->
+        T.CODT_IsTuple ->
             crash "COMPILER BUG - there should never be three tests on a list"
 
 
@@ -1173,13 +1171,13 @@ generateCaseTest mode root path exampleTest =
 -- PATTERN PATHS
 
 
-pathToJsExpr : Mode.Mode -> T.CDN_Name -> DT.Path -> JS.Expr
+pathToJsExpr : Mode.Mode -> T.CDN_Name -> T.CODT_Path -> JS.Expr
 pathToJsExpr mode root path =
     case path of
-        DT.Index index subPath ->
+        T.CODT_Index index subPath ->
             JS.ExprAccess (pathToJsExpr mode root subPath) (JsName.fromIndex index)
 
-        DT.Unbox subPath ->
+        T.CODT_Unbox subPath ->
             case mode of
                 Mode.Dev _ ->
                     JS.ExprAccess (pathToJsExpr mode root subPath) (JsName.fromIndex Index.first)
@@ -1187,7 +1185,7 @@ pathToJsExpr mode root path =
                 Mode.Prod _ ->
                     pathToJsExpr mode root subPath
 
-        DT.Empty ->
+        T.CODT_Empty ->
             JS.ExprRef (JsName.fromLocal root)
 
 
@@ -1195,16 +1193,16 @@ pathToJsExpr mode root path =
 -- GENERATE MAIN
 
 
-generateMain : Mode.Mode -> T.CEMN_Canonical -> Opt.Main -> JS.Expr
+generateMain : Mode.Mode -> T.CEMN_Canonical -> T.CASTO_Main -> JS.Expr
 generateMain mode home main =
     case main of
-        Opt.Static ->
+        T.CASTO_Static ->
             JS.ExprRef (JsName.fromKernel Name.virtualDom "init")
                 |> call (JS.ExprRef (JsName.fromGlobal home "main"))
                 |> call (JS.ExprInt 0)
                 |> call (JS.ExprInt 0)
 
-        Opt.Dynamic msgType decoder ->
+        T.CASTO_Dynamic msgType decoder ->
             JS.ExprRef (JsName.fromGlobal home "main")
                 |> call (generateJsExpr mode decoder)
                 |> call (toDebugMetadata mode msgType)

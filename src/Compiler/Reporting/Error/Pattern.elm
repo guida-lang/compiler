@@ -10,10 +10,10 @@ import Compiler.Reporting.Report as Report
 -- TO REPORT
 
 
-toReport : Code.Source -> P.Error -> Report.Report
+toReport : Code.Source -> P.CNPM_Error -> Report.Report
 toReport source err =
     case err of
-        P.Redundant caseRegion patternRegion index ->
+        P.CNPM_Redundant caseRegion patternRegion index ->
             Report.Report "REDUNDANT PATTERN" patternRegion [] <|
                 Code.toSnippet source
                     caseRegion
@@ -26,9 +26,9 @@ toReport source err =
                         "Any value with this shape will be handled by a previous pattern, so it should be removed."
                     )
 
-        P.Incomplete region context unhandled ->
+        P.CNPM_Incomplete region context unhandled ->
             case context of
-                P.BadArg ->
+                P.CNPM_BadArg ->
                     Report.Report "UNSAFE PATTERN" region [] <|
                         Code.toSnippet source
                             region
@@ -42,7 +42,7 @@ toReport source err =
                                 ]
                             )
 
-                P.BadDestruct ->
+                P.CNPM_BadDestruct ->
                     Report.Report "UNSAFE PATTERN" region [] <|
                         Code.toSnippet source
                             region
@@ -58,7 +58,7 @@ toReport source err =
                                 ]
                             )
 
-                P.BadCase ->
+                P.CNPM_BadCase ->
                     Report.Report "MISSING PATTERNS" region [] <|
                         Code.toSnippet source
                             region
@@ -81,7 +81,7 @@ toReport source err =
 -- PATTERN TO DOC
 
 
-unhandledPatternsToDocBlock : List P.Pattern -> D.Doc
+unhandledPatternsToDocBlock : List P.CNPM_Pattern -> D.Doc
 unhandledPatternsToDocBlock unhandledPatterns =
     D.indent 4 <|
         D.dullyellow <|
@@ -95,34 +95,34 @@ type Context
     | Unambiguous
 
 
-patternToDoc : Context -> P.Pattern -> D.Doc
+patternToDoc : Context -> P.CNPM_Pattern -> D.Doc
 patternToDoc context pattern =
     case delist pattern [] of
-        NonList P.Anything ->
+        NonList P.CNPM_Anything ->
             D.fromChars "_"
 
-        NonList (P.Literal literal) ->
+        NonList (P.CNPM_Literal literal) ->
             case literal of
-                P.Chr chr ->
+                P.CNPM_Chr chr ->
                     D.fromChars ("'" ++ chr ++ "'")
 
-                P.Str str ->
+                P.CNPM_Str str ->
                     D.fromChars ("\"" ++ str ++ "\"")
 
-                P.Int int ->
+                P.CNPM_Int int ->
                     D.fromChars (String.fromInt int)
 
-        NonList (P.Ctor _ "#0" []) ->
+        NonList (P.CNPM_Ctor _ "#0" []) ->
             D.fromChars "()"
 
-        NonList (P.Ctor _ "#2" [ a, b ]) ->
+        NonList (P.CNPM_Ctor _ "#2" [ a, b ]) ->
             D.fromChars "( "
                 |> D.a (patternToDoc Unambiguous a)
                 |> D.a (D.fromChars ", ")
                 |> D.a (patternToDoc Unambiguous b)
                 |> D.a (D.fromChars " )")
 
-        NonList (P.Ctor _ "#3" [ a, b, c ]) ->
+        NonList (P.CNPM_Ctor _ "#3" [ a, b, c ]) ->
             D.fromChars "( "
                 |> D.a (patternToDoc Unambiguous a)
                 |> D.a (D.fromChars ", ")
@@ -131,7 +131,7 @@ patternToDoc context pattern =
                 |> D.a (patternToDoc Unambiguous c)
                 |> D.a (D.fromChars " )")
 
-        NonList (P.Ctor _ name args) ->
+        NonList (P.CNPM_Ctor _ name args) ->
             let
                 ctorDoc : D.Doc
                 ctorDoc =
@@ -181,18 +181,18 @@ patternToDoc context pattern =
 
 
 type Structure
-    = FiniteList (List P.Pattern)
-    | Conses (List P.Pattern) P.Pattern
-    | NonList P.Pattern
+    = FiniteList (List P.CNPM_Pattern)
+    | Conses (List P.CNPM_Pattern) P.CNPM_Pattern
+    | NonList P.CNPM_Pattern
 
 
-delist : P.Pattern -> List P.Pattern -> Structure
+delist : P.CNPM_Pattern -> List P.CNPM_Pattern -> Structure
 delist pattern revEntries =
     case pattern of
-        P.Ctor _ "[]" [] ->
+        P.CNPM_Ctor _ "[]" [] ->
             FiniteList revEntries
 
-        P.Ctor _ "::" [ hd, tl ] ->
+        P.CNPM_Ctor _ "::" [ hd, tl ] ->
             delist tl (hd :: revEntries)
 
         _ ->

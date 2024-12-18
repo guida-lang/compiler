@@ -174,7 +174,7 @@ getCacheDir projectName =
         |> IO.bind
             (\home ->
                 let
-                    root : Utils.FilePath
+                    root : T.FilePath
                     root =
                         Utils.fpForwardSlash home (Utils.fpForwardSlash compilerVersion projectName)
                 in

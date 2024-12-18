@@ -28,7 +28,7 @@ import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -49,7 +49,7 @@ run () () =
 
 
 type Env
-    = Env FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.Outline
+    = Env T.FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.Outline
 
 
 getEnv : Task.Task Exit.Publish Env
@@ -403,7 +403,7 @@ withPrepublishDir root callback =
             (Task.run (callback dir))
 
 
-verifyZipBuild : FilePath -> IO (Result Exit.Publish ())
+verifyZipBuild : T.FilePath -> IO (Result Exit.Publish ())
 verifyZipBuild root =
     BW.withScope
         (\scope ->

@@ -78,7 +78,7 @@ iteratedDealias tipe =
 -- TO DOC
 
 
-toDoc : L.Localizer -> RT.Context -> Type -> D.Doc
+toDoc : L.CRRTL_Localizer -> RT.Context -> Type -> D.Doc
 toDoc localizer ctx tipe =
     case tipe of
         Lambda a b cs ->
@@ -126,19 +126,19 @@ toDoc localizer ctx tipe =
             aliasToDoc localizer ctx home name args
 
 
-aliasToDoc : L.Localizer -> RT.Context -> T.CEMN_Canonical -> T.CDN_Name -> List ( T.CDN_Name, Type ) -> D.Doc
+aliasToDoc : L.CRRTL_Localizer -> RT.Context -> T.CEMN_Canonical -> T.CDN_Name -> List ( T.CDN_Name, Type ) -> D.Doc
 aliasToDoc localizer ctx home name args =
     RT.apply ctx
         (L.toDoc localizer home name)
         (List.map (toDoc localizer RT.App << Tuple.second) args)
 
 
-fieldsToDocs : L.Localizer -> Dict String T.CDN_Name Type -> List ( D.Doc, D.Doc )
+fieldsToDocs : L.CRRTL_Localizer -> Dict String T.CDN_Name Type -> List ( D.Doc, D.Doc )
 fieldsToDocs localizer fields =
     Dict.foldr compare (addField localizer) [] fields
 
 
-addField : L.Localizer -> T.CDN_Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
+addField : L.CRRTL_Localizer -> T.CDN_Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
 addField localizer fieldName fieldType docs =
     let
         f : D.Doc
@@ -238,7 +238,7 @@ merge status1 status2 =
 -- COMPARISON
 
 
-toComparison : L.Localizer -> Type -> Type -> ( D.Doc, D.Doc, List Problem )
+toComparison : L.CRRTL_Localizer -> Type -> Type -> ( D.Doc, D.Doc, List Problem )
 toComparison localizer tipe1 tipe2 =
     case toDiff localizer RT.None tipe1 tipe2 of
         Diff doc1 doc2 Similar ->
@@ -248,7 +248,7 @@ toComparison localizer tipe1 tipe2 =
             ( doc1, doc2, Bag.toList problems )
 
 
-toDiff : L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+toDiff : L.CRRTL_Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
 toDiff localizer ctx tipe1 tipe2 =
     case ( tipe1, tipe2 ) of
         ( Unit, Unit ) ->
@@ -446,7 +446,7 @@ toDiff localizer ctx tipe1 tipe2 =
             toDiffOtherwise localizer ctx pair
 
 
-toDiffOtherwise : L.Localizer -> RT.Context -> ( Type, Type ) -> Diff D.Doc
+toDiffOtherwise : L.CRRTL_Localizer -> RT.Context -> ( Type, Type ) -> Diff D.Doc
 toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
     let
         doc1 : D.Doc
@@ -510,7 +510,7 @@ toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
 -- DIFF HELPERS
 
 
-same : L.Localizer -> RT.Context -> Type -> Diff D.Doc
+same : L.CRRTL_Localizer -> RT.Context -> Type -> Diff D.Doc
 same localizer ctx tipe =
     let
         doc : D.Doc
@@ -520,7 +520,7 @@ same localizer ctx tipe =
     Diff doc doc Similar
 
 
-similar : L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+similar : L.CRRTL_Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
 similar localizer ctx t1 t2 =
     Diff (toDoc localizer ctx t1) (toDoc localizer ctx t2) Similar
 
@@ -622,7 +622,7 @@ isSuper super tipe =
 -- NAME CLASH
 
 
-nameClashToDoc : RT.Context -> L.Localizer -> T.CEMN_Canonical -> T.CDN_Name -> List Type -> D.Doc
+nameClashToDoc : RT.Context -> L.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> List Type -> D.Doc
 nameClashToDoc ctx localizer (T.CEMN_Canonical _ home) name args =
     RT.apply ctx
         (D.yellow (D.fromName home) |> D.a (D.dullyellow (D.fromChars "." |> D.a (D.fromName name))))
@@ -633,7 +633,7 @@ nameClashToDoc ctx localizer (T.CEMN_Canonical _ home) name args =
 -- DIFF ALIASED RECORD
 
 
-diffAliasedRecord : L.Localizer -> Type -> Type -> Maybe (Diff D.Doc)
+diffAliasedRecord : L.CRRTL_Localizer -> Type -> Type -> Maybe (Diff D.Doc)
 diffAliasedRecord localizer t1 t2 =
     case ( iteratedDealias t1, iteratedDealias t2 ) of
         ( Record fields1 ext1, Record fields2 ext2 ) ->
@@ -647,7 +647,7 @@ diffAliasedRecord localizer t1 t2 =
 -- RECORD DIFFS
 
 
-diffRecord : L.Localizer -> Dict String T.CDN_Name Type -> Extension -> Dict String T.CDN_Name Type -> Extension -> Diff D.Doc
+diffRecord : L.CRRTL_Localizer -> Dict String T.CDN_Name Type -> Extension -> Dict String T.CDN_Name Type -> Extension -> Diff D.Doc
 diffRecord localizer fields1 ext1 fields2 ext2 =
     let
         toUnknownDocs : T.CDN_Name -> Type -> ( D.Doc, D.Doc )

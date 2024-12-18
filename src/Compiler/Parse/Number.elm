@@ -36,7 +36,7 @@ type Number
     | Float Float
 
 
-number : (T.CPP_Row -> T.CPP_Col -> x) -> (E.Number -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x Number
+number : (T.CPP_Row -> T.CPP_Col -> x) -> (E.CRES_Number -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x Number
 number toExpectation toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -118,7 +118,7 @@ number toExpectation toError =
 
 
 type Outcome
-    = Err_ Int E.Number
+    = Err_ Int E.CRES_Number
     | OkInt Int Int
     | OkFloat Int
 
@@ -148,7 +148,7 @@ chompInt src pos end n =
             chompExponent src (pos + 1) end
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos E.CRES_NumberEnd
 
         else
             OkInt pos n
@@ -166,13 +166,13 @@ chompFraction src pos end n =
             pos + 1
     in
     if pos1 >= end then
-        Err_ pos (E.NumberDot n)
+        Err_ pos (E.CRES_NumberDot n)
 
     else if isDecimalDigit (String.uncons (String.dropLeft pos1 src) |> Maybe.map Tuple.first |> Maybe.withDefault ' ') then
         chompFractionHelp src (pos1 + 1) end
 
     else
-        Err_ pos (E.NumberDot n)
+        Err_ pos (E.CRES_NumberDot n)
 
 
 chompFractionHelp : String -> Int -> Int -> Outcome
@@ -193,7 +193,7 @@ chompFractionHelp src pos end =
             chompExponent src (pos + 1) end
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos E.CRES_NumberEnd
 
         else
             OkFloat pos
@@ -206,7 +206,7 @@ chompFractionHelp src pos end =
 chompExponent : String -> Int -> Int -> Outcome
 chompExponent src pos end =
     if pos >= end then
-        Err_ pos E.NumberEnd
+        Err_ pos E.CRES_NumberEnd
 
     else
         let
@@ -227,10 +227,10 @@ chompExponent src pos end =
                 chompExponentHelp src (pos + 2) end
 
             else
-                Err_ pos E.NumberEnd
+                Err_ pos E.CRES_NumberEnd
 
         else
-            Err_ pos E.NumberEnd
+            Err_ pos E.CRES_NumberEnd
 
 
 chompExponentHelp : String -> Int -> Int -> Outcome
@@ -267,10 +267,10 @@ chompZero src pos end =
             chompFraction src pos end 0
 
         else if isDecimalDigit word then
-            Err_ pos E.NumberNoLeadingZero
+            Err_ pos E.CRES_NumberNoLeadingZero
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos E.CRES_NumberEnd
 
         else
             OkInt pos 0
@@ -283,7 +283,7 @@ chompHexInt src pos end =
             chompHex src pos end
     in
     if answer < 0 then
-        Err_ newPos E.NumberHexDigit
+        Err_ newPos E.CRES_NumberHexDigit
 
     else
         OkInt newPos answer

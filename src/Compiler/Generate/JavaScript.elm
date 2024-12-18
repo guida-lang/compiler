@@ -32,15 +32,15 @@ import Utils.Main as Utils
 
 
 type alias Graph =
-    Dict (List String) Opt.Global Opt.Node
+    Dict (List String) T.CASTO_Global T.CASTO_Node
 
 
 type alias Mains =
-    Dict (List String) T.CEMN_Canonical Opt.Main
+    Dict (List String) T.CEMN_Canonical T.CASTO_Main
 
 
-generate : Mode.Mode -> Opt.GlobalGraph -> Mains -> String
-generate mode (Opt.GlobalGraph graph _) mains =
+generate : Mode.Mode -> T.CASTO_GlobalGraph -> Mains -> String
+generate mode (T.CASTO_GlobalGraph graph _) mains =
     let
         state : State
         state =
@@ -54,9 +54,9 @@ generate mode (Opt.GlobalGraph graph _) mains =
         ++ "}(this));"
 
 
-addMain : Mode.Mode -> Graph -> T.CEMN_Canonical -> Opt.Main -> State -> State
+addMain : Mode.Mode -> Graph -> T.CEMN_Canonical -> T.CASTO_Main -> State -> State
 addMain mode graph home _ state =
-    addGlobal mode graph state (Opt.Global home "main")
+    addGlobal mode graph state (T.CASTO_Global home "main")
 
 
 perfNote : Mode.Mode -> String
@@ -76,8 +76,8 @@ perfNote mode =
                 ++ " for better performance and smaller assets.');"
 
 
-generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Annotation -> String
-generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (T.CASTC_Forall _ tipe) =
+generateForRepl : Bool -> L.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Annotation -> String
+generateForRepl ansi localizer (T.CASTO_GlobalGraph graph _) home name (T.CASTC_Forall _ tipe) =
     let
         mode : Mode.Mode
         mode =
@@ -85,11 +85,11 @@ generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (T.CASTC_Fora
 
         debugState : State
         debugState =
-            addGlobal mode graph emptyState (Opt.Global ModuleName.debug "toString")
+            addGlobal mode graph emptyState (T.CASTO_Global ModuleName.debug "toString")
 
         evalState : State
         evalState =
-            addGlobal mode graph debugState (Opt.Global home name)
+            addGlobal mode graph debugState (T.CASTO_Global home name)
     in
     "process.on('uncaughtException', function(err) { process.stderr.write(err.toString() + '\\n'); process.exit(1); });"
         ++ Functions.functions
@@ -97,7 +97,7 @@ generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (T.CASTC_Fora
         ++ print ansi localizer home name tipe
 
 
-print : Bool -> L.Localizer -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Type -> String
+print : Bool -> L.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Type -> String
 print ansi localizer home name tipe =
     let
         value : JsName.Name
@@ -137,8 +137,8 @@ print ansi localizer home name tipe =
 -- GENERATE FOR REPL ENDPOINT
 
 
-generateForReplEndpoint : L.Localizer -> Opt.GlobalGraph -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Annotation -> String
-generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (T.CASTC_Forall _ tipe) =
+generateForReplEndpoint : L.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Annotation -> String
+generateForReplEndpoint localizer (T.CASTO_GlobalGraph graph _) home maybeName (T.CASTC_Forall _ tipe) =
     let
         name : T.CDN_Name
         name =
@@ -150,18 +150,18 @@ generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (T.CA
 
         debugState : State
         debugState =
-            addGlobal mode graph emptyState (Opt.Global ModuleName.debug "toString")
+            addGlobal mode graph emptyState (T.CASTO_Global ModuleName.debug "toString")
 
         evalState : State
         evalState =
-            addGlobal mode graph debugState (Opt.Global home name)
+            addGlobal mode graph debugState (T.CASTO_Global home name)
     in
     Functions.functions
         ++ stateToBuilder evalState
         ++ postMessage localizer home maybeName tipe
 
 
-postMessage : L.Localizer -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Type -> String
+postMessage : L.CRRTL_Localizer -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Type -> String
 postMessage localizer home maybeName tipe =
     let
         name : T.CDN_Name
@@ -196,7 +196,7 @@ postMessage localizer home maybeName tipe =
 
 
 type State
-    = State (List String) (List String) (EverySet (List String) Opt.Global)
+    = State (List String) (List String) (EverySet (List String) T.CASTO_Global)
 
 
 emptyState : State
@@ -214,7 +214,7 @@ prependBuilders revBuilders monolith =
     List.foldl (\b m -> b ++ m) monolith revBuilders
 
 
-addGlobal : Mode.Mode -> Graph -> State -> Opt.Global -> State
+addGlobal : Mode.Mode -> Graph -> State -> T.CASTO_Global -> State
 addGlobal mode graph ((State revKernels builders seen) as state) global =
     if EverySet.member Opt.toComparableGlobal global seen then
         state
@@ -224,13 +224,13 @@ addGlobal mode graph ((State revKernels builders seen) as state) global =
             State revKernels builders (EverySet.insert Opt.toComparableGlobal global seen)
 
 
-addGlobalHelp : Mode.Mode -> Graph -> Opt.Global -> State -> State
+addGlobalHelp : Mode.Mode -> Graph -> T.CASTO_Global -> State -> State
 addGlobalHelp mode graph global state =
     let
-        addDeps : EverySet (List String) Opt.Global -> State -> State
+        addDeps : EverySet (List String) T.CASTO_Global -> State -> State
         addDeps deps someState =
             let
-                sortedDeps : List Opt.Global
+                sortedDeps : List T.CASTO_Global
                 sortedDeps =
                     -- This is required given that it looks like `Data.Set.union` sorts its elements
                     List.sortWith Opt.compareGlobal (EverySet.toList Opt.compareGlobal deps)
@@ -238,53 +238,53 @@ addGlobalHelp mode graph global state =
             List.foldl (flip (addGlobal mode graph)) someState sortedDeps
     in
     case Utils.find Opt.toComparableGlobal global graph of
-        Opt.Define expr deps ->
+        T.CASTO_Define expr deps ->
             addStmt (addDeps deps state)
                 (var global (Expr.generate mode expr))
 
-        Opt.DefineTailFunc argNames body deps ->
+        T.CASTO_DefineTailFunc argNames body deps ->
             addStmt (addDeps deps state)
                 (let
-                    (Opt.Global _ name) =
+                    (T.CASTO_Global _ name) =
                         global
                  in
                  var global (Expr.generateTailDef mode name argNames body)
                 )
 
-        Opt.Ctor index arity ->
+        T.CASTO_Ctor index arity ->
             addStmt state
                 (var global (Expr.generateCtor mode global index arity))
 
-        Opt.Link linkedGlobal ->
+        T.CASTO_Link linkedGlobal ->
             addGlobal mode graph state linkedGlobal
 
-        Opt.Cycle names values functions deps ->
+        T.CASTO_Cycle names values functions deps ->
             addStmt (addDeps deps state)
                 (generateCycle mode global names values functions)
 
-        Opt.Manager effectsType ->
+        T.CASTO_Manager effectsType ->
             generateManager mode graph global effectsType state
 
-        Opt.Kernel chunks deps ->
+        T.CASTO_Kernel chunks deps ->
             if isDebugger global && not (Mode.isDebug mode) then
                 state
 
             else
                 addKernel (addDeps deps state) (generateKernel mode chunks)
 
-        Opt.Enum index ->
+        T.CASTO_Enum index ->
             addStmt state
                 (generateEnum mode global index)
 
-        Opt.Box ->
+        T.CASTO_Box ->
             addStmt (addGlobal mode graph state identity_)
                 (generateBox mode global)
 
-        Opt.PortIncoming decoder deps ->
+        T.CASTO_PortIncoming decoder deps ->
             addStmt (addDeps deps state)
                 (generatePort mode global "incomingPort" decoder)
 
-        Opt.PortOutgoing encoder deps ->
+        T.CASTO_PortOutgoing encoder deps ->
             addStmt (addDeps deps state)
                 (generatePort mode global "outgoingPort" encoder)
 
@@ -304,13 +304,13 @@ addKernel (State revKernels revBuilders seen) kernel =
     State (kernel :: revKernels) revBuilders seen
 
 
-var : Opt.Global -> Expr.Code -> JS.Stmt
-var (Opt.Global home name) code =
+var : T.CASTO_Global -> Expr.Code -> JS.Stmt
+var (T.CASTO_Global home name) code =
     JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr code)
 
 
-isDebugger : Opt.Global -> Bool
-isDebugger (Opt.Global (T.CEMN_Canonical _ home) _) =
+isDebugger : T.CASTO_Global -> Bool
+isDebugger (T.CASTO_Global (T.CEMN_Canonical _ home) _) =
     home == Name.debugger
 
 
@@ -318,8 +318,8 @@ isDebugger (Opt.Global (T.CEMN_Canonical _ home) _) =
 -- GENERATE CYCLES
 
 
-generateCycle : Mode.Mode -> Opt.Global -> List T.CDN_Name -> List ( T.CDN_Name, Opt.Expr ) -> List Opt.Def -> JS.Stmt
-generateCycle mode (Opt.Global ((T.CEMN_Canonical _ module_) as home) _) names values functions =
+generateCycle : Mode.Mode -> T.CASTO_Global -> List T.CDN_Name -> List ( T.CDN_Name, T.CASTO_Expr ) -> List T.CASTO_Def -> JS.Stmt
+generateCycle mode (T.CASTO_Global ((T.CEMN_Canonical _ module_) as home) _) names values functions =
     JS.Block
         [ JS.Block <| List.map (generateCycleFunc mode home) functions
         , JS.Block <| List.map (generateSafeCycle mode home) values
@@ -346,17 +346,17 @@ generateCycle mode (Opt.Global ((T.CEMN_Canonical _ module_) as home) _) names v
         ]
 
 
-generateCycleFunc : Mode.Mode -> T.CEMN_Canonical -> Opt.Def -> JS.Stmt
+generateCycleFunc : Mode.Mode -> T.CEMN_Canonical -> T.CASTO_Def -> JS.Stmt
 generateCycleFunc mode home def =
     case def of
-        Opt.Def name expr ->
+        T.CASTO_Def name expr ->
             JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generate mode expr))
 
-        Opt.TailDef name args expr ->
+        T.CASTO_TailDef name args expr ->
             JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generateTailDef mode name args expr))
 
 
-generateSafeCycle : Mode.Mode -> T.CEMN_Canonical -> ( T.CDN_Name, Opt.Expr ) -> JS.Stmt
+generateSafeCycle : Mode.Mode -> T.CEMN_Canonical -> ( T.CDN_Name, T.CASTO_Expr ) -> JS.Stmt
 generateSafeCycle mode home ( name, expr ) =
     JS.FunctionStmt (JsName.fromCycle home name) [] <|
         Expr.codeToStmtList (Expr.generate mode expr)
@@ -450,8 +450,8 @@ addChunk mode chunk builder =
 -- GENERATE ENUM
 
 
-generateEnum : Mode.Mode -> Opt.Global -> T.CDI_ZeroBased -> JS.Stmt
-generateEnum mode ((Opt.Global home name) as global) index =
+generateEnum : Mode.Mode -> T.CASTO_Global -> T.CDI_ZeroBased -> JS.Stmt
+generateEnum mode ((T.CASTO_Global home name) as global) index =
     JS.Var (JsName.fromGlobal home name) <|
         case mode of
             Mode.Dev _ ->
@@ -465,8 +465,8 @@ generateEnum mode ((Opt.Global home name) as global) index =
 -- GENERATE BOX
 
 
-generateBox : Mode.Mode -> Opt.Global -> JS.Stmt
-generateBox mode ((Opt.Global home name) as global) =
+generateBox : Mode.Mode -> T.CASTO_Global -> JS.Stmt
+generateBox mode ((T.CASTO_Global home name) as global) =
     JS.Var (JsName.fromGlobal home name) <|
         case mode of
             Mode.Dev _ ->
@@ -476,17 +476,17 @@ generateBox mode ((Opt.Global home name) as global) =
                 JS.ExprRef (JsName.fromGlobal ModuleName.basics Name.identity_)
 
 
-identity_ : Opt.Global
+identity_ : T.CASTO_Global
 identity_ =
-    Opt.Global ModuleName.basics Name.identity_
+    T.CASTO_Global ModuleName.basics Name.identity_
 
 
 
 -- GENERATE PORTS
 
 
-generatePort : Mode.Mode -> Opt.Global -> T.CDN_Name -> Opt.Expr -> JS.Stmt
-generatePort mode (Opt.Global home name) makePort converter =
+generatePort : Mode.Mode -> T.CASTO_Global -> T.CDN_Name -> T.CASTO_Expr -> JS.Stmt
+generatePort mode (T.CASTO_Global home name) makePort converter =
     JS.Var (JsName.fromGlobal home name) <|
         JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.platform makePort))
             [ JS.ExprString name
@@ -498,8 +498,8 @@ generatePort mode (Opt.Global home name) makePort converter =
 -- GENERATE MANAGER
 
 
-generateManager : Mode.Mode -> Graph -> Opt.Global -> Opt.EffectsType -> State -> State
-generateManager mode graph (Opt.Global ((T.CEMN_Canonical _ moduleName) as home) _) effectsType state =
+generateManager : Mode.Mode -> Graph -> T.CASTO_Global -> T.CASTO_EffectsType -> State -> State
+generateManager mode graph (T.CASTO_Global ((T.CEMN_Canonical _ moduleName) as home) _) effectsType state =
     let
         managerLVar : JS.LValue
         managerLVar =
@@ -531,31 +531,31 @@ leaf =
     JS.ExprRef (JsName.fromKernel Name.platform "leaf")
 
 
-generateManagerHelp : T.CEMN_Canonical -> Opt.EffectsType -> ( List Opt.Global, List JS.Expr, List JS.Stmt )
+generateManagerHelp : T.CEMN_Canonical -> T.CASTO_EffectsType -> ( List T.CASTO_Global, List JS.Expr, List JS.Stmt )
 generateManagerHelp home effectsType =
     let
-        dep : T.CDN_Name -> Opt.Global
+        dep : T.CDN_Name -> T.CASTO_Global
         dep name =
-            Opt.Global home name
+            T.CASTO_Global home name
 
         ref : T.CDN_Name -> JS.Expr
         ref name =
             JS.ExprRef (JsName.fromGlobal home name)
     in
     case effectsType of
-        Opt.Cmd ->
+        T.CASTO_Cmd ->
             ( [ dep "init", dep "onEffects", dep "onSelfMsg", dep "cmdMap" ]
             , [ ref "init", ref "onEffects", ref "onSelfMsg", ref "cmdMap" ]
             , [ generateLeaf home "command" ]
             )
 
-        Opt.Sub ->
+        T.CASTO_Sub ->
             ( [ dep "init", dep "onEffects", dep "onSelfMsg", dep "subMap" ]
             , [ ref "init", ref "onEffects", ref "onSelfMsg", JS.ExprInt 0, ref "subMap" ]
             , [ generateLeaf home "subscription" ]
             )
 
-        Opt.Fx ->
+        T.CASTO_Fx ->
             ( [ dep "init", dep "onEffects", dep "onSelfMsg", dep "cmdMap", dep "subMap" ]
             , [ ref "init", ref "onEffects", ref "onSelfMsg", ref "cmdMap", ref "subMap" ]
             , [ generateLeaf home "command"
@@ -619,7 +619,7 @@ addSubTrie mode end ( name, trie ) =
 
 
 type Trie
-    = Trie (Maybe ( T.CEMN_Canonical, Opt.Main )) (Dict String T.CDN_Name Trie)
+    = Trie (Maybe ( T.CEMN_Canonical, T.CASTO_Main )) (Dict String T.CDN_Name Trie)
 
 
 emptyTrie : Trie
@@ -627,12 +627,12 @@ emptyTrie =
     Trie Nothing Dict.empty
 
 
-addToTrie : T.CEMN_Canonical -> Opt.Main -> Trie -> Trie
+addToTrie : T.CEMN_Canonical -> T.CASTO_Main -> Trie -> Trie
 addToTrie ((T.CEMN_Canonical _ moduleName) as home) main trie =
     merge trie <| segmentsToTrie home (Name.splitDots moduleName) main
 
 
-segmentsToTrie : T.CEMN_Canonical -> List T.CDN_Name -> Opt.Main -> Trie
+segmentsToTrie : T.CEMN_Canonical -> List T.CDN_Name -> T.CASTO_Main -> Trie
 segmentsToTrie home segments main =
     case segments of
         [] ->

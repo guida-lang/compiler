@@ -25,7 +25,7 @@ type alias Parser x a =
 -- CHOMP
 
 
-chomp : (E.Space -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
+chomp : (E.CRES_Space -> T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
 chomp toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -43,10 +43,10 @@ chomp toError =
                     Ok (P.POk P.Consumed () newState)
 
                 HasTab ->
-                    Err (P.PErr P.Consumed newRow newCol (toError E.HasTab))
+                    Err (P.PErr P.Consumed newRow newCol (toError E.CRES_HasTab))
 
                 EndlessMultiComment ->
-                    Err (P.PErr P.Consumed newRow newCol (toError E.EndlessMultiComment))
+                    Err (P.PErr P.Consumed newRow newCol (toError E.CRES_EndlessMultiComment))
 
 
 
@@ -90,7 +90,7 @@ checkFreshLine toError =
 -- CHOMP AND CHECK
 
 
-chompAndCheckIndent : (E.Space -> T.CPP_Row -> T.CPP_Col -> x) -> (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
+chompAndCheckIndent : (E.CRES_Space -> T.CPP_Row -> T.CPP_Col -> x) -> (T.CPP_Row -> T.CPP_Col -> x) -> P.Parser x ()
 chompAndCheckIndent toSpaceError toIndentError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -112,10 +112,10 @@ chompAndCheckIndent toSpaceError toIndentError =
                         Err (P.PErr P.Consumed row col toIndentError)
 
                 HasTab ->
-                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.HasTab))
+                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.CRES_HasTab))
 
                 EndlessMultiComment ->
-                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.EndlessMultiComment))
+                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.CRES_EndlessMultiComment))
 
 
 
@@ -283,7 +283,7 @@ eatMultiCommentHelp src pos end row col openComments =
 -- DOCUMENTATION COMMENT
 
 
-docComment : (Int -> Int -> x) -> (E.Space -> Int -> Int -> x) -> P.Parser x T.CASTS_Comment
+docComment : (Int -> Int -> x) -> (E.CRES_Space -> Int -> Int -> x) -> P.Parser x T.CASTS_Comment
 docComment toExpectation toSpaceError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -338,10 +338,10 @@ docComment toExpectation toSpaceError =
                         Ok (P.POk P.Consumed comment newState)
 
                     MultiTab ->
-                        Err (P.PErr P.Consumed newRow newCol (toSpaceError E.HasTab))
+                        Err (P.PErr P.Consumed newRow newCol (toSpaceError E.CRES_HasTab))
 
                     MultiEndless ->
-                        Err (P.PErr P.Consumed row col (toSpaceError E.EndlessMultiComment))
+                        Err (P.PErr P.Consumed row col (toSpaceError E.CRES_EndlessMultiComment))
 
             else
                 Err (P.PErr P.Empty row col toExpectation)

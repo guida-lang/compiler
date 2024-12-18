@@ -1,7 +1,6 @@
 module Compiler.Optimize.Case exposing (optimize)
 
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Optimized as Opt
 import Compiler.Optimize.DecisionTree as DT
 import Data.Map as Dict exposing (Dict)
 import Prelude
@@ -14,13 +13,13 @@ import Utils.Main as Utils
 -- OPTIMIZE A CASE EXPRESSION
 
 
-optimize : T.CDN_Name -> T.CDN_Name -> List ( Can.Pattern, Opt.Expr ) -> Opt.Expr
+optimize : T.CDN_Name -> T.CDN_Name -> List ( Can.Pattern, T.CASTO_Expr ) -> T.CASTO_Expr
 optimize temp root optBranches =
     let
         ( patterns, indexedBranches ) =
             List.unzip (List.indexedMap indexify optBranches)
 
-        decider : Opt.Decider Int
+        decider : T.CASTO_Decider Int
         decider =
             treeToDecider (DT.compile patterns)
 
@@ -31,7 +30,7 @@ optimize temp root optBranches =
         ( choices, maybeJumps ) =
             List.unzip (List.map (createChoices targetCounts) indexedBranches)
     in
-    Opt.Case temp
+    T.CASTO_Case temp
         root
         (insertChoices (Dict.fromList identity choices) decider)
         (List.filterMap identity maybeJumps)
@@ -51,11 +50,11 @@ indexify index ( pattern, branch ) =
 -- which has special constructs to avoid code duplication when possible.
 
 
-treeToDecider : DT.DecisionTree -> Opt.Decider Int
+treeToDecider : DT.DecisionTree -> T.CASTO_Decider Int
 treeToDecider tree =
     case tree of
         DT.Match target ->
-            Opt.Leaf target
+            T.CASTO_Leaf target
 
         -- zero options
         DT.Decision _ [] Nothing ->
@@ -81,32 +80,32 @@ treeToDecider tree =
                 ( necessaryTests, fallback ) =
                     ( Prelude.init edges, Tuple.second (Prelude.last edges) )
             in
-            Opt.FanOut
+            T.CASTO_FanOut
                 path
                 (List.map (Tuple.mapSecond treeToDecider) necessaryTests)
                 (treeToDecider fallback)
 
         DT.Decision path edges (Just fallback) ->
-            Opt.FanOut path (List.map (Tuple.mapSecond treeToDecider) edges) (treeToDecider fallback)
+            T.CASTO_FanOut path (List.map (Tuple.mapSecond treeToDecider) edges) (treeToDecider fallback)
 
 
-toChain : DT.Path -> DT.Test -> DT.DecisionTree -> DT.DecisionTree -> Opt.Decider Int
+toChain : T.CODT_Path -> T.CODT_Test -> DT.DecisionTree -> DT.DecisionTree -> T.CASTO_Decider Int
 toChain path test successTree failureTree =
     let
-        failure : Opt.Decider Int
+        failure : T.CASTO_Decider Int
         failure =
             treeToDecider failureTree
     in
     case treeToDecider successTree of
-        (Opt.Chain testChain success subFailure) as success_ ->
+        (T.CASTO_Chain testChain success subFailure) as success_ ->
             if failure == subFailure then
-                Opt.Chain (( path, test ) :: testChain) success failure
+                T.CASTO_Chain (( path, test ) :: testChain) success failure
 
             else
-                Opt.Chain [ ( path, test ) ] success_ failure
+                T.CASTO_Chain [ ( path, test ) ] success_ failure
 
         success ->
-            Opt.Chain [ ( path, test ) ] success failure
+            T.CASTO_Chain [ ( path, test ) ] success failure
 
 
 
@@ -116,45 +115,45 @@ toChain path test successTree failureTree =
 -- can be inlined. Whether things are inlined or jumps is called a "choice".
 
 
-countTargets : Opt.Decider Int -> Dict Int Int Int
+countTargets : T.CASTO_Decider Int -> Dict Int Int Int
 countTargets decisionTree =
     case decisionTree of
-        Opt.Leaf target ->
+        T.CASTO_Leaf target ->
             Dict.singleton identity target 1
 
-        Opt.Chain _ success failure ->
+        T.CASTO_Chain _ success failure ->
             Utils.mapUnionWith identity compare (+) (countTargets success) (countTargets failure)
 
-        Opt.FanOut _ tests fallback ->
+        T.CASTO_FanOut _ tests fallback ->
             Utils.mapUnionsWith identity compare (+) (List.map countTargets (fallback :: List.map Tuple.second tests))
 
 
-createChoices : Dict Int Int Int -> ( Int, Opt.Expr ) -> ( ( Int, Opt.Choice ), Maybe ( Int, Opt.Expr ) )
+createChoices : Dict Int Int Int -> ( Int, T.CASTO_Expr ) -> ( ( Int, T.CASTO_Choice ), Maybe ( Int, T.CASTO_Expr ) )
 createChoices targetCounts ( target, branch ) =
     if Dict.get identity target targetCounts == Just 1 then
-        ( ( target, Opt.Inline branch )
+        ( ( target, T.CASTO_Inline branch )
         , Nothing
         )
 
     else
-        ( ( target, Opt.Jump target )
+        ( ( target, T.CASTO_Jump target )
         , Just ( target, branch )
         )
 
 
-insertChoices : Dict Int Int Opt.Choice -> Opt.Decider Int -> Opt.Decider Opt.Choice
+insertChoices : Dict Int Int T.CASTO_Choice -> T.CASTO_Decider Int -> T.CASTO_Decider T.CASTO_Choice
 insertChoices choiceDict decider =
     let
-        go : Opt.Decider Int -> Opt.Decider Opt.Choice
+        go : T.CASTO_Decider Int -> T.CASTO_Decider T.CASTO_Choice
         go =
             insertChoices choiceDict
     in
     case decider of
-        Opt.Leaf target ->
-            Opt.Leaf (Utils.find identity target choiceDict)
+        T.CASTO_Leaf target ->
+            T.CASTO_Leaf (Utils.find identity target choiceDict)
 
-        Opt.Chain testChain success failure ->
-            Opt.Chain testChain (go success) (go failure)
+        T.CASTO_Chain testChain success failure ->
+            T.CASTO_Chain testChain (go success) (go failure)
 
-        Opt.FanOut path tests fallback ->
-            Opt.FanOut path (List.map (Tuple.mapSecond go) tests) (go fallback)
+        T.CASTO_FanOut path tests fallback ->
+            T.CASTO_FanOut path (List.map (Tuple.mapSecond go) tests) (go fallback)

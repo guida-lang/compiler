@@ -4,7 +4,6 @@ module Compiler.Compile exposing
     )
 
 import Compiler.AST.Canonical as Can
-import Compiler.AST.Optimized as Opt
 import Compiler.Canonicalize.Module as Canonicalize
 import Compiler.Nitpick.PatternMatches as PatternMatches
 import Compiler.Optimize.Module as Optimize
@@ -24,10 +23,10 @@ import Types as T
 
 
 type Artifacts
-    = Artifacts Can.Module (Dict String T.CDN_Name T.CASTC_Annotation) Opt.LocalGraph
+    = Artifacts Can.Module (Dict String T.CDN_Name T.CASTC_Annotation) T.CASTO_LocalGraph
 
 
-compile : T.CEP_Name -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO (Result E.Error Artifacts)
+compile : T.CEP_Name -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO (Result E.CRE_Error Artifacts)
 compile pkg ifaces modul =
     IO.pure (canonicalize pkg ifaces modul)
         |> IO.fmap
@@ -52,41 +51,41 @@ compile pkg ifaces modul =
 -- PHASES
 
 
-canonicalize : T.CEP_Name -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> Result E.Error Can.Module
+canonicalize : T.CEP_Name -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> Result E.CRE_Error Can.Module
 canonicalize pkg ifaces modul =
     case Tuple.second (R.run (Canonicalize.canonicalize pkg ifaces modul)) of
         Ok canonical ->
             Ok canonical
 
         Err errors ->
-            Err (E.BadNames errors)
+            Err (E.CRE_BadNames errors)
 
 
-typeCheck : T.CASTS_Module -> Can.Module -> Result E.Error (Dict String T.CDN_Name T.CASTC_Annotation)
+typeCheck : T.CASTS_Module -> Can.Module -> Result E.CRE_Error (Dict String T.CDN_Name T.CASTC_Annotation)
 typeCheck modul canonical =
     case TypeCheck.unsafePerformIO (TypeCheck.bind Type.run (Type.constrain canonical)) of
         Ok annotations ->
             Ok annotations
 
         Err errors ->
-            Err (E.BadTypes (Localizer.fromModule modul) errors)
+            Err (E.CRE_BadTypes (Localizer.fromModule modul) errors)
 
 
-nitpick : Can.Module -> Result E.Error ()
+nitpick : Can.Module -> Result E.CRE_Error ()
 nitpick canonical =
     case PatternMatches.check canonical of
         Ok () ->
             Ok ()
 
         Err errors ->
-            Err (E.BadPatterns errors)
+            Err (E.CRE_BadPatterns errors)
 
 
-optimize : T.CASTS_Module -> Dict String T.CDN_Name T.CASTC_Annotation -> Can.Module -> Result E.Error Opt.LocalGraph
+optimize : T.CASTS_Module -> Dict String T.CDN_Name T.CASTC_Annotation -> Can.Module -> Result E.CRE_Error T.CASTO_LocalGraph
 optimize modul annotations canonical =
     case Tuple.second (R.run (Optimize.optimize annotations canonical)) of
         Ok localGraph ->
             Ok localGraph
 
         Err errors ->
-            Err (E.BadMains (Localizer.fromModule modul) errors)
+            Err (E.CRE_BadMains (Localizer.fromModule modul) errors)

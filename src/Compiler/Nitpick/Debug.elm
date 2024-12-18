@@ -1,162 +1,162 @@
 module Compiler.Nitpick.Debug exposing (hasDebugUses)
 
-import Compiler.AST.Optimized as Opt
 import Compiler.Data.Map.Utils as Map
 import Data.Map as Dict
+import Types as T
 
 
 
 -- HAS DEBUG USES
 
 
-hasDebugUses : Opt.LocalGraph -> Bool
-hasDebugUses (Opt.LocalGraph _ graph _) =
+hasDebugUses : T.CASTO_LocalGraph -> Bool
+hasDebugUses (T.CASTO_LocalGraph _ graph _) =
     Map.any nodeHasDebug graph
 
 
-nodeHasDebug : Opt.Node -> Bool
+nodeHasDebug : T.CASTO_Node -> Bool
 nodeHasDebug node =
     case node of
-        Opt.Define expr _ ->
+        T.CASTO_Define expr _ ->
             hasDebug expr
 
-        Opt.DefineTailFunc _ expr _ ->
+        T.CASTO_DefineTailFunc _ expr _ ->
             hasDebug expr
 
-        Opt.Ctor _ _ ->
+        T.CASTO_Ctor _ _ ->
             False
 
-        Opt.Enum _ ->
+        T.CASTO_Enum _ ->
             False
 
-        Opt.Box ->
+        T.CASTO_Box ->
             False
 
-        Opt.Link _ ->
+        T.CASTO_Link _ ->
             False
 
-        Opt.Cycle _ vs fs _ ->
+        T.CASTO_Cycle _ vs fs _ ->
             List.any (hasDebug << Tuple.second) vs || List.any defHasDebug fs
 
-        Opt.Manager _ ->
+        T.CASTO_Manager _ ->
             False
 
-        Opt.Kernel _ _ ->
+        T.CASTO_Kernel _ _ ->
             False
 
-        Opt.PortIncoming expr _ ->
+        T.CASTO_PortIncoming expr _ ->
             hasDebug expr
 
-        Opt.PortOutgoing expr _ ->
+        T.CASTO_PortOutgoing expr _ ->
             hasDebug expr
 
 
-hasDebug : Opt.Expr -> Bool
+hasDebug : T.CASTO_Expr -> Bool
 hasDebug expression =
     case expression of
-        Opt.Bool _ ->
+        T.CASTO_Bool _ ->
             False
 
-        Opt.Chr _ ->
+        T.CASTO_Chr _ ->
             False
 
-        Opt.Str _ ->
+        T.CASTO_Str _ ->
             False
 
-        Opt.Int _ ->
+        T.CASTO_Int _ ->
             False
 
-        Opt.Float _ ->
+        T.CASTO_Float _ ->
             False
 
-        Opt.VarLocal _ ->
+        T.CASTO_VarLocal _ ->
             False
 
-        Opt.VarGlobal _ ->
+        T.CASTO_VarGlobal _ ->
             False
 
-        Opt.VarEnum _ _ ->
+        T.CASTO_VarEnum _ _ ->
             False
 
-        Opt.VarBox _ ->
+        T.CASTO_VarBox _ ->
             False
 
-        Opt.VarCycle _ _ ->
+        T.CASTO_VarCycle _ _ ->
             False
 
-        Opt.VarDebug _ _ _ _ ->
+        T.CASTO_VarDebug _ _ _ _ ->
             True
 
-        Opt.VarKernel _ _ ->
+        T.CASTO_VarKernel _ _ ->
             False
 
-        Opt.List exprs ->
+        T.CASTO_List exprs ->
             List.any hasDebug exprs
 
-        Opt.Function _ expr ->
+        T.CASTO_Function _ expr ->
             hasDebug expr
 
-        Opt.Call e es ->
+        T.CASTO_Call e es ->
             hasDebug e || List.any hasDebug es
 
-        Opt.TailCall _ args ->
+        T.CASTO_TailCall _ args ->
             List.any (hasDebug << Tuple.second) args
 
-        Opt.If conds finally ->
+        T.CASTO_If conds finally ->
             List.any (\( c, e ) -> hasDebug c || hasDebug e) conds || hasDebug finally
 
-        Opt.Let def body ->
+        T.CASTO_Let def body ->
             defHasDebug def || hasDebug body
 
-        Opt.Destruct _ expr ->
+        T.CASTO_Destruct _ expr ->
             hasDebug expr
 
-        Opt.Case _ _ d jumps ->
+        T.CASTO_Case _ _ d jumps ->
             deciderHasDebug d || List.any (hasDebug << Tuple.second) jumps
 
-        Opt.Accessor _ ->
+        T.CASTO_Accessor _ ->
             False
 
-        Opt.Access r _ ->
+        T.CASTO_Access r _ ->
             hasDebug r
 
-        Opt.Update r fs ->
+        T.CASTO_Update r fs ->
             hasDebug r || List.any hasDebug (Dict.values compare fs)
 
-        Opt.Record fs ->
+        T.CASTO_Record fs ->
             List.any hasDebug (Dict.values compare fs)
 
-        Opt.Unit ->
+        T.CASTO_Unit ->
             False
 
-        Opt.Tuple a b c ->
+        T.CASTO_Tuple a b c ->
             hasDebug a || hasDebug b || Maybe.withDefault False (Maybe.map hasDebug c)
 
-        Opt.Shader _ _ _ ->
+        T.CASTO_Shader _ _ _ ->
             False
 
 
-defHasDebug : Opt.Def -> Bool
+defHasDebug : T.CASTO_Def -> Bool
 defHasDebug def =
     case def of
-        Opt.Def _ expr ->
+        T.CASTO_Def _ expr ->
             hasDebug expr
 
-        Opt.TailDef _ _ expr ->
+        T.CASTO_TailDef _ _ expr ->
             hasDebug expr
 
 
-deciderHasDebug : Opt.Decider Opt.Choice -> Bool
+deciderHasDebug : T.CASTO_Decider T.CASTO_Choice -> Bool
 deciderHasDebug decider =
     case decider of
-        Opt.Leaf (Opt.Inline expr) ->
+        T.CASTO_Leaf (T.CASTO_Inline expr) ->
             hasDebug expr
 
-        Opt.Leaf (Opt.Jump _) ->
+        T.CASTO_Leaf (T.CASTO_Jump _) ->
             False
 
-        Opt.Chain _ success failure ->
+        T.CASTO_Chain _ success failure ->
             deciderHasDebug success || deciderHasDebug failure
 
-        Opt.FanOut _ tests fallback ->
+        T.CASTO_FanOut _ tests fallback ->
             List.any (deciderHasDebug << Tuple.second) tests || deciderHasDebug fallback

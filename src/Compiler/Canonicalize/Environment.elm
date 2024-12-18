@@ -31,7 +31,7 @@ import Types as T
 
 
 type alias EResult i w a =
-    R.RResult i w Error.Error a
+    R.RResult i w Error.CREC_Error a
 
 
 
@@ -163,10 +163,10 @@ addLocalBoth name region var =
             R.ok (Local region)
 
         Local parentRegion ->
-            R.throw (Error.Shadowing name parentRegion region)
+            R.throw (Error.CREC_Shadowing name parentRegion region)
 
         TopLevel parentRegion ->
-            R.throw (Error.Shadowing name parentRegion region)
+            R.throw (Error.CREC_Shadowing name parentRegion region)
 
 
 
@@ -180,10 +180,10 @@ findType region { types, q_types } name =
             R.ok tipe
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousType region Nothing name h hs)
+            R.throw (Error.CREC_AmbiguousType region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundType region Nothing name (toPossibleNames types q_types))
+            R.throw (Error.CREC_NotFoundType region Nothing name (toPossibleNames types q_types))
 
 
 findTypeQual : T.CRA_Region -> Env -> T.CDN_Name -> T.CDN_Name -> EResult i w Type
@@ -195,13 +195,13 @@ findTypeQual region { types, q_types } prefix name =
                     R.ok tipe
 
                 Just (Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousType region (Just prefix) name h hs)
+                    R.throw (Error.CREC_AmbiguousType region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundType region (Just prefix) name (toPossibleNames types q_types))
+                    R.throw (Error.CREC_NotFoundType region (Just prefix) name (toPossibleNames types q_types))
 
         Nothing ->
-            R.throw (Error.NotFoundType region (Just prefix) name (toPossibleNames types q_types))
+            R.throw (Error.CREC_NotFoundType region (Just prefix) name (toPossibleNames types q_types))
 
 
 
@@ -215,10 +215,10 @@ findCtor region { ctors, q_ctors } name =
             R.ok ctor
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousVariant region Nothing name h hs)
+            R.throw (Error.CREC_AmbiguousVariant region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundVariant region Nothing name (toPossibleNames ctors q_ctors))
+            R.throw (Error.CREC_NotFoundVariant region Nothing name (toPossibleNames ctors q_ctors))
 
 
 findCtorQual : T.CRA_Region -> Env -> T.CDN_Name -> T.CDN_Name -> EResult i w Ctor
@@ -230,13 +230,13 @@ findCtorQual region { ctors, q_ctors } prefix name =
                     R.ok pattern
 
                 Just (Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousVariant region (Just prefix) name h hs)
+                    R.throw (Error.CREC_AmbiguousVariant region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
+                    R.throw (Error.CREC_NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
 
         Nothing ->
-            R.throw (Error.NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
+            R.throw (Error.CREC_NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
 
 
 
@@ -250,16 +250,16 @@ findBinop region { binops } name =
             R.ok binop
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousBinop region name h hs)
+            R.throw (Error.CREC_AmbiguousBinop region name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundBinop region name (EverySet.fromList identity (Dict.keys compare binops)))
+            R.throw (Error.CREC_NotFoundBinop region name (EverySet.fromList identity (Dict.keys compare binops)))
 
 
 
 -- TO POSSIBLE NAMES
 
 
-toPossibleNames : Exposed a -> Qualified a -> Error.PossibleNames
+toPossibleNames : Exposed a -> Qualified a -> Error.CREC_PossibleNames
 toPossibleNames exposed qualified =
-    Error.PossibleNames (EverySet.fromList identity (Dict.keys compare exposed)) (Dict.map (\_ -> Dict.keys compare >> EverySet.fromList identity) qualified)
+    Error.CREC_PossibleNames (EverySet.fromList identity (Dict.keys compare exposed)) (Dict.map (\_ -> Dict.keys compare >> EverySet.fromList identity) qualified)

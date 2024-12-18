@@ -12,6 +12,7 @@ port module System.IO exposing
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
     , MVarSubscriber(..)
+    , MVarSubscriber_Maybe_BED_Status(..), MVarSubscriber_Maybe_CASTO_GlobalGraph(..), MVarSubscriber_Maybe_CASTO_LocalGraph(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -84,6 +85,7 @@ import Array exposing (Array)
 import Codec.Archive.Zip as Zip
 import Dict exposing (Dict)
 import Json.Encode as Encode
+import Types as T
 import Utils.Crash exposing (crash)
 
 
@@ -113,6 +115,9 @@ run app =
                     , progName = flags.progName
                     , state = initialReplState
                     , mVars = Array.empty
+                    , mVars_Maybe_BED_Status = Array.empty
+                    , mVars_Maybe_CASTO_LocalGraph = Array.empty
+                    , mVars_Maybe_CASTO_GlobalGraph = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -185,10 +190,23 @@ type Next
     | DirRemoveDirectoryRecursiveNext (() -> IO ())
     | DirWithCurrentDirectoryNext (() -> IO ())
     | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
+      -- MVars
     | NewEmptyMVarNext (Int -> IO ())
     | ReadMVarNext (Encode.Value -> IO ())
     | TakeMVarNext (Encode.Value -> IO ())
     | PutMVarNext (() -> IO ())
+      -- MVars (Maybe T.BED_Status)
+    | NewEmptyMVarNext_Maybe_BED_Status (Int -> IO ())
+    | ReadMVarNext_Maybe_BED_Status (Maybe T.BED_Status -> IO ())
+    | PutMVarNext_Maybe_BED_Status (() -> IO ())
+      -- MVars (Maybe T.CASTO_LocalGraph)
+    | NewEmptyMVarNext_Maybe_CASTO_LocalGraph (Int -> IO ())
+    | ReadMVarNext_Maybe_CASTO_LocalGraph (Maybe T.CASTO_LocalGraph -> IO ())
+    | PutMVarNext_Maybe_CASTO_LocalGraph (() -> IO ())
+      -- MVars (Maybe T.CASTO_GlobalGraph)
+    | NewEmptyMVarNext_Maybe_CASTO_GlobalGraph (Int -> IO ())
+    | ReadMVarNext_Maybe_CASTO_GlobalGraph (Maybe T.CASTO_GlobalGraph -> IO ())
+    | PutMVarNext_Maybe_CASTO_GlobalGraph (() -> IO ())
 
 
 type Msg
@@ -221,9 +239,22 @@ type Msg
     | DirRemoveDirectoryRecursiveMsg Int
     | DirWithCurrentDirectoryMsg Int
     | ReplGetInputLineWithInitialMsg Int (Maybe String)
+      -- MVars
     | NewEmptyMVarMsg Int Int
     | ReadMVarMsg Int Encode.Value
     | PutMVarMsg Int
+      -- MVars (Maybe T.BED_Status)
+    | NewEmptyMVarMsg_Maybe_BED_Status Int Int
+    | ReadMVarMsg_Maybe_BED_Status Int (Maybe T.BED_Status)
+    | PutMVarMsg_Maybe_BED_Status Int
+      -- MVars (Maybe T.CASTO_LocalGraph)
+    | NewEmptyMVarMsg_Maybe_CASTO_LocalGraph Int Int
+    | ReadMVarMsg_Maybe_CASTO_LocalGraph Int (Maybe T.CASTO_LocalGraph)
+    | PutMVarMsg_Maybe_CASTO_LocalGraph Int
+      -- MVars (Maybe T.CASTO_GlobalGraph)
+    | NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph Int Int
+    | ReadMVarMsg_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
+    | PutMVarMsg_Maybe_CASTO_GlobalGraph Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -353,6 +384,7 @@ update msg model =
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( { newRealWorld | next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
+                -- MVars
                 ( newRealWorld, NewEmptyMVar next value ) ->
                     update (NewEmptyMVarMsg index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext next) model.next }
 
@@ -370,7 +402,7 @@ update msg model =
                     ( { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }, Cmd.none )
                         |> updatePutIndex maybePutIndex
 
-                ( newRealWorld, PutMVar next readIndexes value ) ->
+                ( newRealWorld, PutMVar next readIndexes (Just value) ) ->
                     List.foldl
                         (\readIndex ( updatedModel, updateCmd ) ->
                             update (ReadMVarMsg readIndex value) updatedModel
@@ -378,6 +410,75 @@ update msg model =
                         )
                         (update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next })
                         readIndexes
+
+                ( newRealWorld, PutMVar next _ Nothing ) ->
+                    update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }
+
+                -- MVars (Maybe T.BED_Status)
+                ( newRealWorld, NewEmptyMVar_Maybe_BED_Status next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_BED_Status index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_BED_Status next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BED_Status next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_BED_Status index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BED_Status next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BED_Status next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BED_Status next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_Maybe_BED_Status next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_BED_Status readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_BED_Status index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BED_Status next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_BED_Status next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_BED_Status index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BED_Status next) model.next }
+
+                -- MVars (Maybe T.CASTO_LocalGraph)
+                ( newRealWorld, NewEmptyMVar_Maybe_CASTO_LocalGraph next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_CASTO_LocalGraph index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_CASTO_LocalGraph next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CASTO_LocalGraph next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_CASTO_LocalGraph index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CASTO_LocalGraph next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CASTO_LocalGraph next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CASTO_LocalGraph next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_Maybe_CASTO_LocalGraph next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_CASTO_LocalGraph readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_CASTO_LocalGraph index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CASTO_LocalGraph next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_CASTO_LocalGraph next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_CASTO_LocalGraph index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CASTO_LocalGraph next) model.next }
+
+                -- MVars (Maybe T.CASTO_GlobalGraph)
+                ( newRealWorld, NewEmptyMVar_Maybe_CASTO_GlobalGraph next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CASTO_GlobalGraph next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_CASTO_GlobalGraph index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CASTO_GlobalGraph next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CASTO_GlobalGraph next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_Maybe_CASTO_GlobalGraph next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_CASTO_GlobalGraph readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_CASTO_GlobalGraph index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CASTO_GlobalGraph next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_CASTO_GlobalGraph next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_CASTO_GlobalGraph index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -483,14 +584,6 @@ update msg model =
                 _ ->
                     crash "ProcWaitForProcessMsg"
 
-        NewEmptyMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (NewEmptyMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "NewEmptyMVarMsg"
-
         DirFindExecutableMsg index value ->
             case Dict.get index model.next of
                 Just (DirFindExecutableNext fn) ->
@@ -506,14 +599,6 @@ update msg model =
 
                 _ ->
                     crash "ReplGetInputLineMsg"
-
-        PutMVarMsg index ->
-            case Dict.get index model.next of
-                Just (PutMVarNext fn) ->
-                    update (PureMsg index (fn ())) model
-
-                _ ->
-                    crash "PutMVarMsg"
 
         DirDoesFileExistMsg index value ->
             case Dict.get index model.next of
@@ -571,17 +656,6 @@ update msg model =
                 _ ->
                     crash "DirCanonicalizePathMsg"
 
-        ReadMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (ReadMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                Just (TakeMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "ReadMVarMsg"
-
         BinaryDecodeFileOrFailMsg index value ->
             case Dict.get index model.next of
                 Just (BinaryDecodeFileOrFailNext fn) ->
@@ -629,6 +703,109 @@ update msg model =
 
                 _ ->
                     crash "ReplGetInputLineWithInitialMsg"
+
+        -- MVars
+        NewEmptyMVarMsg index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg"
+
+        ReadMVarMsg index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg"
+
+        PutMVarMsg index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg"
+
+        -- MVars (Maybe T.BED_Status)
+        NewEmptyMVarMsg_Maybe_BED_Status index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_BED_Status fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_BED_Status"
+
+        ReadMVarMsg_Maybe_BED_Status index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_BED_Status fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_BED_Status"
+
+        PutMVarMsg_Maybe_BED_Status index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_BED_Status fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_BED_Status"
+
+        -- MVars (Maybe T.CASTO_LocalGraph)
+        NewEmptyMVarMsg_Maybe_CASTO_LocalGraph index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_CASTO_LocalGraph fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_CASTO_LocalGraph"
+
+        ReadMVarMsg_Maybe_CASTO_LocalGraph index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_CASTO_LocalGraph fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_CASTO_LocalGraph"
+
+        PutMVarMsg_Maybe_CASTO_LocalGraph index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_CASTO_LocalGraph fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_CASTO_LocalGraph"
+
+        -- MVars (Maybe T.CASTO_GlobalGraph)
+        NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_CASTO_GlobalGraph fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph"
+
+        ReadMVarMsg_Maybe_CASTO_GlobalGraph index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_CASTO_GlobalGraph fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_CASTO_GlobalGraph"
+
+        PutMVarMsg_Maybe_CASTO_GlobalGraph index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_CASTO_GlobalGraph fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_CASTO_GlobalGraph"
 
 
 updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
@@ -853,10 +1030,23 @@ type ION a
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
     | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
+      -- MVars
     | NewEmptyMVar (Int -> IO a) Int
     | ReadMVar (Encode.Value -> IO a) (Maybe Encode.Value)
     | TakeMVar (Encode.Value -> IO a) (Maybe Encode.Value) (Maybe Int)
-    | PutMVar (() -> IO a) (List Int) Encode.Value
+    | PutMVar (() -> IO a) (List Int) (Maybe Encode.Value)
+      -- MVars (Maybe T.BED_Status)
+    | NewEmptyMVar_Maybe_BED_Status (Int -> IO a) Int
+    | ReadMVar_Maybe_BED_Status (Maybe T.BED_Status -> IO a) (Maybe (Maybe T.BED_Status))
+    | PutMVar_Maybe_BED_Status (() -> IO a) (List Int) (Maybe (Maybe T.BED_Status))
+      -- MVars (Maybe T.CASTO_LocalGraph)
+    | NewEmptyMVar_Maybe_CASTO_LocalGraph (Int -> IO a) Int
+    | ReadMVar_Maybe_CASTO_LocalGraph (Maybe T.CASTO_LocalGraph -> IO a) (Maybe (Maybe T.CASTO_LocalGraph))
+    | PutMVar_Maybe_CASTO_LocalGraph (() -> IO a) (List Int) (Maybe (Maybe T.CASTO_LocalGraph))
+      -- MVars (Maybe T.CASTO_GlobalGraph)
+    | NewEmptyMVar_Maybe_CASTO_GlobalGraph (Int -> IO a) Int
+    | ReadMVar_Maybe_CASTO_GlobalGraph (Maybe T.CASTO_GlobalGraph -> IO a) (Maybe (Maybe T.CASTO_GlobalGraph))
+    | PutMVar_Maybe_CASTO_GlobalGraph (() -> IO a) (List Int) (Maybe (Maybe T.CASTO_GlobalGraph))
 
 
 type alias RealWorld =
@@ -867,6 +1057,9 @@ type alias RealWorld =
     , progName : String
     , state : ReplState
     , mVars : Array { subscribers : List MVarSubscriber, value : Maybe Encode.Value }
+    , mVars_Maybe_BED_Status : Array { subscribers : List MVarSubscriber_Maybe_BED_Status, value : Maybe (Maybe T.BED_Status) }
+    , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe T.CASTO_LocalGraph) }
+    , mVars_Maybe_CASTO_GlobalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_GlobalGraph, value : Maybe (Maybe T.CASTO_GlobalGraph) }
     , next : Dict Int Next
     }
 
@@ -875,6 +1068,24 @@ type MVarSubscriber
     = ReadMVarSubscriber Int
     | TakeMVarSubscriber Int
     | PutMVarSubscriber Int Encode.Value
+
+
+type MVarSubscriber_Maybe_BED_Status
+    = ReadMVarSubscriber_Maybe_BED_Status Int
+    | TakeMVarSubscriber_Maybe_BED_Status Int
+    | PutMVarSubscriber_Maybe_BED_Status Int (Maybe T.BED_Status)
+
+
+type MVarSubscriber_Maybe_CASTO_LocalGraph
+    = ReadMVarSubscriber_Maybe_CASTO_LocalGraph Int
+    | TakeMVarSubscriber_Maybe_CASTO_LocalGraph Int
+    | PutMVarSubscriber_Maybe_CASTO_LocalGraph Int (Maybe T.CASTO_LocalGraph)
+
+
+type MVarSubscriber_Maybe_CASTO_GlobalGraph
+    = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
+    | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
+    | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
 
 
 pure : a -> IO a
@@ -990,6 +1201,7 @@ bind f (IO ma) =
                 ( s1, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( s1, ReplGetInputLineWithInitial (\value -> bind f (next value)) prompt left right )
 
+                -- MVars
                 ( s1, NewEmptyMVar next emptyMVarIndex ) ->
                     ( s1, NewEmptyMVar (\value -> bind f (next value)) emptyMVarIndex )
 
@@ -1001,6 +1213,36 @@ bind f (IO ma) =
 
                 ( s1, PutMVar next readIndexes value ) ->
                     ( s1, PutMVar (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.BED_Status)
+                ( s1, NewEmptyMVar_Maybe_BED_Status next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_BED_Status (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_BED_Status next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_BED_Status (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_Maybe_BED_Status next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_BED_Status (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.CASTO_LocalGraph)
+                ( s1, NewEmptyMVar_Maybe_CASTO_LocalGraph next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_CASTO_LocalGraph (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_CASTO_LocalGraph next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_CASTO_LocalGraph (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_Maybe_CASTO_LocalGraph next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_CASTO_LocalGraph (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.CASTO_GlobalGraph)
+                ( s1, NewEmptyMVar_Maybe_CASTO_GlobalGraph next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_CASTO_GlobalGraph (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_CASTO_GlobalGraph next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_CASTO_GlobalGraph (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_Maybe_CASTO_GlobalGraph next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_CASTO_GlobalGraph (\() -> bind f (next ())) readIndexes value )
         )
 
 

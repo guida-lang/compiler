@@ -34,7 +34,7 @@ import Utils.Main as Utils
 
 
 type alias EResult i w a =
-    R.RResult i w Error.Error a
+    R.RResult i w Error.CREC_Error a
 
 
 type alias FreeLocals =
@@ -102,7 +102,7 @@ canonicalize env (T.CRA_At region expression) =
 
             T.CASTS_Lambda srcArgs body ->
                 delayedUsage <|
-                    (Pattern.verify Error.DPLambdaArgs
+                    (Pattern.verify Error.CREC_DPLambdaArgs
                         (R.traverse (Pattern.canonicalize env) srcArgs)
                         |> R.bind
                             (\( args, bindings ) ->
@@ -146,7 +146,7 @@ canonicalize env (T.CRA_At region expression) =
 
             T.CASTS_Update (T.CRA_At reg name) fields ->
                 let
-                    makeCanFields : R.RResult i w Error.Error (Dict String T.CDN_Name (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
+                    makeCanFields : R.RResult i w Error.CREC_Error (Dict String T.CDN_Name (R.RResult FreeLocals (List W.Warning) Error.CREC_Error Can.FieldUpdate))
                     makeCanFields =
                         Dups.checkFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize env t)) fields
                 in
@@ -184,7 +184,7 @@ canonicalizeTupleExtras region env extras =
             R.fmap Just <| canonicalize env three
 
         _ ->
-            R.throw (Error.TupleLargerThanThree region)
+            R.throw (Error.CREC_TupleLargerThanThree region)
 
 
 
@@ -205,7 +205,7 @@ canonicalizeIfBranch env ( condition, branch ) =
 canonicalizeCaseBranch : Env.Env -> ( T.CASTS_Pattern, T.CASTS_Expr ) -> EResult FreeLocals (List W.Warning) Can.CaseBranch
 canonicalizeCaseBranch env ( pattern, expr ) =
     directUsage
-        (Pattern.verify Error.DPCaseBranch
+        (Pattern.verify Error.CREC_DPCaseBranch
             (Pattern.canonicalize env pattern)
             |> R.bind
                 (\( cpattern, bindings ) ->
@@ -229,7 +229,7 @@ canonicalizeCaseBranch env ( pattern, expr ) =
 canonicalizeBinops : T.CRA_Region -> Env.Env -> List ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) Can.Expr
 canonicalizeBinops overallRegion env ops final =
     let
-        canonicalizeHelp : ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> R.RResult FreeLocals (List W.Warning) Error.Error ( Can.Expr, Env.Binop )
+        canonicalizeHelp : ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> R.RResult FreeLocals (List W.Warning) Error.CREC_Error ( Can.Expr, Env.Binop )
         canonicalizeHelp ( expr, T.CRA_At region op ) =
             R.ok Tuple.pair
                 |> R.apply (canonicalize env expr)
@@ -262,7 +262,7 @@ runBinopStepper overallRegion step =
                 toBinopStep (toBinop op expr) op rest final
 
         Error (Env.Binop op1 _ _ _ _ _) (Env.Binop op2 _ _ _ _ _) ->
-            R.throw (Error.Binop overallRegion op1 op2)
+            R.throw (Error.CREC_Binop overallRegion op1 op2)
 
 
 toBinopStep : (Can.Expr -> Can.Expr) -> Env.Binop -> List ( Can.Expr, Env.Binop ) -> Can.Expr -> Step
@@ -306,7 +306,7 @@ toBinop (Env.Binop op home name annotation _ _) left right =
 canonicalizeLet : T.CRA_Region -> Env.Env -> List (T.CRA_Located T.CASTS_Def) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) Can.Expr
 canonicalizeLet letRegion env defs body =
     directUsage <|
-        (Dups.detect (Error.DuplicatePattern Error.DPLetBinding)
+        (Dups.detect (Error.CREC_DuplicatePattern Error.CREC_DPLetBinding)
             (List.foldl addBindings Dups.none defs)
             |> R.bind
                 (\bindings ->
@@ -404,7 +404,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
         T.CASTS_Define ((T.CRA_At _ name) as aname) srcArgs body maybeType ->
             case maybeType of
                 Nothing ->
-                    Pattern.verify (Error.DPFuncArgs name)
+                    Pattern.verify (Error.CREC_DPFuncArgs name)
                         (R.traverse (Pattern.canonicalize env) srcArgs)
                         |> R.bind
                             (\( args, argBindings ) ->
@@ -432,7 +432,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
                     Type.toAnnotation env tipe
                         |> R.bind
                             (\(T.CASTC_Forall freeVars ctipe) ->
-                                Pattern.verify (Error.DPFuncArgs name)
+                                Pattern.verify (Error.CREC_DPFuncArgs name)
                                     (gatherTypedArgs env name srcArgs ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
@@ -458,7 +458,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
                             )
 
         T.CASTS_Destruct pattern body ->
-            Pattern.verify Error.DPDestruct
+            Pattern.verify Error.CREC_DPDestruct
                 (Pattern.canonicalize env pattern)
                 |> R.bind
                     (\( cpattern, _ ) ->
@@ -594,7 +594,7 @@ gatherTypedArgs env name srcArgs tipe index revTypedArgs =
                         ( T.CRA_At start _, T.CRA_At end _ ) =
                             ( Prelude.head srcArgs, Prelude.last srcArgs )
                     in
-                    R.throw (Error.AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
+                    R.throw (Error.CREC_AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
 
 
 detectCycles : T.CRA_Region -> List (Graph.SCC Binding) -> Can.Expr -> EResult i w Can.Expr
@@ -637,20 +637,20 @@ checkCycle bindings defs =
             case binding of
                 Define ((Can.Def name args _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                        R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
 
                     else
                         checkCycle otherBindings (def :: defs)
 
                 Define ((Can.TypedDef name _ args _ _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                        R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
 
                     else
                         checkCycle otherBindings (def :: defs)
 
                 Edge name ->
-                    R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                    R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
 
                 Destruct _ _ ->
                     -- a Destruct cannot appear in a cycle without any Edge values
@@ -815,10 +815,10 @@ findVar region env name =
                         )
 
                 Env.Foreigns h hs ->
-                    R.throw (Error.AmbiguousVar region Nothing name h hs)
+                    R.throw (Error.CREC_AmbiguousVar region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundVar region Nothing name (toPossibleNames env.vars env.q_vars))
+            R.throw (Error.CREC_NotFoundVar region Nothing name (toPossibleNames env.vars env.q_vars))
 
 
 findVarQual : T.CRA_Region -> Env.Env -> T.CDN_Name -> T.CDN_Name -> EResult FreeLocals w Can.Expr_
@@ -835,10 +835,10 @@ findVarQual region env prefix name =
                             Can.VarForeign home name annotation
 
                 Just (Env.Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousVar region (Just prefix) name h hs)
+                    R.throw (Error.CREC_AmbiguousVar region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                    R.throw (Error.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
         Nothing ->
             let
@@ -849,12 +849,12 @@ findVarQual region env prefix name =
                 R.ok <| Can.VarKernel (Name.getKernel prefix) name
 
             else
-                R.throw (Error.NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                R.throw (Error.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
 
-toPossibleNames : Dict String T.CDN_Name Env.Var -> Env.Qualified T.CASTC_Annotation -> Error.PossibleNames
+toPossibleNames : Dict String T.CDN_Name Env.Var -> Env.Qualified T.CASTC_Annotation -> Error.CREC_PossibleNames
 toPossibleNames exposed qualified =
-    Error.PossibleNames (Utils.keysSet identity compare exposed) (Dict.map (\_ -> Utils.keysSet identity compare) qualified)
+    Error.CREC_PossibleNames (Utils.keysSet identity compare exposed) (Dict.map (\_ -> Utils.keysSet identity compare) qualified)
 
 
 

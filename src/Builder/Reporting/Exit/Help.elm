@@ -22,7 +22,7 @@ import System.IO as IO exposing (IO)
 
 
 type Report
-    = CompilerReport String Error.Module (List Error.Module)
+    = CompilerReport String Error.CRE_Module (List Error.CRE_Module)
     | Report String (Maybe String) D.Doc
 
 
@@ -41,7 +41,7 @@ jsonReport =
     Report
 
 
-compilerReport : String -> Error.Module -> List Error.Module -> Report
+compilerReport : String -> Error.CRE_Module -> List Error.CRE_Module -> Report
 compilerReport =
     CompilerReport
 

@@ -23,20 +23,20 @@ import Utils.Main as Utils
 
 
 type alias MResult i w a =
-    R.RResult i w E.Error a
+    R.RResult i w E.CREM_Error a
 
 
 type alias Annotations =
     Dict String T.CDN_Name T.CASTC_Annotation
 
 
-optimize : Annotations -> Can.Module -> MResult i (List W.Warning) Opt.LocalGraph
+optimize : Annotations -> Can.Module -> MResult i (List W.Warning) T.CASTO_LocalGraph
 optimize annotations (Can.Module home _ _ decls unions aliases _ effects) =
     addDecls home annotations decls <|
         addEffects home effects <|
             addUnions home unions <|
                 addAliases home aliases <|
-                    Opt.LocalGraph Nothing Dict.empty Dict.empty
+                    T.CASTO_LocalGraph Nothing Dict.empty Dict.empty
 
 
 
@@ -44,12 +44,12 @@ optimize annotations (Can.Module home _ _ decls unions aliases _ effects) =
 
 
 type alias Nodes =
-    Dict (List String) Opt.Global Opt.Node
+    Dict (List String) T.CASTO_Global T.CASTO_Node
 
 
-addUnions : T.CEMN_Canonical -> Dict String T.CDN_Name T.CASTC_Union -> Opt.LocalGraph -> Opt.LocalGraph
-addUnions home unions (Opt.LocalGraph main nodes fields) =
-    Opt.LocalGraph main (Dict.foldr compare (\_ -> addUnion home) nodes unions) fields
+addUnions : T.CEMN_Canonical -> Dict String T.CDN_Name T.CASTC_Union -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addUnions home unions (T.CASTO_LocalGraph main nodes fields) =
+    T.CASTO_LocalGraph main (Dict.foldr compare (\_ -> addUnion home) nodes unions) fields
 
 
 addUnion : T.CEMN_Canonical -> T.CASTC_Union -> Nodes -> Nodes
@@ -60,48 +60,48 @@ addUnion home (T.CASTC_Union _ ctors _ opts) nodes =
 addCtorNode : T.CEMN_Canonical -> T.CASTC_CtorOpts -> T.CASTC_Ctor -> Nodes -> Nodes
 addCtorNode home opts (T.CASTC_Ctor name index numArgs _) nodes =
     let
-        node : Opt.Node
+        node : T.CASTO_Node
         node =
             case opts of
                 T.CASTC_Normal ->
-                    Opt.Ctor index numArgs
+                    T.CASTO_Ctor index numArgs
 
                 T.CASTC_Unbox ->
-                    Opt.Box
+                    T.CASTO_Box
 
                 T.CASTC_Enum ->
-                    Opt.Enum index
+                    T.CASTO_Enum index
     in
-    Dict.insert Opt.toComparableGlobal (Opt.Global home name) node nodes
+    Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) node nodes
 
 
 
 -- ALIAS
 
 
-addAliases : T.CEMN_Canonical -> Dict String T.CDN_Name T.CASTC_Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAliases : T.CEMN_Canonical -> Dict String T.CDN_Name T.CASTC_Alias -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
 addAliases home aliases graph =
     Dict.foldr compare (addAlias home) graph aliases
 
 
-addAlias : T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Alias -> Opt.LocalGraph -> Opt.LocalGraph
-addAlias home name (T.CASTC_Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
+addAlias : T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Alias -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addAlias home name (T.CASTC_Alias _ tipe) ((T.CASTO_LocalGraph main nodes fieldCounts) as graph) =
     case tipe of
         T.CASTC_TRecord fields Nothing ->
             let
-                function : Opt.Expr
+                function : T.CASTO_Expr
                 function =
-                    Opt.Function (List.map Tuple.first (Can.fieldsToList fields)) <|
-                        Opt.Record <|
-                            Dict.map (\field _ -> Opt.VarLocal field) fields
+                    T.CASTO_Function (List.map Tuple.first (Can.fieldsToList fields)) <|
+                        T.CASTO_Record <|
+                            Dict.map (\field _ -> T.CASTO_VarLocal field) fields
 
-                node : Opt.Node
+                node : T.CASTO_Node
                 node =
-                    Opt.Define function EverySet.empty
+                    T.CASTO_Define function EverySet.empty
             in
-            Opt.LocalGraph
+            T.CASTO_LocalGraph
                 main
-                (Dict.insert Opt.toComparableGlobal (Opt.Global home name) node nodes)
+                (Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) node nodes)
                 (Dict.foldr compare addRecordCtorField fieldCounts fields)
 
         _ ->
@@ -117,8 +117,8 @@ addRecordCtorField name _ fields =
 -- ADD EFFECTS
 
 
-addEffects : T.CEMN_Canonical -> Can.Effects -> Opt.LocalGraph -> Opt.LocalGraph
-addEffects home effects ((Opt.LocalGraph main nodes fields) as graph) =
+addEffects : T.CEMN_Canonical -> Can.Effects -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addEffects home effects ((T.CASTO_LocalGraph main nodes fields) as graph) =
     case effects of
         Can.NoEffects ->
             graph
@@ -128,42 +128,42 @@ addEffects home effects ((Opt.LocalGraph main nodes fields) as graph) =
 
         Can.Manager _ _ _ manager ->
             let
-                fx : Opt.Global
+                fx : T.CASTO_Global
                 fx =
-                    Opt.Global home "$fx$"
+                    T.CASTO_Global home "$fx$"
 
-                cmd : Opt.Global
+                cmd : T.CASTO_Global
                 cmd =
-                    Opt.Global home "command"
+                    T.CASTO_Global home "command"
 
-                sub : Opt.Global
+                sub : T.CASTO_Global
                 sub =
-                    Opt.Global home "subscription"
+                    T.CASTO_Global home "subscription"
 
-                link : Opt.Node
+                link : T.CASTO_Node
                 link =
-                    Opt.Link fx
+                    T.CASTO_Link fx
 
-                newNodes : Dict (List String) Opt.Global Opt.Node
+                newNodes : Dict (List String) T.CASTO_Global T.CASTO_Node
                 newNodes =
                     case manager of
                         Can.Cmd _ ->
                             Dict.insert Opt.toComparableGlobal cmd link <|
-                                Dict.insert Opt.toComparableGlobal fx (Opt.Manager Opt.Cmd) nodes
+                                Dict.insert Opt.toComparableGlobal fx (T.CASTO_Manager T.CASTO_Cmd) nodes
 
                         Can.Sub _ ->
                             Dict.insert Opt.toComparableGlobal sub link <|
-                                Dict.insert Opt.toComparableGlobal fx (Opt.Manager Opt.Sub) nodes
+                                Dict.insert Opt.toComparableGlobal fx (T.CASTO_Manager T.CASTO_Sub) nodes
 
                         Can.Fx _ _ ->
                             Dict.insert Opt.toComparableGlobal cmd link <|
                                 Dict.insert Opt.toComparableGlobal sub link <|
-                                    Dict.insert Opt.toComparableGlobal fx (Opt.Manager Opt.Fx) nodes
+                                    Dict.insert Opt.toComparableGlobal fx (T.CASTO_Manager T.CASTO_Fx) nodes
             in
-            Opt.LocalGraph main newNodes fields
+            T.CASTO_LocalGraph main newNodes fields
 
 
-addPort : T.CEMN_Canonical -> T.CDN_Name -> Can.Port -> Opt.LocalGraph -> Opt.LocalGraph
+addPort : T.CEMN_Canonical -> T.CDN_Name -> Can.Port -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
 addPort home name port_ graph =
     case port_ of
         Can.Incoming { payload } ->
@@ -171,31 +171,31 @@ addPort home name port_ graph =
                 ( deps, fields, decoder ) =
                     Names.run (Port.toDecoder payload)
 
-                node : Opt.Node
+                node : T.CASTO_Node
                 node =
-                    Opt.PortIncoming decoder deps
+                    T.CASTO_PortIncoming decoder deps
             in
-            addToGraph (Opt.Global home name) node fields graph
+            addToGraph (T.CASTO_Global home name) node fields graph
 
         Can.Outgoing { payload } ->
             let
                 ( deps, fields, encoder ) =
                     Names.run (Port.toEncoder payload)
 
-                node : Opt.Node
+                node : T.CASTO_Node
                 node =
-                    Opt.PortOutgoing encoder deps
+                    T.CASTO_PortOutgoing encoder deps
             in
-            addToGraph (Opt.Global home name) node fields graph
+            addToGraph (T.CASTO_Global home name) node fields graph
 
 
 
 -- HELPER
 
 
-addToGraph : Opt.Global -> Opt.Node -> Dict String T.CDN_Name Int -> Opt.LocalGraph -> Opt.LocalGraph
-addToGraph name node fields (Opt.LocalGraph main nodes fieldCounts) =
-    Opt.LocalGraph
+addToGraph : T.CASTO_Global -> T.CASTO_Node -> Dict String T.CDN_Name Int -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addToGraph name node fields (T.CASTO_LocalGraph main nodes fieldCounts) =
+    T.CASTO_LocalGraph
         main
         (Dict.insert Opt.toComparableGlobal name node nodes)
         (Utils.mapUnionWith identity compare (+) fields fieldCounts)
@@ -205,7 +205,7 @@ addToGraph name node fields (Opt.LocalGraph main nodes fieldCounts) =
 -- ADD DECLS
 
 
-addDecls : T.CEMN_Canonical -> Annotations -> Can.Decls -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDecls : T.CEMN_Canonical -> Annotations -> Can.Decls -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
 addDecls home annotations decls graph =
     case decls of
         Can.Declare def subDecls ->
@@ -223,7 +223,7 @@ addDecls home annotations decls graph =
                     addDecls home annotations subDecls (addRecDefs home defs graph)
 
                 Just region ->
-                    R.throw <| E.BadCycle region (defToName d) (List.map defToName ds)
+                    R.throw <| E.CREM_BadCycle region (defToName d) (List.map defToName ds)
 
         Can.SaveTheEnvironment ->
             R.ok graph
@@ -266,7 +266,7 @@ defToName def =
 -- ADD DEFS
 
 
-addDef : T.CEMN_Canonical -> Annotations -> Can.Def -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDef : T.CEMN_Canonical -> Annotations -> Can.Def -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
 addDef home annotations def graph =
     case def of
         Can.Def (T.CRA_At region name) args body ->
@@ -281,8 +281,8 @@ addDef home annotations def graph =
             addDefHelp region annotations home name (List.map Tuple.first typedArgs) body graph
 
 
-addDefHelp : T.CRA_Region -> Annotations -> T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
-addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
+addDefHelp : T.CRA_Region -> Annotations -> T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> T.CASTO_LocalGraph -> MResult i w T.CASTO_LocalGraph
+addDefHelp region annotations home name args body ((T.CASTO_LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
         R.ok (addDefNode home name args body EverySet.empty graph)
 
@@ -291,36 +291,36 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
             (T.CASTC_Forall _ tipe) =
                 Utils.find identity name annotations
 
-            addMain : ( EverySet (List String) Opt.Global, Dict String T.CDN_Name Int, Opt.Main ) -> Opt.LocalGraph
+            addMain : ( EverySet (List String) T.CASTO_Global, Dict String T.CDN_Name Int, T.CASTO_Main ) -> T.CASTO_LocalGraph
             addMain ( deps, fields, main ) =
                 addDefNode home name args body deps <|
-                    Opt.LocalGraph (Just main) nodes (Utils.mapUnionWith identity compare (+) fields fieldCounts)
+                    T.CASTO_LocalGraph (Just main) nodes (Utils.mapUnionWith identity compare (+) fields fieldCounts)
         in
         case Type.deepDealias tipe of
             T.CASTC_TType hm nm [ _ ] ->
                 if hm == ModuleName.virtualDom && nm == Name.node then
-                    R.ok <| addMain <| Names.run <| Names.registerKernel Name.virtualDom Opt.Static
+                    R.ok <| addMain <| Names.run <| Names.registerKernel Name.virtualDom T.CASTO_Static
 
                 else
-                    R.throw (E.BadType region tipe)
+                    R.throw (E.CREM_BadType region tipe)
 
             T.CASTC_TType hm nm [ flags, _, message ] ->
                 if hm == ModuleName.platform && nm == Name.program then
                     case Effects.checkPayload flags of
                         Ok () ->
-                            R.ok <| addMain <| Names.run <| Names.fmap (Opt.Dynamic message) <| Port.toFlagsDecoder flags
+                            R.ok <| addMain <| Names.run <| Names.fmap (T.CASTO_Dynamic message) <| Port.toFlagsDecoder flags
 
                         Err ( subType, invalidPayload ) ->
-                            R.throw (E.BadFlags region subType invalidPayload)
+                            R.throw (E.CREM_BadFlags region subType invalidPayload)
 
                 else
-                    R.throw (E.BadType region tipe)
+                    R.throw (E.CREM_BadType region tipe)
 
             _ ->
-                R.throw (E.BadType region tipe)
+                R.throw (E.CREM_BadType region tipe)
 
 
-addDefNode : T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
+addDefNode : T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) T.CASTO_Global -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
 addDefNode home name args body mainDeps graph =
     let
         ( deps, fields, def ) =
@@ -336,12 +336,12 @@ addDefNode home name args body mainDeps graph =
                                     Expr.optimize EverySet.empty body
                                         |> Names.fmap
                                             (\obody ->
-                                                Opt.Function argNames <|
-                                                    List.foldr Opt.Destruct obody destructors
+                                                T.CASTO_Function argNames <|
+                                                    List.foldr T.CASTO_Destruct obody destructors
                                             )
                                 )
     in
-    addToGraph (Opt.Global home name) (Opt.Define def (EverySet.union deps mainDeps)) fields graph
+    addToGraph (T.CASTO_Global home name) (T.CASTO_Define def (EverySet.union deps mainDeps)) fields graph
 
 
 
@@ -350,29 +350,29 @@ addDefNode home name args body mainDeps graph =
 
 type State
     = State
-        { values : List ( T.CDN_Name, Opt.Expr )
-        , functions : List Opt.Def
+        { values : List ( T.CDN_Name, T.CASTO_Expr )
+        , functions : List T.CASTO_Def
         }
 
 
-addRecDefs : T.CEMN_Canonical -> List Can.Def -> Opt.LocalGraph -> Opt.LocalGraph
-addRecDefs home defs (Opt.LocalGraph main nodes fieldCounts) =
+addRecDefs : T.CEMN_Canonical -> List Can.Def -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addRecDefs home defs (T.CASTO_LocalGraph main nodes fieldCounts) =
     let
         names : List T.CDN_Name
         names =
             List.reverse (List.map toName defs)
 
-        cycleName : Opt.Global
+        cycleName : T.CASTO_Global
         cycleName =
-            Opt.Global home (Name.fromManyNames names)
+            T.CASTO_Global home (Name.fromManyNames names)
 
         cycle : EverySet String T.CDN_Name
         cycle =
             List.foldr addValueName EverySet.empty defs
 
-        links : Dict (List String) Opt.Global Opt.Node
+        links : Dict (List String) T.CASTO_Global T.CASTO_Node
         links =
-            List.foldr (addLink home (Opt.Link cycleName)) Dict.empty defs
+            List.foldr (addLink home (T.CASTO_Link cycleName)) Dict.empty defs
 
         ( deps, fields, State { values, functions } ) =
             Names.run <|
@@ -380,9 +380,9 @@ addRecDefs home defs (Opt.LocalGraph main nodes fieldCounts) =
                     (Names.pure (State { values = [], functions = [] }))
                     defs
     in
-    Opt.LocalGraph
+    T.CASTO_LocalGraph
         main
-        (Dict.insert Opt.toComparableGlobal cycleName (Opt.Cycle names values functions deps) (Dict.union links nodes))
+        (Dict.insert Opt.toComparableGlobal cycleName (T.CASTO_Cycle names values functions deps) (Dict.union links nodes))
         (Utils.mapUnionWith identity compare (+) fields fieldCounts)
 
 
@@ -414,14 +414,14 @@ addValueName def names =
                 names
 
 
-addLink : T.CEMN_Canonical -> Opt.Node -> Can.Def -> Dict (List String) Opt.Global Opt.Node -> Dict (List String) Opt.Global Opt.Node
+addLink : T.CEMN_Canonical -> T.CASTO_Node -> Can.Def -> Dict (List String) T.CASTO_Global T.CASTO_Node -> Dict (List String) T.CASTO_Global T.CASTO_Node
 addLink home link def links =
     case def of
         Can.Def (T.CRA_At _ name) _ _ ->
-            Dict.insert Opt.toComparableGlobal (Opt.Global home name) link links
+            Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) link links
 
         Can.TypedDef (T.CRA_At _ name) _ _ _ _ ->
-            Dict.insert Opt.toComparableGlobal (Opt.Global home name) link links
+            Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) link links
 
 
 

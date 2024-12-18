@@ -224,9 +224,9 @@ constrainEffects home r0 r1 r2 manager =
                                                                                                     [ CLocal r0 "init" (E.NoExpectation (task state0))
                                                                                                     , CLocal r1 "onEffects" (E.NoExpectation onEffects)
                                                                                                     , CLocal r2 "onSelfMsg" (E.NoExpectation onSelfMsg)
-                                                                                                    , CEqual r1 E.Effects state0 (E.NoExpectation state1)
-                                                                                                    , CEqual r2 E.Effects state0 (E.NoExpectation state2)
-                                                                                                    , CEqual r2 E.Effects self1 (E.NoExpectation self2)
+                                                                                                    , CEqual r1 E.CRET_Effects state0 (E.NoExpectation state1)
+                                                                                                    , CEqual r2 E.CRET_Effects state0 (E.NoExpectation state2)
+                                                                                                    , CEqual r2 E.CRET_Effects self1 (E.NoExpectation self2)
                                                                                                     ]
                                                                                         in
                                                                                         IO.fmap (CLet [] [ s0, s1, s2, m1, m2, sm1, sm2 ] Dict.empty effectCons)

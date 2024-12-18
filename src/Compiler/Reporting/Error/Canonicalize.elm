@@ -1,11 +1,11 @@
 module Compiler.Reporting.Error.Canonicalize exposing
-    ( BadArityContext(..)
-    , DuplicatePatternContext(..)
-    , Error(..)
-    , InvalidPayload(..)
-    , PortProblem(..)
-    , PossibleNames
-    , VarKind(..)
+    ( CREC_BadArityContext(..)
+    , CREC_DuplicatePatternContext(..)
+    , CREC_Error(..)
+    , CREC_InvalidPayload(..)
+    , CREC_PortProblem(..)
+    , CREC_PossibleNames
+    , CREC_VarKind(..)
     , errorDecoder
     , errorEncoder
     , invalidPayloadDecoder
@@ -37,76 +37,76 @@ import Types as T
 -- CANONICALIZATION ERRORS
 
 
-type Error
-    = AnnotationTooShort T.CRA_Region T.CDN_Name T.CDI_ZeroBased Int
-    | AmbiguousVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
-    | AmbiguousType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
-    | AmbiguousVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
-    | AmbiguousBinop T.CRA_Region T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
-    | BadArity T.CRA_Region BadArityContext T.CDN_Name Int Int
-    | Binop T.CRA_Region T.CDN_Name T.CDN_Name
-    | DuplicateDecl T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateType T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateCtor T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateBinop T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateField T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateAliasArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicateUnionArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
-    | DuplicatePattern DuplicatePatternContext T.CDN_Name T.CRA_Region T.CRA_Region
-    | EffectNotFound T.CRA_Region T.CDN_Name
-    | EffectFunctionNotFound T.CRA_Region T.CDN_Name
-    | ExportDuplicate T.CDN_Name T.CRA_Region T.CRA_Region
-    | ExportNotFound T.CRA_Region VarKind T.CDN_Name (List T.CDN_Name)
-    | ExportOpenAlias T.CRA_Region T.CDN_Name
-    | ImportCtorByName T.CRA_Region T.CDN_Name T.CDN_Name
-    | ImportNotFound T.CRA_Region T.CDN_Name (List T.CEMN_Canonical)
-    | ImportOpenAlias T.CRA_Region T.CDN_Name
-    | ImportExposingNotFound T.CRA_Region T.CEMN_Canonical T.CDN_Name (List T.CDN_Name)
-    | NotFoundVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
-    | NotFoundType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
-    | NotFoundVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name PossibleNames
-    | NotFoundBinop T.CRA_Region T.CDN_Name (EverySet String T.CDN_Name)
-    | PatternHasRecordCtor T.CRA_Region T.CDN_Name
-    | PortPayloadInvalid T.CRA_Region T.CDN_Name T.CASTC_Type InvalidPayload
-    | PortTypeInvalid T.CRA_Region T.CDN_Name PortProblem
-    | RecursiveAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) T.CASTS_Type (List T.CDN_Name)
-    | RecursiveDecl T.CRA_Region T.CDN_Name (List T.CDN_Name)
-    | RecursiveLet (T.CRA_Located T.CDN_Name) (List T.CDN_Name)
-    | Shadowing T.CDN_Name T.CRA_Region T.CRA_Region
-    | TupleLargerThanThree T.CRA_Region
-    | TypeVarsUnboundInUnion T.CRA_Region T.CDN_Name (List T.CDN_Name) ( T.CDN_Name, T.CRA_Region ) (List ( T.CDN_Name, T.CRA_Region ))
-    | TypeVarsMessedUpInAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) (List ( T.CDN_Name, T.CRA_Region )) (List ( T.CDN_Name, T.CRA_Region ))
+type CREC_Error
+    = CREC_AnnotationTooShort T.CRA_Region T.CDN_Name T.CDI_ZeroBased Int
+    | CREC_AmbiguousVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | CREC_AmbiguousType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | CREC_AmbiguousVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | CREC_AmbiguousBinop T.CRA_Region T.CDN_Name T.CEMN_Canonical (OneOrMore T.CEMN_Canonical)
+    | CREC_BadArity T.CRA_Region CREC_BadArityContext T.CDN_Name Int Int
+    | CREC_Binop T.CRA_Region T.CDN_Name T.CDN_Name
+    | CREC_DuplicateDecl T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateType T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateCtor T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateBinop T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateField T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateAliasArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicateUnionArg T.CDN_Name T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_DuplicatePattern CREC_DuplicatePatternContext T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_EffectNotFound T.CRA_Region T.CDN_Name
+    | CREC_EffectFunctionNotFound T.CRA_Region T.CDN_Name
+    | CREC_ExportDuplicate T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_ExportNotFound T.CRA_Region CREC_VarKind T.CDN_Name (List T.CDN_Name)
+    | CREC_ExportOpenAlias T.CRA_Region T.CDN_Name
+    | CREC_ImportCtorByName T.CRA_Region T.CDN_Name T.CDN_Name
+    | CREC_ImportNotFound T.CRA_Region T.CDN_Name (List T.CEMN_Canonical)
+    | CREC_ImportOpenAlias T.CRA_Region T.CDN_Name
+    | CREC_ImportExposingNotFound T.CRA_Region T.CEMN_Canonical T.CDN_Name (List T.CDN_Name)
+    | CREC_NotFoundVar T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name CREC_PossibleNames
+    | CREC_NotFoundType T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name CREC_PossibleNames
+    | CREC_NotFoundVariant T.CRA_Region (Maybe T.CDN_Name) T.CDN_Name CREC_PossibleNames
+    | CREC_NotFoundBinop T.CRA_Region T.CDN_Name (EverySet String T.CDN_Name)
+    | CREC_PatternHasRecordCtor T.CRA_Region T.CDN_Name
+    | CREC_PortPayloadInvalid T.CRA_Region T.CDN_Name T.CASTC_Type CREC_InvalidPayload
+    | CREC_PortTypeInvalid T.CRA_Region T.CDN_Name CREC_PortProblem
+    | CREC_RecursiveAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) T.CASTS_Type (List T.CDN_Name)
+    | CREC_RecursiveDecl T.CRA_Region T.CDN_Name (List T.CDN_Name)
+    | CREC_RecursiveLet (T.CRA_Located T.CDN_Name) (List T.CDN_Name)
+    | CREC_Shadowing T.CDN_Name T.CRA_Region T.CRA_Region
+    | CREC_TupleLargerThanThree T.CRA_Region
+    | CREC_TypeVarsUnboundInUnion T.CRA_Region T.CDN_Name (List T.CDN_Name) ( T.CDN_Name, T.CRA_Region ) (List ( T.CDN_Name, T.CRA_Region ))
+    | CREC_TypeVarsMessedUpInAlias T.CRA_Region T.CDN_Name (List T.CDN_Name) (List ( T.CDN_Name, T.CRA_Region )) (List ( T.CDN_Name, T.CRA_Region ))
 
 
-type BadArityContext
-    = TypeArity
-    | PatternArity
+type CREC_BadArityContext
+    = CREC_TypeArity
+    | CREC_PatternArity
 
 
-type DuplicatePatternContext
-    = DPLambdaArgs
-    | DPFuncArgs T.CDN_Name
-    | DPCaseBranch
-    | DPLetBinding
-    | DPDestruct
+type CREC_DuplicatePatternContext
+    = CREC_DPLambdaArgs
+    | CREC_DPFuncArgs T.CDN_Name
+    | CREC_DPCaseBranch
+    | CREC_DPLetBinding
+    | CREC_DPDestruct
 
 
-type InvalidPayload
-    = ExtendedRecord
-    | Function
-    | TypeVariable T.CDN_Name
-    | UnsupportedType T.CDN_Name
+type CREC_InvalidPayload
+    = CREC_ExtendedRecord
+    | CREC_Function
+    | CREC_TypeVariable T.CDN_Name
+    | CREC_UnsupportedType T.CDN_Name
 
 
-type PortProblem
-    = CmdNoArg
-    | CmdExtraArgs Int
-    | CmdBadMsg
-    | SubBad
-    | NotCmdOrSub
+type CREC_PortProblem
+    = CREC_CmdNoArg
+    | CREC_CmdExtraArgs Int
+    | CREC_CmdBadMsg
+    | CREC_SubBad
+    | CREC_NotCmdOrSub
 
 
-type alias PossibleNames =
+type alias CREC_PossibleNames =
     { locals : EverySet String T.CDN_Name
     , quals : Dict String T.CDN_Name (EverySet String T.CDN_Name)
     }
@@ -116,17 +116,17 @@ type alias PossibleNames =
 -- KIND
 
 
-type VarKind
-    = BadOp
-    | BadVar
-    | BadPattern
-    | BadType
+type CREC_VarKind
+    = CREC_BadOp
+    | CREC_BadVar
+    | CREC_BadPattern
+    | CREC_BadType
 
 
-toKindInfo : VarKind -> T.CDN_Name -> ( D.Doc, D.Doc, D.Doc )
+toKindInfo : CREC_VarKind -> T.CDN_Name -> ( D.Doc, D.Doc, D.Doc )
 toKindInfo kind name =
     case kind of
-        BadOp ->
+        CREC_BadOp ->
             ( D.fromChars "an"
             , D.fromChars "operator"
             , D.fromChars "("
@@ -134,7 +134,7 @@ toKindInfo kind name =
                 |> D.a (D.fromChars ")")
             )
 
-        BadVar ->
+        CREC_BadVar ->
             ( D.fromChars "a"
             , D.fromChars "value"
             , D.fromChars "`"
@@ -142,7 +142,7 @@ toKindInfo kind name =
                 |> D.a (D.fromChars "`")
             )
 
-        BadPattern ->
+        CREC_BadPattern ->
             ( D.fromChars "a"
             , D.fromChars "pattern"
             , D.fromChars "`"
@@ -150,7 +150,7 @@ toKindInfo kind name =
                 |> D.a (D.fromChars "`")
             )
 
-        BadType ->
+        CREC_BadType ->
             ( D.fromChars "a"
             , D.fromChars "type"
             , D.fromChars "`"
@@ -163,10 +163,10 @@ toKindInfo kind name =
 -- TO REPORT
 
 
-toReport : Code.Source -> Error -> Report.Report
+toReport : Code.Source -> CREC_Error -> Report.Report
 toReport source err =
     case err of
-        AnnotationTooShort region name index leftovers ->
+        CREC_AnnotationTooShort region name index leftovers ->
             let
                 numTypeArgs : Int
                 numTypeArgs =
@@ -201,27 +201,27 @@ toReport source err =
                         )
                     )
 
-        AmbiguousVar region maybePrefix name h hs ->
+        CREC_AmbiguousVar region maybePrefix name h hs ->
             ambiguousName source region maybePrefix name h hs "variable"
 
-        AmbiguousType region maybePrefix name h hs ->
+        CREC_AmbiguousType region maybePrefix name h hs ->
             ambiguousName source region maybePrefix name h hs "type"
 
-        AmbiguousVariant region maybePrefix name h hs ->
+        CREC_AmbiguousVariant region maybePrefix name h hs ->
             ambiguousName source region maybePrefix name h hs "variant"
 
-        AmbiguousBinop region name h hs ->
+        CREC_AmbiguousBinop region name h hs ->
             ambiguousName source region Nothing name h hs "operator"
 
-        BadArity region badArityContext name expected actual ->
+        CREC_BadArity region badArityContext name expected actual ->
             let
                 thing : String
                 thing =
                     case badArityContext of
-                        TypeArity ->
+                        CREC_TypeArity ->
                             "type"
 
-                        PatternArity ->
+                        CREC_PatternArity ->
                             "variant"
             in
             if actual < expected then
@@ -267,7 +267,7 @@ toReport source err =
                             D.fromChars "Which are the extra ones? Maybe some parentheses are missing?"
                         )
 
-        Binop region op1 op2 ->
+        CREC_Binop region op1 op2 ->
             Report.Report "INFIX PROBLEM" region [] <|
                 Code.toSnippet source
                     region
@@ -278,37 +278,37 @@ toReport source err =
                         "I do not know how to group these expressions. Add parentheses for me!"
                     )
 
-        DuplicateDecl name r1 r2 ->
+        CREC_DuplicateDecl name r1 r2 ->
             nameClash source r1 r2 <|
                 "This file has multiple `"
                     ++ name
                     ++ "` declarations."
 
-        DuplicateType name r1 r2 ->
+        CREC_DuplicateType name r1 r2 ->
             nameClash source r1 r2 <|
                 "This file defines multiple `"
                     ++ name
                     ++ "` types."
 
-        DuplicateCtor name r1 r2 ->
+        CREC_DuplicateCtor name r1 r2 ->
             nameClash source r1 r2 <|
                 "This file defines multiple `"
                     ++ name
                     ++ "` type constructors."
 
-        DuplicateBinop name r1 r2 ->
+        CREC_DuplicateBinop name r1 r2 ->
             nameClash source r1 r2 <|
                 "This file defines multiple ("
                     ++ name
                     ++ ") operators."
 
-        DuplicateField name r1 r2 ->
+        CREC_DuplicateField name r1 r2 ->
             nameClash source r1 r2 <|
                 "This record has multiple `"
                     ++ name
                     ++ "` fields."
 
-        DuplicateAliasArg typeName name r1 r2 ->
+        CREC_DuplicateAliasArg typeName name r1 r2 ->
             nameClash source r1 r2 <|
                 "The `"
                     ++ typeName
@@ -316,7 +316,7 @@ toReport source err =
                     ++ name
                     ++ "` type variables."
 
-        DuplicateUnionArg typeName name r1 r2 ->
+        CREC_DuplicateUnionArg typeName name r1 r2 ->
             nameClash source r1 r2 <|
                 "The `"
                     ++ typeName
@@ -324,25 +324,25 @@ toReport source err =
                     ++ name
                     ++ "` type variables."
 
-        DuplicatePattern context name r1 r2 ->
+        CREC_DuplicatePattern context name r1 r2 ->
             nameClash source r1 r2 <|
                 case context of
-                    DPLambdaArgs ->
+                    CREC_DPLambdaArgs ->
                         "This anonymous function has multiple `" ++ name ++ "` arguments."
 
-                    DPFuncArgs funcName ->
+                    CREC_DPFuncArgs funcName ->
                         "The `" ++ funcName ++ "` function has multiple `" ++ name ++ "` arguments."
 
-                    DPCaseBranch ->
+                    CREC_DPCaseBranch ->
                         "This `case` pattern has multiple `" ++ name ++ "` variables."
 
-                    DPLetBinding ->
+                    CREC_DPLetBinding ->
                         "This `let` expression defines `" ++ name ++ "` more than once!"
 
-                    DPDestruct ->
+                    CREC_DPDestruct ->
                         "This pattern contains multiple `" ++ name ++ "` variables."
 
-        EffectNotFound region name ->
+        CREC_EffectNotFound region name ->
             Report.Report "EFFECT PROBLEM" region [] <|
                 Code.toSnippet source
                     region
@@ -353,7 +353,7 @@ toReport source err =
                         ("But I cannot find a custom type named `" ++ name ++ "` in this file!")
                     )
 
-        EffectFunctionNotFound region name ->
+        CREC_EffectFunctionNotFound region name ->
             Report.Report "EFFECT PROBLEM" region [] <|
                 Code.toSnippet source
                     region
@@ -364,7 +364,7 @@ toReport source err =
                         ("But I cannot find `" ++ name ++ "` in this file!")
                     )
 
-        ExportDuplicate name r1 r2 ->
+        CREC_ExportDuplicate name r1 r2 ->
             let
                 messageThatEndsWithPunctuation : String
                 messageThatEndsWithPunctuation =
@@ -382,7 +382,7 @@ toReport source err =
                     , D.fromChars "Remove one of them and you should be all set!"
                     )
 
-        ExportNotFound region kind rawName possibleNames ->
+        CREC_ExportNotFound region kind rawName possibleNames ->
             let
                 suggestions : List String
                 suggestions =
@@ -431,7 +431,7 @@ toReport source err =
                                 ]
                     ]
 
-        ExportOpenAlias region name ->
+        CREC_ExportOpenAlias region name ->
             Report.Report "BAD EXPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -445,7 +445,7 @@ toReport source err =
                         "Remove the (..) and you should be fine!"
                     )
 
-        ImportCtorByName region ctor tipe ->
+        CREC_ImportCtorByName region ctor tipe ->
             Report.Report "BAD IMPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -481,7 +481,7 @@ toReport source err =
                         ]
                     )
 
-        ImportNotFound region name _ ->
+        CREC_ImportNotFound region name _ ->
             --
             -- NOTE: this should always be detected by `builder`
             -- So this error should never actually get printed out.
@@ -495,7 +495,7 @@ toReport source err =
                     , D.empty
                     )
 
-        ImportOpenAlias region name ->
+        CREC_ImportOpenAlias region name ->
             Report.Report "BAD IMPORT" region [] <|
                 Code.toSnippet source
                     region
@@ -506,7 +506,7 @@ toReport source err =
                         "Remove the (..) and it should work."
                     )
 
-        ImportExposingNotFound region (T.CEMN_Canonical _ home) value possibleNames ->
+        CREC_ImportExposingNotFound region (T.CEMN_Canonical _ home) value possibleNames ->
             let
                 suggestions : List String
                 suggestions =
@@ -543,16 +543,16 @@ toReport source err =
                                 ]
                     )
 
-        NotFoundVar region prefix name possibleNames ->
+        CREC_NotFoundVar region prefix name possibleNames ->
             notFound source region prefix name "variable" possibleNames
 
-        NotFoundType region prefix name possibleNames ->
+        CREC_NotFoundType region prefix name possibleNames ->
             notFound source region prefix name "type" possibleNames
 
-        NotFoundVariant region prefix name possibleNames ->
+        CREC_NotFoundVariant region prefix name possibleNames ->
             notFound source region prefix name "variant" possibleNames
 
-        NotFoundBinop region op locals ->
+        CREC_NotFoundBinop region op locals ->
             if op == "===" then
                 Report.Report "UNKNOWN OPERATOR" region [ "==" ] <|
                     Code.toSnippet source
@@ -650,7 +650,7 @@ toReport source err =
                             )
                         )
 
-        PatternHasRecordCtor region name ->
+        CREC_PatternHasRecordCtor region name ->
             Report.Report "BAD PATTERN" region [] <|
                 Code.toSnippet source
                     region
@@ -664,7 +664,7 @@ toReport source err =
                         "I recommend matching the record as a variable and unpacking it later."
                     )
 
-        PortPayloadInvalid region portName _ invalidPayload ->
+        CREC_PortPayloadInvalid region portName _ invalidPayload ->
             let
                 formatDetails : ( String, D.Doc ) -> Report.Report
                 formatDetails ( aBadKindOfThing, elaboration ) =
@@ -685,25 +685,25 @@ toReport source err =
             in
             formatDetails <|
                 case invalidPayload of
-                    ExtendedRecord ->
+                    CREC_ExtendedRecord ->
                         ( "an extended record"
                         , D.reflow
                             "But the exact shape of the record must be known at compile time. No type variables!"
                         )
 
-                    Function ->
+                    CREC_Function ->
                         ( "a function"
                         , D.reflow
                             "But functions cannot be sent in and out ports. If we allowed functions in from JS they may perform some side-effects. If we let functions out, they could produce incorrect results because Elm optimizations assume there are no side-effects."
                         )
 
-                    TypeVariable name ->
+                    CREC_TypeVariable name ->
                         ( "an unspecified type"
                         , D.reflow
                             ("But type variables like `" ++ name ++ "` cannot flow through ports. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Elm program.")
                         )
 
-                    UnsupportedType name ->
+                    CREC_UnsupportedType name ->
                         ( "a `" ++ name ++ "` value"
                         , D.stack
                             [ D.reflow "I cannot handle that. The types that CAN flow in and out of Elm include:"
@@ -715,7 +715,7 @@ toReport source err =
                             ]
                         )
 
-        PortTypeInvalid region name portProblem ->
+        CREC_PortTypeInvalid region name portProblem ->
             let
                 formatDetails : ( String, D.Doc ) -> Report.Report
                 formatDetails ( before, after ) =
@@ -735,13 +735,13 @@ toReport source err =
             in
             formatDetails <|
                 case portProblem of
-                    CmdNoArg ->
+                    CREC_CmdNoArg ->
                         ( "The `" ++ name ++ "` port cannot be just a command."
                         , D.reflow
                             "It can be (() -> Cmd msg) if you just need to trigger a JavaScript function, but there is often a better way to set things up."
                         )
 
-                    CmdExtraArgs n ->
+                    CREC_CmdExtraArgs n ->
                         ( "The `" ++ name ++ "` port can only send ONE value out to JavaScript."
                         , let
                             theseItemsInSomething : String
@@ -758,13 +758,13 @@ toReport source err =
                           D.reflow <| "You can put " ++ theseItemsInSomething ++ " to send them out though."
                         )
 
-                    CmdBadMsg ->
+                    CREC_CmdBadMsg ->
                         ( "The `" ++ name ++ "` port cannot send any messages to the `update` function."
                         , D.reflow
                             "It must produce a (Cmd msg) type. Notice the lower case `msg` type variable. The command will trigger some JS code, but it will not send anything particular back to Elm."
                         )
 
-                    SubBad ->
+                    CREC_SubBad ->
                         ( "There is something off about this `" ++ name ++ "` port declaration."
                         , D.stack
                             [ D.reflow
@@ -775,16 +775,16 @@ toReport source err =
                             ]
                         )
 
-                    NotCmdOrSub ->
+                    CREC_NotCmdOrSub ->
                         ( "I am confused about the `" ++ name ++ "` port declaration."
                         , D.reflow
                             "Ports need to produce a command (Cmd) or a subscription (Sub) but this is neither. I do not know how to handle this."
                         )
 
-        RecursiveAlias region name args tipe others ->
+        CREC_RecursiveAlias region name args tipe others ->
             aliasRecursionReport source region name args tipe others
 
-        RecursiveDecl region name names ->
+        CREC_RecursiveDecl region name names ->
             let
                 makeTheory : String -> String -> D.Doc
                 makeTheory question details =
@@ -811,7 +811,7 @@ toReport source err =
                                 ]
                             )
 
-        RecursiveLet (T.CRA_At region name) names ->
+        CREC_RecursiveLet (T.CRA_At region name) names ->
             Report.Report "CYCLIC VALUE" region [] <|
                 Code.toSnippet source region Nothing <|
                     case names of
@@ -838,7 +838,7 @@ toReport source err =
                                 ]
                             )
 
-        Shadowing name r1 r2 ->
+        CREC_Shadowing name r1 r2 ->
             let
                 advice : D.Doc
                 advice =
@@ -859,7 +859,7 @@ toReport source err =
                     , advice
                     )
 
-        TupleLargerThanThree region ->
+        CREC_TupleLargerThanThree region ->
             Report.Report "BAD TUPLE" region [] <|
                 Code.toSnippet source
                     region
@@ -871,10 +871,10 @@ toReport source err =
                         ]
                     )
 
-        TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
+        CREC_TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
             unboundTypeVars source unionRegion [ D.fromChars "type" ] typeName allVars unbound unbounds
 
-        TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
+        CREC_TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
             case ( unusedVars, unboundVars ) of
                 ( unused :: unuseds, [] ) ->
                     let
@@ -1179,7 +1179,7 @@ ambiguousName source region maybePrefix name h hs thing =
                     )
 
 
-notFound : Code.Source -> T.CRA_Region -> Maybe T.CDN_Name -> T.CDN_Name -> String -> PossibleNames -> Report.Report
+notFound : Code.Source -> T.CRA_Region -> Maybe T.CDN_Name -> T.CDN_Name -> String -> CREC_PossibleNames -> Report.Report
 notFound source region maybePrefix name thing { locals, quals } =
     let
         givenName : T.CDN_Name
@@ -1297,10 +1297,10 @@ aliasToUnionDoc name args tipe =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : CREC_Error -> Encode.Value
 errorEncoder error =
     case error of
-        AnnotationTooShort region name index leftovers ->
+        CREC_AnnotationTooShort region name index leftovers ->
             Encode.object
                 [ ( "type", Encode.string "AnnotationTooShort" )
                 , ( "region", A.regionEncoder region )
@@ -1309,7 +1309,7 @@ errorEncoder error =
                 , ( "leftovers", Encode.int leftovers )
                 ]
 
-        AmbiguousVar region maybePrefix name h hs ->
+        CREC_AmbiguousVar region maybePrefix name h hs ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousVar" )
                 , ( "region", A.regionEncoder region )
@@ -1319,7 +1319,7 @@ errorEncoder error =
                 , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
                 ]
 
-        AmbiguousType region maybePrefix name h hs ->
+        CREC_AmbiguousType region maybePrefix name h hs ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousType" )
                 , ( "region", A.regionEncoder region )
@@ -1329,7 +1329,7 @@ errorEncoder error =
                 , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
                 ]
 
-        AmbiguousVariant region maybePrefix name h hs ->
+        CREC_AmbiguousVariant region maybePrefix name h hs ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousVariant" )
                 , ( "region", A.regionEncoder region )
@@ -1339,7 +1339,7 @@ errorEncoder error =
                 , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
                 ]
 
-        AmbiguousBinop region name h hs ->
+        CREC_AmbiguousBinop region name h hs ->
             Encode.object
                 [ ( "type", Encode.string "AmbiguousBinop" )
                 , ( "region", A.regionEncoder region )
@@ -1348,7 +1348,7 @@ errorEncoder error =
                 , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
                 ]
 
-        BadArity region badArityContext name expected actual ->
+        CREC_BadArity region badArityContext name expected actual ->
             Encode.object
                 [ ( "type", Encode.string "BadArity" )
                 , ( "region", A.regionEncoder region )
@@ -1358,7 +1358,7 @@ errorEncoder error =
                 , ( "actual", Encode.int actual )
                 ]
 
-        Binop region op1 op2 ->
+        CREC_Binop region op1 op2 ->
             Encode.object
                 [ ( "type", Encode.string "Binop" )
                 , ( "region", A.regionEncoder region )
@@ -1366,7 +1366,7 @@ errorEncoder error =
                 , ( "op2", Encode.string op2 )
                 ]
 
-        DuplicateDecl name r1 r2 ->
+        CREC_DuplicateDecl name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateDecl" )
                 , ( "name", Encode.string name )
@@ -1374,7 +1374,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateType name r1 r2 ->
+        CREC_DuplicateType name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateType" )
                 , ( "name", Encode.string name )
@@ -1382,7 +1382,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateCtor name r1 r2 ->
+        CREC_DuplicateCtor name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateCtor" )
                 , ( "name", Encode.string name )
@@ -1390,7 +1390,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateBinop name r1 r2 ->
+        CREC_DuplicateBinop name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateBinop" )
                 , ( "name", Encode.string name )
@@ -1398,7 +1398,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateField name r1 r2 ->
+        CREC_DuplicateField name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateField" )
                 , ( "name", Encode.string name )
@@ -1406,7 +1406,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateAliasArg typeName name r1 r2 ->
+        CREC_DuplicateAliasArg typeName name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateAliasArg" )
                 , ( "typeName", Encode.string typeName )
@@ -1415,7 +1415,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicateUnionArg typeName name r1 r2 ->
+        CREC_DuplicateUnionArg typeName name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicateUnionArg" )
                 , ( "typeName", Encode.string typeName )
@@ -1424,7 +1424,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        DuplicatePattern context name r1 r2 ->
+        CREC_DuplicatePattern context name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "DuplicatePattern" )
                 , ( "context", duplicatePatternContextEncoder context )
@@ -1433,21 +1433,21 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        EffectNotFound region name ->
+        CREC_EffectNotFound region name ->
             Encode.object
                 [ ( "type", Encode.string "EffectNotFound" )
                 , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 ]
 
-        EffectFunctionNotFound region name ->
+        CREC_EffectFunctionNotFound region name ->
             Encode.object
                 [ ( "type", Encode.string "EffectFunctionNotFound" )
                 , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 ]
 
-        ExportDuplicate name r1 r2 ->
+        CREC_ExportDuplicate name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "ExportDuplicate" )
                 , ( "name", Encode.string name )
@@ -1455,7 +1455,7 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        ExportNotFound region kind rawName possibleNames ->
+        CREC_ExportNotFound region kind rawName possibleNames ->
             Encode.object
                 [ ( "type", Encode.string "ExportNotFound" )
                 , ( "region", A.regionEncoder region )
@@ -1464,14 +1464,14 @@ errorEncoder error =
                 , ( "possibleNames", Encode.list Encode.string possibleNames )
                 ]
 
-        ExportOpenAlias region name ->
+        CREC_ExportOpenAlias region name ->
             Encode.object
                 [ ( "type", Encode.string "ExportOpenAlias" )
                 , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 ]
 
-        ImportCtorByName region ctor tipe ->
+        CREC_ImportCtorByName region ctor tipe ->
             Encode.object
                 [ ( "type", Encode.string "ImportCtorByName" )
                 , ( "region", A.regionEncoder region )
@@ -1479,7 +1479,7 @@ errorEncoder error =
                 , ( "tipe", Encode.string tipe )
                 ]
 
-        ImportNotFound region name suggestions ->
+        CREC_ImportNotFound region name suggestions ->
             Encode.object
                 [ ( "type", Encode.string "ImportNotFound" )
                 , ( "region", A.regionEncoder region )
@@ -1487,14 +1487,14 @@ errorEncoder error =
                 , ( "suggestions", Encode.list ModuleName.canonicalEncoder suggestions )
                 ]
 
-        ImportOpenAlias region name ->
+        CREC_ImportOpenAlias region name ->
             Encode.object
                 [ ( "type", Encode.string "ImportOpenAlias" )
                 , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 ]
 
-        ImportExposingNotFound region home value possibleNames ->
+        CREC_ImportExposingNotFound region home value possibleNames ->
             Encode.object
                 [ ( "type", Encode.string "ImportExposingNotFound" )
                 , ( "region", A.regionEncoder region )
@@ -1503,7 +1503,7 @@ errorEncoder error =
                 , ( "possibleNames", Encode.list Encode.string possibleNames )
                 ]
 
-        NotFoundVar region prefix name possibleNames ->
+        CREC_NotFoundVar region prefix name possibleNames ->
             Encode.object
                 [ ( "type", Encode.string "NotFoundVar" )
                 , ( "region", A.regionEncoder region )
@@ -1512,7 +1512,7 @@ errorEncoder error =
                 , ( "possibleNames", possibleNamesEncoder possibleNames )
                 ]
 
-        NotFoundType region prefix name possibleNames ->
+        CREC_NotFoundType region prefix name possibleNames ->
             Encode.object
                 [ ( "type", Encode.string "NotFoundType" )
                 , ( "region", A.regionEncoder region )
@@ -1521,7 +1521,7 @@ errorEncoder error =
                 , ( "possibleNames", possibleNamesEncoder possibleNames )
                 ]
 
-        NotFoundVariant region prefix name possibleNames ->
+        CREC_NotFoundVariant region prefix name possibleNames ->
             Encode.object
                 [ ( "type", Encode.string "NotFoundVariant" )
                 , ( "region", A.regionEncoder region )
@@ -1530,7 +1530,7 @@ errorEncoder error =
                 , ( "possibleNames", possibleNamesEncoder possibleNames )
                 ]
 
-        NotFoundBinop region op locals ->
+        CREC_NotFoundBinop region op locals ->
             Encode.object
                 [ ( "type", Encode.string "NotFoundBinop" )
                 , ( "region", A.regionEncoder region )
@@ -1538,14 +1538,14 @@ errorEncoder error =
                 , ( "locals", EncodeX.everySet compare Encode.string locals )
                 ]
 
-        PatternHasRecordCtor region name ->
+        CREC_PatternHasRecordCtor region name ->
             Encode.object
                 [ ( "type", Encode.string "PatternHasRecordCtor" )
                 , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 ]
 
-        PortPayloadInvalid region portName badType invalidPayload ->
+        CREC_PortPayloadInvalid region portName badType invalidPayload ->
             Encode.object
                 [ ( "type", Encode.string "PortPayloadInvalid" )
                 , ( "region", A.regionEncoder region )
@@ -1554,7 +1554,7 @@ errorEncoder error =
                 , ( "invalidPayload", invalidPayloadEncoder invalidPayload )
                 ]
 
-        PortTypeInvalid region name portProblem ->
+        CREC_PortTypeInvalid region name portProblem ->
             Encode.object
                 [ ( "type", Encode.string "PortTypeInvalid" )
                 , ( "region", A.regionEncoder region )
@@ -1562,7 +1562,7 @@ errorEncoder error =
                 , ( "portProblem", portProblemEncoder portProblem )
                 ]
 
-        RecursiveAlias region name args tipe others ->
+        CREC_RecursiveAlias region name args tipe others ->
             Encode.object
                 [ ( "type", Encode.string "RecursiveAlias" )
                 , ( "region", A.regionEncoder region )
@@ -1572,7 +1572,7 @@ errorEncoder error =
                 , ( "others", Encode.list Encode.string others )
                 ]
 
-        RecursiveDecl region name names ->
+        CREC_RecursiveDecl region name names ->
             Encode.object
                 [ ( "type", Encode.string "RecursiveDecl" )
                 , ( "region", A.regionEncoder region )
@@ -1580,14 +1580,14 @@ errorEncoder error =
                 , ( "names", Encode.list Encode.string names )
                 ]
 
-        RecursiveLet name names ->
+        CREC_RecursiveLet name names ->
             Encode.object
                 [ ( "type", Encode.string "RecursiveLet" )
                 , ( "name", A.locatedEncoder Encode.string name )
                 , ( "names", Encode.list Encode.string names )
                 ]
 
-        Shadowing name r1 r2 ->
+        CREC_Shadowing name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "Shadowing" )
                 , ( "name", Encode.string name )
@@ -1595,13 +1595,13 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        TupleLargerThanThree region ->
+        CREC_TupleLargerThanThree region ->
             Encode.object
                 [ ( "type", Encode.string "TupleLargerThanThree" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
+        CREC_TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
             Encode.object
                 [ ( "type", Encode.string "TypeVarsUnboundInUnion" )
                 , ( "unionRegion", A.regionEncoder unionRegion )
@@ -1611,7 +1611,7 @@ errorEncoder error =
                 , ( "unbounds", Encode.list (EncodeX.jsonPair Encode.string A.regionEncoder) unbounds )
                 ]
 
-        TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
+        CREC_TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
             Encode.object
                 [ ( "type", Encode.string "TypeVarsMessedUpInAlias" )
                 , ( "aliasRegion", A.regionEncoder aliasRegion )
@@ -1622,21 +1622,21 @@ errorEncoder error =
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : Decode.Decoder CREC_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "AnnotationTooShort" ->
-                        Decode.map4 AnnotationTooShort
+                        Decode.map4 CREC_AnnotationTooShort
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "index" Index.zeroBasedDecoder)
                             (Decode.field "leftovers" Decode.int)
 
                     "AmbiguousVar" ->
-                        Decode.map5 AmbiguousVar
+                        Decode.map5 CREC_AmbiguousVar
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "maybePrefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
@@ -1644,7 +1644,7 @@ errorDecoder =
                             (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
 
                     "AmbiguousType" ->
-                        Decode.map5 AmbiguousType
+                        Decode.map5 CREC_AmbiguousType
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "maybePrefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
@@ -1652,7 +1652,7 @@ errorDecoder =
                             (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
 
                     "AmbiguousVariant" ->
-                        Decode.map5 AmbiguousVariant
+                        Decode.map5 CREC_AmbiguousVariant
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "maybePrefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
@@ -1660,14 +1660,14 @@ errorDecoder =
                             (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
 
                     "AmbiguousBinop" ->
-                        Decode.map4 AmbiguousBinop
+                        Decode.map4 CREC_AmbiguousBinop
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "h" ModuleName.canonicalDecoder)
                             (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
 
                     "BadArity" ->
-                        Decode.map5 BadArity
+                        Decode.map5 CREC_BadArity
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "badArityContext" badArityContextDecoder)
                             (Decode.field "name" Decode.string)
@@ -1675,161 +1675,161 @@ errorDecoder =
                             (Decode.field "actual" Decode.int)
 
                     "Binop" ->
-                        Decode.map3 Binop
+                        Decode.map3 CREC_Binop
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "op1" Decode.string)
                             (Decode.field "op2" Decode.string)
 
                     "DuplicateDecl" ->
-                        Decode.map3 DuplicateDecl
+                        Decode.map3 CREC_DuplicateDecl
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateType" ->
-                        Decode.map3 DuplicateType
+                        Decode.map3 CREC_DuplicateType
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateCtor" ->
-                        Decode.map3 DuplicateCtor
+                        Decode.map3 CREC_DuplicateCtor
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateBinop" ->
-                        Decode.map3 DuplicateBinop
+                        Decode.map3 CREC_DuplicateBinop
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateField" ->
-                        Decode.map3 DuplicateField
+                        Decode.map3 CREC_DuplicateField
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateAliasArg" ->
-                        Decode.map4 DuplicateAliasArg
+                        Decode.map4 CREC_DuplicateAliasArg
                             (Decode.field "typeName" Decode.string)
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicateUnionArg" ->
-                        Decode.map4 DuplicateUnionArg
+                        Decode.map4 CREC_DuplicateUnionArg
                             (Decode.field "typeName" Decode.string)
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "DuplicatePattern" ->
-                        Decode.map4 DuplicatePattern
+                        Decode.map4 CREC_DuplicatePattern
                             (Decode.field "context" duplicatePatternContextDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "EffectNotFound" ->
-                        Decode.map2 EffectNotFound
+                        Decode.map2 CREC_EffectNotFound
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
                     "EffectFunctionNotFound" ->
-                        Decode.map2 EffectFunctionNotFound
+                        Decode.map2 CREC_EffectFunctionNotFound
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
                     "ExportDuplicate" ->
-                        Decode.map3 ExportDuplicate
+                        Decode.map3 CREC_ExportDuplicate
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "ExportNotFound" ->
-                        Decode.map4 ExportNotFound
+                        Decode.map4 CREC_ExportNotFound
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "kind" varKindDecoder)
                             (Decode.field "rawName" Decode.string)
                             (Decode.field "possibleNames" (Decode.list Decode.string))
 
                     "ExportOpenAlias" ->
-                        Decode.map2 ExportOpenAlias
+                        Decode.map2 CREC_ExportOpenAlias
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
                     "ImportCtorByName" ->
-                        Decode.map3 ImportCtorByName
+                        Decode.map3 CREC_ImportCtorByName
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "ctor" Decode.string)
                             (Decode.field "tipe" Decode.string)
 
                     "ImportNotFound" ->
-                        Decode.map3 ImportNotFound
+                        Decode.map3 CREC_ImportNotFound
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "suggestions" (Decode.list ModuleName.canonicalDecoder))
 
                     "ImportOpenAlias" ->
-                        Decode.map2 ImportOpenAlias
+                        Decode.map2 CREC_ImportOpenAlias
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
                     "ImportExposingNotFound" ->
-                        Decode.map4 ImportExposingNotFound
+                        Decode.map4 CREC_ImportExposingNotFound
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "value" Decode.string)
                             (Decode.field "possibleNames" (Decode.list Decode.string))
 
                     "NotFoundVar" ->
-                        Decode.map4 NotFoundVar
+                        Decode.map4 CREC_NotFoundVar
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "prefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
                             (Decode.field "possibleNames" possibleNamesDecoder)
 
                     "NotFoundType" ->
-                        Decode.map4 NotFoundType
+                        Decode.map4 CREC_NotFoundType
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "prefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
                             (Decode.field "possibleNames" possibleNamesDecoder)
 
                     "NotFoundVariant" ->
-                        Decode.map4 NotFoundVariant
+                        Decode.map4 CREC_NotFoundVariant
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "prefix" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
                             (Decode.field "possibleNames" possibleNamesDecoder)
 
                     "NotFoundBinop" ->
-                        Decode.map3 NotFoundBinop
+                        Decode.map3 CREC_NotFoundBinop
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "op" Decode.string)
                             (Decode.field "locals" (DecodeX.everySet identity Decode.string))
 
                     "PatternHasRecordCtor" ->
-                        Decode.map2 PatternHasRecordCtor
+                        Decode.map2 CREC_PatternHasRecordCtor
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
 
                     "PortPayloadInvalid" ->
-                        Decode.map4 PortPayloadInvalid
+                        Decode.map4 CREC_PortPayloadInvalid
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "portName" Decode.string)
                             (Decode.field "badType" Can.typeDecoder)
                             (Decode.field "invalidPayload" invalidPayloadDecoder)
 
                     "PortTypeInvalid" ->
-                        Decode.map3 PortTypeInvalid
+                        Decode.map3 CREC_PortTypeInvalid
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "portProblem" portProblemDecoder)
 
                     "RecursiveAlias" ->
-                        Decode.map5 RecursiveAlias
+                        Decode.map5 CREC_RecursiveAlias
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list Decode.string))
@@ -1837,27 +1837,27 @@ errorDecoder =
                             (Decode.field "others" (Decode.list Decode.string))
 
                     "RecursiveDecl" ->
-                        Decode.map3 RecursiveDecl
+                        Decode.map3 CREC_RecursiveDecl
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "names" (Decode.list Decode.string))
 
                     "RecursiveLet" ->
-                        Decode.map2 RecursiveLet
+                        Decode.map2 CREC_RecursiveLet
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "names" (Decode.list Decode.string))
 
                     "Shadowing" ->
-                        Decode.map3 Shadowing
+                        Decode.map3 CREC_Shadowing
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "TupleLargerThanThree" ->
-                        Decode.map TupleLargerThanThree (Decode.field "region" A.regionDecoder)
+                        Decode.map CREC_TupleLargerThanThree (Decode.field "region" A.regionDecoder)
 
                     "TypeVarsUnboundInUnion" ->
-                        Decode.map5 TypeVarsUnboundInUnion
+                        Decode.map5 CREC_TypeVarsUnboundInUnion
                             (Decode.field "unionRegion" A.regionDecoder)
                             (Decode.field "typeName" Decode.string)
                             (Decode.field "allVars" (Decode.list Decode.string))
@@ -1865,7 +1865,7 @@ errorDecoder =
                             (Decode.field "unbounds" (Decode.list (DecodeX.jsonPair Decode.string A.regionDecoder)))
 
                     "TypeVarsMessedUpInAlias" ->
-                        Decode.map5 TypeVarsMessedUpInAlias
+                        Decode.map5 CREC_TypeVarsMessedUpInAlias
                             (Decode.field "aliasRegion" A.regionDecoder)
                             (Decode.field "typeName" Decode.string)
                             (Decode.field "allVars" (Decode.list Decode.string))
@@ -1877,129 +1877,129 @@ errorDecoder =
             )
 
 
-badArityContextEncoder : BadArityContext -> Encode.Value
+badArityContextEncoder : CREC_BadArityContext -> Encode.Value
 badArityContextEncoder badArityContext =
     case badArityContext of
-        TypeArity ->
+        CREC_TypeArity ->
             Encode.string "TypeArity"
 
-        PatternArity ->
+        CREC_PatternArity ->
             Encode.string "PatternArity"
 
 
-badArityContextDecoder : Decode.Decoder BadArityContext
+badArityContextDecoder : Decode.Decoder CREC_BadArityContext
 badArityContextDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "TypeArity" ->
-                        Decode.succeed TypeArity
+                        Decode.succeed CREC_TypeArity
 
                     "PatternArity" ->
-                        Decode.succeed PatternArity
+                        Decode.succeed CREC_PatternArity
 
                     _ ->
                         Decode.fail ("Unknown BadArityContext: " ++ str)
             )
 
 
-duplicatePatternContextEncoder : DuplicatePatternContext -> Encode.Value
+duplicatePatternContextEncoder : CREC_DuplicatePatternContext -> Encode.Value
 duplicatePatternContextEncoder duplicatePatternContext =
     case duplicatePatternContext of
-        DPLambdaArgs ->
+        CREC_DPLambdaArgs ->
             Encode.object
                 [ ( "type", Encode.string "DPLambdaArgs" )
                 ]
 
-        DPFuncArgs funcName ->
+        CREC_DPFuncArgs funcName ->
             Encode.object
                 [ ( "type", Encode.string "DPFuncArgs" )
                 , ( "funcName", Encode.string funcName )
                 ]
 
-        DPCaseBranch ->
+        CREC_DPCaseBranch ->
             Encode.object
                 [ ( "type", Encode.string "DPCaseBranch" )
                 ]
 
-        DPLetBinding ->
+        CREC_DPLetBinding ->
             Encode.object
                 [ ( "type", Encode.string "DPLetBinding" )
                 ]
 
-        DPDestruct ->
+        CREC_DPDestruct ->
             Encode.object
                 [ ( "type", Encode.string "DPDestruct" )
                 ]
 
 
-duplicatePatternContextDecoder : Decode.Decoder DuplicatePatternContext
+duplicatePatternContextDecoder : Decode.Decoder CREC_DuplicatePatternContext
 duplicatePatternContextDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DPLambdaArgs" ->
-                        Decode.succeed DPLambdaArgs
+                        Decode.succeed CREC_DPLambdaArgs
 
                     "DPFuncArgs" ->
-                        Decode.map DPFuncArgs (Decode.field "funcName" Decode.string)
+                        Decode.map CREC_DPFuncArgs (Decode.field "funcName" Decode.string)
 
                     "DPCaseBranch" ->
-                        Decode.succeed DPCaseBranch
+                        Decode.succeed CREC_DPCaseBranch
 
                     "DPLetBinding" ->
-                        Decode.succeed DPLetBinding
+                        Decode.succeed CREC_DPLetBinding
 
                     "DPDestruct" ->
-                        Decode.succeed DPDestruct
+                        Decode.succeed CREC_DPDestruct
 
                     _ ->
                         Decode.fail ("Failed to decode DuplicatePatternContext's type: " ++ type_)
             )
 
 
-varKindEncoder : VarKind -> Encode.Value
+varKindEncoder : CREC_VarKind -> Encode.Value
 varKindEncoder varKind =
     case varKind of
-        BadOp ->
+        CREC_BadOp ->
             Encode.string "BadOp"
 
-        BadVar ->
+        CREC_BadVar ->
             Encode.string "BadVar"
 
-        BadPattern ->
+        CREC_BadPattern ->
             Encode.string "BadPattern"
 
-        BadType ->
+        CREC_BadType ->
             Encode.string "BadType"
 
 
-varKindDecoder : Decode.Decoder VarKind
+varKindDecoder : Decode.Decoder CREC_VarKind
 varKindDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "BadOp" ->
-                        Decode.succeed BadOp
+                        Decode.succeed CREC_BadOp
 
                     "BadVar" ->
-                        Decode.succeed BadVar
+                        Decode.succeed CREC_BadVar
 
                     "BadPattern" ->
-                        Decode.succeed BadPattern
+                        Decode.succeed CREC_BadPattern
 
                     "BadType" ->
-                        Decode.succeed BadType
+                        Decode.succeed CREC_BadType
 
                     _ ->
                         Decode.fail ("Unknown VarKind: " ++ str)
             )
 
 
-possibleNamesEncoder : PossibleNames -> Encode.Value
+possibleNamesEncoder : CREC_PossibleNames -> Encode.Value
 possibleNamesEncoder possibleNames =
     Encode.object
         [ ( "type", Encode.string "PossibleNames" )
@@ -2008,112 +2008,112 @@ possibleNamesEncoder possibleNames =
         ]
 
 
-possibleNamesDecoder : Decode.Decoder PossibleNames
+possibleNamesDecoder : Decode.Decoder CREC_PossibleNames
 possibleNamesDecoder =
-    Decode.map2 PossibleNames
+    Decode.map2 CREC_PossibleNames
         (Decode.field "locals" (DecodeX.everySet identity Decode.string))
         (Decode.field "quals" (DecodeX.assocListDict identity Decode.string (DecodeX.everySet identity Decode.string)))
 
 
-invalidPayloadEncoder : InvalidPayload -> Encode.Value
+invalidPayloadEncoder : CREC_InvalidPayload -> Encode.Value
 invalidPayloadEncoder invalidPayload =
     case invalidPayload of
-        ExtendedRecord ->
+        CREC_ExtendedRecord ->
             Encode.object
                 [ ( "type", Encode.string "ExtendedRecord" )
                 ]
 
-        Function ->
+        CREC_Function ->
             Encode.object
                 [ ( "type", Encode.string "Function" )
                 ]
 
-        TypeVariable name ->
+        CREC_TypeVariable name ->
             Encode.object
                 [ ( "type", Encode.string "TypeVariable" )
                 , ( "name", Encode.string name )
                 ]
 
-        UnsupportedType name ->
+        CREC_UnsupportedType name ->
             Encode.object
                 [ ( "type", Encode.string "UnsupportedType" )
                 , ( "name", Encode.string name )
                 ]
 
 
-invalidPayloadDecoder : Decode.Decoder InvalidPayload
+invalidPayloadDecoder : Decode.Decoder CREC_InvalidPayload
 invalidPayloadDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ExtendedRecord" ->
-                        Decode.succeed ExtendedRecord
+                        Decode.succeed CREC_ExtendedRecord
 
                     "Function" ->
-                        Decode.succeed Function
+                        Decode.succeed CREC_Function
 
                     "TypeVariable" ->
-                        Decode.map TypeVariable (Decode.field "name" Decode.string)
+                        Decode.map CREC_TypeVariable (Decode.field "name" Decode.string)
 
                     "UnsupportedType" ->
-                        Decode.map UnsupportedType (Decode.field "name" Decode.string)
+                        Decode.map CREC_UnsupportedType (Decode.field "name" Decode.string)
 
                     _ ->
                         Decode.fail ("Failed to decode InvalidPayload's type: " ++ type_)
             )
 
 
-portProblemEncoder : PortProblem -> Encode.Value
+portProblemEncoder : CREC_PortProblem -> Encode.Value
 portProblemEncoder portProblem =
     case portProblem of
-        CmdNoArg ->
+        CREC_CmdNoArg ->
             Encode.object
                 [ ( "type", Encode.string "CmdNoArg" )
                 ]
 
-        CmdExtraArgs n ->
+        CREC_CmdExtraArgs n ->
             Encode.object
                 [ ( "type", Encode.string "CmdExtraArgs" )
                 , ( "n", Encode.int n )
                 ]
 
-        CmdBadMsg ->
+        CREC_CmdBadMsg ->
             Encode.object
                 [ ( "type", Encode.string "CmdBadMsg" )
                 ]
 
-        SubBad ->
+        CREC_SubBad ->
             Encode.object
                 [ ( "type", Encode.string "SubBad" )
                 ]
 
-        NotCmdOrSub ->
+        CREC_NotCmdOrSub ->
             Encode.object
                 [ ( "type", Encode.string "NotCmdOrSub" )
                 ]
 
 
-portProblemDecoder : Decode.Decoder PortProblem
+portProblemDecoder : Decode.Decoder CREC_PortProblem
 portProblemDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "CmdNoArg" ->
-                        Decode.succeed CmdNoArg
+                        Decode.succeed CREC_CmdNoArg
 
                     "CmdExtraArgs" ->
-                        Decode.map CmdExtraArgs (Decode.field "n" Decode.int)
+                        Decode.map CREC_CmdExtraArgs (Decode.field "n" Decode.int)
 
                     "CmdBadMsg" ->
-                        Decode.succeed CmdBadMsg
+                        Decode.succeed CREC_CmdBadMsg
 
                     "SubBad" ->
-                        Decode.succeed SubBad
+                        Decode.succeed CREC_SubBad
 
                     "NotCmdOrSub" ->
-                        Decode.succeed NotCmdOrSub
+                        Decode.succeed CREC_NotCmdOrSub
 
                     _ ->
                         Decode.fail ("Failed to decode PortProblem's type: " ++ type_)

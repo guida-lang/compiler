@@ -24,7 +24,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import System.IO as IO exposing (IO)
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -38,7 +38,7 @@ type alias Task a =
     Task.Task Exit.Generate a
 
 
-debug : FilePath -> Details.Details -> Build.Artifacts -> Task String
+debug : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
 debug root details (Build.Artifacts pkg ifaces roots modules) =
     loadObjects root details modules
         |> Task.bind
@@ -54,11 +54,11 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                                             mode =
                                                 Mode.Dev (Just types)
 
-                                            graph : Opt.GlobalGraph
+                                            graph : T.CASTO_GlobalGraph
                                             graph =
                                                 objectsToGlobalGraph objects
 
-                                            mains : Dict (List String) T.CEMN_Canonical Opt.Main
+                                            mains : Dict (List String) T.CEMN_Canonical T.CASTO_Main
                                             mains =
                                                 gatherMains pkg objects roots
                                         in
@@ -68,7 +68,7 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
             )
 
 
-dev : FilePath -> Details.Details -> Build.Artifacts -> Task String
+dev : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
 dev root details (Build.Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.fmap
@@ -78,11 +78,11 @@ dev root details (Build.Artifacts pkg _ roots modules) =
                     mode =
                         Mode.Dev Nothing
 
-                    graph : Opt.GlobalGraph
+                    graph : T.CASTO_GlobalGraph
                     graph =
                         objectsToGlobalGraph objects
 
-                    mains : Dict (List String) T.CEMN_Canonical Opt.Main
+                    mains : Dict (List String) T.CEMN_Canonical T.CASTO_Main
                     mains =
                         gatherMains pkg objects roots
                 in
@@ -90,7 +90,7 @@ dev root details (Build.Artifacts pkg _ roots modules) =
             )
 
 
-prod : FilePath -> Details.Details -> Build.Artifacts -> Task String
+prod : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
 prod root details (Build.Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.bind
@@ -99,7 +99,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                     |> Task.fmap
                         (\_ ->
                             let
-                                graph : Opt.GlobalGraph
+                                graph : T.CASTO_GlobalGraph
                                 graph =
                                     objectsToGlobalGraph objects
 
@@ -107,7 +107,7 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                                 mode =
                                     Mode.Prod (Mode.shortenFieldNames graph)
 
-                                mains : Dict (List String) T.CEMN_Canonical Opt.Main
+                                mains : Dict (List String) T.CEMN_Canonical T.CASTO_Main
                                 mains =
                                     gatherMains pkg objects roots
                             in
@@ -116,13 +116,13 @@ prod root details (Build.Artifacts pkg _ roots modules) =
             )
 
 
-repl : FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> T.CDN_Name -> Task String
+repl : T.FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> T.CDN_Name -> Task String
 repl root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.fmap
             (\objects ->
                 let
-                    graph : Opt.GlobalGraph
+                    graph : T.CASTO_GlobalGraph
                     graph =
                         objectsToGlobalGraph objects
                 in
@@ -148,16 +148,16 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
-gatherMains : T.CEP_Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) T.CEMN_Canonical Opt.Main
+gatherMains : T.CEP_Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) T.CEMN_Canonical T.CASTO_Main
 gatherMains pkg (Objects _ locals) roots =
     Dict.fromList ModuleName.toComparableCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
-lookupMain : T.CEP_Name -> Dict String T.CEMN_Raw Opt.LocalGraph -> Build.Root -> Maybe ( T.CEMN_Canonical, Opt.Main )
+lookupMain : T.CEP_Name -> Dict String T.CEMN_Raw T.CASTO_LocalGraph -> Build.Root -> Maybe ( T.CEMN_Canonical, T.CASTO_Main )
 lookupMain pkg locals root =
     let
-        toPair : T.CDN_Name -> Opt.LocalGraph -> Maybe ( T.CEMN_Canonical, Opt.Main )
-        toPair name (Opt.LocalGraph maybeMain _ _) =
+        toPair : T.CDN_Name -> T.CASTO_LocalGraph -> Maybe ( T.CEMN_Canonical, T.CASTO_Main )
+        toPair name (T.CASTO_LocalGraph maybeMain _ _) =
             Maybe.map (Tuple.pair (T.CEMN_Canonical pkg name)) maybeMain
     in
     case root of
@@ -173,10 +173,10 @@ lookupMain pkg locals root =
 
 
 type LoadingObjects
-    = LoadingObjects (T.MVar (Maybe Opt.GlobalGraph)) (Dict String T.CEMN_Raw (T.MVar (Maybe Opt.LocalGraph)))
+    = LoadingObjects (T.MVar (Maybe T.CASTO_GlobalGraph)) (Dict String T.CEMN_Raw (T.MVar (Maybe T.CASTO_LocalGraph)))
 
 
-loadObjects : FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
+loadObjects : T.FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
 loadObjects root details modules =
     Task.io
         (Details.loadObjects root details
@@ -191,18 +191,18 @@ loadObjects root details modules =
         )
 
 
-loadObject : FilePath -> Build.Module -> IO ( T.CEMN_Raw, T.MVar (Maybe Opt.LocalGraph) )
+loadObject : T.FilePath -> Build.Module -> IO ( T.CEMN_Raw, T.MVar (Maybe T.CASTO_LocalGraph) )
 loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
-            Utils.newMVar (Utils.maybeEncoder Opt.localGraphEncoder) (Just graph)
+            Utils.newMVar_Maybe_CASTO_LocalGraph (Just graph)
                 |> IO.fmap (\mvar -> ( name, mvar ))
 
         Build.Cached name _ _ ->
-            Utils.newEmptyMVar
+            Utils.newEmptyMVar_Maybe_CASTO_LocalGraph
                 |> IO.bind
                     (\mvar ->
-                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.elmo root name)))
+                        Utils.forkIO (IO.bind (Utils.putMVar_Maybe_CASTO_LocalGraph mvar) (File.readBinary Opt.localGraphDecoder (Stuff.elmo root name)))
                             |> IO.fmap (\_ -> ( name, mvar ))
                     )
 
@@ -212,16 +212,16 @@ loadObject root modul =
 
 
 type Objects
-    = Objects Opt.GlobalGraph (Dict String T.CEMN_Raw Opt.LocalGraph)
+    = Objects T.CASTO_GlobalGraph (Dict String T.CEMN_Raw T.CASTO_LocalGraph)
 
 
 finalizeObjects : LoadingObjects -> Task Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
-        (Utils.readMVar (Decode.maybe Opt.globalGraphDecoder) mvar
+        (Utils.readMVar_Maybe_CASTO_GlobalGraph mvar
             |> IO.bind
                 (\result ->
-                    Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe Opt.localGraphDecoder)) mvars
+                    Utils.mapTraverse identity compare Utils.readMVar_Maybe_CASTO_LocalGraph mvars
                         |> IO.fmap
                             (\results ->
                                 case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
@@ -235,7 +235,7 @@ finalizeObjects (LoadingObjects mvar mvars) =
         )
 
 
-objectsToGlobalGraph : Objects -> Opt.GlobalGraph
+objectsToGlobalGraph : Objects -> T.CASTO_GlobalGraph
 objectsToGlobalGraph (Objects globals locals) =
     Dict.foldr compare (\_ -> Opt.addLocalGraph) globals locals
 
@@ -244,7 +244,7 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
-loadTypes : FilePath -> Dict (List String) T.CEMN_Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
+loadTypes : T.FilePath -> Dict (List String) T.CEMN_Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules
@@ -269,7 +269,7 @@ loadTypes root ifaces modules =
         )
 
 
-loadTypesHelp : FilePath -> Build.Module -> IO (T.MVar (Maybe Extract.Types))
+loadTypesHelp : T.FilePath -> Build.Module -> IO (T.MVar (Maybe Extract.Types))
 loadTypesHelp root modul =
     case modul of
         Build.Fresh name iface _ ->
@@ -280,7 +280,7 @@ loadTypesHelp root modul =
                 |> IO.bind
                     (\cachedInterface ->
                         case cachedInterface of
-                            Build.Unneeded ->
+                            Build.BB_Unneeded ->
                                 Utils.newEmptyMVar
                                     |> IO.bind
                                         (\mvar ->
@@ -294,9 +294,9 @@ loadTypesHelp root modul =
                                                 |> IO.fmap (\_ -> mvar)
                                         )
 
-                            Build.Loaded iface ->
+                            Build.BB_Loaded iface ->
                                 Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
 
-                            Build.Corrupted ->
+                            Build.BB_Corrupted ->
                                 Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) Nothing
                     )

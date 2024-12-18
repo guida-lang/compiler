@@ -44,7 +44,7 @@ import System.IO as IO exposing (IO)
 import System.Process as Process
 import Types as T
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -52,7 +52,7 @@ import Utils.Main as Utils exposing (FilePath)
 
 
 type Flags
-    = Flags (Maybe FilePath) Bool
+    = Flags (Maybe T.FilePath) Bool
 
 
 run : () -> Flags -> IO ()
@@ -112,7 +112,7 @@ printWelcomeMessage =
 
 
 type Env
-    = Env FilePath FilePath Bool
+    = Env T.FilePath T.FilePath Bool
 
 
 initEnv : Flags -> IO Env
@@ -468,22 +468,22 @@ startsWithKeyword keyword lines =
            )
 
 
-toExprPosition : String -> ES.Expr -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
+toExprPosition : String -> ES.CRES_Expr -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toExprPosition src expr row col =
     let
-        decl : ES.Decl
+        decl : ES.CRES_Decl
         decl =
-            ES.DeclDef N.replValueToPrint (ES.DeclDefBody expr row col) row col
+            ES.CRES_DeclDef N.replValueToPrint (ES.CRES_DeclDefBody expr row col) row col
     in
     toDeclPosition src decl row col
 
 
-toDeclPosition : String -> ES.Decl -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
+toDeclPosition : String -> ES.CRES_Decl -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toDeclPosition src decl r c =
     let
-        err : ES.Error
+        err : ES.CRES_Error
         err =
-            ES.ParseError (ES.Declarations decl r c)
+            ES.CRES_ParseError (ES.CRES_Declarations decl r c)
 
         report : Report.Report
         report =
@@ -625,7 +625,7 @@ attemptEval (Env root interpreter ansi) oldState newState output =
             )
 
 
-interpret : FilePath -> String -> IO Exit.ExitCode
+interpret : T.FilePath -> String -> IO Exit.ExitCode
 interpret interpreter javascript =
     let
         createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
@@ -718,7 +718,7 @@ genericHelpMessage =
 -- GET ROOT
 
 
-getRoot : IO FilePath
+getRoot : IO T.FilePath
 getRoot =
     Stuff.findRoot
         |> IO.bind
@@ -769,7 +769,7 @@ defaultDeps =
 -- GET INTERPRETER
 
 
-getInterpreter : Maybe String -> IO FilePath
+getInterpreter : Maybe String -> IO T.FilePath
 getInterpreter maybeName =
     case maybeName of
         Just name ->
@@ -786,7 +786,7 @@ getInterpreter maybeName =
                 )
 
 
-getInterpreterHelp : String -> IO (Maybe FilePath) -> IO FilePath
+getInterpreterHelp : String -> IO (Maybe T.FilePath) -> IO T.FilePath
 getInterpreterHelp name findExe =
     findExe
         |> IO.bind

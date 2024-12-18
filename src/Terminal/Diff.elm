@@ -229,7 +229,7 @@ writeDiff oldDocs newDocs =
         changes =
             DD.diff oldDocs newDocs
 
-        localizer : L.Localizer
+        localizer : L.CRRTL_Localizer
         localizer =
             L.fromNames (Dict.union oldDocs newDocs)
     in
@@ -240,7 +240,7 @@ writeDiff oldDocs newDocs =
 -- TO DOC
 
 
-toDoc : L.Localizer -> PackageChanges -> D.Doc
+toDoc : L.CRRTL_Localizer -> PackageChanges -> D.Doc
 toDoc localizer ((PackageChanges added changed removed) as changes) =
     if List.isEmpty added && Dict.isEmpty changed && List.isEmpty removed then
         D.fromChars "No API changes detected, so this is a"
@@ -312,7 +312,7 @@ chunkToDoc (Chunk title magnitude details) =
         ]
 
 
-changesToChunk : L.Localizer -> ( T.CDN_Name, ModuleChanges ) -> Chunk
+changesToChunk : L.CRRTL_Localizer -> ( T.CDN_Name, ModuleChanges ) -> Chunk
 changesToChunk localizer ( name, (ModuleChanges unions aliases values binops) as changes ) =
     let
         magnitude : M.Magnitude
@@ -377,8 +377,8 @@ changesToDoc categoryName unions aliases values binops =
                     ++ values
 
 
-unionToDoc : L.Localizer -> T.CDN_Name -> Docs.Union -> D.Doc
-unionToDoc localizer name (Docs.Union _ tvars ctors) =
+unionToDoc : L.CRRTL_Localizer -> T.CDN_Name -> Docs.CED_Union -> D.Doc
+unionToDoc localizer name (Docs.CED_Union _ tvars ctors) =
     let
         setup : D.Doc
         setup =
@@ -386,9 +386,9 @@ unionToDoc localizer name (Docs.Union _ tvars ctors) =
                 |> D.plus (D.fromName name)
                 |> D.plus (D.hsep (List.map D.fromName tvars))
 
-        ctorDoc : ( T.CDN_Name, List Type.Type ) -> D.Doc
+        ctorDoc : ( T.CDN_Name, List Type.CECT_Type ) -> D.Doc
         ctorDoc ( ctor, tipes ) =
-            typeDoc localizer (Type.Type ctor tipes)
+            typeDoc localizer (Type.CECT_Type ctor tipes)
     in
     D.hang 4
         (D.sep
@@ -400,8 +400,8 @@ unionToDoc localizer name (Docs.Union _ tvars ctors) =
         )
 
 
-aliasToDoc : L.Localizer -> T.CDN_Name -> Docs.Alias -> D.Doc
-aliasToDoc localizer name (Docs.Alias _ tvars tipe) =
+aliasToDoc : L.CRRTL_Localizer -> T.CDN_Name -> Docs.CED_Alias -> D.Doc
+aliasToDoc localizer name (Docs.CED_Alias _ tvars tipe) =
     let
         declaration : D.Doc
         declaration =
@@ -415,13 +415,13 @@ aliasToDoc localizer name (Docs.Alias _ tvars tipe) =
     D.hang 4 (D.sep [ declaration, typeDoc localizer tipe ])
 
 
-valueToDoc : L.Localizer -> T.CDN_Name -> Docs.Value -> D.Doc
-valueToDoc localizer name (Docs.Value _ tipe) =
+valueToDoc : L.CRRTL_Localizer -> T.CDN_Name -> Docs.CED_Value -> D.Doc
+valueToDoc localizer name (Docs.CED_Value _ tipe) =
     D.hang 4 <| D.sep [ D.fromName name |> D.plus (D.fromChars ":"), typeDoc localizer tipe ]
 
 
-binopToDoc : L.Localizer -> T.CDN_Name -> Docs.Binop -> D.Doc
-binopToDoc localizer name (Docs.Binop _ tipe associativity n) =
+binopToDoc : L.CRRTL_Localizer -> T.CDN_Name -> Docs.CED_Binop -> D.Doc
+binopToDoc localizer name (Docs.CED_Binop _ tipe associativity n) =
     let
         details : D.Doc
         details =
@@ -458,6 +458,6 @@ binopToDoc localizer name (Docs.Binop _ tipe associativity n) =
         )
 
 
-typeDoc : L.Localizer -> Type.Type -> D.Doc
+typeDoc : L.CRRTL_Localizer -> Type.CECT_Type -> D.Doc
 typeDoc localizer tipe =
     Type.toDoc localizer Type.None tipe

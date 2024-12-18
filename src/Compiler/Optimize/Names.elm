@@ -32,17 +32,17 @@ import Utils.Main as Utils
 type Tracker a
     = Tracker
         (Int
-         -> EverySet (List String) Opt.Global
+         -> EverySet (List String) T.CASTO_Global
          -> Dict String T.CDN_Name Int
          -> TResult a
         )
 
 
 type TResult a
-    = TResult Int (EverySet (List String) Opt.Global) (Dict String T.CDN_Name Int) a
+    = TResult Int (EverySet (List String) T.CASTO_Global) (Dict String T.CDN_Name Int) a
 
 
-run : Tracker a -> ( EverySet (List String) Opt.Global, Dict String T.CDN_Name Int, a )
+run : Tracker a -> ( EverySet (List String) T.CASTO_Global, Dict String T.CDN_Name Int, a )
 run (Tracker k) =
     case k 0 EverySet.empty Dict.empty of
         TResult _ deps fields value ->
@@ -63,74 +63,74 @@ registerKernel home value =
             TResult uid (EverySet.insert Opt.toComparableGlobal (Opt.toKernelGlobal home) deps) fields value
 
 
-registerGlobal : T.CEMN_Canonical -> T.CDN_Name -> Tracker Opt.Expr
+registerGlobal : T.CEMN_Canonical -> T.CDN_Name -> Tracker T.CASTO_Expr
 registerGlobal home name =
     Tracker <|
         \uid deps fields ->
             let
-                global : Opt.Global
+                global : T.CASTO_Global
                 global =
-                    Opt.Global home name
+                    T.CASTO_Global home name
             in
-            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal global)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (T.CASTO_VarGlobal global)
 
 
-registerDebug : T.CDN_Name -> T.CEMN_Canonical -> T.CRA_Region -> Tracker Opt.Expr
+registerDebug : T.CDN_Name -> T.CEMN_Canonical -> T.CRA_Region -> Tracker T.CASTO_Expr
 registerDebug name home region =
     Tracker <|
         \uid deps fields ->
             let
-                global : Opt.Global
+                global : T.CASTO_Global
                 global =
-                    Opt.Global ModuleName.debug name
+                    T.CASTO_Global ModuleName.debug name
             in
-            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug name home region Nothing)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (T.CASTO_VarDebug name home region Nothing)
 
 
-registerCtor : T.CEMN_Canonical -> T.CDN_Name -> T.CDI_ZeroBased -> T.CASTC_CtorOpts -> Tracker Opt.Expr
+registerCtor : T.CEMN_Canonical -> T.CDN_Name -> T.CDI_ZeroBased -> T.CASTC_CtorOpts -> Tracker T.CASTO_Expr
 registerCtor home name index opts =
     Tracker <|
         \uid deps fields ->
             let
-                global : Opt.Global
+                global : T.CASTO_Global
                 global =
-                    Opt.Global home name
+                    T.CASTO_Global home name
 
-                newDeps : EverySet (List String) Opt.Global
+                newDeps : EverySet (List String) T.CASTO_Global
                 newDeps =
                     EverySet.insert Opt.toComparableGlobal global deps
             in
             case opts of
                 T.CASTC_Normal ->
-                    TResult uid newDeps fields (Opt.VarGlobal global)
+                    TResult uid newDeps fields (T.CASTO_VarGlobal global)
 
                 T.CASTC_Enum ->
                     TResult uid newDeps fields <|
                         case name of
                             "True" ->
                                 if home == ModuleName.basics then
-                                    Opt.Bool True
+                                    T.CASTO_Bool True
 
                                 else
-                                    Opt.VarEnum global index
+                                    T.CASTO_VarEnum global index
 
                             "False" ->
                                 if home == ModuleName.basics then
-                                    Opt.Bool False
+                                    T.CASTO_Bool False
 
                                 else
-                                    Opt.VarEnum global index
+                                    T.CASTO_VarEnum global index
 
                             _ ->
-                                Opt.VarEnum global index
+                                T.CASTO_VarEnum global index
 
                 T.CASTC_Unbox ->
-                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox global)
+                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (T.CASTO_VarBox global)
 
 
-identity : Opt.Global
+identity : T.CASTO_Global
 identity =
-    Opt.Global ModuleName.basics Name.identity_
+    T.CASTO_Global ModuleName.basics Name.identity_
 
 
 registerField : T.CDN_Name -> a -> Tracker a

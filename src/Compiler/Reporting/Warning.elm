@@ -32,7 +32,7 @@ type Context
 -- TO REPORT
 
 
-toReport : L.Localizer -> Code.Source -> Warning -> Report
+toReport : L.CRRTL_Localizer -> Code.Source -> Warning -> Report
 toReport localizer source warning =
     case warning of
         UnusedImport region moduleName ->

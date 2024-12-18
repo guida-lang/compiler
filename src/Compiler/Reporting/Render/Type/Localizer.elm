@@ -1,5 +1,5 @@
 module Compiler.Reporting.Render.Type.Localizer exposing
-    ( Localizer
+    ( CRRTL_Localizer
     , empty
     , fromModule
     , fromNames
@@ -26,47 +26,47 @@ import Types as T
 -- LOCALIZER
 
 
-type Localizer
-    = Localizer (Dict String T.CDN_Name Import)
+type CRRTL_Localizer
+    = CRRTL_Localizer (Dict String T.CDN_Name CRRTL_Import)
 
 
-type alias Import =
+type alias CRRTL_Import =
     { alias : Maybe T.CDN_Name
-    , exposing_ : Exposing
+    , exposing_ : CRRTL_Exposing
     }
 
 
-type Exposing
-    = All
-    | Only (EverySet String T.CDN_Name)
+type CRRTL_Exposing
+    = CRRTL_All
+    | CRRTL_Only (EverySet String T.CDN_Name)
 
 
-empty : Localizer
+empty : CRRTL_Localizer
 empty =
-    Localizer Dict.empty
+    CRRTL_Localizer Dict.empty
 
 
 
 -- LOCALIZE
 
 
-toDoc : Localizer -> T.CEMN_Canonical -> T.CDN_Name -> D.Doc
+toDoc : CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> D.Doc
 toDoc localizer home name =
     D.fromChars (toChars localizer home name)
 
 
-toChars : Localizer -> T.CEMN_Canonical -> T.CDN_Name -> String
-toChars (Localizer localizer) ((T.CEMN_Canonical _ home) as moduleName) name =
+toChars : CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> String
+toChars (CRRTL_Localizer localizer) ((T.CEMN_Canonical _ home) as moduleName) name =
     case Dict.get identity home localizer of
         Nothing ->
             home ++ "." ++ name
 
         Just import_ ->
             case import_.exposing_ of
-                All ->
+                CRRTL_All ->
                     name
 
-                Only set ->
+                CRRTL_Only set ->
                     if EverySet.member identity name set then
                         name
 
@@ -81,37 +81,37 @@ toChars (Localizer localizer) ((T.CEMN_Canonical _ home) as moduleName) name =
 -- FROM NAMES
 
 
-fromNames : Dict String T.CDN_Name a -> Localizer
+fromNames : Dict String T.CDN_Name a -> CRRTL_Localizer
 fromNames names =
-    Localizer (Dict.map (\_ _ -> { alias = Nothing, exposing_ = All }) names)
+    CRRTL_Localizer (Dict.map (\_ _ -> { alias = Nothing, exposing_ = CRRTL_All }) names)
 
 
 
 -- FROM MODULE
 
 
-fromModule : T.CASTS_Module -> Localizer
+fromModule : T.CASTS_Module -> CRRTL_Localizer
 fromModule ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) =
-    Localizer <|
+    CRRTL_Localizer <|
         Dict.fromList identity <|
-            (( Src.getName modul, { alias = Nothing, exposing_ = All } ) :: List.map toPair imports)
+            (( Src.getName modul, { alias = Nothing, exposing_ = CRRTL_All } ) :: List.map toPair imports)
 
 
-toPair : T.CASTS_Import -> ( T.CDN_Name, Import )
+toPair : T.CASTS_Import -> ( T.CDN_Name, CRRTL_Import )
 toPair (T.CASTS_Import (T.CRA_At _ name) alias_ exposing_) =
     ( name
-    , Import alias_ (toExposing exposing_)
+    , CRRTL_Import alias_ (toExposing exposing_)
     )
 
 
-toExposing : T.CASTS_Exposing -> Exposing
+toExposing : T.CASTS_Exposing -> CRRTL_Exposing
 toExposing exposing_ =
     case exposing_ of
         T.CASTS_Open ->
-            All
+            CRRTL_All
 
         T.CASTS_Explicit exposedList ->
-            Only (List.foldr addType EverySet.empty exposedList)
+            CRRTL_Only (List.foldr addType EverySet.empty exposedList)
 
 
 addType : T.CASTS_Exposed -> EverySet String T.CDN_Name -> EverySet String T.CDN_Name
@@ -131,17 +131,17 @@ addType exposed types =
 -- ENCODERS and DECODERS
 
 
-localizerEncoder : Localizer -> Encode.Value
-localizerEncoder (Localizer localizer) =
+localizerEncoder : CRRTL_Localizer -> Encode.Value
+localizerEncoder (CRRTL_Localizer localizer) =
     EncodeX.assocListDict compare Encode.string importEncoder localizer
 
 
-localizerDecoder : Decode.Decoder Localizer
+localizerDecoder : Decode.Decoder CRRTL_Localizer
 localizerDecoder =
-    Decode.map Localizer (DecodeX.assocListDict identity Decode.string importDecoder)
+    Decode.map CRRTL_Localizer (DecodeX.assocListDict identity Decode.string importDecoder)
 
 
-importEncoder : Import -> Encode.Value
+importEncoder : CRRTL_Import -> Encode.Value
 importEncoder import_ =
     Encode.object
         [ ( "type", Encode.string "Import" )
@@ -150,39 +150,39 @@ importEncoder import_ =
         ]
 
 
-importDecoder : Decode.Decoder Import
+importDecoder : Decode.Decoder CRRTL_Import
 importDecoder =
-    Decode.map2 Import
+    Decode.map2 CRRTL_Import
         (Decode.field "alias" (Decode.maybe Decode.string))
         (Decode.field "exposing" exposingDecoder)
 
 
-exposingEncoder : Exposing -> Encode.Value
+exposingEncoder : CRRTL_Exposing -> Encode.Value
 exposingEncoder exposing_ =
     case exposing_ of
-        All ->
+        CRRTL_All ->
             Encode.object
                 [ ( "type", Encode.string "All" )
                 ]
 
-        Only set ->
+        CRRTL_Only set ->
             Encode.object
                 [ ( "type", Encode.string "Only" )
                 , ( "set", EncodeX.everySet compare Encode.string set )
                 ]
 
 
-exposingDecoder : Decode.Decoder Exposing
+exposingDecoder : Decode.Decoder CRRTL_Exposing
 exposingDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "All" ->
-                        Decode.succeed All
+                        Decode.succeed CRRTL_All
 
                     "Only" ->
-                        Decode.map Only (Decode.field "set" (DecodeX.everySet identity Decode.string))
+                        Decode.map CRRTL_Only (Decode.field "set" (DecodeX.everySet identity Decode.string))
 
                     _ ->
                         Decode.fail ("Unknown Exposing's type: " ++ type_)

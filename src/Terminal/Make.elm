@@ -20,7 +20,6 @@ import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
-import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
 import Json.Decode as Decode
@@ -29,7 +28,7 @@ import Maybe.Extra as Maybe
 import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -199,7 +198,7 @@ getExposed (Details.Details _ validOutline _ _ _ _) =
 -- BUILD PROJECTS
 
 
-buildExposed : Reporting.Style -> FilePath -> Details.Details -> Maybe FilePath -> NE.Nonempty T.CEMN_Raw -> Task ()
+buildExposed : Reporting.Style -> T.FilePath -> Details.Details -> Maybe T.FilePath -> NE.Nonempty T.CEMN_Raw -> Task ()
 buildExposed style root details maybeDocs exposed =
     let
         docsGoal : Build.DocsGoal ()
@@ -210,7 +209,7 @@ buildExposed style root details maybeDocs exposed =
         Build.fromExposed (Decode.succeed ()) (\_ -> Encode.object []) style root details docsGoal exposed
 
 
-buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts
+buildPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> Task Build.Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths
@@ -235,7 +234,7 @@ getMain modules root =
             else
                 Nothing
 
-        Build.Outside name _ (Opt.LocalGraph maybeMain _ _) ->
+        Build.Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             maybeMain
                 |> Maybe.map (\_ -> name)
 
@@ -243,7 +242,7 @@ getMain modules root =
 isMain : T.CEMN_Raw -> Build.Module -> Bool
 isMain targetName modul =
     case modul of
-        Build.Fresh name _ (Opt.LocalGraph maybeMain _ _) ->
+        Build.Fresh name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             Maybe.isJust maybeMain && name == targetName
 
         Build.Cached name mainIsDefined _ ->
@@ -283,7 +282,7 @@ getNoMain modules root =
             else
                 Just name
 
-        Build.Outside name _ (Opt.LocalGraph maybeMain _ _) ->
+        Build.Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             case maybeMain of
                 Just _ ->
                     Nothing
@@ -296,7 +295,7 @@ getNoMain modules root =
 -- GENERATE
 
 
-generate : Reporting.Style -> FilePath -> String -> NE.Nonempty T.CEMN_Raw -> Task ()
+generate : Reporting.Style -> T.FilePath -> String -> NE.Nonempty T.CEMN_Raw -> Task ()
 generate style target builder names =
     Task.io
         (Utils.dirCreateDirectoryIfMissing True (Utils.fpTakeDirectory target)
@@ -315,7 +314,7 @@ type DesiredMode
     | Prod
 
 
-toBuilder : FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
+toBuilder : T.FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
 toBuilder root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of

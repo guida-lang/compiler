@@ -1,17 +1,5 @@
 module Compiler.AST.Optimized exposing
-    ( Choice(..)
-    , Decider(..)
-    , Def(..)
-    , Destructor(..)
-    , EffectsType(..)
-    , Expr(..)
-    , Global(..)
-    , GlobalGraph(..)
-    , LocalGraph(..)
-    , Main(..)
-    , Node(..)
-    , Path(..)
-    , addGlobalGraph
+    ( addGlobalGraph
     , addKernel
     , addLocalGraph
     , compareGlobal
@@ -35,7 +23,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -46,42 +34,8 @@ import Types as T
 -- EXPRESSIONS
 
 
-type Expr
-    = Bool Bool
-    | Chr String
-    | Str String
-    | Int Int
-    | Float Float
-    | VarLocal T.CDN_Name
-    | VarGlobal Global
-    | VarEnum Global T.CDI_ZeroBased
-    | VarBox Global
-    | VarCycle T.CEMN_Canonical T.CDN_Name
-    | VarDebug T.CDN_Name T.CEMN_Canonical T.CRA_Region (Maybe T.CDN_Name)
-    | VarKernel T.CDN_Name T.CDN_Name
-    | List (List Expr)
-    | Function (List T.CDN_Name) Expr
-    | Call Expr (List Expr)
-    | TailCall T.CDN_Name (List ( T.CDN_Name, Expr ))
-    | If (List ( Expr, Expr )) Expr
-    | Let Def Expr
-    | Destruct Destructor Expr
-    | Case T.CDN_Name T.CDN_Name (Decider Choice) (List ( Int, Expr ))
-    | Accessor T.CDN_Name
-    | Access Expr T.CDN_Name
-    | Update Expr (Dict String T.CDN_Name Expr)
-    | Record (Dict String T.CDN_Name Expr)
-    | Unit
-    | Tuple Expr Expr (Maybe Expr)
-    | Shader T.CASTUS_Source (EverySet String T.CDN_Name) (EverySet String T.CDN_Name)
-
-
-type Global
-    = Global T.CEMN_Canonical T.CDN_Name
-
-
-compareGlobal : Global -> Global -> Order
-compareGlobal (Global home1 name1) (Global home2 name2) =
+compareGlobal : T.CASTO_Global -> T.CASTO_Global -> Order
+compareGlobal (T.CASTO_Global home1 name1) (T.CASTO_Global home2 name2) =
     case compare name1 name2 of
         LT ->
             LT
@@ -93,134 +47,58 @@ compareGlobal (Global home1 name1) (Global home2 name2) =
             GT
 
 
-toComparableGlobal : Global -> List String
-toComparableGlobal (Global home name) =
+toComparableGlobal : T.CASTO_Global -> List String
+toComparableGlobal (T.CASTO_Global home name) =
     ModuleName.toComparableCanonical home ++ [ name ]
-
-
-
--- DEFINITIONS
-
-
-type Def
-    = Def T.CDN_Name Expr
-    | TailDef T.CDN_Name (List T.CDN_Name) Expr
-
-
-type Destructor
-    = Destructor T.CDN_Name Path
-
-
-type Path
-    = Index T.CDI_ZeroBased Path
-    | Field T.CDN_Name Path
-    | Unbox Path
-    | Root T.CDN_Name
-
-
-
--- BRANCHING
-
-
-type Decider a
-    = Leaf a
-    | Chain (List ( DT.Path, DT.Test )) (Decider a) (Decider a)
-    | FanOut DT.Path (List ( DT.Test, Decider a )) (Decider a)
-
-
-type Choice
-    = Inline Expr
-    | Jump Int
-
-
-
--- OBJECT GRAPH
-
-
-type GlobalGraph
-    = GlobalGraph (Dict (List String) Global Node) (Dict String T.CDN_Name Int)
-
-
-type LocalGraph
-    = LocalGraph
-        (Maybe Main)
-        -- PERF profile switching Global to Name
-        (Dict (List String) Global Node)
-        (Dict String T.CDN_Name Int)
-
-
-type Main
-    = Static
-    | Dynamic T.CASTC_Type Expr
-
-
-type Node
-    = Define Expr (EverySet (List String) Global)
-    | DefineTailFunc (List T.CDN_Name) Expr (EverySet (List String) Global)
-    | Ctor T.CDI_ZeroBased Int
-    | Enum T.CDI_ZeroBased
-    | Box
-    | Link Global
-    | Cycle (List T.CDN_Name) (List ( T.CDN_Name, Expr )) (List Def) (EverySet (List String) Global)
-    | Manager EffectsType
-    | Kernel (List T.CEK_Chunk) (EverySet (List String) Global)
-    | PortIncoming Expr (EverySet (List String) Global)
-    | PortOutgoing Expr (EverySet (List String) Global)
-
-
-type EffectsType
-    = Cmd
-    | Sub
-    | Fx
 
 
 
 -- GRAPHS
 
 
-empty : GlobalGraph
+empty : T.CASTO_GlobalGraph
 empty =
-    GlobalGraph Dict.empty Dict.empty
+    T.CASTO_GlobalGraph Dict.empty Dict.empty
 
 
-addGlobalGraph : GlobalGraph -> GlobalGraph -> GlobalGraph
-addGlobalGraph (GlobalGraph nodes1 fields1) (GlobalGraph nodes2 fields2) =
-    GlobalGraph
+addGlobalGraph : T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph
+addGlobalGraph (T.CASTO_GlobalGraph nodes1 fields1) (T.CASTO_GlobalGraph nodes2 fields2) =
+    T.CASTO_GlobalGraph
         (Dict.union nodes1 nodes2)
         (Dict.union fields1 fields2)
 
 
-addLocalGraph : LocalGraph -> GlobalGraph -> GlobalGraph
-addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
-    GlobalGraph
+addLocalGraph : T.CASTO_LocalGraph -> T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph
+addLocalGraph (T.CASTO_LocalGraph _ nodes1 fields1) (T.CASTO_GlobalGraph nodes2 fields2) =
+    T.CASTO_GlobalGraph
         (Dict.union nodes1 nodes2)
         (Dict.union fields1 fields2)
 
 
-addKernel : T.CDN_Name -> List T.CEK_Chunk -> GlobalGraph -> GlobalGraph
-addKernel shortName chunks (GlobalGraph nodes fields) =
+addKernel : T.CDN_Name -> List T.CEK_Chunk -> T.CASTO_GlobalGraph -> T.CASTO_GlobalGraph
+addKernel shortName chunks (T.CASTO_GlobalGraph nodes fields) =
     let
-        global : Global
+        global : T.CASTO_Global
         global =
             toKernelGlobal shortName
 
-        node : Node
+        node : T.CASTO_Node
         node =
-            Kernel chunks (List.foldr addKernelDep EverySet.empty chunks)
+            T.CASTO_Kernel chunks (List.foldr addKernelDep EverySet.empty chunks)
     in
-    GlobalGraph
+    T.CASTO_GlobalGraph
         (Dict.insert toComparableGlobal global node nodes)
         (Dict.union (K.countFields chunks) fields)
 
 
-addKernelDep : T.CEK_Chunk -> EverySet (List String) Global -> EverySet (List String) Global
+addKernelDep : T.CEK_Chunk -> EverySet (List String) T.CASTO_Global -> EverySet (List String) T.CASTO_Global
 addKernelDep chunk deps =
     case chunk of
         T.CEK_JS _ ->
             deps
 
         T.CEK_ElmVar home name ->
-            EverySet.insert toComparableGlobal (Global home name) deps
+            EverySet.insert toComparableGlobal (T.CASTO_Global home name) deps
 
         T.CEK_JsVar shortName _ ->
             EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
@@ -241,17 +119,17 @@ addKernelDep chunk deps =
             deps
 
 
-toKernelGlobal : T.CDN_Name -> Global
+toKernelGlobal : T.CDN_Name -> T.CASTO_Global
 toKernelGlobal shortName =
-    Global (T.CEMN_Canonical Pkg.kernel shortName) Name.dollar
+    T.CASTO_Global (T.CEMN_Canonical Pkg.kernel shortName) Name.dollar
 
 
 
 -- ENCODERS and DECODERS
 
 
-globalGraphEncoder : GlobalGraph -> Encode.Value
-globalGraphEncoder (GlobalGraph nodes fields) =
+globalGraphEncoder : T.CASTO_GlobalGraph -> Encode.Value
+globalGraphEncoder (T.CASTO_GlobalGraph nodes fields) =
     Encode.object
         [ ( "type", Encode.string "GlobalGraph" )
         , ( "nodes", E.assocListDict compareGlobal globalEncoder nodeEncoder nodes )
@@ -259,15 +137,15 @@ globalGraphEncoder (GlobalGraph nodes fields) =
         ]
 
 
-globalGraphDecoder : Decode.Decoder GlobalGraph
+globalGraphDecoder : Decode.Decoder T.CASTO_GlobalGraph
 globalGraphDecoder =
-    Decode.map2 GlobalGraph
+    Decode.map2 T.CASTO_GlobalGraph
         (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
         (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
 
 
-localGraphEncoder : LocalGraph -> Encode.Value
-localGraphEncoder (LocalGraph main nodes fields) =
+localGraphEncoder : T.CASTO_LocalGraph -> Encode.Value
+localGraphEncoder (T.CASTO_LocalGraph main nodes fields) =
     Encode.object
         [ ( "type", Encode.string "LocalGraph" )
         , ( "main", E.maybe mainEncoder main )
@@ -276,23 +154,23 @@ localGraphEncoder (LocalGraph main nodes fields) =
         ]
 
 
-localGraphDecoder : Decode.Decoder LocalGraph
+localGraphDecoder : Decode.Decoder T.CASTO_LocalGraph
 localGraphDecoder =
-    Decode.map3 LocalGraph
+    Decode.map3 T.CASTO_LocalGraph
         (Decode.field "main" (Decode.maybe mainDecoder))
         (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
         (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
 
 
-mainEncoder : Main -> Encode.Value
+mainEncoder : T.CASTO_Main -> Encode.Value
 mainEncoder main_ =
     case main_ of
-        Static ->
+        T.CASTO_Static ->
             Encode.object
                 [ ( "type", Encode.string "Static" )
                 ]
 
-        Dynamic msgType decoder ->
+        T.CASTO_Dynamic msgType decoder ->
             Encode.object
                 [ ( "type", Encode.string "Dynamic" )
                 , ( "msgType", Can.typeEncoder msgType )
@@ -300,17 +178,17 @@ mainEncoder main_ =
                 ]
 
 
-mainDecoder : Decode.Decoder Main
+mainDecoder : Decode.Decoder T.CASTO_Main
 mainDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Static" ->
-                        Decode.succeed Static
+                        Decode.succeed T.CASTO_Static
 
                     "Dynamic" ->
-                        Decode.map2 Dynamic
+                        Decode.map2 T.CASTO_Dynamic
                             (Decode.field "msgType" Can.typeDecoder)
                             (Decode.field "decoder" exprDecoder)
 
@@ -319,8 +197,8 @@ mainDecoder =
             )
 
 
-globalEncoder : Global -> Encode.Value
-globalEncoder (Global home name) =
+globalEncoder : T.CASTO_Global -> Encode.Value
+globalEncoder (T.CASTO_Global home name) =
     Encode.object
         [ ( "type", Encode.string "Global" )
         , ( "home", ModuleName.canonicalEncoder home )
@@ -328,24 +206,24 @@ globalEncoder (Global home name) =
         ]
 
 
-globalDecoder : Decode.Decoder Global
+globalDecoder : Decode.Decoder T.CASTO_Global
 globalDecoder =
-    Decode.map2 Global
+    Decode.map2 T.CASTO_Global
         (Decode.field "home" ModuleName.canonicalDecoder)
         (Decode.field "name" Decode.string)
 
 
-nodeEncoder : Node -> Encode.Value
+nodeEncoder : T.CASTO_Node -> Encode.Value
 nodeEncoder node =
     case node of
-        Define expr deps ->
+        T.CASTO_Define expr deps ->
             Encode.object
                 [ ( "type", Encode.string "Define" )
                 , ( "expr", exprEncoder expr )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        DefineTailFunc argNames body deps ->
+        T.CASTO_DefineTailFunc argNames body deps ->
             Encode.object
                 [ ( "type", Encode.string "DefineTailFunc" )
                 , ( "argNames", Encode.list Encode.string argNames )
@@ -353,31 +231,31 @@ nodeEncoder node =
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        Ctor index arity ->
+        T.CASTO_Ctor index arity ->
             Encode.object
                 [ ( "type", Encode.string "Ctor" )
                 , ( "index", Index.zeroBasedEncoder index )
                 , ( "arity", Encode.int arity )
                 ]
 
-        Enum index ->
+        T.CASTO_Enum index ->
             Encode.object
                 [ ( "type", Encode.string "Enum" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        Box ->
+        T.CASTO_Box ->
             Encode.object
                 [ ( "type", Encode.string "Box" )
                 ]
 
-        Link linkedGlobal ->
+        T.CASTO_Link linkedGlobal ->
             Encode.object
                 [ ( "type", Encode.string "Link" )
                 , ( "linkedGlobal", globalEncoder linkedGlobal )
                 ]
 
-        Cycle names values functions deps ->
+        T.CASTO_Cycle names values functions deps ->
             Encode.object
                 [ ( "type", Encode.string "Cycle" )
                 , ( "names", Encode.list Encode.string names )
@@ -386,27 +264,27 @@ nodeEncoder node =
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        Manager effectsType ->
+        T.CASTO_Manager effectsType ->
             Encode.object
                 [ ( "type", Encode.string "Manager" )
                 , ( "effectsType", effectsTypeEncoder effectsType )
                 ]
 
-        Kernel chunks deps ->
+        T.CASTO_Kernel chunks deps ->
             Encode.object
                 [ ( "type", Encode.string "Kernel" )
                 , ( "chunks", Encode.list K.chunkEncoder chunks )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        PortIncoming decoder deps ->
+        T.CASTO_PortIncoming decoder deps ->
             Encode.object
                 [ ( "type", Encode.string "PortIncoming" )
                 , ( "decoder", exprEncoder decoder )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        PortOutgoing encoder deps ->
+        T.CASTO_PortOutgoing encoder deps ->
             Encode.object
                 [ ( "type", Encode.string "PortOutgoing" )
                 , ( "encoder", exprEncoder encoder )
@@ -414,60 +292,60 @@ nodeEncoder node =
                 ]
 
 
-nodeDecoder : Decode.Decoder Node
+nodeDecoder : Decode.Decoder T.CASTO_Node
 nodeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Define" ->
-                        Decode.map2 Define
+                        Decode.map2 T.CASTO_Define
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "DefineTailFunc" ->
-                        Decode.map3 DefineTailFunc
+                        Decode.map3 T.CASTO_DefineTailFunc
                             (Decode.field "argNames" (Decode.list Decode.string))
                             (Decode.field "body" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "Ctor" ->
-                        Decode.map2 Ctor
+                        Decode.map2 T.CASTO_Ctor
                             (Decode.field "index" Index.zeroBasedDecoder)
                             (Decode.field "arity" Decode.int)
 
                     "Enum" ->
-                        Decode.map Enum
+                        Decode.map T.CASTO_Enum
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "Box" ->
-                        Decode.succeed Box
+                        Decode.succeed T.CASTO_Box
 
                     "Link" ->
-                        Decode.map Link (Decode.field "linkedGlobal" globalDecoder)
+                        Decode.map T.CASTO_Link (Decode.field "linkedGlobal" globalDecoder)
 
                     "Cycle" ->
-                        Decode.map4 Cycle
+                        Decode.map4 T.CASTO_Cycle
                             (Decode.field "names" (Decode.list Decode.string))
                             (Decode.field "values" (Decode.list (D.jsonPair Decode.string exprDecoder)))
                             (Decode.field "functions" (Decode.list defDecoder))
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "Manager" ->
-                        Decode.map Manager (Decode.field "effectsType" effectsTypeDecoder)
+                        Decode.map T.CASTO_Manager (Decode.field "effectsType" effectsTypeDecoder)
 
                     "Kernel" ->
-                        Decode.map2 Kernel
+                        Decode.map2 T.CASTO_Kernel
                             (Decode.field "chunks" (Decode.list K.chunkDecoder))
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "PortIncoming" ->
-                        Decode.map2 PortIncoming
+                        Decode.map2 T.CASTO_PortIncoming
                             (Decode.field "decoder" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "PortOutgoing" ->
-                        Decode.map2 PortOutgoing
+                        Decode.map2 T.CASTO_PortOutgoing
                             (Decode.field "encoder" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
@@ -476,72 +354,72 @@ nodeDecoder =
             )
 
 
-exprEncoder : Expr -> Encode.Value
+exprEncoder : T.CASTO_Expr -> Encode.Value
 exprEncoder expr =
     case expr of
-        Bool value ->
+        T.CASTO_Bool value ->
             Encode.object
                 [ ( "type", Encode.string "Bool" )
                 , ( "value", Encode.bool value )
                 ]
 
-        Chr value ->
+        T.CASTO_Chr value ->
             Encode.object
                 [ ( "type", Encode.string "Chr" )
                 , ( "value", Encode.string value )
                 ]
 
-        Str value ->
+        T.CASTO_Str value ->
             Encode.object
                 [ ( "type", Encode.string "Str" )
                 , ( "value", Encode.string value )
                 ]
 
-        Int value ->
+        T.CASTO_Int value ->
             Encode.object
                 [ ( "type", Encode.string "Int" )
                 , ( "value", Encode.int value )
                 ]
 
-        Float value ->
+        T.CASTO_Float value ->
             Encode.object
                 [ ( "type", Encode.string "Float" )
                 , ( "value", Encode.float value )
                 ]
 
-        VarLocal value ->
+        T.CASTO_VarLocal value ->
             Encode.object
                 [ ( "type", Encode.string "VarLocal" )
                 , ( "value", Encode.string value )
                 ]
 
-        VarGlobal value ->
+        T.CASTO_VarGlobal value ->
             Encode.object
                 [ ( "type", Encode.string "VarGlobal" )
                 , ( "value", globalEncoder value )
                 ]
 
-        VarEnum global index ->
+        T.CASTO_VarEnum global index ->
             Encode.object
                 [ ( "type", Encode.string "VarEnum" )
                 , ( "global", globalEncoder global )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        VarBox value ->
+        T.CASTO_VarBox value ->
             Encode.object
                 [ ( "type", Encode.string "VarBox" )
                 , ( "value", globalEncoder value )
                 ]
 
-        VarCycle home name ->
+        T.CASTO_VarCycle home name ->
             Encode.object
                 [ ( "type", Encode.string "VarCycle" )
                 , ( "home", ModuleName.canonicalEncoder home )
                 , ( "name", Encode.string name )
                 ]
 
-        VarDebug name home region unhandledValueName ->
+        T.CASTO_VarDebug name home region unhandledValueName ->
             Encode.object
                 [ ( "type", Encode.string "VarDebug" )
                 , ( "name", Encode.string name )
@@ -550,62 +428,62 @@ exprEncoder expr =
                 , ( "unhandledValueName", E.maybe Encode.string unhandledValueName )
                 ]
 
-        VarKernel home name ->
+        T.CASTO_VarKernel home name ->
             Encode.object
                 [ ( "type", Encode.string "VarKernel" )
                 , ( "home", Encode.string home )
                 , ( "name", Encode.string name )
                 ]
 
-        List value ->
+        T.CASTO_List value ->
             Encode.object
                 [ ( "type", Encode.string "List" )
                 , ( "value", Encode.list exprEncoder value )
                 ]
 
-        Function args body ->
+        T.CASTO_Function args body ->
             Encode.object
                 [ ( "type", Encode.string "Function" )
                 , ( "args", Encode.list Encode.string args )
                 , ( "body", exprEncoder body )
                 ]
 
-        Call func args ->
+        T.CASTO_Call func args ->
             Encode.object
                 [ ( "type", Encode.string "Call" )
                 , ( "func", exprEncoder func )
                 , ( "args", Encode.list exprEncoder args )
                 ]
 
-        TailCall name args ->
+        T.CASTO_TailCall name args ->
             Encode.object
                 [ ( "type", Encode.string "TailCall" )
                 , ( "name", Encode.string name )
                 , ( "args", Encode.list (E.jsonPair Encode.string exprEncoder) args )
                 ]
 
-        If branches final ->
+        T.CASTO_If branches final ->
             Encode.object
                 [ ( "type", Encode.string "If" )
                 , ( "branches", Encode.list (E.jsonPair exprEncoder exprEncoder) branches )
                 , ( "final", exprEncoder final )
                 ]
 
-        Let def body ->
+        T.CASTO_Let def body ->
             Encode.object
                 [ ( "type", Encode.string "Let" )
                 , ( "def", defEncoder def )
                 , ( "body", exprEncoder body )
                 ]
 
-        Destruct destructor body ->
+        T.CASTO_Destruct destructor body ->
             Encode.object
                 [ ( "type", Encode.string "Destruct" )
                 , ( "destructor", destructorEncoder destructor )
                 , ( "body", exprEncoder body )
                 ]
 
-        Case label root decider jumps ->
+        T.CASTO_Case label root decider jumps ->
             Encode.object
                 [ ( "type", Encode.string "Case" )
                 , ( "label", Encode.string label )
@@ -614,38 +492,38 @@ exprEncoder expr =
                 , ( "jumps", Encode.list (E.jsonPair Encode.int exprEncoder) jumps )
                 ]
 
-        Accessor field ->
+        T.CASTO_Accessor field ->
             Encode.object
                 [ ( "type", Encode.string "Accessor" )
                 , ( "field", Encode.string field )
                 ]
 
-        Access record field ->
+        T.CASTO_Access record field ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "record", exprEncoder record )
                 , ( "field", Encode.string field )
                 ]
 
-        Update record fields ->
+        T.CASTO_Update record fields ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
                 , ( "record", exprEncoder record )
                 , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
                 ]
 
-        Record value ->
+        T.CASTO_Record value ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 , ( "value", E.assocListDict compare Encode.string exprEncoder value )
                 ]
 
-        Unit ->
+        T.CASTO_Unit ->
             Encode.object
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        T.CASTO_Tuple a b maybeC ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", exprEncoder a )
@@ -653,7 +531,7 @@ exprEncoder expr =
                 , ( "maybeC", E.maybe exprEncoder maybeC )
                 ]
 
-        Shader src attributes uniforms ->
+        T.CASTO_Shader src attributes uniforms ->
             Encode.object
                 [ ( "type", Encode.string "Shader" )
                 , ( "src", Shader.sourceEncoder src )
@@ -662,125 +540,125 @@ exprEncoder expr =
                 ]
 
 
-exprDecoder : Decode.Decoder Expr
+exprDecoder : Decode.Decoder T.CASTO_Expr
 exprDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Bool" ->
-                        Decode.map Bool (Decode.field "value" Decode.bool)
+                        Decode.map T.CASTO_Bool (Decode.field "value" Decode.bool)
 
                     "Chr" ->
-                        Decode.map Chr (Decode.field "value" Decode.string)
+                        Decode.map T.CASTO_Chr (Decode.field "value" Decode.string)
 
                     "Str" ->
-                        Decode.map Str (Decode.field "value" Decode.string)
+                        Decode.map T.CASTO_Str (Decode.field "value" Decode.string)
 
                     "Int" ->
-                        Decode.map Int (Decode.field "value" Decode.int)
+                        Decode.map T.CASTO_Int (Decode.field "value" Decode.int)
 
                     "Float" ->
-                        Decode.map Float (Decode.field "value" Decode.float)
+                        Decode.map T.CASTO_Float (Decode.field "value" Decode.float)
 
                     "VarLocal" ->
-                        Decode.map VarLocal (Decode.field "value" Decode.string)
+                        Decode.map T.CASTO_VarLocal (Decode.field "value" Decode.string)
 
                     "VarGlobal" ->
-                        Decode.map VarGlobal (Decode.field "value" globalDecoder)
+                        Decode.map T.CASTO_VarGlobal (Decode.field "value" globalDecoder)
 
                     "VarEnum" ->
-                        Decode.map2 VarEnum
+                        Decode.map2 T.CASTO_VarEnum
                             (Decode.field "global" globalDecoder)
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "VarBox" ->
-                        Decode.map VarBox (Decode.field "value" globalDecoder)
+                        Decode.map T.CASTO_VarBox (Decode.field "value" globalDecoder)
 
                     "VarCycle" ->
-                        Decode.map2 VarCycle
+                        Decode.map2 T.CASTO_VarCycle
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
 
                     "VarDebug" ->
-                        Decode.map4 VarDebug
+                        Decode.map4 T.CASTO_VarDebug
                             (Decode.field "name" Decode.string)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "unhandledValueName" (Decode.maybe Decode.string))
 
                     "VarKernel" ->
-                        Decode.map2 VarKernel
+                        Decode.map2 T.CASTO_VarKernel
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "List" ->
-                        Decode.map List (Decode.field "value" (Decode.list exprDecoder))
+                        Decode.map T.CASTO_List (Decode.field "value" (Decode.list exprDecoder))
 
                     "Function" ->
-                        Decode.map2 Function
+                        Decode.map2 T.CASTO_Function
                             (Decode.field "args" (Decode.list Decode.string))
                             (Decode.field "body" exprDecoder)
 
                     "Call" ->
-                        Decode.map2 Call
+                        Decode.map2 T.CASTO_Call
                             (Decode.field "func" exprDecoder)
                             (Decode.field "args" (Decode.list exprDecoder))
 
                     "TailCall" ->
-                        Decode.map2 TailCall
+                        Decode.map2 T.CASTO_TailCall
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list (D.jsonPair Decode.string exprDecoder)))
 
                     "If" ->
-                        Decode.map2 If
+                        Decode.map2 T.CASTO_If
                             (Decode.field "branches" (Decode.list (D.jsonPair exprDecoder exprDecoder)))
                             (Decode.field "final" exprDecoder)
 
                     "Let" ->
-                        Decode.map2 Let
+                        Decode.map2 T.CASTO_Let
                             (Decode.field "def" defDecoder)
                             (Decode.field "body" exprDecoder)
 
                     "Destruct" ->
-                        Decode.map2 Destruct
+                        Decode.map2 T.CASTO_Destruct
                             (Decode.field "destructor" destructorDecoder)
                             (Decode.field "body" exprDecoder)
 
                     "Case" ->
-                        Decode.map4 Case
+                        Decode.map4 T.CASTO_Case
                             (Decode.field "label" Decode.string)
                             (Decode.field "root" Decode.string)
                             (Decode.field "decider" (deciderDecoder choiceDecoder))
                             (Decode.field "jumps" (Decode.list (D.jsonPair Decode.int exprDecoder)))
 
                     "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
+                        Decode.map T.CASTO_Accessor (Decode.field "field" Decode.string)
 
                     "Access" ->
-                        Decode.map2 Access
+                        Decode.map2 T.CASTO_Access
                             (Decode.field "record" exprDecoder)
                             (Decode.field "field" Decode.string)
 
                     "Update" ->
-                        Decode.map2 Update
+                        Decode.map2 T.CASTO_Update
                             (Decode.field "record" exprDecoder)
                             (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Record" ->
-                        Decode.map Record (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
+                        Decode.map T.CASTO_Record (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Unit" ->
-                        Decode.succeed Unit
+                        Decode.succeed T.CASTO_Unit
 
                     "Tuple" ->
-                        Decode.map3 Tuple
+                        Decode.map3 T.CASTO_Tuple
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
                             (Decode.field "maybeC" (Decode.maybe exprDecoder))
 
                     "Shader" ->
-                        Decode.map3 Shader
+                        Decode.map3 T.CASTO_Shader
                             (Decode.field "src" Shader.sourceDecoder)
                             (Decode.field "attributes" (D.everySet identity Decode.string))
                             (Decode.field "uniforms" (D.everySet identity Decode.string))
@@ -790,17 +668,17 @@ exprDecoder =
             )
 
 
-defEncoder : Def -> Encode.Value
+defEncoder : T.CASTO_Def -> Encode.Value
 defEncoder def =
     case def of
-        Def name expr ->
+        T.CASTO_Def name expr ->
             Encode.object
                 [ ( "type", Encode.string "Def" )
                 , ( "name", Encode.string name )
                 , ( "expr", exprEncoder expr )
                 ]
 
-        TailDef name args expr ->
+        T.CASTO_TailDef name args expr ->
             Encode.object
                 [ ( "type", Encode.string "TailDef" )
                 , ( "name", Encode.string name )
@@ -809,19 +687,19 @@ defEncoder def =
                 ]
 
 
-defDecoder : Decode.Decoder Def
+defDecoder : Decode.Decoder T.CASTO_Def
 defDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Def" ->
-                        Decode.map2 Def
+                        Decode.map2 T.CASTO_Def
                             (Decode.field "name" Decode.string)
                             (Decode.field "expr" exprDecoder)
 
                     "TailDef" ->
-                        Decode.map3 TailDef
+                        Decode.map3 T.CASTO_TailDef
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list Decode.string))
                             (Decode.field "expr" exprDecoder)
@@ -831,8 +709,8 @@ defDecoder =
             )
 
 
-destructorEncoder : Destructor -> Encode.Value
-destructorEncoder (Destructor name path) =
+destructorEncoder : T.CASTO_Destructor -> Encode.Value
+destructorEncoder (T.CASTO_Destructor name path) =
     Encode.object
         [ ( "type", Encode.string "Destructor" )
         , ( "name", Encode.string name )
@@ -840,23 +718,23 @@ destructorEncoder (Destructor name path) =
         ]
 
 
-destructorDecoder : Decode.Decoder Destructor
+destructorDecoder : Decode.Decoder T.CASTO_Destructor
 destructorDecoder =
-    Decode.map2 Destructor
+    Decode.map2 T.CASTO_Destructor
         (Decode.field "name" Decode.string)
         (Decode.field "path" pathDecoder)
 
 
-deciderEncoder : (a -> Encode.Value) -> Decider a -> Encode.Value
+deciderEncoder : (a -> Encode.Value) -> T.CASTO_Decider a -> Encode.Value
 deciderEncoder encoder decider =
     case decider of
-        Leaf value ->
+        T.CASTO_Leaf value ->
             Encode.object
                 [ ( "type", Encode.string "Leaf" )
                 , ( "value", encoder value )
                 ]
 
-        Chain testChain success failure ->
+        T.CASTO_Chain testChain success failure ->
             Encode.object
                 [ ( "type", Encode.string "Chain" )
                 , ( "testChain", Encode.list (E.jsonPair DT.pathEncoder DT.testEncoder) testChain )
@@ -864,7 +742,7 @@ deciderEncoder encoder decider =
                 , ( "failure", deciderEncoder encoder failure )
                 ]
 
-        FanOut path edges fallback ->
+        T.CASTO_FanOut path edges fallback ->
             Encode.object
                 [ ( "type", Encode.string "FanOut" )
                 , ( "path", DT.pathEncoder path )
@@ -873,23 +751,23 @@ deciderEncoder encoder decider =
                 ]
 
 
-deciderDecoder : Decode.Decoder a -> Decode.Decoder (Decider a)
+deciderDecoder : Decode.Decoder a -> Decode.Decoder (T.CASTO_Decider a)
 deciderDecoder decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Leaf" ->
-                        Decode.map Leaf (Decode.field "value" decoder)
+                        Decode.map T.CASTO_Leaf (Decode.field "value" decoder)
 
                     "Chain" ->
-                        Decode.map3 Chain
+                        Decode.map3 T.CASTO_Chain
                             (Decode.field "testChain" (Decode.list (D.jsonPair DT.pathDecoder DT.testDecoder)))
                             (Decode.field "success" (deciderDecoder decoder))
                             (Decode.field "failure" (deciderDecoder decoder))
 
                     "FanOut" ->
-                        Decode.map3 FanOut
+                        Decode.map3 T.CASTO_FanOut
                             (Decode.field "path" DT.pathDecoder)
                             (Decode.field "edges" (Decode.list (D.jsonPair DT.testDecoder (deciderDecoder decoder))))
                             (Decode.field "fallback" (deciderDecoder decoder))
@@ -899,123 +777,123 @@ deciderDecoder decoder =
             )
 
 
-choiceEncoder : Choice -> Encode.Value
+choiceEncoder : T.CASTO_Choice -> Encode.Value
 choiceEncoder choice =
     case choice of
-        Inline value ->
+        T.CASTO_Inline value ->
             Encode.object
                 [ ( "type", Encode.string "Inline" )
                 , ( "value", exprEncoder value )
                 ]
 
-        Jump value ->
+        T.CASTO_Jump value ->
             Encode.object
                 [ ( "type", Encode.string "Jump" )
                 , ( "value", Encode.int value )
                 ]
 
 
-choiceDecoder : Decode.Decoder Choice
+choiceDecoder : Decode.Decoder T.CASTO_Choice
 choiceDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Inline" ->
-                        Decode.map Inline (Decode.field "value" exprDecoder)
+                        Decode.map T.CASTO_Inline (Decode.field "value" exprDecoder)
 
                     "Jump" ->
-                        Decode.map Jump (Decode.field "value" Decode.int)
+                        Decode.map T.CASTO_Jump (Decode.field "value" Decode.int)
 
                     _ ->
                         Decode.fail ("Unknown Choice's type: " ++ type_)
             )
 
 
-pathEncoder : Path -> Encode.Value
+pathEncoder : T.CASTO_Path -> Encode.Value
 pathEncoder path =
     case path of
-        Index index subPath ->
+        T.CASTO_Index index subPath ->
             Encode.object
                 [ ( "type", Encode.string "Index" )
                 , ( "index", Index.zeroBasedEncoder index )
                 , ( "subPath", pathEncoder subPath )
                 ]
 
-        Field field subPath ->
+        T.CASTO_Field field subPath ->
             Encode.object
                 [ ( "type", Encode.string "Field" )
                 , ( "field", Encode.string field )
                 , ( "subPath", pathEncoder subPath )
                 ]
 
-        Unbox subPath ->
+        T.CASTO_Unbox subPath ->
             Encode.object
                 [ ( "type", Encode.string "Unbox" )
                 , ( "subPath", pathEncoder subPath )
                 ]
 
-        Root name ->
+        T.CASTO_Root name ->
             Encode.object
                 [ ( "type", Encode.string "Root" )
                 , ( "name", Encode.string name )
                 ]
 
 
-pathDecoder : Decode.Decoder Path
+pathDecoder : Decode.Decoder T.CASTO_Path
 pathDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Index" ->
-                        Decode.map2 Index
+                        Decode.map2 T.CASTO_Index
                             (Decode.field "index" Index.zeroBasedDecoder)
                             (Decode.field "subPath" pathDecoder)
 
                     "Field" ->
-                        Decode.map2 Field
+                        Decode.map2 T.CASTO_Field
                             (Decode.field "field" Decode.string)
                             (Decode.field "subPath" pathDecoder)
 
                     "Unbox" ->
-                        Decode.map Unbox (Decode.field "subPath" pathDecoder)
+                        Decode.map T.CASTO_Unbox (Decode.field "subPath" pathDecoder)
 
                     "Root" ->
-                        Decode.map Root (Decode.field "name" Decode.string)
+                        Decode.map T.CASTO_Root (Decode.field "name" Decode.string)
 
                     _ ->
                         Decode.fail ("Unknown Path's type: " ++ type_)
             )
 
 
-effectsTypeEncoder : EffectsType -> Encode.Value
+effectsTypeEncoder : T.CASTO_EffectsType -> Encode.Value
 effectsTypeEncoder effectsType =
     case effectsType of
-        Cmd ->
+        T.CASTO_Cmd ->
             Encode.string "Cmd"
 
-        Sub ->
+        T.CASTO_Sub ->
             Encode.string "Sub"
 
-        Fx ->
+        T.CASTO_Fx ->
             Encode.string "Fx"
 
 
-effectsTypeDecoder : Decode.Decoder EffectsType
+effectsTypeDecoder : Decode.Decoder T.CASTO_EffectsType
 effectsTypeDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "Cmd" ->
-                        Decode.succeed Cmd
+                        Decode.succeed T.CASTO_Cmd
 
                     "Sub" ->
-                        Decode.succeed Sub
+                        Decode.succeed T.CASTO_Sub
 
                     "Fx" ->
-                        Decode.succeed Fx
+                        Decode.succeed T.CASTO_Fx
 
                     _ ->
                         Decode.fail ("Unknown EffectsType: " ++ str)

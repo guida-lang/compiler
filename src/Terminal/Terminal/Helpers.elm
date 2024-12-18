@@ -17,7 +17,7 @@ import Data.Map as Dict
 import System.IO as IO exposing (IO)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -92,7 +92,7 @@ elmFile =
         }
 
 
-parseElmFile : String -> Maybe FilePath
+parseElmFile : String -> Maybe T.FilePath
 parseElmFile chars =
     if Utils.fpTakeExtension chars == ".elm" then
         Just chars

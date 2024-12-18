@@ -59,7 +59,7 @@ import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
 import System.IO exposing (IO)
 import Types as T
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 
 
 
@@ -1025,7 +1025,7 @@ type Install
     = InstallNoOutline
     | InstallBadOutline Outline
     | InstallBadRegistry RegistryProblem
-    | InstallNoArgs FilePath
+    | InstallNoArgs T.FilePath
     | InstallNoOnlineAppSolution T.CEP_Name
     | InstallNoOfflineAppSolution T.CEP_Name
     | InstallNoOnlinePkgSolution T.CEP_Name
@@ -1290,8 +1290,8 @@ toSolverReport problem =
 
 type Outline
     = OutlineHasBadStructure (Decode.Error OutlineProblem)
-    | OutlineHasMissingSrcDirs FilePath (List FilePath)
-    | OutlineHasDuplicateSrcDirs FilePath FilePath FilePath
+    | OutlineHasMissingSrcDirs T.FilePath (List T.FilePath)
+    | OutlineHasDuplicateSrcDirs T.FilePath T.FilePath T.FilePath
     | OutlineNoPkgCore
     | OutlineNoAppCore
     | OutlineNoAppJson
@@ -1390,7 +1390,7 @@ toOutlineReport problem =
                 ]
 
 
-toOutlineProblemReport : FilePath -> Code.Source -> Json.Context -> T.CRA_Region -> OutlineProblem -> Help.Report
+toOutlineProblemReport : T.FilePath -> Code.Source -> Json.Context -> T.CRA_Region -> OutlineProblem -> Help.Report
 toOutlineProblemReport path source _ region problem =
     let
         toHighlight : Int -> Int -> Maybe T.CRA_Region
@@ -1838,7 +1838,7 @@ type Details
     | DetailsHandEditedDependencies
     | DetailsBadOutline Outline
     | DetailsCannotGetRegistry RegistryProblem
-    | DetailsBadDeps FilePath (List DetailsBadDep)
+    | DetailsBadDeps T.FilePath (List DetailsBadDep)
 
 
 type DetailsBadDep
@@ -2504,20 +2504,20 @@ makeToReport make =
 
 
 type BuildProblem
-    = BuildBadModules FilePath Error.Module (List Error.Module)
+    = BuildBadModules T.FilePath Error.CRE_Module (List Error.CRE_Module)
     | BuildProjectProblem BuildProjectProblem
 
 
 type BuildProjectProblem
-    = BP_PathUnknown FilePath
-    | BP_WithBadExtension FilePath
-    | BP_WithAmbiguousSrcDir FilePath FilePath FilePath
-    | BP_MainPathDuplicate FilePath FilePath
-    | BP_RootNameDuplicate T.CEMN_Raw FilePath FilePath
-    | BP_RootNameInvalid FilePath FilePath (List String)
+    = BP_PathUnknown T.FilePath
+    | BP_WithBadExtension T.FilePath
+    | BP_WithAmbiguousSrcDir T.FilePath T.FilePath T.FilePath
+    | BP_MainPathDuplicate T.FilePath T.FilePath
+    | BP_RootNameDuplicate T.CEMN_Raw T.FilePath T.FilePath
+    | BP_RootNameInvalid T.FilePath T.FilePath (List String)
     | BP_CannotLoadDependencies
     | BP_Cycle T.CEMN_Raw (List T.CEMN_Raw)
-    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, Import.Problem ))
+    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, Import.CREI_Problem ))
 
 
 toBuildProblemReport : BuildProblem -> Help.Report
@@ -2620,7 +2620,7 @@ toProjectProblemReport projectProblem =
 
         BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
             case problem of
-                Import.NotFound ->
+                Import.CREI_NotFound ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2629,7 +2629,7 @@ toProjectProblemReport projectProblem =
                             "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
                         ]
 
-                Import.Ambiguous _ _ pkg _ ->
+                Import.CREI_Ambiguous _ _ pkg _ ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2640,7 +2640,7 @@ toProjectProblemReport projectProblem =
                                 ++ " already uses that name. Try choosing a different name for your local file."
                         ]
 
-                Import.AmbiguousLocal path1 path2 paths ->
+                Import.CREI_AmbiguousLocal path1 path2 paths ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2655,7 +2655,7 @@ toProjectProblemReport projectProblem =
                             "Change the module names to be distinct!"
                         ]
 
-                Import.AmbiguousForeign _ _ _ ->
+                Import.CREI_AmbiguousForeign _ _ _ ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2667,10 +2667,10 @@ toProjectProblemReport projectProblem =
                         ]
 
 
-toModuleNameConventionTable : FilePath -> List String -> D.Doc
+toModuleNameConventionTable : T.FilePath -> List String -> D.Doc
 toModuleNameConventionTable srcDir names =
     let
-        toPair : String -> ( String, FilePath )
+        toPair : String -> ( String, T.FilePath )
         toPair name =
             ( name
             , Utils.fpForwardSlash srcDir
@@ -2689,7 +2689,7 @@ toModuleNameConventionTable srcDir names =
                 )
             )
 
-        namePairs : List ( String, FilePath )
+        namePairs : List ( String, T.FilePath )
         namePairs =
             List.map toPair names
 
@@ -2786,8 +2786,8 @@ corruptCacheReport =
 
 type Repl
     = ReplBadDetails Details
-    | ReplBadInput String Error.Error
-    | ReplBadLocalDeps FilePath Error.Module (List Error.Module)
+    | ReplBadInput String Error.CRE_Error
+    | ReplBadLocalDeps T.FilePath Error.CRE_Module (List Error.CRE_Module)
     | ReplProjectProblem BuildProjectProblem
     | ReplBadGenerate Generate
     | ReplBadCache
@@ -2801,7 +2801,7 @@ replToReport problem =
             toDetailsReport details
 
         ReplBadInput source err ->
-            Help.compilerReport "/" (Error.Module N.replModule "REPL" File.zeroTime source err) []
+            Help.compilerReport "/" (Error.CRE_Module N.replModule "REPL" File.zeroTime source err) []
 
         ReplBadLocalDeps root e es ->
             Help.compilerReport root e es

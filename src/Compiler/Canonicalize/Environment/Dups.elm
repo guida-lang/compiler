@@ -13,7 +13,7 @@ module Compiler.Canonicalize.Environment.Dups exposing
     )
 
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
-import Compiler.Reporting.Error.Canonicalize as Error exposing (Error)
+import Compiler.Reporting.Error.Canonicalize as Error exposing (CREC_Error)
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Types as T
@@ -39,10 +39,10 @@ type alias Info value =
 
 
 type alias ToError =
-    T.CDN_Name -> T.CRA_Region -> T.CRA_Region -> Error
+    T.CDN_Name -> T.CRA_Region -> T.CRA_Region -> CREC_Error
 
 
-detect : ToError -> Tracker a -> R.RResult i w Error (Dict String T.CDN_Name a)
+detect : ToError -> Tracker a -> R.RResult i w CREC_Error (Dict String T.CDN_Name a)
 detect toError dict =
     Dict.foldl compare
         (\name values ->
@@ -56,7 +56,7 @@ detect toError dict =
         dict
 
 
-detectHelp : ToError -> T.CDN_Name -> OneOrMore (Info a) -> R.RResult i w Error a
+detectHelp : ToError -> T.CDN_Name -> OneOrMore (Info a) -> R.RResult i w CREC_Error a
 detectHelp toError name values =
     case values of
         OneOrMore.One { value } ->
@@ -74,9 +74,9 @@ detectHelp toError name values =
 -- CHECK FIELDS
 
 
-checkFields : List ( T.CRA_Located T.CDN_Name, a ) -> R.RResult i w Error (Dict String T.CDN_Name a)
+checkFields : List ( T.CRA_Located T.CDN_Name, a ) -> R.RResult i w CREC_Error (Dict String T.CDN_Name a)
 checkFields fields =
-    detect Error.DuplicateField (List.foldr addField none fields)
+    detect Error.CREC_DuplicateField (List.foldr addField none fields)
 
 
 addField : ( T.CRA_Located T.CDN_Name, a ) -> Tracker a -> Tracker a
@@ -84,9 +84,9 @@ addField ( T.CRA_At region name, value ) dups =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one (Info region value)) dups
 
 
-checkFields_ : (T.CRA_Region -> a -> b) -> List ( T.CRA_Located T.CDN_Name, a ) -> R.RResult i w Error (Dict String T.CDN_Name b)
+checkFields_ : (T.CRA_Region -> a -> b) -> List ( T.CRA_Located T.CDN_Name, a ) -> R.RResult i w CREC_Error (Dict String T.CDN_Name b)
 checkFields_ toValue fields =
-    detect Error.DuplicateField (List.foldr (addField_ toValue) none fields)
+    detect Error.CREC_DuplicateField (List.foldr (addField_ toValue) none fields)
 
 
 addField_ : (T.CRA_Region -> a -> b) -> ( T.CRA_Located T.CDN_Name, a ) -> Tracker b -> Tracker b

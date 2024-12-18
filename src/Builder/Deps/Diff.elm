@@ -33,7 +33,7 @@ type PackageChanges
 
 
 type ModuleChanges
-    = ModuleChanges (Changes String T.CDN_Name Docs.Union) (Changes String T.CDN_Name Docs.Alias) (Changes String T.CDN_Name Docs.Value) (Changes String T.CDN_Name Docs.Binop)
+    = ModuleChanges (Changes String T.CDN_Name Docs.CED_Union) (Changes String T.CDN_Name Docs.CED_Alias) (Changes String T.CDN_Name Docs.CED_Value) (Changes String T.CDN_Name Docs.CED_Binop)
 
 
 type Changes c k v
@@ -77,8 +77,8 @@ diff oldDocs newDocs =
         (Dict.keys compare removed)
 
 
-diffModule : ( Docs.Module, Docs.Module ) -> ModuleChanges
-diffModule ( Docs.Module _ _ u1 a1 v1 b1, Docs.Module _ _ u2 a2 v2 b2 ) =
+diffModule : ( Docs.CED_Module, Docs.CED_Module ) -> ModuleChanges
+diffModule ( Docs.CED_Module _ _ u1 a1 v1 b1, Docs.CED_Module _ _ u2 a2 v2 b2 ) =
     ModuleChanges
         (getChanges identity compare isEquivalentUnion u1 u2)
         (getChanges identity compare isEquivalentAlias a1 a2)
@@ -90,18 +90,18 @@ diffModule ( Docs.Module _ _ u1 a1 v1 b1, Docs.Module _ _ u2 a2 v2 b2 ) =
 -- EQUIVALENCE
 
 
-isEquivalentUnion : Docs.Union -> Docs.Union -> Bool
-isEquivalentUnion (Docs.Union oldComment oldVars oldCtors) (Docs.Union newComment newVars newCtors) =
+isEquivalentUnion : Docs.CED_Union -> Docs.CED_Union -> Bool
+isEquivalentUnion (Docs.CED_Union oldComment oldVars oldCtors) (Docs.CED_Union newComment newVars newCtors) =
     let
-        equiv : List Type.Type -> List Type.Type -> Bool
+        equiv : List Type.CECT_Type -> List Type.CECT_Type -> Bool
         equiv oldTypes newTypes =
             let
                 allEquivalent : List Bool
                 allEquivalent =
                     List.map2
                         isEquivalentAlias
-                        (List.map (Docs.Alias oldComment oldVars) oldTypes)
-                        (List.map (Docs.Alias newComment newVars) newTypes)
+                        (List.map (Docs.CED_Alias oldComment oldVars) oldTypes)
+                        (List.map (Docs.CED_Alias newComment newVars) newTypes)
             in
             (List.length oldTypes == List.length newTypes)
                 && List.all identity allEquivalent
@@ -111,8 +111,8 @@ isEquivalentUnion (Docs.Union oldComment oldVars oldCtors) (Docs.Union newCommen
         && List.all identity (Dict.values compare (Utils.mapIntersectionWith identity compare equiv (Dict.fromList identity oldCtors) (Dict.fromList identity newCtors)))
 
 
-isEquivalentAlias : Docs.Alias -> Docs.Alias -> Bool
-isEquivalentAlias (Docs.Alias _ oldVars oldType) (Docs.Alias _ newVars newType) =
+isEquivalentAlias : Docs.CED_Alias -> Docs.CED_Alias -> Bool
+isEquivalentAlias (Docs.CED_Alias _ oldVars oldType) (Docs.CED_Alias _ newVars newType) =
     case diffType oldType newType of
         Nothing ->
             False
@@ -122,14 +122,14 @@ isEquivalentAlias (Docs.Alias _ oldVars oldType) (Docs.Alias _ newVars newType) 
                 && isEquivalentRenaming (List.map2 Tuple.pair oldVars newVars ++ renamings)
 
 
-isEquivalentValue : Docs.Value -> Docs.Value -> Bool
-isEquivalentValue (Docs.Value c1 t1) (Docs.Value c2 t2) =
-    isEquivalentAlias (Docs.Alias c1 [] t1) (Docs.Alias c2 [] t2)
+isEquivalentValue : Docs.CED_Value -> Docs.CED_Value -> Bool
+isEquivalentValue (Docs.CED_Value c1 t1) (Docs.CED_Value c2 t2) =
+    isEquivalentAlias (Docs.CED_Alias c1 [] t1) (Docs.CED_Alias c2 [] t2)
 
 
-isEquivalentBinop : Docs.Binop -> Docs.Binop -> Bool
-isEquivalentBinop (Docs.Binop c1 t1 a1 p1) (Docs.Binop c2 t2 a2 p2) =
-    isEquivalentAlias (Docs.Alias c1 [] t1) (Docs.Alias c2 [] t2)
+isEquivalentBinop : Docs.CED_Binop -> Docs.CED_Binop -> Bool
+isEquivalentBinop (Docs.CED_Binop c1 t1 a1 p1) (Docs.CED_Binop c2 t2 a2 p2) =
+    isEquivalentAlias (Docs.CED_Alias c1 [] t1) (Docs.CED_Alias c2 [] t2)
         && (a1 == a2)
         && (p1 == p2)
 
@@ -138,23 +138,23 @@ isEquivalentBinop (Docs.Binop c1 t1 a1 p1) (Docs.Binop c2 t2 a2 p2) =
 -- DIFF TYPES
 
 
-diffType : Type.Type -> Type.Type -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
+diffType : Type.CECT_Type -> Type.CECT_Type -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffType oldType newType =
     case ( oldType, newType ) of
-        ( Type.Var oldName, Type.Var newName ) ->
+        ( Type.CECT_Var oldName, Type.CECT_Var newName ) ->
             Just [ ( oldName, newName ) ]
 
-        ( Type.Lambda a b, Type.Lambda a_ b_ ) ->
+        ( Type.CECT_Lambda a b, Type.CECT_Lambda a_ b_ ) ->
             Maybe.map2 (++) (diffType a a_) (diffType b b_)
 
-        ( Type.Type oldName oldArgs, Type.Type newName newArgs ) ->
+        ( Type.CECT_Type oldName oldArgs, Type.CECT_Type newName newArgs ) ->
             if not (isSameName oldName newName) || List.length oldArgs /= List.length newArgs then
                 Nothing
 
             else
                 Maybe.map List.concat (Utils.zipWithM diffType oldArgs newArgs)
 
-        ( Type.Record fields maybeExt, Type.Record fields_ maybeExt_ ) ->
+        ( Type.CECT_Record fields maybeExt, Type.CECT_Record fields_ maybeExt_ ) ->
             case ( maybeExt, maybeExt_ ) of
                 ( Nothing, Just _ ) ->
                     Nothing
@@ -168,10 +168,10 @@ diffType oldType newType =
                 ( Just oldExt, Just newExt ) ->
                     Maybe.map ((::) ( oldExt, newExt )) (diffFields fields fields_)
 
-        ( Type.Unit, Type.Unit ) ->
+        ( Type.CECT_Unit, Type.CECT_Unit ) ->
             Just []
 
-        ( Type.Tuple a b cs, Type.Tuple x y zs ) ->
+        ( Type.CECT_Tuple a b cs, Type.CECT_Tuple x y zs ) ->
             if List.length cs /= List.length zs then
                 Nothing
 
@@ -207,7 +207,7 @@ isSameName oldFullName newFullName =
             oldFullName == newFullName
 
 
-diffFields : List ( T.CDN_Name, Type.Type ) -> List ( T.CDN_Name, Type.Type ) -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
+diffFields : List ( T.CDN_Name, Type.CECT_Type ) -> List ( T.CDN_Name, Type.CECT_Type ) -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffFields oldRawFields newRawFields =
     if List.length oldRawFields /= List.length newRawFields then
         Nothing
@@ -218,11 +218,11 @@ diffFields oldRawFields newRawFields =
             sort fields =
                 List.sortBy Tuple.first fields
 
-            oldFields : List ( T.CDN_Name, Type.Type )
+            oldFields : List ( T.CDN_Name, Type.CECT_Type )
             oldFields =
                 sort oldRawFields
 
-            newFields : List ( T.CDN_Name, Type.Type )
+            newFields : List ( T.CDN_Name, Type.CECT_Type )
             newFields =
                 sort newRawFields
         in
