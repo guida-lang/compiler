@@ -2504,7 +2504,7 @@ makeToReport make =
 
 
 type BuildProblem
-    = BuildBadModules T.FilePath Error.CRE_Module (List Error.CRE_Module)
+    = BuildBadModules T.FilePath T.CRE_Module (List T.CRE_Module)
     | BuildProjectProblem BuildProjectProblem
 
 
@@ -2517,7 +2517,7 @@ type BuildProjectProblem
     | BP_RootNameInvalid T.FilePath T.FilePath (List String)
     | BP_CannotLoadDependencies
     | BP_Cycle T.CEMN_Raw (List T.CEMN_Raw)
-    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, Import.CREI_Problem ))
+    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, T.CREI_Problem ))
 
 
 toBuildProblemReport : BuildProblem -> Help.Report
@@ -2620,7 +2620,7 @@ toProjectProblemReport projectProblem =
 
         BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
             case problem of
-                Import.CREI_NotFound ->
+                T.CREI_NotFound ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2629,7 +2629,7 @@ toProjectProblemReport projectProblem =
                             "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
                         ]
 
-                Import.CREI_Ambiguous _ _ pkg _ ->
+                T.CREI_Ambiguous _ _ pkg _ ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2640,7 +2640,7 @@ toProjectProblemReport projectProblem =
                                 ++ " already uses that name. Try choosing a different name for your local file."
                         ]
 
-                Import.CREI_AmbiguousLocal path1 path2 paths ->
+                T.CREI_AmbiguousLocal path1 path2 paths ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2655,7 +2655,7 @@ toProjectProblemReport projectProblem =
                             "Change the module names to be distinct!"
                         ]
 
-                Import.CREI_AmbiguousForeign _ _ _ ->
+                T.CREI_AmbiguousForeign _ _ _ ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -2786,8 +2786,8 @@ corruptCacheReport =
 
 type Repl
     = ReplBadDetails Details
-    | ReplBadInput String Error.CRE_Error
-    | ReplBadLocalDeps T.FilePath Error.CRE_Module (List Error.CRE_Module)
+    | ReplBadInput String T.CRE_Error
+    | ReplBadLocalDeps T.FilePath T.CRE_Module (List T.CRE_Module)
     | ReplProjectProblem BuildProjectProblem
     | ReplBadGenerate Generate
     | ReplBadCache
@@ -2801,7 +2801,7 @@ replToReport problem =
             toDetailsReport details
 
         ReplBadInput source err ->
-            Help.compilerReport "/" (Error.CRE_Module N.replModule "REPL" File.zeroTime source err) []
+            Help.compilerReport "/" (T.CRE_Module N.replModule "REPL" File.zeroTime source err) []
 
         ReplBadLocalDeps root e es ->
             Help.compilerReport root e es

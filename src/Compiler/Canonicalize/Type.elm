@@ -7,7 +7,6 @@ module Compiler.Canonicalize.Type exposing
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Types as T
@@ -19,7 +18,7 @@ import Utils.Main as Utils
 
 
 type alias CResult i w a =
-    R.RResult i w Error.CREC_Error a
+    R.RResult i w T.CREC_Error a
 
 
 
@@ -81,14 +80,14 @@ canonicalize env (T.CRA_At typeRegion tipe) =
                                     |> R.fmap (tTuple << Just)
 
                             _ ->
-                                R.throw <| Error.CREC_TupleLargerThanThree typeRegion
+                                R.throw <| T.CREC_TupleLargerThanThree typeRegion
                     )
 
 
 canonicalizeFields : Env.Env -> List ( T.CRA_Located T.CDN_Name, T.CASTS_Type ) -> List ( T.CRA_Located T.CDN_Name, CResult i w T.CASTC_FieldType )
 canonicalizeFields env fields =
     let
-        canonicalizeField : Int -> ( a, T.CASTS_Type ) -> ( a, R.RResult i w Error.CREC_Error T.CASTC_FieldType )
+        canonicalizeField : Int -> ( a, T.CASTS_Type ) -> ( a, R.RResult i w T.CREC_Error T.CASTC_FieldType )
         canonicalizeField index ( name, srcType ) =
             ( name, R.fmap (T.CASTC_FieldType index) (canonicalize env srcType) )
     in
@@ -126,7 +125,7 @@ checkArity expected region name args answer =
         R.ok answer
 
     else
-        R.throw (Error.CREC_BadArity region Error.CREC_TypeArity name expected actual)
+        R.throw (T.CREC_BadArity region T.CREC_TypeArity name expected actual)
 
 
 

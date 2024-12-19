@@ -12,7 +12,9 @@ port module System.IO exposing
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
     , MVarSubscriber(..)
-    , MVarSubscriber_Maybe_BED_Status(..), MVarSubscriber_Maybe_CASTO_GlobalGraph(..), MVarSubscriber_Maybe_CASTO_LocalGraph(..)
+    , MVarSubscriber_Maybe_BED_Status(..)
+    , MVarSubscriber_Maybe_CASTO_GlobalGraph(..)
+    , MVarSubscriber_Maybe_CASTO_LocalGraph(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -78,6 +80,9 @@ port module System.IO exposing
 # MVar
 
 @docs MVarSubscriber
+@docs MVarSubscriber_Maybe_BED_Status
+@docs MVarSubscriber_Maybe_CASTO_GlobalGraph
+@docs MVarSubscriber_Maybe_CASTO_LocalGraph
 
 -}
 

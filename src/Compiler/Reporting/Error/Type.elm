@@ -1,14 +1,5 @@
 module Compiler.Reporting.Error.Type exposing
-    ( CRET_Category(..)
-    , CRET_Context(..)
-    , CRET_Error(..)
-    , CRET_Expected(..)
-    , CRET_MaybeName(..)
-    , CRET_PCategory(..)
-    , CRET_PContext(..)
-    , CRET_PExpected(..)
-    , CRET_SubContext(..)
-    , errorDecoder
+    ( errorDecoder
     , errorEncoder
     , ptypeReplace
     , toReport
@@ -23,156 +14,56 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
-import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
 import Compiler.Type.Error as T
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Dict
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Types as T
 
 
 
--- ERRORS
-
-
-type CRET_Error
-    = CRET_BadExpr T.CRA_Region CRET_Category T.Type (CRET_Expected T.Type)
-    | CRET_BadPattern T.CRA_Region CRET_PCategory T.Type (CRET_PExpected T.Type)
-    | CRET_InfiniteType T.CRA_Region T.CDN_Name T.Type
-
-
-
--- EXPRESSION EXPECTATIONS
-
-
-type CRET_Expected tipe
-    = NoExpectation tipe
-    | FromContext T.CRA_Region CRET_Context tipe
-    | FromAnnotation T.CDN_Name Int CRET_SubContext tipe
-
-
-type CRET_Context
-    = CRET_ListEntry T.CDI_ZeroBased
-    | CRET_Negate
-    | CRET_OpLeft T.CDN_Name
-    | CRET_OpRight T.CDN_Name
-    | CRET_IfCondition
-    | CRET_IfBranch T.CDI_ZeroBased
-    | CRET_CaseBranch T.CDI_ZeroBased
-    | CRET_CallArity CRET_MaybeName Int
-    | CRET_CallArg CRET_MaybeName T.CDI_ZeroBased
-    | CRET_RecordAccess T.CRA_Region (Maybe T.CDN_Name) T.CRA_Region T.CDN_Name
-    | CRET_RecordUpdateKeys T.CDN_Name (Dict String T.CDN_Name Can.FieldUpdate)
-    | CRET_RecordUpdateValue T.CDN_Name
-    | CRET_Destructure
-
-
-type CRET_SubContext
-    = CRET_TypedIfBranch T.CDI_ZeroBased
-    | CRET_TypedCaseBranch T.CDI_ZeroBased
-    | CRET_TypedBody
-
-
-type CRET_MaybeName
-    = CRET_FuncName T.CDN_Name
-    | CRET_CtorName T.CDN_Name
-    | CRET_OpName T.CDN_Name
-    | CRET_NoName
-
-
-type CRET_Category
-    = CRET_List
-    | CRET_Number
-    | CRET_Float
-    | CRET_String
-    | CRET_Char
-    | CRET_If
-    | CRET_Case
-    | CRET_CallResult CRET_MaybeName
-    | CRET_Lambda
-    | CRET_Accessor T.CDN_Name
-    | CRET_Access T.CDN_Name
-    | CRET_Record
-    | CRET_Tuple
-    | CRET_Unit
-    | CRET_Shader
-    | CRET_Effects
-    | CRET_Local T.CDN_Name
-    | CRET_Foreign T.CDN_Name
-
-
-
--- PATTERN EXPECTATIONS
-
-
-type CRET_PExpected tipe
-    = CRET_PNoExpectation tipe
-    | CRET_PFromContext T.CRA_Region CRET_PContext tipe
-
-
-type CRET_PContext
-    = CRET_PTypedArg T.CDN_Name T.CDI_ZeroBased
-    | CRET_PCaseMatch T.CDI_ZeroBased
-    | CRET_PCtorArg T.CDN_Name T.CDI_ZeroBased
-    | CRET_PListEntry T.CDI_ZeroBased
-    | CRET_PTail
-
-
-type CRET_PCategory
-    = CRET_PRecord
-    | CRET_PUnit
-    | CRET_PTuple
-    | CRET_PList
-    | CRET_PCtor T.CDN_Name
-    | CRET_PInt
-    | CRET_PStr
-    | CRET_PChr
-    | CRET_PBool
-
-
-
 -- HELPERS
 
 
-typeReplace : CRET_Expected a -> b -> CRET_Expected b
+typeReplace : T.CRET_Expected a -> b -> T.CRET_Expected b
 typeReplace expectation tipe =
     case expectation of
-        NoExpectation _ ->
-            NoExpectation tipe
+        T.CRET_NoExpectation _ ->
+            T.CRET_NoExpectation tipe
 
-        FromContext region context _ ->
-            FromContext region context tipe
+        T.CRET_FromContext region context _ ->
+            T.CRET_FromContext region context tipe
 
-        FromAnnotation name arity context _ ->
-            FromAnnotation name arity context tipe
+        T.CRET_FromAnnotation name arity context _ ->
+            T.CRET_FromAnnotation name arity context tipe
 
 
-ptypeReplace : CRET_PExpected a -> b -> CRET_PExpected b
+ptypeReplace : T.CRET_PExpected a -> b -> T.CRET_PExpected b
 ptypeReplace expectation tipe =
     case expectation of
-        CRET_PNoExpectation _ ->
-            CRET_PNoExpectation tipe
+        T.CRET_PNoExpectation _ ->
+            T.CRET_PNoExpectation tipe
 
-        CRET_PFromContext region context _ ->
-            CRET_PFromContext region context tipe
+        T.CRET_PFromContext region context _ ->
+            T.CRET_PFromContext region context tipe
 
 
 
 -- TO REPORT
 
 
-toReport : Code.Source -> L.CRRTL_Localizer -> CRET_Error -> Report.Report
+toReport : Code.Source -> T.CRRTL_Localizer -> T.CRET_Error -> Report.Report
 toReport source localizer err =
     case err of
-        CRET_BadExpr region category actualType expected ->
+        T.CRET_BadExpr region category actualType expected ->
             toExprReport source localizer region category actualType expected
 
-        CRET_BadPattern region category tipe expected ->
+        T.CRET_BadPattern region category tipe expected ->
             toPatternReport source localizer region category tipe expected
 
-        CRET_InfiniteType region name overallType ->
+        T.CRET_InfiniteType region name overallType ->
             toInfiniteReport source localizer region name overallType
 
 
@@ -180,11 +71,11 @@ toReport source localizer err =
 -- TO PATTERN REPORT
 
 
-toPatternReport : Code.Source -> L.CRRTL_Localizer -> T.CRA_Region -> CRET_PCategory -> T.Type -> CRET_PExpected T.Type -> Report.Report
+toPatternReport : Code.Source -> T.CRRTL_Localizer -> T.CRA_Region -> T.CRET_PCategory -> T.CTE_Type -> T.CRET_PExpected T.CTE_Type -> Report.Report
 toPatternReport source localizer patternRegion category tipe expected =
     Report.Report "TYPE MISMATCH" patternRegion [] <|
         case expected of
-            CRET_PNoExpectation expectedType ->
+            T.CRET_PNoExpectation expectedType ->
                 Code.toSnippet source patternRegion Nothing <|
                     ( D.fromChars "This pattern is being used in an unexpected way:"
                     , patternTypeComparison localizer
@@ -195,10 +86,10 @@ toPatternReport source localizer patternRegion category tipe expected =
                         []
                     )
 
-            CRET_PFromContext region context expectedType ->
+            T.CRET_PFromContext region context expectedType ->
                 Code.toSnippet source region (Just patternRegion) <|
                     case context of
-                        CRET_PTypedArg name index ->
+                        T.CRET_PTypedArg name index ->
                             ( D.reflow <|
                                 "The "
                                     ++ D.ordinal index
@@ -218,7 +109,7 @@ toPatternReport source localizer patternRegion category tipe expected =
                                 []
                             )
 
-                        CRET_PCaseMatch index ->
+                        T.CRET_PCaseMatch index ->
                             if index == Index.first then
                                 ( D.reflow <|
                                     "The 1st pattern in this `case` causing a mismatch:"
@@ -249,7 +140,7 @@ toPatternReport source localizer patternRegion category tipe expected =
                                     ]
                                 )
 
-                        CRET_PCtorArg name index ->
+                        T.CRET_PCtorArg name index ->
                             ( D.reflow <|
                                 "The "
                                     ++ D.ordinal index
@@ -269,7 +160,7 @@ toPatternReport source localizer patternRegion category tipe expected =
                                 []
                             )
 
-                        CRET_PListEntry index ->
+                        T.CRET_PListEntry index ->
                             ( D.reflow <|
                                 "The "
                                     ++ D.ordinal index
@@ -286,7 +177,7 @@ toPatternReport source localizer patternRegion category tipe expected =
                                 ]
                             )
 
-                        CRET_PTail ->
+                        T.CRET_PTail ->
                             ( D.reflow <|
                                 "The pattern after (::) is causing issues."
                             , patternTypeComparison localizer
@@ -302,7 +193,7 @@ toPatternReport source localizer patternRegion category tipe expected =
 -- PATTERN HELPERS
 
 
-patternTypeComparison : L.CRRTL_Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
+patternTypeComparison : T.CRRTL_Localizer -> T.CTE_Type -> T.CTE_Type -> String -> String -> List D.Doc -> D.Doc
 patternTypeComparison localizer actual expected iAmSeeing insteadOf contextHints =
     let
         ( actualDoc, expectedDoc, problems ) =
@@ -318,35 +209,35 @@ patternTypeComparison localizer actual expected iAmSeeing insteadOf contextHints
             ++ contextHints
 
 
-addPatternCategory : String -> CRET_PCategory -> String
+addPatternCategory : String -> T.CRET_PCategory -> String
 addPatternCategory iAmTryingToMatch category =
     iAmTryingToMatch
         ++ (case category of
-                CRET_PRecord ->
+                T.CRET_PRecord ->
                     " record values of type:"
 
-                CRET_PUnit ->
+                T.CRET_PUnit ->
                     " unit values:"
 
-                CRET_PTuple ->
+                T.CRET_PTuple ->
                     " tuples of type:"
 
-                CRET_PList ->
+                T.CRET_PList ->
                     " lists of type:"
 
-                CRET_PCtor name ->
+                T.CRET_PCtor name ->
                     " `" ++ name ++ "` values of type:"
 
-                CRET_PInt ->
+                T.CRET_PInt ->
                     " integers:"
 
-                CRET_PStr ->
+                T.CRET_PStr ->
                     " strings:"
 
-                CRET_PChr ->
+                T.CRET_PChr ->
                     " characters:"
 
-                CRET_PBool ->
+                T.CRET_PBool ->
                     " booleans:"
            )
 
@@ -355,7 +246,7 @@ addPatternCategory iAmTryingToMatch category =
 -- EXPR HELPERS
 
 
-typeComparison : L.CRRTL_Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
+typeComparison : T.CRRTL_Localizer -> T.CTE_Type -> T.CTE_Type -> String -> String -> List D.Doc -> D.Doc
 typeComparison localizer actual expected iAmSeeing insteadOf contextHints =
     let
         ( actualDoc, expectedDoc, problems ) =
@@ -371,7 +262,7 @@ typeComparison localizer actual expected iAmSeeing insteadOf contextHints =
             ++ problemsToHint problems
 
 
-loneType : L.CRRTL_Localizer -> T.Type -> T.Type -> D.Doc -> List D.Doc -> D.Doc
+loneType : T.CRRTL_Localizer -> T.CTE_Type -> T.CTE_Type -> D.Doc -> List D.Doc -> D.Doc
 loneType localizer actual expected iAmSeeing furtherDetails =
     let
         ( actualDoc, _, problems ) =
@@ -385,72 +276,72 @@ loneType localizer actual expected iAmSeeing furtherDetails =
             ++ problemsToHint problems
 
 
-addCategory : String -> CRET_Category -> String
+addCategory : String -> T.CRET_Category -> String
 addCategory thisIs category =
     case category of
-        CRET_Local name ->
+        T.CRET_Local name ->
             "This `" ++ name ++ "` value is a:"
 
-        CRET_Foreign name ->
+        T.CRET_Foreign name ->
             "This `" ++ name ++ "` value is a:"
 
-        CRET_Access field ->
+        T.CRET_Access field ->
             "The value at ." ++ field ++ " is a:"
 
-        CRET_Accessor field ->
+        T.CRET_Accessor field ->
             "This ." ++ field ++ " field access function has type:"
 
-        CRET_If ->
+        T.CRET_If ->
             "This `if` expression produces:"
 
-        CRET_Case ->
+        T.CRET_Case ->
             "This `case` expression produces:"
 
-        CRET_List ->
+        T.CRET_List ->
             thisIs ++ " a list of type:"
 
-        CRET_Number ->
+        T.CRET_Number ->
             thisIs ++ " a number of type:"
 
-        CRET_Float ->
+        T.CRET_Float ->
             thisIs ++ " a float of type:"
 
-        CRET_String ->
+        T.CRET_String ->
             thisIs ++ " a string of type:"
 
-        CRET_Char ->
+        T.CRET_Char ->
             thisIs ++ " a character of type:"
 
-        CRET_Lambda ->
+        T.CRET_Lambda ->
             thisIs ++ " an anonymous function of type:"
 
-        CRET_Record ->
+        T.CRET_Record ->
             thisIs ++ " a record of type:"
 
-        CRET_Tuple ->
+        T.CRET_Tuple ->
             thisIs ++ " a tuple of type:"
 
-        CRET_Unit ->
+        T.CRET_Unit ->
             thisIs ++ " a unit value:"
 
-        CRET_Shader ->
+        T.CRET_Shader ->
             thisIs ++ " a GLSL shader of type:"
 
-        CRET_Effects ->
+        T.CRET_Effects ->
             thisIs ++ " a thing for CORE LIBRARIES ONLY."
 
-        CRET_CallResult maybeName ->
+        T.CRET_CallResult maybeName ->
             case maybeName of
-                CRET_NoName ->
+                T.CRET_NoName ->
                     thisIs ++ ":"
 
-                CRET_FuncName name ->
+                T.CRET_FuncName name ->
                     "This `" ++ name ++ "` call produces:"
 
-                CRET_CtorName name ->
+                T.CRET_CtorName name ->
                     "This `" ++ name ++ "` call produces:"
 
-                CRET_OpName _ ->
+                T.CRET_OpName _ ->
                     thisIs ++ ":"
 
 
@@ -601,116 +492,116 @@ problemToHint problem =
 
         T.BadFlexSuper direction super tipe ->
             case tipe of
-                T.Lambda _ _ _ ->
+                T.CTE_Lambda _ _ _ ->
                     badFlexSuper direction super tipe
 
-                T.Infinite ->
+                T.CTE_Infinite ->
                     []
 
-                T.Error ->
+                T.CTE_Error ->
                     []
 
-                T.FlexVar _ ->
+                T.CTE_FlexVar _ ->
                     []
 
-                T.FlexSuper s _ ->
+                T.CTE_FlexSuper s _ ->
                     badFlexFlexSuper super s
 
-                T.RigidVar y ->
+                T.CTE_RigidVar y ->
                     badRigidVar y (toASuperThing super)
 
-                T.RigidSuper s _ ->
+                T.CTE_RigidSuper s _ ->
                     badRigidSuper s (toASuperThing super)
 
-                T.Type _ _ _ ->
+                T.CTE_Type _ _ _ ->
                     badFlexSuper direction super tipe
 
-                T.Record _ _ ->
+                T.CTE_Record _ _ ->
                     badFlexSuper direction super tipe
 
-                T.Unit ->
+                T.CTE_Unit ->
                     badFlexSuper direction super tipe
 
-                T.Tuple _ _ _ ->
+                T.CTE_Tuple _ _ _ ->
                     badFlexSuper direction super tipe
 
-                T.Alias _ _ _ _ ->
+                T.CTE_Alias _ _ _ _ ->
                     badFlexSuper direction super tipe
 
         T.BadRigidVar x tipe ->
             case tipe of
-                T.Lambda _ _ _ ->
+                T.CTE_Lambda _ _ _ ->
                     badRigidVar x "a function"
 
-                T.Infinite ->
+                T.CTE_Infinite ->
                     []
 
-                T.Error ->
+                T.CTE_Error ->
                     []
 
-                T.FlexVar _ ->
+                T.CTE_FlexVar _ ->
                     []
 
-                T.FlexSuper s _ ->
+                T.CTE_FlexSuper s _ ->
                     badRigidVar x (toASuperThing s)
 
-                T.RigidVar y ->
+                T.CTE_RigidVar y ->
                     badDoubleRigid x y
 
-                T.RigidSuper _ y ->
+                T.CTE_RigidSuper _ y ->
                     badDoubleRigid x y
 
-                T.Type _ n _ ->
+                T.CTE_Type _ n _ ->
                     badRigidVar x ("a `" ++ n ++ "` value")
 
-                T.Record _ _ ->
+                T.CTE_Record _ _ ->
                     badRigidVar x "a record"
 
-                T.Unit ->
+                T.CTE_Unit ->
                     badRigidVar x "a unit value"
 
-                T.Tuple _ _ _ ->
+                T.CTE_Tuple _ _ _ ->
                     badRigidVar x "a tuple"
 
-                T.Alias _ n _ _ ->
+                T.CTE_Alias _ n _ _ ->
                     badRigidVar x ("a `" ++ n ++ "` value")
 
         T.BadRigidSuper super x tipe ->
             case tipe of
-                T.Lambda _ _ _ ->
+                T.CTE_Lambda _ _ _ ->
                     badRigidSuper super "a function"
 
-                T.Infinite ->
+                T.CTE_Infinite ->
                     []
 
-                T.Error ->
+                T.CTE_Error ->
                     []
 
-                T.FlexVar _ ->
+                T.CTE_FlexVar _ ->
                     []
 
-                T.FlexSuper s _ ->
+                T.CTE_FlexSuper s _ ->
                     badRigidSuper super (toASuperThing s)
 
-                T.RigidVar y ->
+                T.CTE_RigidVar y ->
                     badDoubleRigid x y
 
-                T.RigidSuper _ y ->
+                T.CTE_RigidSuper _ y ->
                     badDoubleRigid x y
 
-                T.Type _ n _ ->
+                T.CTE_Type _ n _ ->
                     badRigidSuper super ("a `" ++ n ++ "` value")
 
-                T.Record _ _ ->
+                T.CTE_Record _ _ ->
                     badRigidSuper super "a record"
 
-                T.Unit ->
+                T.CTE_Unit ->
                     badRigidSuper super "a unit value"
 
-                T.Tuple _ _ _ ->
+                T.CTE_Tuple _ _ _ ->
                     badRigidSuper super "a tuple"
 
-                T.Alias _ n _ _ ->
+                T.CTE_Alias _ n _ _ ->
                     badRigidSuper super ("a `" ++ n ++ "` value")
 
         T.FieldsMissing fields ->
@@ -792,19 +683,19 @@ badDoubleRigid x y =
     ]
 
 
-toASuperThing : T.Super -> String
+toASuperThing : T.CTE_Super -> String
 toASuperThing super =
     case super of
-        T.Number ->
+        T.CTE_Number ->
             "a `number` value"
 
-        T.Comparable ->
+        T.CTE_Comparable ->
             "a `comparable` value"
 
-        T.CompAppend ->
+        T.CTE_CompAppend ->
             "a `compappend` value"
 
-        T.Appendable ->
+        T.CTE_Appendable ->
             "an `appendable` value"
 
 
@@ -812,19 +703,19 @@ toASuperThing super =
 -- BAD SUPER HINTS
 
 
-badFlexSuper : T.Direction -> T.Super -> T.Type -> List D.Doc
+badFlexSuper : T.Direction -> T.CTE_Super -> T.CTE_Type -> List D.Doc
 badFlexSuper direction super tipe =
     case super of
-        T.Comparable ->
+        T.CTE_Comparable ->
             case tipe of
-                T.Record _ _ ->
+                T.CTE_Record _ _ ->
                     [ D.link "Hint"
                         "I do not know how to compare records. I can only compare ints, floats, chars, strings, lists of comparable values, and tuples of comparable values. Check out"
                         "comparing-records"
                         "for ideas on how to proceed."
                     ]
 
-                T.Type _ name _ ->
+                T.CTE_Type _ name _ ->
                     [ D.toSimpleHint <|
                         "I do not know how to compare `"
                             ++ name
@@ -840,17 +731,17 @@ badFlexSuper direction super tipe =
                         "I only know how to compare ints, floats, chars, strings, lists of comparable values, and tuples of comparable values."
                     ]
 
-        T.Appendable ->
+        T.CTE_Appendable ->
             [ D.toSimpleHint "I only know how to append strings and lists."
             ]
 
-        T.CompAppend ->
+        T.CTE_CompAppend ->
             [ D.toSimpleHint "Only strings and lists are both comparable and appendable."
             ]
 
-        T.Number ->
+        T.CTE_Number ->
             case tipe of
-                T.Type home name _ ->
+                T.CTE_Type home name _ ->
                     if T.isString home name then
                         case direction of
                             T.Have ->
@@ -903,21 +794,21 @@ badFlexSuperNumber =
     ]
 
 
-badRigidSuper : T.Super -> String -> List D.Doc
+badRigidSuper : T.CTE_Super -> String -> List D.Doc
 badRigidSuper super aThing =
     let
         ( superType, manyThings ) =
             case super of
-                T.Number ->
+                T.CTE_Number ->
                     ( "number", "ints AND floats" )
 
-                T.Comparable ->
+                T.CTE_Comparable ->
                     ( "comparable", "ints, floats, chars, strings, lists, and tuples" )
 
-                T.Appendable ->
+                T.CTE_Appendable ->
                     ( "appendable", "strings AND lists" )
 
-                T.CompAppend ->
+                T.CTE_CompAppend ->
                     ( "compappend", "strings AND lists" )
     in
     [ D.toSimpleHint <|
@@ -932,22 +823,22 @@ badRigidSuper super aThing =
     ]
 
 
-badFlexFlexSuper : T.Super -> T.Super -> List D.Doc
+badFlexFlexSuper : T.CTE_Super -> T.CTE_Super -> List D.Doc
 badFlexFlexSuper s1 s2 =
     let
-        likeThis : T.Super -> String
+        likeThis : T.CTE_Super -> String
         likeThis super =
             case super of
-                T.Number ->
+                T.CTE_Number ->
                     "a number"
 
-                T.Comparable ->
+                T.CTE_Comparable ->
                     "comparable"
 
-                T.CompAppend ->
+                T.CTE_CompAppend ->
                     "a compappend"
 
-                T.Appendable ->
+                T.CTE_Appendable ->
                     "appendable"
     in
     [ D.toSimpleHint <|
@@ -963,10 +854,10 @@ badFlexFlexSuper s1 s2 =
 -- TO EXPR REPORT
 
 
-toExprReport : Code.Source -> L.CRRTL_Localizer -> T.CRA_Region -> CRET_Category -> T.Type -> CRET_Expected T.Type -> Report.Report
+toExprReport : Code.Source -> T.CRRTL_Localizer -> T.CRA_Region -> T.CRET_Category -> T.CTE_Type -> T.CRET_Expected T.CTE_Type -> Report.Report
 toExprReport source localizer exprRegion category tipe expected =
     case expected of
-        NoExpectation expectedType ->
+        T.CRET_NoExpectation expectedType ->
             Report.Report "TYPE MISMATCH" exprRegion [] <|
                 Code.toSnippet source
                     exprRegion
@@ -980,30 +871,30 @@ toExprReport source localizer exprRegion category tipe expected =
                         []
                     )
 
-        FromAnnotation name _ subContext expectedType ->
+        T.CRET_FromAnnotation name _ subContext expectedType ->
             let
                 thing : String
                 thing =
                     case subContext of
-                        CRET_TypedIfBranch index ->
+                        T.CRET_TypedIfBranch index ->
                             D.ordinal index ++ " branch of this `if` expression:"
 
-                        CRET_TypedCaseBranch index ->
+                        T.CRET_TypedCaseBranch index ->
                             D.ordinal index ++ " branch of this `case` expression:"
 
-                        CRET_TypedBody ->
+                        T.CRET_TypedBody ->
                             "body of the `" ++ name ++ "` definition:"
 
                 itIs : String
                 itIs =
                     case subContext of
-                        CRET_TypedIfBranch index ->
+                        T.CRET_TypedIfBranch index ->
                             "The " ++ D.ordinal index ++ " branch is"
 
-                        CRET_TypedCaseBranch index ->
+                        T.CRET_TypedCaseBranch index ->
                             "The " ++ D.ordinal index ++ " branch is"
 
-                        CRET_TypedBody ->
+                        T.CRET_TypedBody ->
                             "The body is"
             in
             Report.Report "TYPE MISMATCH" exprRegion [] <|
@@ -1017,7 +908,7 @@ toExprReport source localizer exprRegion category tipe expected =
                         []
                     )
 
-        FromContext region context expectedType ->
+        T.CRET_FromContext region context expectedType ->
             let
                 mismatch : ( ( Maybe T.CRA_Region, String ), ( String, String, List D.Doc ) ) -> Report.Report
                 mismatch ( ( maybeHighlight, problem ), ( thisIs, insteadOf, furtherDetails ) ) =
@@ -1045,7 +936,7 @@ toExprReport source localizer exprRegion category tipe expected =
                         Code.toSnippet source region maybeHighlight docPair
             in
             case context of
-                CRET_ListEntry index ->
+                T.CRET_ListEntry index ->
                     let
                         ith : String
                         ith =
@@ -1065,7 +956,7 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_Negate ->
+                T.CRET_Negate ->
                     badType
                         ( ( Just exprRegion
                           , "I do not know how to negate this type of value:"
@@ -1088,11 +979,11 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_OpLeft op ->
+                T.CRET_OpLeft op ->
                     custom (Just exprRegion) <|
                         opLeftToDocs localizer category op tipe expectedType
 
-                CRET_OpRight op ->
+                T.CRET_OpRight op ->
                     case opRightToDocs localizer category op tipe expectedType of
                         EmphBoth details ->
                             custom Nothing details
@@ -1100,7 +991,7 @@ toExprReport source localizer exprRegion category tipe expected =
                         EmphRight details ->
                             custom (Just exprRegion) details
 
-                CRET_IfCondition ->
+                T.CRET_IfCondition ->
                     badType
                         ( ( Just exprRegion
                           , "This `if` condition does not evaluate to a boolean value, True or False."
@@ -1123,7 +1014,7 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_IfBranch index ->
+                T.CRET_IfBranch index ->
                     let
                         ith : String
                         ith =
@@ -1143,7 +1034,7 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_CaseBranch index ->
+                T.CRET_CaseBranch index ->
                     let
                         ith : String
                         ith =
@@ -1163,7 +1054,7 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_CallArity maybeFuncName numGivenArgs ->
+                T.CRET_CallArity maybeFuncName numGivenArgs ->
                     Report.Report "TOO MANY ARGS" exprRegion [] <|
                         Code.toSnippet source region (Just exprRegion) <|
                             case countArgs tipe of
@@ -1172,16 +1063,16 @@ toExprReport source localizer exprRegion category tipe expected =
                                         thisValue : String
                                         thisValue =
                                             case maybeFuncName of
-                                                CRET_NoName ->
+                                                T.CRET_NoName ->
                                                     "This value"
 
-                                                CRET_FuncName name ->
+                                                T.CRET_FuncName name ->
                                                     "The `" ++ name ++ "` value"
 
-                                                CRET_CtorName name ->
+                                                T.CRET_CtorName name ->
                                                     "The `" ++ name ++ "` value"
 
-                                                CRET_OpName op ->
+                                                T.CRET_OpName op ->
                                                     "The (" ++ op ++ ") operator"
                                     in
                                     ( D.reflow <| thisValue ++ " is not a function, but it was given " ++ D.args numGivenArgs ++ "."
@@ -1193,23 +1084,23 @@ toExprReport source localizer exprRegion category tipe expected =
                                         thisFunction : String
                                         thisFunction =
                                             case maybeFuncName of
-                                                CRET_NoName ->
+                                                T.CRET_NoName ->
                                                     "This function"
 
-                                                CRET_FuncName name ->
+                                                T.CRET_FuncName name ->
                                                     "The `" ++ name ++ "` function"
 
-                                                CRET_CtorName name ->
+                                                T.CRET_CtorName name ->
                                                     "The `" ++ name ++ "` constructor"
 
-                                                CRET_OpName op ->
+                                                T.CRET_OpName op ->
                                                     "The (" ++ op ++ ") operator"
                                     in
                                     ( D.reflow <| thisFunction ++ " expects " ++ D.args n ++ ", but it got " ++ String.fromInt numGivenArgs ++ " instead."
                                     , D.reflow <| "Are there any missing commas? Or missing parentheses?"
                                     )
 
-                CRET_CallArg maybeFuncName index ->
+                T.CRET_CallArg maybeFuncName index ->
                     let
                         ith : String
                         ith =
@@ -1218,16 +1109,16 @@ toExprReport source localizer exprRegion category tipe expected =
                         thisFunction : String
                         thisFunction =
                             case maybeFuncName of
-                                CRET_NoName ->
+                                T.CRET_NoName ->
                                     "this function"
 
-                                CRET_FuncName name ->
+                                T.CRET_FuncName name ->
                                     "`" ++ name ++ "`"
 
-                                CRET_CtorName name ->
+                                T.CRET_CtorName name ->
                                     "`" ++ name ++ "`"
 
-                                CRET_OpName op ->
+                                T.CRET_OpName op ->
                                     "(" ++ op ++ ")"
                     in
                     mismatch
@@ -1246,9 +1137,9 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_RecordAccess recordRegion maybeName fieldRegion field ->
+                T.CRET_RecordAccess recordRegion maybeName fieldRegion field ->
                     case T.iteratedDealias tipe of
-                        T.Record fields ext ->
+                        T.CTE_Record fields ext ->
                             custom (Just fieldRegion)
                                 ( D.reflow <|
                                     "This "
@@ -1300,9 +1191,9 @@ toExprReport source localizer exprRegion category tipe expected =
                                   )
                                 )
 
-                CRET_RecordUpdateKeys record expectedFields ->
+                T.CRET_RecordUpdateKeys record expectedFields ->
                     case T.iteratedDealias tipe of
-                        T.Record actualFields ext ->
+                        T.CTE_Record actualFields ext ->
                             case List.sortBy Tuple.first (Dict.toList compare (Dict.diff expectedFields actualFields)) of
                                 [] ->
                                     mismatch
@@ -1317,7 +1208,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                           )
                                         )
 
-                                ( field, Can.FieldUpdate fieldRegion _ ) :: _ ->
+                                ( field, T.CASTC_FieldUpdate fieldRegion _ ) :: _ ->
                                     let
                                         rStr : String
                                         rStr =
@@ -1368,7 +1259,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                   )
                                 )
 
-                CRET_RecordUpdateValue field ->
+                T.CRET_RecordUpdateValue field ->
                     mismatch
                         ( ( Just exprRegion
                           , "I cannot update the `" ++ field ++ "` field like this:"
@@ -1381,7 +1272,7 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         )
 
-                CRET_Destructure ->
+                T.CRET_Destructure ->
                     mismatch
                         ( ( Nothing
                           , "This definition is causing issues:"
@@ -1397,10 +1288,10 @@ toExprReport source localizer exprRegion category tipe expected =
 -- HELPERS
 
 
-countArgs : T.Type -> Int
+countArgs : T.CTE_Type -> Int
 countArgs tipe =
     case tipe of
-        T.Lambda _ _ stuff ->
+        T.CTE_Lambda _ _ stuff ->
             1 + List.length stuff
 
         _ ->
@@ -1411,7 +1302,7 @@ countArgs tipe =
 -- FIELD NAME HELPERS
 
 
-toNearbyRecord : L.CRRTL_Localizer -> ( T.CDN_Name, T.Type ) -> List ( T.CDN_Name, T.Type ) -> T.Extension -> D.Doc
+toNearbyRecord : T.CRRTL_Localizer -> ( T.CDN_Name, T.CTE_Type ) -> List ( T.CDN_Name, T.CTE_Type ) -> T.CTE_Extension -> D.Doc
 toNearbyRecord localizer f fs ext =
     D.indent 4 <|
         if List.length fs <= 3 then
@@ -1421,23 +1312,23 @@ toNearbyRecord localizer f fs ext =
             RT.vrecordSnippet (fieldToDocs localizer f) (List.map (fieldToDocs localizer) (List.take 3 fs))
 
 
-fieldToDocs : L.CRRTL_Localizer -> ( T.CDN_Name, T.Type ) -> ( D.Doc, D.Doc )
+fieldToDocs : T.CRRTL_Localizer -> ( T.CDN_Name, T.CTE_Type ) -> ( D.Doc, D.Doc )
 fieldToDocs localizer ( name, tipe ) =
     ( D.fromName name
     , T.toDoc localizer RT.None tipe
     )
 
 
-extToDoc : T.Extension -> Maybe D.Doc
+extToDoc : T.CTE_Extension -> Maybe D.Doc
 extToDoc ext =
     case ext of
-        T.Closed ->
+        T.CTE_Closed ->
             Nothing
 
-        T.FlexOpen x ->
+        T.CTE_FlexOpen x ->
             Just (D.fromName x)
 
-        T.RigidOpen x ->
+        T.CTE_RigidOpen x ->
             Just (D.fromName x)
 
 
@@ -1445,7 +1336,7 @@ extToDoc ext =
 -- OP LEFT
 
 
-opLeftToDocs : L.CRRTL_Localizer -> CRET_Category -> T.CDN_Name -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+opLeftToDocs : T.CRRTL_Localizer -> T.CRET_Category -> T.CDN_Name -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 opLeftToDocs localizer category op tipe expected =
     case op of
         "+" ->
@@ -1527,7 +1418,7 @@ type RightDocs
     | EmphRight ( D.Doc, D.Doc )
 
 
-opRightToDocs : L.CRRTL_Localizer -> CRET_Category -> T.CDN_Name -> T.Type -> T.Type -> RightDocs
+opRightToDocs : T.CRRTL_Localizer -> T.CRET_Category -> T.CDN_Name -> T.CTE_Type -> T.CTE_Type -> RightDocs
 opRightToDocs localizer category op tipe expected =
     case op of
         "+" ->
@@ -1628,7 +1519,7 @@ opRightToDocs localizer category op tipe expected =
 
         "|>" ->
             case ( tipe, expected ) of
-                ( T.Lambda expectedArgType _ _, T.Lambda argType _ _ ) ->
+                ( T.CTE_Lambda expectedArgType _ _, T.CTE_Lambda argType _ _ ) ->
                     EmphRight
                         ( D.reflow "This function cannot handle the argument sent through the (|>) pipe:"
                         , typeComparison localizer
@@ -1653,7 +1544,7 @@ opRightToDocs localizer category op tipe expected =
             badOpRightFallback localizer category op tipe expected
 
 
-badOpRightFallback : L.CRRTL_Localizer -> CRET_Category -> T.CDN_Name -> T.Type -> T.Type -> RightDocs
+badOpRightFallback : T.CRRTL_Localizer -> T.CRET_Category -> T.CDN_Name -> T.CTE_Type -> T.CTE_Type -> RightDocs
 badOpRightFallback localizer category op tipe expected =
     EmphRight
         ( D.reflow ("The right argument of (" ++ op ++ ") is causing problems.")
@@ -1670,40 +1561,40 @@ badOpRightFallback localizer category op tipe expected =
         )
 
 
-isInt : T.Type -> Bool
+isInt : T.CTE_Type -> Bool
 isInt tipe =
     case tipe of
-        T.Type home name [] ->
+        T.CTE_Type home name [] ->
             T.isInt home name
 
         _ ->
             False
 
 
-isFloat : T.Type -> Bool
+isFloat : T.CTE_Type -> Bool
 isFloat tipe =
     case tipe of
-        T.Type home name [] ->
+        T.CTE_Type home name [] ->
             T.isFloat home name
 
         _ ->
             False
 
 
-isString : T.Type -> Bool
+isString : T.CTE_Type -> Bool
 isString tipe =
     case tipe of
-        T.Type home name [] ->
+        T.CTE_Type home name [] ->
             T.isString home name
 
         _ ->
             False
 
 
-isList : T.Type -> Bool
+isList : T.CTE_Type -> Bool
 isList tipe =
     case tipe of
-        T.Type home name [ _ ] ->
+        T.CTE_Type home name [ _ ] ->
             T.isList home name
 
         _ ->
@@ -1714,13 +1605,13 @@ isList tipe =
 -- BAD CONS
 
 
-badConsRight : L.CRRTL_Localizer -> CRET_Category -> T.Type -> T.Type -> RightDocs
+badConsRight : T.CRRTL_Localizer -> T.CRET_Category -> T.CTE_Type -> T.CTE_Type -> RightDocs
 badConsRight localizer category tipe expected =
     case tipe of
-        T.Type home1 name1 [ actualElement ] ->
+        T.CTE_Type home1 name1 [ actualElement ] ->
             if T.isList home1 name1 then
                 case expected of
-                    T.Type home2 name2 [ expectedElement ] ->
+                    T.CTE_Type home2 name2 [ expectedElement ] ->
                         if T.isList home2 name2 then
                             EmphBoth
                                 ( D.reflow "I am having trouble with this (::) operator:"
@@ -1730,7 +1621,7 @@ badConsRight localizer category tipe expected =
                                     "The left side of (::) is:"
                                     "But you are trying to put that into a list filled with:"
                                     (case expectedElement of
-                                        T.Type home name [ _ ] ->
+                                        T.CTE_Type home name [ _ ] ->
                                             if T.isList home name then
                                                 [ D.toSimpleHint
                                                     "Are you trying to append two lists? The (++) operator appends lists, whereas the (::) operator is only for adding ONE element to a list."
@@ -1806,10 +1697,10 @@ type AppendType
     | AOther
 
 
-toAppendType : T.Type -> AppendType
+toAppendType : T.CTE_Type -> AppendType
 toAppendType tipe =
     case tipe of
-        T.Type home name _ ->
+        T.CTE_Type home name _ ->
             if T.isInt home name then
                 ANumber (D.fromChars "Int") (D.fromChars "String.fromInt")
 
@@ -1825,14 +1716,14 @@ toAppendType tipe =
             else
                 AOther
 
-        T.FlexSuper T.Number _ ->
+        T.CTE_FlexSuper T.CTE_Number _ ->
             ANumber (D.fromChars "number") (D.fromChars "String.fromInt")
 
         _ ->
             AOther
 
 
-badAppendLeft : L.CRRTL_Localizer -> CRET_Category -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badAppendLeft : T.CRRTL_Localizer -> T.CRET_Category -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badAppendLeft localizer category tipe expected =
     case toAppendType tipe of
         ANumber thing stringFromThing ->
@@ -1917,7 +1808,7 @@ badAppendLeft localizer category tipe expected =
             )
 
 
-badAppendRight : L.CRRTL_Localizer -> CRET_Category -> T.Type -> T.Type -> RightDocs
+badAppendRight : T.CRRTL_Localizer -> T.CRET_Category -> T.CTE_Type -> T.CTE_Type -> RightDocs
 badAppendRight localizer category tipe expected =
     case ( toAppendType expected, toAppendType tipe ) of
         ( AString, ANumber thing stringFromThing ) ->
@@ -2175,7 +2066,7 @@ badStringAdd =
     )
 
 
-badListAdd : L.CRRTL_Localizer -> CRET_Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badListAdd : T.CRRTL_Localizer -> T.CRET_Category -> String -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badListAdd localizer category direction tipe expected =
     ( D.fromChars "I cannot do addition with lists:"
     , loneType localizer
@@ -2207,7 +2098,7 @@ badListAdd localizer category direction tipe expected =
     )
 
 
-badListMul : L.CRRTL_Localizer -> CRET_Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badListMul : T.CRRTL_Localizer -> T.CRET_Category -> String -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badListMul localizer category direction tipe expected =
     badMath localizer category "Multiplication" direction "*" tipe expected <|
         [ D.toFancyHint
@@ -2226,7 +2117,7 @@ badListMul localizer category direction tipe expected =
         ]
 
 
-badMath : L.CRRTL_Localizer -> CRET_Category -> String -> String -> String -> T.Type -> T.Type -> List D.Doc -> ( D.Doc, D.Doc )
+badMath : T.CRRTL_Localizer -> T.CRET_Category -> String -> String -> String -> T.CTE_Type -> T.CTE_Type -> List D.Doc -> ( D.Doc, D.Doc )
 badMath localizer category operation direction op tipe expected otherHints =
     ( D.reflow <|
         operation
@@ -2251,7 +2142,7 @@ badMath localizer category operation direction op tipe expected otherHints =
     )
 
 
-badFDiv : L.CRRTL_Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badFDiv : T.CRRTL_Localizer -> D.Doc -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badFDiv localizer direction tipe expected =
     ( D.reflow "The (/) operator is specifically for floating-point division:"
     , if isInt tipe then
@@ -2311,7 +2202,7 @@ badFDiv localizer direction tipe expected =
     )
 
 
-badIDiv : L.CRRTL_Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badIDiv : T.CRRTL_Localizer -> D.Doc -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badIDiv localizer direction tipe expected =
     ( D.reflow "The (//) operator is specifically for integer division:"
     , if isFloat tipe then
@@ -2382,7 +2273,7 @@ badIDiv localizer direction tipe expected =
 -- BAD BOOLS
 
 
-badBool : L.CRRTL_Localizer -> D.Doc -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badBool : T.CRRTL_Localizer -> D.Doc -> D.Doc -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badBool localizer op direction tipe expected =
     ( D.reflow "I am struggling with this boolean operation:"
     , loneType localizer
@@ -2412,7 +2303,7 @@ badBool localizer op direction tipe expected =
 -- BAD COMPARISON
 
 
-badCompLeft : L.CRRTL_Localizer -> CRET_Category -> String -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badCompLeft : T.CRRTL_Localizer -> T.CRET_Category -> String -> String -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc )
 badCompLeft localizer category op direction tipe expected =
     ( D.reflow "I cannot do a comparison with this value:"
     , loneType localizer
@@ -2458,7 +2349,7 @@ badCompLeft localizer category op direction tipe expected =
     )
 
 
-badCompRight : L.CRRTL_Localizer -> String -> T.Type -> T.Type -> RightDocs
+badCompRight : T.CRRTL_Localizer -> String -> T.CTE_Type -> T.CTE_Type -> RightDocs
 badCompRight localizer op tipe expected =
     EmphBoth
         ( D.reflow <|
@@ -2478,7 +2369,7 @@ badCompRight localizer op tipe expected =
 -- BAD EQUALITY
 
 
-badEquality : L.CRRTL_Localizer -> String -> T.Type -> T.Type -> RightDocs
+badEquality : T.CRRTL_Localizer -> String -> T.CTE_Type -> T.CTE_Type -> RightDocs
 badEquality localizer op tipe expected =
     EmphBoth
         ( D.reflow <|
@@ -2502,7 +2393,7 @@ badEquality localizer op tipe expected =
 -- INFINITE TYPES
 
 
-toInfiniteReport : Code.Source -> L.CRRTL_Localizer -> T.CRA_Region -> T.CDN_Name -> T.Type -> Report.Report
+toInfiniteReport : Code.Source -> T.CRRTL_Localizer -> T.CRA_Region -> T.CDN_Name -> T.CTE_Type -> Report.Report
 toInfiniteReport source localizer region name overallType =
     Report.Report "INFINITE TYPE" region [] <|
         Code.toSnippet source region Nothing <|
@@ -2524,10 +2415,10 @@ toInfiniteReport source localizer region name overallType =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : CRET_Error -> Encode.Value
+errorEncoder : T.CRET_Error -> Encode.Value
 errorEncoder error =
     case error of
-        CRET_BadExpr region category actualType expected ->
+        T.CRET_BadExpr region category actualType expected ->
             Encode.object
                 [ ( "type", Encode.string "BadExpr" )
                 , ( "region", A.regionEncoder region )
@@ -2536,7 +2427,7 @@ errorEncoder error =
                 , ( "expected", expectedEncoder T.typeEncoder expected )
                 ]
 
-        CRET_BadPattern region category tipe expected ->
+        T.CRET_BadPattern region category tipe expected ->
             Encode.object
                 [ ( "type", Encode.string "BadPattern" )
                 , ( "region", A.regionEncoder region )
@@ -2545,7 +2436,7 @@ errorEncoder error =
                 , ( "expected", pExpectedEncoder T.typeEncoder expected )
                 ]
 
-        CRET_InfiniteType region name overallType ->
+        T.CRET_InfiniteType region name overallType ->
             Encode.object
                 [ ( "type", Encode.string "InfiniteType" )
                 , ( "region", A.regionEncoder region )
@@ -2554,28 +2445,28 @@ errorEncoder error =
                 ]
 
 
-errorDecoder : Decode.Decoder CRET_Error
+errorDecoder : Decode.Decoder T.CRET_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "BadExpr" ->
-                        Decode.map4 CRET_BadExpr
+                        Decode.map4 T.CRET_BadExpr
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "category" categoryDecoder)
                             (Decode.field "actualType" T.typeDecoder)
                             (Decode.field "expected" (expectedDecoder T.typeDecoder))
 
                     "BadPattern" ->
-                        Decode.map4 CRET_BadPattern
+                        Decode.map4 T.CRET_BadPattern
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "category" pCategoryDecoder)
                             (Decode.field "tipe" T.typeDecoder)
                             (Decode.field "expected" (pExpectedDecoder T.typeDecoder))
 
                     "InfiniteType" ->
-                        Decode.map3 CRET_InfiniteType
+                        Decode.map3 T.CRET_InfiniteType
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "overallType" T.typeDecoder)
@@ -2585,180 +2476,180 @@ errorDecoder =
             )
 
 
-categoryEncoder : CRET_Category -> Encode.Value
+categoryEncoder : T.CRET_Category -> Encode.Value
 categoryEncoder category =
     case category of
-        CRET_List ->
+        T.CRET_List ->
             Encode.object
                 [ ( "type", Encode.string "List" )
                 ]
 
-        CRET_Number ->
+        T.CRET_Number ->
             Encode.object
                 [ ( "type", Encode.string "Number" )
                 ]
 
-        CRET_Float ->
+        T.CRET_Float ->
             Encode.object
                 [ ( "type", Encode.string "Float" )
                 ]
 
-        CRET_String ->
+        T.CRET_String ->
             Encode.object
                 [ ( "type", Encode.string "String" )
                 ]
 
-        CRET_Char ->
+        T.CRET_Char ->
             Encode.object
                 [ ( "type", Encode.string "Char" )
                 ]
 
-        CRET_If ->
+        T.CRET_If ->
             Encode.object
                 [ ( "type", Encode.string "If" )
                 ]
 
-        CRET_Case ->
+        T.CRET_Case ->
             Encode.object
                 [ ( "type", Encode.string "Case" )
                 ]
 
-        CRET_CallResult maybeName ->
+        T.CRET_CallResult maybeName ->
             Encode.object
                 [ ( "type", Encode.string "CallResult" )
                 , ( "maybeName", maybeNameEncoder maybeName )
                 ]
 
-        CRET_Lambda ->
+        T.CRET_Lambda ->
             Encode.object
                 [ ( "type", Encode.string "Lambda" )
                 ]
 
-        CRET_Accessor field ->
+        T.CRET_Accessor field ->
             Encode.object
                 [ ( "type", Encode.string "Accessor" )
                 , ( "field", Encode.string field )
                 ]
 
-        CRET_Access field ->
+        T.CRET_Access field ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "field", Encode.string field )
                 ]
 
-        CRET_Record ->
+        T.CRET_Record ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 ]
 
-        CRET_Tuple ->
+        T.CRET_Tuple ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 ]
 
-        CRET_Unit ->
+        T.CRET_Unit ->
             Encode.object
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        CRET_Shader ->
+        T.CRET_Shader ->
             Encode.object
                 [ ( "type", Encode.string "Shader" )
                 ]
 
-        CRET_Effects ->
+        T.CRET_Effects ->
             Encode.object
                 [ ( "type", Encode.string "Effects" )
                 ]
 
-        CRET_Local name ->
+        T.CRET_Local name ->
             Encode.object
                 [ ( "type", Encode.string "Local" )
                 , ( "name", Encode.string name )
                 ]
 
-        CRET_Foreign name ->
+        T.CRET_Foreign name ->
             Encode.object
                 [ ( "type", Encode.string "Foreign" )
                 , ( "name", Encode.string name )
                 ]
 
 
-categoryDecoder : Decode.Decoder CRET_Category
+categoryDecoder : Decode.Decoder T.CRET_Category
 categoryDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "List" ->
-                        Decode.succeed CRET_List
+                        Decode.succeed T.CRET_List
 
                     "Number" ->
-                        Decode.succeed CRET_Number
+                        Decode.succeed T.CRET_Number
 
                     "Float" ->
-                        Decode.succeed CRET_Float
+                        Decode.succeed T.CRET_Float
 
                     "String" ->
-                        Decode.succeed CRET_String
+                        Decode.succeed T.CRET_String
 
                     "Char" ->
-                        Decode.succeed CRET_Char
+                        Decode.succeed T.CRET_Char
 
                     "If" ->
-                        Decode.succeed CRET_If
+                        Decode.succeed T.CRET_If
 
                     "Case" ->
-                        Decode.succeed CRET_Case
+                        Decode.succeed T.CRET_Case
 
                     "CallResult" ->
-                        Decode.map CRET_CallResult (Decode.field "maybeName" maybeNameDecoder)
+                        Decode.map T.CRET_CallResult (Decode.field "maybeName" maybeNameDecoder)
 
                     "Lambda" ->
-                        Decode.succeed CRET_Lambda
+                        Decode.succeed T.CRET_Lambda
 
                     "Accessor" ->
-                        Decode.map CRET_Accessor (Decode.field "field" Decode.string)
+                        Decode.map T.CRET_Accessor (Decode.field "field" Decode.string)
 
                     "Access" ->
-                        Decode.map CRET_Access (Decode.field "field" Decode.string)
+                        Decode.map T.CRET_Access (Decode.field "field" Decode.string)
 
                     "Record" ->
-                        Decode.succeed CRET_Record
+                        Decode.succeed T.CRET_Record
 
                     "Tuple" ->
-                        Decode.succeed CRET_Tuple
+                        Decode.succeed T.CRET_Tuple
 
                     "Unit" ->
-                        Decode.succeed CRET_Unit
+                        Decode.succeed T.CRET_Unit
 
                     "Shader" ->
-                        Decode.succeed CRET_Shader
+                        Decode.succeed T.CRET_Shader
 
                     "Effects" ->
-                        Decode.succeed CRET_Effects
+                        Decode.succeed T.CRET_Effects
 
                     "Local" ->
-                        Decode.map CRET_Local (Decode.field "name" Decode.string)
+                        Decode.map T.CRET_Local (Decode.field "name" Decode.string)
 
                     "Foreign" ->
-                        Decode.map CRET_Foreign (Decode.field "name" Decode.string)
+                        Decode.map T.CRET_Foreign (Decode.field "name" Decode.string)
 
                     _ ->
                         Decode.fail ("Failed to decode Category's type: " ++ type_)
             )
 
 
-expectedEncoder : (a -> Encode.Value) -> CRET_Expected a -> Encode.Value
+expectedEncoder : (a -> Encode.Value) -> T.CRET_Expected a -> Encode.Value
 expectedEncoder encoder expected =
     case expected of
-        NoExpectation expectedType ->
+        T.CRET_NoExpectation expectedType ->
             Encode.object
                 [ ( "type", Encode.string "NoExpectation" )
                 , ( "expectedType", encoder expectedType )
                 ]
 
-        FromContext region context expectedType ->
+        T.CRET_FromContext region context expectedType ->
             Encode.object
                 [ ( "type", Encode.string "FromContext" )
                 , ( "region", A.regionEncoder region )
@@ -2766,7 +2657,7 @@ expectedEncoder encoder expected =
                 , ( "expectedType", encoder expectedType )
                 ]
 
-        FromAnnotation name arity subContext expectedType ->
+        T.CRET_FromAnnotation name arity subContext expectedType ->
             Encode.object
                 [ ( "type", Encode.string "FromAnnotation" )
                 , ( "name", Encode.string name )
@@ -2776,24 +2667,24 @@ expectedEncoder encoder expected =
                 ]
 
 
-expectedDecoder : Decode.Decoder a -> Decode.Decoder (CRET_Expected a)
+expectedDecoder : Decode.Decoder a -> Decode.Decoder (T.CRET_Expected a)
 expectedDecoder decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NoExpectation" ->
-                        Decode.map NoExpectation
+                        Decode.map T.CRET_NoExpectation
                             (Decode.field "expectedType" decoder)
 
                     "FromContext" ->
-                        Decode.map3 FromContext
+                        Decode.map3 T.CRET_FromContext
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "context" contextDecoder)
                             (Decode.field "expectedType" decoder)
 
                     "FromAnnotation" ->
-                        Decode.map4 FromAnnotation
+                        Decode.map4 T.CRET_FromAnnotation
                             (Decode.field "name" Decode.string)
                             (Decode.field "arity" Decode.int)
                             (Decode.field "subContext" subContextDecoder)
@@ -2804,124 +2695,124 @@ expectedDecoder decoder =
             )
 
 
-contextDecoder : Decode.Decoder CRET_Context
+contextDecoder : Decode.Decoder T.CRET_Context
 contextDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ListEntry" ->
-                        Decode.map CRET_ListEntry (Decode.field "index" Index.zeroBasedDecoder)
+                        Decode.map T.CRET_ListEntry (Decode.field "index" Index.zeroBasedDecoder)
 
                     "Negate" ->
-                        Decode.succeed CRET_Negate
+                        Decode.succeed T.CRET_Negate
 
                     "OpLeft" ->
-                        Decode.map CRET_OpLeft (Decode.field "op" Decode.string)
+                        Decode.map T.CRET_OpLeft (Decode.field "op" Decode.string)
 
                     "OpRight" ->
-                        Decode.map CRET_OpRight (Decode.field "op" Decode.string)
+                        Decode.map T.CRET_OpRight (Decode.field "op" Decode.string)
 
                     "IfCondition" ->
-                        Decode.succeed CRET_IfCondition
+                        Decode.succeed T.CRET_IfCondition
 
                     "IfBranch" ->
-                        Decode.map CRET_IfBranch (Decode.field "index" Index.zeroBasedDecoder)
+                        Decode.map T.CRET_IfBranch (Decode.field "index" Index.zeroBasedDecoder)
 
                     "CaseBranch" ->
-                        Decode.map CRET_CaseBranch (Decode.field "index" Index.zeroBasedDecoder)
+                        Decode.map T.CRET_CaseBranch (Decode.field "index" Index.zeroBasedDecoder)
 
                     "CallArity" ->
-                        Decode.map2 CRET_CallArity
+                        Decode.map2 T.CRET_CallArity
                             (Decode.field "maybeFuncName" maybeNameDecoder)
                             (Decode.field "numGivenArgs" Decode.int)
 
                     "CallArg" ->
-                        Decode.map2 CRET_CallArg
+                        Decode.map2 T.CRET_CallArg
                             (Decode.field "maybeFuncName" maybeNameDecoder)
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "RecordAccess" ->
-                        Decode.map4 CRET_RecordAccess
+                        Decode.map4 T.CRET_RecordAccess
                             (Decode.field "recordRegion" A.regionDecoder)
                             (Decode.field "maybeName" (Decode.nullable Decode.string))
                             (Decode.field "fieldRegion" A.regionDecoder)
                             (Decode.field "field" Decode.string)
 
                     "RecordUpdateKeys" ->
-                        Decode.map2 CRET_RecordUpdateKeys
+                        Decode.map2 T.CRET_RecordUpdateKeys
                             (Decode.field "record" Decode.string)
                             (Decode.field "expectedFields" (DecodeX.assocListDict identity Decode.string Can.fieldUpdateDecoder))
 
                     "RecordUpdateValue" ->
-                        Decode.map CRET_RecordUpdateValue (Decode.field "field" Decode.string)
+                        Decode.map T.CRET_RecordUpdateValue (Decode.field "field" Decode.string)
 
                     "Destructure" ->
-                        Decode.succeed CRET_Destructure
+                        Decode.succeed T.CRET_Destructure
 
                     _ ->
                         Decode.fail ("Unknown Context's type: " ++ type_)
             )
 
 
-contextEncoder : CRET_Context -> Encode.Value
+contextEncoder : T.CRET_Context -> Encode.Value
 contextEncoder context =
     case context of
-        CRET_ListEntry index ->
+        T.CRET_ListEntry index ->
             Encode.object
                 [ ( "type", Encode.string "ListEntry" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_Negate ->
+        T.CRET_Negate ->
             Encode.object
                 [ ( "type", Encode.string "Negate" )
                 ]
 
-        CRET_OpLeft op ->
+        T.CRET_OpLeft op ->
             Encode.object
                 [ ( "type", Encode.string "OpLeft" )
                 , ( "op", Encode.string op )
                 ]
 
-        CRET_OpRight op ->
+        T.CRET_OpRight op ->
             Encode.object
                 [ ( "type", Encode.string "OpRight" )
                 , ( "op", Encode.string op )
                 ]
 
-        CRET_IfCondition ->
+        T.CRET_IfCondition ->
             Encode.object
                 [ ( "type", Encode.string "IfCondition" )
                 ]
 
-        CRET_IfBranch index ->
+        T.CRET_IfBranch index ->
             Encode.object
                 [ ( "type", Encode.string "IfBranch" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_CaseBranch index ->
+        T.CRET_CaseBranch index ->
             Encode.object
                 [ ( "type", Encode.string "CaseBranch" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_CallArity maybeFuncName numGivenArgs ->
+        T.CRET_CallArity maybeFuncName numGivenArgs ->
             Encode.object
                 [ ( "type", Encode.string "CallArity" )
                 , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
                 , ( "numGivenArgs", Encode.int numGivenArgs )
                 ]
 
-        CRET_CallArg maybeFuncName index ->
+        T.CRET_CallArg maybeFuncName index ->
             Encode.object
                 [ ( "type", Encode.string "CallArg" )
                 , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_RecordAccess recordRegion maybeName fieldRegion field ->
+        T.CRET_RecordAccess recordRegion maybeName fieldRegion field ->
             Encode.object
                 [ ( "type", Encode.string "RecordAccess" )
                 , ( "recordRegion", A.regionEncoder recordRegion )
@@ -2930,166 +2821,166 @@ contextEncoder context =
                 , ( "field", Encode.string field )
                 ]
 
-        CRET_RecordUpdateKeys record expectedFields ->
+        T.CRET_RecordUpdateKeys record expectedFields ->
             Encode.object
                 [ ( "type", Encode.string "RecordUpdateKeys" )
                 , ( "record", Encode.string record )
                 , ( "expectedFields", EncodeX.assocListDict compare Encode.string Can.fieldUpdateEncoder expectedFields )
                 ]
 
-        CRET_RecordUpdateValue field ->
+        T.CRET_RecordUpdateValue field ->
             Encode.object
                 [ ( "type", Encode.string "RecordUpdateValue" )
                 , ( "field", Encode.string field )
                 ]
 
-        CRET_Destructure ->
+        T.CRET_Destructure ->
             Encode.object
                 [ ( "type", Encode.string "Destructure" )
                 ]
 
 
-subContextDecoder : Decode.Decoder CRET_SubContext
+subContextDecoder : Decode.Decoder T.CRET_SubContext
 subContextDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TypedIfBranch" ->
-                        Decode.map CRET_TypedIfBranch
+                        Decode.map T.CRET_TypedIfBranch
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "TypedCaseBranch" ->
-                        Decode.map CRET_TypedCaseBranch
+                        Decode.map T.CRET_TypedCaseBranch
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "TypedBody" ->
-                        Decode.succeed CRET_TypedBody
+                        Decode.succeed T.CRET_TypedBody
 
                     _ ->
                         Decode.fail ("Unknown SubContext's type: " ++ type_)
             )
 
 
-subContextEncoder : CRET_SubContext -> Encode.Value
+subContextEncoder : T.CRET_SubContext -> Encode.Value
 subContextEncoder subContext =
     case subContext of
-        CRET_TypedIfBranch index ->
+        T.CRET_TypedIfBranch index ->
             Encode.object
                 [ ( "type", Encode.string "TypedIfBranch" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_TypedCaseBranch index ->
+        T.CRET_TypedCaseBranch index ->
             Encode.object
                 [ ( "type", Encode.string "TypedCaseBranch" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_TypedBody ->
+        T.CRET_TypedBody ->
             Encode.object
                 [ ( "type", Encode.string "TypedBody" )
                 ]
 
 
-pCategoryEncoder : CRET_PCategory -> Encode.Value
+pCategoryEncoder : T.CRET_PCategory -> Encode.Value
 pCategoryEncoder pCategory =
     case pCategory of
-        CRET_PRecord ->
+        T.CRET_PRecord ->
             Encode.object
                 [ ( "type", Encode.string "PRecord" )
                 ]
 
-        CRET_PUnit ->
+        T.CRET_PUnit ->
             Encode.object
                 [ ( "type", Encode.string "PUnit" )
                 ]
 
-        CRET_PTuple ->
+        T.CRET_PTuple ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 ]
 
-        CRET_PList ->
+        T.CRET_PList ->
             Encode.object
                 [ ( "type", Encode.string "PList" )
                 ]
 
-        CRET_PCtor name ->
+        T.CRET_PCtor name ->
             Encode.object
                 [ ( "type", Encode.string "PCtor" )
                 , ( "name", Encode.string name )
                 ]
 
-        CRET_PInt ->
+        T.CRET_PInt ->
             Encode.object
                 [ ( "type", Encode.string "PInt" )
                 ]
 
-        CRET_PStr ->
+        T.CRET_PStr ->
             Encode.object
                 [ ( "type", Encode.string "PStr" )
                 ]
 
-        CRET_PChr ->
+        T.CRET_PChr ->
             Encode.object
                 [ ( "type", Encode.string "PChr" )
                 ]
 
-        CRET_PBool ->
+        T.CRET_PBool ->
             Encode.object
                 [ ( "type", Encode.string "PBool" )
                 ]
 
 
-pCategoryDecoder : Decode.Decoder CRET_PCategory
+pCategoryDecoder : Decode.Decoder T.CRET_PCategory
 pCategoryDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PRecord" ->
-                        Decode.succeed CRET_PRecord
+                        Decode.succeed T.CRET_PRecord
 
                     "PUnit" ->
-                        Decode.succeed CRET_PUnit
+                        Decode.succeed T.CRET_PUnit
 
                     "PTuple" ->
-                        Decode.succeed CRET_PTuple
+                        Decode.succeed T.CRET_PTuple
 
                     "PList" ->
-                        Decode.succeed CRET_PList
+                        Decode.succeed T.CRET_PList
 
                     "PCtor" ->
-                        Decode.map CRET_PCtor (Decode.field "name" Decode.string)
+                        Decode.map T.CRET_PCtor (Decode.field "name" Decode.string)
 
                     "PInt" ->
-                        Decode.succeed CRET_PInt
+                        Decode.succeed T.CRET_PInt
 
                     "PStr" ->
-                        Decode.succeed CRET_PStr
+                        Decode.succeed T.CRET_PStr
 
                     "PChr" ->
-                        Decode.succeed CRET_PChr
+                        Decode.succeed T.CRET_PChr
 
                     "PBool" ->
-                        Decode.succeed CRET_PBool
+                        Decode.succeed T.CRET_PBool
 
                     _ ->
                         Decode.fail ("Unknown PCategory's type: " ++ type_)
             )
 
 
-pExpectedEncoder : (a -> Encode.Value) -> CRET_PExpected a -> Encode.Value
+pExpectedEncoder : (a -> Encode.Value) -> T.CRET_PExpected a -> Encode.Value
 pExpectedEncoder encoder pExpected =
     case pExpected of
-        CRET_PNoExpectation expectedType ->
+        T.CRET_PNoExpectation expectedType ->
             Encode.object
                 [ ( "type", Encode.string "PNoExpectation" )
                 , ( "expectedType", encoder expectedType )
                 ]
 
-        CRET_PFromContext region context expectedType ->
+        T.CRET_PFromContext region context expectedType ->
             Encode.object
                 [ ( "type", Encode.string "PFromContext" )
                 , ( "region", A.regionEncoder region )
@@ -3098,18 +2989,18 @@ pExpectedEncoder encoder pExpected =
                 ]
 
 
-pExpectedDecoder : Decode.Decoder a -> Decode.Decoder (CRET_PExpected a)
+pExpectedDecoder : Decode.Decoder a -> Decode.Decoder (T.CRET_PExpected a)
 pExpectedDecoder decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PNoExpectation" ->
-                        Decode.map CRET_PNoExpectation (Decode.field "expectedType" decoder)
+                        Decode.map T.CRET_PNoExpectation (Decode.field "expectedType" decoder)
 
                     --     | PFromContext T.CRA_Region PContext tipe
                     "PFromContext" ->
-                        Decode.map3 CRET_PFromContext
+                        Decode.map3 T.CRET_PFromContext
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "context" pContextDecoder)
                             (Decode.field "expectedType" decoder)
@@ -3119,115 +3010,115 @@ pExpectedDecoder decoder =
             )
 
 
-maybeNameEncoder : CRET_MaybeName -> Encode.Value
+maybeNameEncoder : T.CRET_MaybeName -> Encode.Value
 maybeNameEncoder maybeName =
     case maybeName of
-        CRET_FuncName name ->
+        T.CRET_FuncName name ->
             Encode.object
                 [ ( "type", Encode.string "FuncName" )
                 , ( "name", Encode.string name )
                 ]
 
-        CRET_CtorName name ->
+        T.CRET_CtorName name ->
             Encode.object
                 [ ( "type", Encode.string "CtorName" )
                 , ( "name", Encode.string name )
                 ]
 
-        CRET_OpName op ->
+        T.CRET_OpName op ->
             Encode.object
                 [ ( "type", Encode.string "OpName" )
                 , ( "op", Encode.string op )
                 ]
 
-        CRET_NoName ->
+        T.CRET_NoName ->
             Encode.object
                 [ ( "type", Encode.string "NoName" )
                 ]
 
 
-maybeNameDecoder : Decode.Decoder CRET_MaybeName
+maybeNameDecoder : Decode.Decoder T.CRET_MaybeName
 maybeNameDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "FuncName" ->
-                        Decode.map CRET_FuncName (Decode.field "name" Decode.string)
+                        Decode.map T.CRET_FuncName (Decode.field "name" Decode.string)
 
                     "CtorName" ->
-                        Decode.map CRET_CtorName (Decode.field "name" Decode.string)
+                        Decode.map T.CRET_CtorName (Decode.field "name" Decode.string)
 
                     "OpName" ->
-                        Decode.map CRET_OpName (Decode.field "op" Decode.string)
+                        Decode.map T.CRET_OpName (Decode.field "op" Decode.string)
 
                     "NoName" ->
-                        Decode.succeed CRET_NoName
+                        Decode.succeed T.CRET_NoName
 
                     _ ->
                         Decode.fail ("Failed to decode MaybeName's type: " ++ type_)
             )
 
 
-pContextEncoder : CRET_PContext -> Encode.Value
+pContextEncoder : T.CRET_PContext -> Encode.Value
 pContextEncoder pContext =
     case pContext of
-        CRET_PTypedArg name index ->
+        T.CRET_PTypedArg name index ->
             Encode.object
                 [ ( "type", Encode.string "PTypedArg" )
                 , ( "name", Encode.string name )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_PCaseMatch index ->
+        T.CRET_PCaseMatch index ->
             Encode.object
                 [ ( "type", Encode.string "PCaseMatch" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_PCtorArg name index ->
+        T.CRET_PCtorArg name index ->
             Encode.object
                 [ ( "type", Encode.string "PCtorArg" )
                 , ( "name", Encode.string name )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_PListEntry index ->
+        T.CRET_PListEntry index ->
             Encode.object
                 [ ( "type", Encode.string "PListEntry" )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        CRET_PTail ->
+        T.CRET_PTail ->
             Encode.object
                 [ ( "type", Encode.string "PTail" )
                 ]
 
 
-pContextDecoder : Decode.Decoder CRET_PContext
+pContextDecoder : Decode.Decoder T.CRET_PContext
 pContextDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PTypedArg" ->
-                        Decode.map2 CRET_PTypedArg
+                        Decode.map2 T.CRET_PTypedArg
                             (Decode.field "name" Decode.string)
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "PCaseMatch" ->
-                        Decode.map CRET_PCaseMatch (Decode.field "index" Index.zeroBasedDecoder)
+                        Decode.map T.CRET_PCaseMatch (Decode.field "index" Index.zeroBasedDecoder)
 
                     "PCtorArg" ->
-                        Decode.map2 CRET_PCtorArg
+                        Decode.map2 T.CRET_PCtorArg
                             (Decode.field "name" Decode.string)
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "PListEntry" ->
-                        Decode.map CRET_PListEntry (Decode.field "index" Index.zeroBasedDecoder)
+                        Decode.map T.CRET_PListEntry (Decode.field "index" Index.zeroBasedDecoder)
 
                     "PTail" ->
-                        Decode.succeed CRET_PTail
+                        Decode.succeed T.CRET_PTail
 
                     _ ->
                         Decode.fail ("Failed to decode PContext's type: " ++ type_)

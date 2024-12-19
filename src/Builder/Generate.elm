@@ -280,7 +280,7 @@ loadTypesHelp root modul =
                 |> IO.bind
                     (\cachedInterface ->
                         case cachedInterface of
-                            Build.BB_Unneeded ->
+                            T.BB_Unneeded ->
                                 Utils.newEmptyMVar
                                     |> IO.bind
                                         (\mvar ->
@@ -294,9 +294,9 @@ loadTypesHelp root modul =
                                                 |> IO.fmap (\_ -> mvar)
                                         )
 
-                            Build.BB_Loaded iface ->
+                            T.BB_Loaded iface ->
                                 Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
 
-                            Build.BB_Corrupted ->
+                            T.BB_Corrupted ->
                                 Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) Nothing
                     )

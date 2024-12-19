@@ -1,36 +1,5 @@
 module Compiler.Reporting.Error.Syntax exposing
-    ( CRES_Case(..)
-    , CRES_Char(..)
-    , CRES_CustomType(..)
-    , CRES_Decl(..)
-    , CRES_DeclDef(..)
-    , CRES_DeclType(..)
-    , CRES_Def(..)
-    , CRES_Destruct(..)
-    , CRES_Error(..)
-    , CRES_Escape(..)
-    , CRES_Exposing(..)
-    , CRES_Expr(..)
-    , CRES_Func(..)
-    , CRES_If(..)
-    , CRES_Let(..)
-    , CRES_List_(..)
-    , CRES_Module(..)
-    , CRES_Number(..)
-    , CRES_PList(..)
-    , CRES_PRecord(..)
-    , CRES_PTuple(..)
-    , CRES_Pattern(..)
-    , CRES_Port(..)
-    , CRES_Record(..)
-    , CRES_Space(..)
-    , CRES_String_(..)
-    , CRES_TRecord(..)
-    , CRES_TTuple(..)
-    , CRES_Tuple(..)
-    , CRES_Type(..)
-    , CRES_TypeAlias(..)
-    , errorDecoder
+    ( errorDecoder
     , errorEncoder
     , spaceDecoder
     , spaceEncoder
@@ -39,7 +8,7 @@ module Compiler.Reporting.Error.Syntax exposing
     )
 
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Parse.Symbol exposing (CPS_BadOperator(..))
+import Compiler.Parse.Symbol
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -51,433 +20,13 @@ import Types as T
 
 
 
--- ALL SYNTAX ERRORS
-
-
-type CRES_Error
-    = CRES_ModuleNameUnspecified T.CEMN_Raw
-    | CRES_ModuleNameMismatch T.CEMN_Raw (T.CRA_Located T.CEMN_Raw)
-    | CRES_UnexpectedPort T.CRA_Region
-    | CRES_NoPorts T.CRA_Region
-    | CRES_NoPortsInPackage (T.CRA_Located T.CDN_Name)
-    | CRES_NoPortModulesInPackage T.CRA_Region
-    | CRES_NoEffectsOutsideKernel T.CRA_Region
-    | CRES_ParseError CRES_Module
-
-
-type CRES_Module
-    = CRES_ModuleSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_ModuleBadEnd T.CPP_Row T.CPP_Col
-      --
-    | CRES_ModuleProblem T.CPP_Row T.CPP_Col
-    | CRES_ModuleName T.CPP_Row T.CPP_Col
-    | CRES_ModuleExposing CRES_Exposing T.CPP_Row T.CPP_Col
-      --
-    | CRES_PortModuleProblem T.CPP_Row T.CPP_Col
-    | CRES_PortModuleName T.CPP_Row T.CPP_Col
-    | CRES_PortModuleExposing CRES_Exposing T.CPP_Row T.CPP_Col
-      --
-    | CRES_Effect T.CPP_Row T.CPP_Col
-      --
-    | CRES_FreshLine T.CPP_Row T.CPP_Col
-      --
-    | CRES_ImportStart T.CPP_Row T.CPP_Col
-    | CRES_ImportName T.CPP_Row T.CPP_Col
-    | CRES_ImportAs T.CPP_Row T.CPP_Col
-    | CRES_ImportAlias T.CPP_Row T.CPP_Col
-    | CRES_ImportExposing T.CPP_Row T.CPP_Col
-    | CRES_ImportExposingList CRES_Exposing T.CPP_Row T.CPP_Col
-    | CRES_ImportEnd T.CPP_Row T.CPP_Col -- different based on col=1 or if greater
-      --
-    | CRES_ImportIndentName T.CPP_Row T.CPP_Col
-    | CRES_ImportIndentAlias T.CPP_Row T.CPP_Col
-    | CRES_ImportIndentExposingList T.CPP_Row T.CPP_Col
-      --
-    | CRES_Infix T.CPP_Row T.CPP_Col
-      --
-    | CRES_Declarations CRES_Decl T.CPP_Row T.CPP_Col
-
-
-type CRES_Exposing
-    = CRES_ExposingSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_ExposingStart T.CPP_Row T.CPP_Col
-    | CRES_ExposingValue T.CPP_Row T.CPP_Col
-    | CRES_ExposingOperator T.CPP_Row T.CPP_Col
-    | CRES_ExposingOperatorReserved CPS_BadOperator T.CPP_Row T.CPP_Col
-    | CRES_ExposingOperatorRightParen T.CPP_Row T.CPP_Col
-    | CRES_ExposingTypePrivacy T.CPP_Row T.CPP_Col
-    | CRES_ExposingEnd T.CPP_Row T.CPP_Col
-      --
-    | CRES_ExposingIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_ExposingIndentValue T.CPP_Row T.CPP_Col
-
-
-
--- DECLARATIONS
-
-
-type CRES_Decl
-    = CRES_DeclStart T.CPP_Row T.CPP_Col
-    | CRES_DeclSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_Port CRES_Port T.CPP_Row T.CPP_Col
-    | CRES_DeclType CRES_DeclType T.CPP_Row T.CPP_Col
-    | CRES_DeclDef T.CDN_Name CRES_DeclDef T.CPP_Row T.CPP_Col
-      --
-    | CRES_DeclFreshLineAfterDocComment T.CPP_Row T.CPP_Col
-
-
-type CRES_DeclDef
-    = CRES_DeclDefSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_DeclDefEquals T.CPP_Row T.CPP_Col
-    | CRES_DeclDefType CRES_Type T.CPP_Row T.CPP_Col
-    | CRES_DeclDefArg CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_DeclDefBody CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_DeclDefNameRepeat T.CPP_Row T.CPP_Col
-    | CRES_DeclDefNameMatch T.CDN_Name T.CPP_Row T.CPP_Col
-      --
-    | CRES_DeclDefIndentType T.CPP_Row T.CPP_Col
-    | CRES_DeclDefIndentEquals T.CPP_Row T.CPP_Col
-    | CRES_DeclDefIndentBody T.CPP_Row T.CPP_Col
-
-
-type CRES_Port
-    = CRES_PortSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_PortName T.CPP_Row T.CPP_Col
-    | CRES_PortColon T.CPP_Row T.CPP_Col
-    | CRES_PortType CRES_Type T.CPP_Row T.CPP_Col
-    | CRES_PortIndentName T.CPP_Row T.CPP_Col
-    | CRES_PortIndentColon T.CPP_Row T.CPP_Col
-    | CRES_PortIndentType T.CPP_Row T.CPP_Col
-
-
-
--- TYPE DECLARATIONS
-
-
-type CRES_DeclType
-    = CRES_DT_Space CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_DT_Name T.CPP_Row T.CPP_Col
-    | CRES_DT_Alias CRES_TypeAlias T.CPP_Row T.CPP_Col
-    | CRES_DT_Union CRES_CustomType T.CPP_Row T.CPP_Col
-      --
-    | CRES_DT_IndentName T.CPP_Row T.CPP_Col
-
-
-type CRES_TypeAlias
-    = CRES_AliasSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_AliasName T.CPP_Row T.CPP_Col
-    | CRES_AliasEquals T.CPP_Row T.CPP_Col
-    | CRES_AliasBody CRES_Type T.CPP_Row T.CPP_Col
-      --
-    | CRES_AliasIndentEquals T.CPP_Row T.CPP_Col
-    | CRES_AliasIndentBody T.CPP_Row T.CPP_Col
-
-
-type CRES_CustomType
-    = CRES_CT_Space CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_CT_Name T.CPP_Row T.CPP_Col
-    | CRES_CT_Equals T.CPP_Row T.CPP_Col
-    | CRES_CT_Bar T.CPP_Row T.CPP_Col
-    | CRES_CT_Variant T.CPP_Row T.CPP_Col
-    | CRES_CT_VariantArg CRES_Type T.CPP_Row T.CPP_Col
-      --
-    | CRES_CT_IndentEquals T.CPP_Row T.CPP_Col
-    | CRES_CT_IndentBar T.CPP_Row T.CPP_Col
-    | CRES_CT_IndentAfterBar T.CPP_Row T.CPP_Col
-    | CRES_CT_IndentAfterEquals T.CPP_Row T.CPP_Col
-
-
-
--- EXPRESSIONS
-
-
-type CRES_Expr
-    = CRES_Let CRES_Let T.CPP_Row T.CPP_Col
-    | CRES_Case CRES_Case T.CPP_Row T.CPP_Col
-    | CRES_If CRES_If T.CPP_Row T.CPP_Col
-    | CRES_List CRES_List_ T.CPP_Row T.CPP_Col
-    | CRES_Record CRES_Record T.CPP_Row T.CPP_Col
-    | CRES_Tuple CRES_Tuple T.CPP_Row T.CPP_Col
-    | CRES_Func CRES_Func T.CPP_Row T.CPP_Col
-      --
-    | CRES_Dot T.CPP_Row T.CPP_Col
-    | CRES_Access T.CPP_Row T.CPP_Col
-    | CRES_OperatorRight T.CDN_Name T.CPP_Row T.CPP_Col
-    | CRES_OperatorReserved CPS_BadOperator T.CPP_Row T.CPP_Col
-      --
-    | CRES_Start T.CPP_Row T.CPP_Col
-    | CRES_Char CRES_Char T.CPP_Row T.CPP_Col
-    | CRES_String_ CRES_String_ T.CPP_Row T.CPP_Col
-    | CRES_Number CRES_Number T.CPP_Row T.CPP_Col
-    | CRES_Space CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_EndlessShader T.CPP_Row T.CPP_Col
-    | CRES_ShaderProblem String T.CPP_Row T.CPP_Col
-    | CRES_IndentOperatorRight T.CDN_Name T.CPP_Row T.CPP_Col
-
-
-type CRES_Record
-    = CRES_RecordOpen T.CPP_Row T.CPP_Col
-    | CRES_RecordEnd T.CPP_Row T.CPP_Col
-    | CRES_RecordField T.CPP_Row T.CPP_Col
-    | CRES_RecordEquals T.CPP_Row T.CPP_Col
-    | CRES_RecordExpr CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_RecordSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_RecordIndentOpen T.CPP_Row T.CPP_Col
-    | CRES_RecordIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_RecordIndentField T.CPP_Row T.CPP_Col
-    | CRES_RecordIndentEquals T.CPP_Row T.CPP_Col
-    | CRES_RecordIndentExpr T.CPP_Row T.CPP_Col
-
-
-type CRES_Tuple
-    = CRES_TupleExpr CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_TupleSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_TupleEnd T.CPP_Row T.CPP_Col
-    | CRES_TupleOperatorClose T.CPP_Row T.CPP_Col
-    | CRES_TupleOperatorReserved CPS_BadOperator T.CPP_Row T.CPP_Col
-      --
-    | CRES_TupleIndentExpr1 T.CPP_Row T.CPP_Col
-    | CRES_TupleIndentExprN T.CPP_Row T.CPP_Col
-    | CRES_TupleIndentEnd T.CPP_Row T.CPP_Col
-
-
-type CRES_List_
-    = CRES_ListSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_ListOpen T.CPP_Row T.CPP_Col
-    | CRES_ListExpr CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_ListEnd T.CPP_Row T.CPP_Col
-      --
-    | CRES_ListIndentOpen T.CPP_Row T.CPP_Col
-    | CRES_ListIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_ListIndentExpr T.CPP_Row T.CPP_Col
-
-
-type CRES_Func
-    = CRES_FuncSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_FuncArg CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_FuncBody CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_FuncArrow T.CPP_Row T.CPP_Col
-      --
-    | CRES_FuncIndentArg T.CPP_Row T.CPP_Col
-    | CRES_FuncIndentArrow T.CPP_Row T.CPP_Col
-    | CRES_FuncIndentBody T.CPP_Row T.CPP_Col
-
-
-type CRES_Case
-    = CRES_CaseSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_CaseOf T.CPP_Row T.CPP_Col
-    | CRES_CasePattern CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_CaseArrow T.CPP_Row T.CPP_Col
-    | CRES_CaseExpr CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_CaseBranch CRES_Expr T.CPP_Row T.CPP_Col
-      --
-    | CRES_CaseIndentOf T.CPP_Row T.CPP_Col
-    | CRES_CaseIndentExpr T.CPP_Row T.CPP_Col
-    | CRES_CaseIndentPattern T.CPP_Row T.CPP_Col
-    | CRES_CaseIndentArrow T.CPP_Row T.CPP_Col
-    | CRES_CaseIndentBranch T.CPP_Row T.CPP_Col
-    | CRES_CasePatternAlignment Int T.CPP_Row T.CPP_Col
-
-
-type CRES_If
-    = CRES_IfSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_IfThen T.CPP_Row T.CPP_Col
-    | CRES_IfElse T.CPP_Row T.CPP_Col
-    | CRES_IfElseBranchStart T.CPP_Row T.CPP_Col
-      --
-    | CRES_IfCondition CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_IfThenBranch CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_IfElseBranch CRES_Expr T.CPP_Row T.CPP_Col
-      --
-    | CRES_IfIndentCondition T.CPP_Row T.CPP_Col
-    | CRES_IfIndentThen T.CPP_Row T.CPP_Col
-    | CRES_IfIndentThenBranch T.CPP_Row T.CPP_Col
-    | CRES_IfIndentElseBranch T.CPP_Row T.CPP_Col
-    | CRES_IfIndentElse T.CPP_Row T.CPP_Col
-
-
-type CRES_Let
-    = CRES_LetSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_LetIn T.CPP_Row T.CPP_Col
-    | CRES_LetDefAlignment Int T.CPP_Row T.CPP_Col
-    | CRES_LetDefName T.CPP_Row T.CPP_Col
-    | CRES_LetDef T.CDN_Name CRES_Def T.CPP_Row T.CPP_Col
-    | CRES_LetDestruct CRES_Destruct T.CPP_Row T.CPP_Col
-    | CRES_LetBody CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_LetIndentDef T.CPP_Row T.CPP_Col
-    | CRES_LetIndentIn T.CPP_Row T.CPP_Col
-    | CRES_LetIndentBody T.CPP_Row T.CPP_Col
-
-
-type CRES_Def
-    = CRES_DefSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_DefType CRES_Type T.CPP_Row T.CPP_Col
-    | CRES_DefNameRepeat T.CPP_Row T.CPP_Col
-    | CRES_DefNameMatch T.CDN_Name T.CPP_Row T.CPP_Col
-    | CRES_DefArg CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_DefEquals T.CPP_Row T.CPP_Col
-    | CRES_DefBody CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_DefIndentEquals T.CPP_Row T.CPP_Col
-    | CRES_DefIndentType T.CPP_Row T.CPP_Col
-    | CRES_DefIndentBody T.CPP_Row T.CPP_Col
-    | CRES_DefAlignment Int T.CPP_Row T.CPP_Col
-
-
-type CRES_Destruct
-    = CRES_DestructSpace CRES_Space T.CPP_Row T.CPP_Col
-    | CRES_DestructPattern CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_DestructEquals T.CPP_Row T.CPP_Col
-    | CRES_DestructBody CRES_Expr T.CPP_Row T.CPP_Col
-    | CRES_DestructIndentEquals T.CPP_Row T.CPP_Col
-    | CRES_DestructIndentBody T.CPP_Row T.CPP_Col
-
-
-
--- PATTERNS
-
-
-type CRES_Pattern
-    = CRES_PRecord CRES_PRecord T.CPP_Row T.CPP_Col
-    | CRES_PTuple CRES_PTuple T.CPP_Row T.CPP_Col
-    | CRES_PList CRES_PList T.CPP_Row T.CPP_Col
-      --
-    | CRES_PStart T.CPP_Row T.CPP_Col
-    | CRES_PChar CRES_Char T.CPP_Row T.CPP_Col
-    | CRES_PString CRES_String_ T.CPP_Row T.CPP_Col
-    | CRES_PNumber CRES_Number T.CPP_Row T.CPP_Col
-    | CRES_PFloat Int T.CPP_Row T.CPP_Col
-    | CRES_PAlias T.CPP_Row T.CPP_Col
-    | CRES_PWildcardNotVar T.CDN_Name Int T.CPP_Row T.CPP_Col
-    | CRES_PSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_PIndentStart T.CPP_Row T.CPP_Col
-    | CRES_PIndentAlias T.CPP_Row T.CPP_Col
-
-
-type CRES_PRecord
-    = CRES_PRecordOpen T.CPP_Row T.CPP_Col
-    | CRES_PRecordEnd T.CPP_Row T.CPP_Col
-    | CRES_PRecordField T.CPP_Row T.CPP_Col
-    | CRES_PRecordSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_PRecordIndentOpen T.CPP_Row T.CPP_Col
-    | CRES_PRecordIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_PRecordIndentField T.CPP_Row T.CPP_Col
-
-
-type CRES_PTuple
-    = CRES_PTupleOpen T.CPP_Row T.CPP_Col
-    | CRES_PTupleEnd T.CPP_Row T.CPP_Col
-    | CRES_PTupleExpr CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_PTupleSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_PTupleIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_PTupleIndentExpr1 T.CPP_Row T.CPP_Col
-    | CRES_PTupleIndentExprN T.CPP_Row T.CPP_Col
-
-
-type CRES_PList
-    = CRES_PListOpen T.CPP_Row T.CPP_Col
-    | CRES_PListEnd T.CPP_Row T.CPP_Col
-    | CRES_PListExpr CRES_Pattern T.CPP_Row T.CPP_Col
-    | CRES_PListSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_PListIndentOpen T.CPP_Row T.CPP_Col
-    | CRES_PListIndentEnd T.CPP_Row T.CPP_Col
-    | CRES_PListIndentExpr T.CPP_Row T.CPP_Col
-
-
-
--- TYPES
-
-
-type CRES_Type
-    = CRES_TRecord CRES_TRecord T.CPP_Row T.CPP_Col
-    | CRES_TTuple CRES_TTuple T.CPP_Row T.CPP_Col
-      --
-    | CRES_TStart T.CPP_Row T.CPP_Col
-    | CRES_TSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_TIndentStart T.CPP_Row T.CPP_Col
-
-
-type CRES_TRecord
-    = CRES_TRecordOpen T.CPP_Row T.CPP_Col
-    | CRES_TRecordEnd T.CPP_Row T.CPP_Col
-      --
-    | CRES_TRecordField T.CPP_Row T.CPP_Col
-    | CRES_TRecordColon T.CPP_Row T.CPP_Col
-    | CRES_TRecordType CRES_Type T.CPP_Row T.CPP_Col
-      --
-    | CRES_TRecordSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_TRecordIndentOpen T.CPP_Row T.CPP_Col
-    | CRES_TRecordIndentField T.CPP_Row T.CPP_Col
-    | CRES_TRecordIndentColon T.CPP_Row T.CPP_Col
-    | CRES_TRecordIndentType T.CPP_Row T.CPP_Col
-    | CRES_TRecordIndentEnd T.CPP_Row T.CPP_Col
-
-
-type CRES_TTuple
-    = CRES_TTupleOpen T.CPP_Row T.CPP_Col
-    | CRES_TTupleEnd T.CPP_Row T.CPP_Col
-    | CRES_TTupleType CRES_Type T.CPP_Row T.CPP_Col
-    | CRES_TTupleSpace CRES_Space T.CPP_Row T.CPP_Col
-      --
-    | CRES_TTupleIndentType1 T.CPP_Row T.CPP_Col
-    | CRES_TTupleIndentTypeN T.CPP_Row T.CPP_Col
-    | CRES_TTupleIndentEnd T.CPP_Row T.CPP_Col
-
-
-
--- LITERALS
-
-
-type CRES_Char
-    = CRES_CharEndless
-    | CRES_CharEscape CRES_Escape
-    | CRES_CharNotString Int
-
-
-type CRES_String_
-    = CRES_StringEndless_Single
-    | CRES_StringEndless_Multi
-    | CRES_StringEscape CRES_Escape
-
-
-type CRES_Escape
-    = CRES_EscapeUnknown
-    | CRES_BadUnicodeFormat Int
-    | CRES_BadUnicodeCode Int
-    | CRES_BadUnicodeLength Int Int Int
-
-
-type CRES_Number
-    = CRES_NumberEnd
-    | CRES_NumberDot Int
-    | CRES_NumberHexDigit
-    | CRES_NumberNoLeadingZero
-
-
-
--- MISC
-
-
-type CRES_Space
-    = CRES_HasTab
-    | CRES_EndlessMultiComment
-
-
-
 -- TO REPORT
 
 
-toReport : Code.Source -> CRES_Error -> Report.Report
+toReport : Code.Source -> T.CRES_Error -> Report.Report
 toReport source err =
     case err of
-        CRES_ModuleNameUnspecified name ->
+        T.CRES_ModuleNameUnspecified name ->
             let
                 region : T.CRA_Region
                 region =
@@ -499,7 +48,7 @@ toReport source err =
                         "It is best to replace (..) with an explicit list of types and functions you want to expose. When you know a value is only used within this module, you can refactor without worrying about uses elsewhere. Limiting exposed values can also speed up compilation because I can skip a bunch of work if I see that the exposed API has not changed."
                     ]
 
-        CRES_ModuleNameMismatch expectedName (T.CRA_At region actualName) ->
+        T.CRES_ModuleNameMismatch expectedName (T.CRA_At region actualName) ->
             Report.Report "MODULE NAME MISMATCH" region [ expectedName ] <|
                 Code.toSnippet source region Nothing <|
                     ( D.fromChars "It looks like this module name is out of sync:"
@@ -518,7 +67,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_UnexpectedPort region ->
+        T.CRES_UnexpectedPort region ->
             Report.Report "UNEXPECTED PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -546,7 +95,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_NoPorts region ->
+        T.CRES_NoPorts region ->
             Report.Report "NO PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -565,7 +114,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_NoPortsInPackage (T.CRA_At region _) ->
+        T.CRES_NoPortsInPackage (T.CRA_At region _) ->
             Report.Report "PACKAGES CANNOT HAVE PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -577,7 +126,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_NoPortModulesInPackage region ->
+        T.CRES_NoPortModulesInPackage region ->
             Report.Report "PACKAGES CANNOT HAVE PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -600,7 +149,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_NoEffectsOutsideKernel region ->
+        T.CRES_NoEffectsOutsideKernel region ->
             Report.Report "INVALID EFFECT MODULE" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow <|
@@ -613,7 +162,7 @@ toReport source err =
                         ]
                     )
 
-        CRES_ParseError modul ->
+        T.CRES_ParseError modul ->
             toParseErrorReport source modul
 
 
@@ -627,20 +176,20 @@ noteForPortsInPackage =
         ]
 
 
-toParseErrorReport : Code.Source -> CRES_Module -> Report.Report
+toParseErrorReport : Code.Source -> T.CRES_Module -> Report.Report
 toParseErrorReport source modul =
     case modul of
-        CRES_ModuleSpace space row col ->
+        T.CRES_ModuleSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_ModuleBadEnd row col ->
+        T.CRES_ModuleBadEnd row col ->
             if col == 1 then
                 toDeclStartReport source row col
 
             else
                 toWeirdEndReport source row col
 
-        CRES_ModuleProblem row col ->
+        T.CRES_ModuleProblem row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -673,7 +222,7 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_ModuleName row col ->
+        T.CRES_ModuleName row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -718,10 +267,10 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_ModuleExposing exposing_ row col ->
+        T.CRES_ModuleExposing exposing_ row col ->
             toExposingReport source exposing_ row col
 
-        CRES_PortModuleProblem row col ->
+        T.CRES_PortModuleProblem row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -755,7 +304,7 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_PortModuleName row col ->
+        T.CRES_PortModuleName row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -790,10 +339,10 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_PortModuleExposing exposing_ row col ->
+        T.CRES_PortModuleExposing exposing_ row col ->
             toExposingReport source exposing_ row col
 
-        CRES_Effect row col ->
+        T.CRES_Effect row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -807,7 +356,7 @@ toParseErrorReport source modul =
                         "This type of module is reserved for the @elm organization. It is used to define certain effects, avoiding building them into the compiler."
                     )
 
-        CRES_FreshLine row col ->
+        T.CRES_FreshLine row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -863,10 +412,10 @@ toParseErrorReport source modul =
                                 ]
                             )
 
-        CRES_ImportStart row col ->
+        T.CRES_ImportStart row col ->
             toImportReport source row col
 
-        CRES_ImportName row col ->
+        T.CRES_ImportName row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -908,10 +457,10 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_ImportAs row col ->
+        T.CRES_ImportAs row col ->
             toImportReport source row col
 
-        CRES_ImportAlias row col ->
+        T.CRES_ImportAlias row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -951,22 +500,22 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_ImportExposing row col ->
+        T.CRES_ImportExposing row col ->
             toImportReport source row col
 
-        CRES_ImportExposingList exposing_ row col ->
+        T.CRES_ImportExposingList exposing_ row col ->
             toExposingReport source exposing_ row col
 
-        CRES_ImportEnd row col ->
+        T.CRES_ImportEnd row col ->
             toImportReport source row col
 
-        CRES_ImportIndentName row col ->
+        T.CRES_ImportIndentName row col ->
             toImportReport source row col
 
-        CRES_ImportIndentAlias row col ->
+        T.CRES_ImportIndentAlias row col ->
             toImportReport source row col
 
-        CRES_ImportIndentExposingList row col ->
+        T.CRES_ImportIndentExposingList row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -999,7 +548,7 @@ toParseErrorReport source modul =
                         ]
                     )
 
-        CRES_Infix row col ->
+        T.CRES_Infix row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -1013,7 +562,7 @@ toParseErrorReport source modul =
                         "This feature is used by the @elm organization to define the languages built-in operators."
                     )
 
-        CRES_Declarations decl _ _ ->
+        T.CRES_Declarations decl _ _ ->
             toDeclarationsReport source decl
 
 
@@ -1219,13 +768,13 @@ toImportReport source row col =
 -- EXPOSING
 
 
-toExposingReport : Code.Source -> CRES_Exposing -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toExposingReport : Code.Source -> T.CRES_Exposing -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toExposingReport source exposing_ startRow startCol =
     case exposing_ of
-        CRES_ExposingSpace space row col ->
+        T.CRES_ExposingSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_ExposingStart row col ->
+        T.CRES_ExposingStart row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1274,7 +823,7 @@ toExposingReport source exposing_ startRow startCol =
                         ]
                     )
 
-        CRES_ExposingValue row col ->
+        T.CRES_ExposingValue row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -1355,7 +904,7 @@ toExposingReport source exposing_ startRow startCol =
                                 ]
                             )
 
-        CRES_ExposingOperator row col ->
+        T.CRES_ExposingOperator row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1397,7 +946,7 @@ toExposingReport source exposing_ startRow startCol =
                         ]
                     )
 
-        CRES_ExposingOperatorReserved op row col ->
+        T.CRES_ExposingOperatorReserved op row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1411,10 +960,10 @@ toExposingReport source exposing_ startRow startCol =
                 Code.toSnippet source surroundings (Just region) <|
                     ( D.reflow "I cannot expose this as an operator:"
                     , case op of
-                        CPS_BadDot ->
+                        T.CPS_BadDot ->
                             D.reflow "Try getting rid of this entry? Maybe I can give you a better hint after that?"
 
-                        CPS_BadPipe ->
+                        T.CPS_BadPipe ->
                             D.fillSep
                                 [ D.fromChars "Maybe"
                                 , D.fromChars "you"
@@ -1423,10 +972,10 @@ toExposingReport source exposing_ startRow startCol =
                                 , D.fromChars "instead?"
                                 ]
 
-                        CPS_BadArrow ->
+                        T.CPS_BadArrow ->
                             D.reflow "Try getting rid of this entry? Maybe I can give you a better hint after that?"
 
-                        CPS_BadEquals ->
+                        T.CPS_BadEquals ->
                             D.fillSep
                                 [ D.fromChars "Maybe"
                                 , D.fromChars "you"
@@ -1435,7 +984,7 @@ toExposingReport source exposing_ startRow startCol =
                                 , D.fromChars "instead?"
                                 ]
 
-                        CPS_BadHasType ->
+                        T.CPS_BadHasType ->
                             D.fillSep
                                 [ D.fromChars "Maybe"
                                 , D.fromChars "you"
@@ -1445,7 +994,7 @@ toExposingReport source exposing_ startRow startCol =
                                 ]
                     )
 
-        CRES_ExposingOperatorRightParen row col ->
+        T.CRES_ExposingOperatorRightParen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1480,7 +1029,7 @@ toExposingReport source exposing_ startRow startCol =
                         ]
                     )
 
-        CRES_ExposingEnd row col ->
+        T.CRES_ExposingEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1496,7 +1045,7 @@ toExposingReport source exposing_ startRow startCol =
                     , D.reflow "Maybe there is a comma missing before this?"
                     )
 
-        CRES_ExposingTypePrivacy row col ->
+        T.CRES_ExposingTypePrivacy row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1541,7 +1090,7 @@ toExposingReport source exposing_ startRow startCol =
                         ]
                     )
 
-        CRES_ExposingIndentEnd row col ->
+        T.CRES_ExposingIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1574,7 +1123,7 @@ toExposingReport source exposing_ startRow startCol =
                         ]
                     )
 
-        CRES_ExposingIndentValue row col ->
+        T.CRES_ExposingIndentValue row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1595,10 +1144,10 @@ toExposingReport source exposing_ startRow startCol =
 -- SPACES
 
 
-toSpaceReport : Code.Source -> CRES_Space -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toSpaceReport : Code.Source -> T.CRES_Space -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toSpaceReport source space row col =
     case space of
-        CRES_HasTab ->
+        T.CRES_HasTab ->
             let
                 region : T.CRA_Region
                 region =
@@ -1610,7 +1159,7 @@ toSpaceReport source space row col =
                     , D.reflow "Replace the tab with spaces."
                     )
 
-        CRES_EndlessMultiComment ->
+        T.CRES_EndlessMultiComment ->
             let
                 region : T.CRA_Region
                 region =
@@ -1655,25 +1204,25 @@ toKeywordRegion row col keyword =
         (T.CRA_Position row (col + String.length keyword))
 
 
-toDeclarationsReport : Code.Source -> CRES_Decl -> Report.Report
+toDeclarationsReport : Code.Source -> T.CRES_Decl -> Report.Report
 toDeclarationsReport source decl =
     case decl of
-        CRES_DeclStart row col ->
+        T.CRES_DeclStart row col ->
             toDeclStartReport source row col
 
-        CRES_DeclSpace space row col ->
+        T.CRES_DeclSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_Port port_ row col ->
+        T.CRES_Port port_ row col ->
             toPortReport source port_ row col
 
-        CRES_DeclType declType row col ->
+        T.CRES_DeclType declType row col ->
             toDeclTypeReport source declType row col
 
-        CRES_DeclDef name declDef row col ->
+        T.CRES_DeclDef name declDef row col ->
             toDeclDefReport source name declDef row col
 
-        CRES_DeclFreshLineAfterDocComment row col ->
+        T.CRES_DeclFreshLineAfterDocComment row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -1853,13 +1402,13 @@ toDeclStartWeirdDeclarationReport source region =
 -- PORT
 
 
-toPortReport : Code.Source -> CRES_Port -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toPortReport : Code.Source -> T.CRES_Port -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPortReport source port_ startRow startCol =
     case port_ of
-        CRES_PortSpace space row col ->
+        T.CRES_PortSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_PortName row col ->
+        T.CRES_PortName row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -1916,7 +1465,7 @@ toPortReport source port_ startRow startCol =
                                 ]
                             )
 
-        CRES_PortColon row col ->
+        T.CRES_PortColon row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1935,10 +1484,10 @@ toPortReport source port_ startRow startCol =
                         ]
                     )
 
-        CRES_PortType tipe row col ->
+        T.CRES_PortType tipe row col ->
             toTypeReport source TC_Port tipe row col
 
-        CRES_PortIndentName row col ->
+        T.CRES_PortIndentName row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1977,7 +1526,7 @@ toPortReport source port_ startRow startCol =
                         ]
                     )
 
-        CRES_PortIndentColon row col ->
+        T.CRES_PortIndentColon row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -1996,7 +1545,7 @@ toPortReport source port_ startRow startCol =
                         ]
                     )
 
-        CRES_PortIndentType row col ->
+        T.CRES_PortIndentType row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2058,13 +1607,13 @@ portNote =
 -- DECL TYPE
 
 
-toDeclTypeReport : Code.Source -> CRES_DeclType -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toDeclTypeReport : Code.Source -> T.CRES_DeclType -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toDeclTypeReport source declType startRow startCol =
     case declType of
-        CRES_DT_Space space row col ->
+        T.CRES_DT_Space space row col ->
             toSpaceReport source space row col
 
-        CRES_DT_Name row col ->
+        T.CRES_DT_Name row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2107,13 +1656,13 @@ toDeclTypeReport source declType startRow startCol =
                         ]
                     )
 
-        CRES_DT_Alias typeAlias row col ->
+        T.CRES_DT_Alias typeAlias row col ->
             toTypeAliasReport source typeAlias row col
 
-        CRES_DT_Union customType row col ->
+        T.CRES_DT_Union customType row col ->
             toCustomTypeReport source customType row col
 
-        CRES_DT_IndentName row col ->
+        T.CRES_DT_IndentName row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2157,13 +1706,13 @@ toDeclTypeReport source declType startRow startCol =
                     )
 
 
-toTypeAliasReport : Code.Source -> CRES_TypeAlias -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toTypeAliasReport : Code.Source -> T.CRES_TypeAlias -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTypeAliasReport source typeAlias startRow startCol =
     case typeAlias of
-        CRES_AliasSpace space row col ->
+        T.CRES_AliasSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_AliasName row col ->
+        T.CRES_AliasName row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2206,7 +1755,7 @@ toTypeAliasReport source typeAlias startRow startCol =
                         ]
                     )
 
-        CRES_AliasEquals row col ->
+        T.CRES_AliasEquals row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -2250,10 +1799,10 @@ toTypeAliasReport source typeAlias startRow startCol =
                                 ]
                             )
 
-        CRES_AliasBody tipe row col ->
+        T.CRES_AliasBody tipe row col ->
             toTypeReport source TC_TypeAlias tipe row col
 
-        CRES_AliasIndentEquals row col ->
+        T.CRES_AliasIndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2272,7 +1821,7 @@ toTypeAliasReport source typeAlias startRow startCol =
                         ]
                     )
 
-        CRES_AliasIndentBody row col ->
+        T.CRES_AliasIndentBody row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2335,13 +1884,13 @@ typeAliasNote =
         ]
 
 
-toCustomTypeReport : Code.Source -> CRES_CustomType -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toCustomTypeReport : Code.Source -> T.CRES_CustomType -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCustomTypeReport source customType startRow startCol =
     case customType of
-        CRES_CT_Space space row col ->
+        T.CRES_CT_Space space row col ->
             toSpaceReport source space row col
 
-        CRES_CT_Name row col ->
+        T.CRES_CT_Name row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2384,7 +1933,7 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_Equals row col ->
+        T.CRES_CT_Equals row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -2427,7 +1976,7 @@ toCustomTypeReport source customType startRow startCol =
                                 ]
                             )
 
-        CRES_CT_Bar row col ->
+        T.CRES_CT_Bar row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2446,7 +1995,7 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_Variant row col ->
+        T.CRES_CT_Variant row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2490,10 +2039,10 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_VariantArg tipe row col ->
+        T.CRES_CT_VariantArg tipe row col ->
             toTypeReport source TC_CustomType tipe row col
 
-        CRES_CT_IndentEquals row col ->
+        T.CRES_CT_IndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2512,7 +2061,7 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_IndentBar row col ->
+        T.CRES_CT_IndentBar row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2531,7 +2080,7 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_IndentAfterBar row col ->
+        T.CRES_CT_IndentAfterBar row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2550,7 +2099,7 @@ toCustomTypeReport source customType startRow startCol =
                         ]
                     )
 
-        CRES_CT_IndentAfterEquals row col ->
+        T.CRES_CT_IndentAfterEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2589,13 +2138,13 @@ customTypeNote =
 -- DECL DEF
 
 
-toDeclDefReport : Code.Source -> T.CDN_Name -> CRES_DeclDef -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toDeclDefReport : Code.Source -> T.CDN_Name -> T.CRES_DeclDef -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toDeclDefReport source name declDef startRow startCol =
     case declDef of
-        CRES_DeclDefSpace space row col ->
+        T.CRES_DeclDefSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_DeclDefEquals row col ->
+        T.CRES_DeclDefEquals row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -2789,16 +2338,16 @@ toDeclDefReport source name declDef startRow startCol =
                                 ]
                             )
 
-        CRES_DeclDefType tipe row col ->
+        T.CRES_DeclDefType tipe row col ->
             toTypeReport source (TC_Annotation name) tipe row col
 
-        CRES_DeclDefArg pattern row col ->
+        T.CRES_DeclDefArg pattern row col ->
             toPatternReport source PArg pattern row col
 
-        CRES_DeclDefBody expr row col ->
+        T.CRES_DeclDefBody expr row col ->
             toExprReport source (InDef name startRow startCol) expr row col
 
-        CRES_DeclDefNameRepeat row col ->
+        T.CRES_DeclDefNameRepeat row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2820,7 +2369,7 @@ toDeclDefReport source name declDef startRow startCol =
                         ]
                     )
 
-        CRES_DeclDefNameMatch defName row col ->
+        T.CRES_DeclDefNameMatch defName row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2849,7 +2398,7 @@ toDeclDefReport source name declDef startRow startCol =
                         ]
                     )
 
-        CRES_DeclDefIndentType row col ->
+        T.CRES_DeclDefIndentType row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2871,7 +2420,7 @@ toDeclDefReport source name declDef startRow startCol =
                         ]
                     )
 
-        CRES_DeclDefIndentEquals row col ->
+        T.CRES_DeclDefIndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2893,7 +2442,7 @@ toDeclDefReport source name declDef startRow startCol =
                         ]
                     )
 
-        CRES_DeclDefIndentBody row col ->
+        T.CRES_DeclDefIndentBody row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -2985,31 +2534,31 @@ isWithin desiredNode context =
 -- EXPR REPORTS
 
 
-toExprReport : Code.Source -> Context -> CRES_Expr -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toExprReport : Code.Source -> Context -> T.CRES_Expr -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toExprReport source context expr startRow startCol =
     case expr of
-        CRES_Let let_ row col ->
+        T.CRES_Let let_ row col ->
             toLetReport source context let_ row col
 
-        CRES_Case case_ row col ->
+        T.CRES_Case case_ row col ->
             toCaseReport source context case_ row col
 
-        CRES_If if_ row col ->
+        T.CRES_If if_ row col ->
             toIfReport source context if_ row col
 
-        CRES_List list row col ->
+        T.CRES_List list row col ->
             toListReport source context list row col
 
-        CRES_Record record row col ->
+        T.CRES_Record record row col ->
             toRecordReport source context record row col
 
-        CRES_Tuple tuple row col ->
+        T.CRES_Tuple tuple row col ->
             toTupleReport source context tuple row col
 
-        CRES_Func func row col ->
+        T.CRES_Func func row col ->
             toFuncReport source context func row col
 
-        CRES_Dot row col ->
+        T.CRES_Dot row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -3034,7 +2583,7 @@ toExprReport source context expr startRow startCol =
                         ]
                     )
 
-        CRES_Access row col ->
+        T.CRES_Access row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -3062,7 +2611,7 @@ toExprReport source context expr startRow startCol =
                         ]
                     )
 
-        CRES_OperatorRight op row col ->
+        T.CRES_OperatorRight op row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -3146,10 +2695,10 @@ toExprReport source context expr startRow startCol =
                         D.reflow "I was expecting to see an expression next."
                     )
 
-        CRES_OperatorReserved operator row col ->
+        T.CRES_OperatorReserved operator row col ->
             toOperatorReport source context operator row col
 
-        CRES_Start row col ->
+        T.CRES_Start row col ->
             let
                 ( contextRow, contextCol, aThing ) =
                     case context of
@@ -3229,19 +2778,19 @@ toExprReport source context expr startRow startCol =
                         ]
                     )
 
-        CRES_Char char row col ->
+        T.CRES_Char char row col ->
             toCharReport source char row col
 
-        CRES_String_ string row col ->
+        T.CRES_String_ string row col ->
             toStringReport source string row col
 
-        CRES_Number number row col ->
+        T.CRES_Number number row col ->
             toNumberReport source number row col
 
-        CRES_Space space row col ->
+        T.CRES_Space space row col ->
             toSpaceReport source space row col
 
-        CRES_EndlessShader row col ->
+        T.CRES_EndlessShader row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -3253,7 +2802,7 @@ toExprReport source context expr startRow startCol =
                     , D.reflow "Add a |] somewhere after this to end the shader."
                     )
 
-        CRES_ShaderProblem problem row col ->
+        T.CRES_ShaderProblem problem row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -3268,7 +2817,7 @@ toExprReport source context expr startRow startCol =
                         ]
                     )
 
-        CRES_IndentOperatorRight op row col ->
+        T.CRES_IndentOperatorRight op row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -3318,10 +2867,10 @@ toExprReport source context expr startRow startCol =
 -- CHAR
 
 
-toCharReport : Code.Source -> CRES_Char -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toCharReport : Code.Source -> T.CRES_Char -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCharReport source char row col =
     case char of
-        CRES_CharEndless ->
+        T.CRES_CharEndless ->
             let
                 region : T.CRA_Region
                 region =
@@ -3334,10 +2883,10 @@ toCharReport source char row col =
                     , D.reflow "Add a closing single quote here!"
                     )
 
-        CRES_CharEscape escape ->
+        T.CRES_CharEscape escape ->
             toEscapeReport source escape row col
 
-        CRES_CharNotString width ->
+        T.CRES_CharNotString width ->
             let
                 region : T.CRA_Region
                 region =
@@ -3363,10 +2912,10 @@ toCharReport source char row col =
 -- STRING
 
 
-toStringReport : Code.Source -> CRES_String_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toStringReport : Code.Source -> T.CRES_String_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toStringReport source string row col =
     case string of
-        CRES_StringEndless_Single ->
+        T.CRES_StringEndless_Single ->
             let
                 region : T.CRA_Region
                 region =
@@ -3415,7 +2964,7 @@ toStringReport source string row col =
                         ]
                     )
 
-        CRES_StringEndless_Multi ->
+        T.CRES_StringEndless_Multi ->
             let
                 region : T.CRA_Region
                 region =
@@ -3443,7 +2992,7 @@ toStringReport source string row col =
                         ]
                     )
 
-        CRES_StringEscape escape ->
+        T.CRES_StringEscape escape ->
             toEscapeReport source escape row col
 
 
@@ -3451,10 +3000,10 @@ toStringReport source string row col =
 -- ESCAPES
 
 
-toEscapeReport : Code.Source -> CRES_Escape -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toEscapeReport : Code.Source -> T.CRES_Escape -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toEscapeReport source escape row col =
     case escape of
-        CRES_EscapeUnknown ->
+        T.CRES_EscapeUnknown ->
             let
                 region : T.CRA_Region
                 region =
@@ -3481,7 +3030,7 @@ toEscapeReport source escape row col =
                         ]
                     )
 
-        CRES_BadUnicodeFormat width ->
+        T.CRES_BadUnicodeFormat width ->
             let
                 region : T.CRA_Region
                 region =
@@ -3504,7 +3053,7 @@ toEscapeReport source escape row col =
                         ]
                     )
 
-        CRES_BadUnicodeCode width ->
+        T.CRES_BadUnicodeCode width ->
             let
                 region : T.CRA_Region
                 region =
@@ -3516,7 +3065,7 @@ toEscapeReport source escape row col =
                     , D.reflow "The valid code points are between 0 and 10FFFF inclusive."
                     )
 
-        CRES_BadUnicodeLength width numDigits badCode ->
+        T.CRES_BadUnicodeLength width numDigits badCode ->
             let
                 region : T.CRA_Region
                 region =
@@ -3576,7 +3125,7 @@ toEscapeReport source escape row col =
 -- NUMBERS
 
 
-toNumberReport : Code.Source -> CRES_Number -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toNumberReport : Code.Source -> T.CRES_Number -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toNumberReport source number row col =
     let
         region : T.CRA_Region
@@ -3584,7 +3133,7 @@ toNumberReport source number row col =
             toRegion row col
     in
     case number of
-        CRES_NumberEnd ->
+        T.CRES_NumberEnd ->
             Report.Report "WEIRD NUMBER" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I thought I was reading a number, but I ran into some weird stuff here:"
@@ -3601,7 +3150,7 @@ toNumberReport source number row col =
                         ]
                     )
 
-        CRES_NumberDot int ->
+        T.CRES_NumberDot int ->
             Report.Report "WEIRD NUMBER" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "Numbers cannot end with a dot like this:"
@@ -3617,7 +3166,7 @@ toNumberReport source number row col =
                         ]
                     )
 
-        CRES_NumberHexDigit ->
+        T.CRES_NumberHexDigit ->
             Report.Report "WEIRD HEXIDECIMAL" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I thought I was reading a hexidecimal number until I got here:"
@@ -3632,7 +3181,7 @@ toNumberReport source number row col =
                         ]
                     )
 
-        CRES_NumberNoLeadingZero ->
+        T.CRES_NumberNoLeadingZero ->
             Report.Report "LEADING ZEROS" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I do not accept numbers with leading zeros:"
@@ -3647,10 +3196,10 @@ toNumberReport source number row col =
 -- OPERATORS
 
 
-toOperatorReport : Code.Source -> Context -> CPS_BadOperator -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toOperatorReport : Code.Source -> Context -> T.CPS_BadOperator -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toOperatorReport source context operator row col =
     case operator of
-        CPS_BadDot ->
+        T.CPS_BadDot ->
             let
                 region : T.CRA_Region
                 region =
@@ -3662,7 +3211,7 @@ toOperatorReport source context operator row col =
                     , D.reflow "Dots are for record access and decimal points, so they cannot float around on their own. Maybe there is some extra whitespace?"
                     )
 
-        CPS_BadPipe ->
+        T.CPS_BadPipe ->
             let
                 region : T.CRA_Region
                 region =
@@ -3674,7 +3223,7 @@ toOperatorReport source context operator row col =
                     , D.reflow "Vertical bars should only appear in custom type declarations. Maybe you want || instead?"
                     )
 
-        CPS_BadArrow ->
+        T.CPS_BadArrow ->
             let
                 region : T.CRA_Region
                 region =
@@ -3710,7 +3259,7 @@ toOperatorReport source context operator row col =
                             ]
                         )
 
-        CPS_BadEquals ->
+        T.CPS_BadEquals ->
             let
                 region : T.CRA_Region
                 region =
@@ -3738,7 +3287,7 @@ toOperatorReport source context operator row col =
                         ]
                     )
 
-        CPS_BadHasType ->
+        T.CPS_BadHasType ->
             let
                 region : T.CRA_Region
                 region =
@@ -3801,13 +3350,13 @@ toOperatorReport source context operator row col =
 -- CASE
 
 
-toLetReport : Code.Source -> Context -> CRES_Let -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toLetReport : Code.Source -> Context -> T.CRES_Let -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetReport source context let_ startRow startCol =
     case let_ of
-        CRES_LetSpace space row col ->
+        T.CRES_LetSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_LetIn row col ->
+        T.CRES_LetIn row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -3846,7 +3395,7 @@ toLetReport source context let_ startRow startCol =
                         ]
                     )
 
-        CRES_LetDefAlignment _ row col ->
+        T.CRES_LetDefAlignment _ row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -3885,7 +3434,7 @@ toLetReport source context let_ startRow startCol =
                         ]
                     )
 
-        CRES_LetDefName row col ->
+        T.CRES_LetDefName row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -3912,21 +3461,21 @@ toLetReport source context let_ startRow startCol =
                         D.reflow
                             "I was expecting the name of a definition next."
 
-        CRES_LetDef name def row col ->
+        T.CRES_LetDef name def row col ->
             toLetDefReport source name def row col
 
-        CRES_LetDestruct destruct row col ->
+        T.CRES_LetDestruct destruct row col ->
             toLetDestructReport source destruct row col
 
-        CRES_LetBody expr row col ->
+        T.CRES_LetBody expr row col ->
             toExprReport source context expr row col
 
-        CRES_LetIndentDef row col ->
+        T.CRES_LetIndentDef row col ->
             toUnfinishLetReport source row col startRow startCol <|
                 D.reflow
                     "I was expecting a value to be defined here."
 
-        CRES_LetIndentIn row col ->
+        T.CRES_LetIndentIn row col ->
             toUnfinishLetReport source row col startRow startCol <|
                 D.fillSep
                     [ D.fromChars "I"
@@ -3946,7 +3495,7 @@ toLetReport source context let_ startRow startCol =
                     , D.fromChars "expression?"
                     ]
 
-        CRES_LetIndentBody row col ->
+        T.CRES_LetIndentBody row col ->
             toUnfinishLetReport source row col startRow startCol <|
                 D.reflow
                     "I was expecting an expression next. Tell me what should happen with the value you just defined!"
@@ -4003,16 +3552,16 @@ toUnfinishLetReport source row col startRow startCol message =
             )
 
 
-toLetDefReport : Code.Source -> T.CDN_Name -> CRES_Def -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toLetDefReport : Code.Source -> T.CDN_Name -> T.CRES_Def -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetDefReport source name def startRow startCol =
     case def of
-        CRES_DefSpace space row col ->
+        T.CRES_DefSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_DefType tipe row col ->
+        T.CRES_DefType tipe row col ->
             toTypeReport source (TC_Annotation name) tipe row col
 
-        CRES_DefNameRepeat row col ->
+        T.CRES_DefNameRepeat row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4031,7 +3580,7 @@ toLetDefReport source name def startRow startCol =
                         ]
                     )
 
-        CRES_DefNameMatch defName row col ->
+        T.CRES_DefNameMatch defName row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4055,10 +3604,10 @@ toLetDefReport source name def startRow startCol =
                         ]
                     )
 
-        CRES_DefArg pattern row col ->
+        T.CRES_DefArg pattern row col ->
             toPatternReport source PArg pattern row col
 
-        CRES_DefEquals row col ->
+        T.CRES_DefEquals row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -4243,10 +3792,10 @@ toLetDefReport source name def startRow startCol =
                                 ]
                             )
 
-        CRES_DefBody expr row col ->
+        T.CRES_DefBody expr row col ->
             toExprReport source (InDef name startRow startCol) expr row col
 
-        CRES_DefIndentEquals row col ->
+        T.CRES_DefIndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4265,7 +3814,7 @@ toLetDefReport source name def startRow startCol =
                         ]
                     )
 
-        CRES_DefIndentType row col ->
+        T.CRES_DefIndentType row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4284,7 +3833,7 @@ toLetDefReport source name def startRow startCol =
                         ]
                     )
 
-        CRES_DefIndentBody row col ->
+        T.CRES_DefIndentBody row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4303,7 +3852,7 @@ toLetDefReport source name def startRow startCol =
                         ]
                     )
 
-        CRES_DefAlignment indent row col ->
+        T.CRES_DefAlignment indent row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4354,16 +3903,16 @@ defNote =
         ]
 
 
-toLetDestructReport : Code.Source -> CRES_Destruct -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toLetDestructReport : Code.Source -> T.CRES_Destruct -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toLetDestructReport source destruct startRow startCol =
     case destruct of
-        CRES_DestructSpace space row col ->
+        T.CRES_DestructSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_DestructPattern pattern row col ->
+        T.CRES_DestructPattern pattern row col ->
             toPatternReport source PLet pattern row col
 
-        CRES_DestructEquals row col ->
+        T.CRES_DestructEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4387,10 +3936,10 @@ toLetDestructReport source destruct startRow startCol =
                             D.reflow "I was expecting to see an equals sign next, followed by an expression telling me what to compute."
                     )
 
-        CRES_DestructBody expr row col ->
+        T.CRES_DestructBody expr row col ->
             toExprReport source (InDestruct startRow startCol) expr row col
 
-        CRES_DestructIndentEquals row col ->
+        T.CRES_DestructIndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4406,7 +3955,7 @@ toLetDestructReport source destruct startRow startCol =
                     , D.reflow "I was expecting to see an equals sign next, followed by an expression telling me what to compute."
                     )
 
-        CRES_DestructIndentBody row col ->
+        T.CRES_DestructIndentBody row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4427,13 +3976,13 @@ toLetDestructReport source destruct startRow startCol =
 -- CASE
 
 
-toCaseReport : Code.Source -> Context -> CRES_Case -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toCaseReport : Code.Source -> Context -> T.CRES_Case -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toCaseReport source context case_ startRow startCol =
     case case_ of
-        CRES_CaseSpace space row col ->
+        T.CRES_CaseSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_CaseOf row col ->
+        T.CRES_CaseOf row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4452,10 +4001,10 @@ toCaseReport source context case_ startRow startCol =
                     ]
                 )
 
-        CRES_CasePattern pattern row col ->
+        T.CRES_CasePattern pattern row col ->
             toPatternReport source PCase pattern row col
 
-        CRES_CaseArrow row col ->
+        T.CRES_CaseArrow row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -4555,13 +4104,13 @@ toCaseReport source context case_ startRow startCol =
                             )
                         )
 
-        CRES_CaseExpr expr row col ->
+        T.CRES_CaseExpr expr row col ->
             toExprReport source (InNode NCase startRow startCol context) expr row col
 
-        CRES_CaseBranch expr row col ->
+        T.CRES_CaseBranch expr row col ->
             toExprReport source (InNode NBranch startRow startCol context) expr row col
 
-        CRES_CaseIndentOf row col ->
+        T.CRES_CaseIndentOf row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4580,7 +4129,7 @@ toCaseReport source context case_ startRow startCol =
                     ]
                 )
 
-        CRES_CaseIndentExpr row col ->
+        T.CRES_CaseIndentExpr row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4588,7 +4137,7 @@ toCaseReport source context case_ startRow startCol =
                 startCol
                 (D.reflow "I was expecting to see an expression next.")
 
-        CRES_CaseIndentPattern row col ->
+        T.CRES_CaseIndentPattern row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4596,7 +4145,7 @@ toCaseReport source context case_ startRow startCol =
                 startCol
                 (D.reflow "I was expecting to see a pattern next.")
 
-        CRES_CaseIndentArrow row col ->
+        T.CRES_CaseIndentArrow row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4620,7 +4169,7 @@ toCaseReport source context case_ startRow startCol =
                     ]
                 )
 
-        CRES_CaseIndentBranch row col ->
+        T.CRES_CaseIndentBranch row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4628,7 +4177,7 @@ toCaseReport source context case_ startRow startCol =
                 startCol
                 (D.reflow "I was expecting to see an expression next. What should I do when I run into this particular pattern?")
 
-        CRES_CasePatternAlignment indent row col ->
+        T.CRES_CasePatternAlignment indent row col ->
             toUnfinishCaseReport source
                 row
                 col
@@ -4694,13 +4243,13 @@ noteForCaseIndentError =
 -- IF
 
 
-toIfReport : Code.Source -> Context -> CRES_If -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toIfReport : Code.Source -> Context -> T.CRES_If -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toIfReport source context if_ startRow startCol =
     case if_ of
-        CRES_IfSpace space row col ->
+        T.CRES_IfSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_IfThen row col ->
+        T.CRES_IfThen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4726,7 +4275,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfElse row col ->
+        T.CRES_IfElse row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4752,7 +4301,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfElseBranchStart row col ->
+        T.CRES_IfElseBranchStart row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4768,16 +4317,16 @@ toIfReport source context if_ startRow startCol =
                     , D.reflow "I was expecting to see an expression next. Maybe it is not filled in yet?"
                     )
 
-        CRES_IfCondition expr row col ->
+        T.CRES_IfCondition expr row col ->
             toExprReport source (InNode NCond startRow startCol context) expr row col
 
-        CRES_IfThenBranch expr row col ->
+        T.CRES_IfThenBranch expr row col ->
             toExprReport source (InNode NThen startRow startCol context) expr row col
 
-        CRES_IfElseBranch expr row col ->
+        T.CRES_IfElseBranch expr row col ->
             toExprReport source (InNode NElse startRow startCol context) expr row col
 
-        CRES_IfIndentCondition row col ->
+        T.CRES_IfIndentCondition row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4812,7 +4361,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfIndentThen row col ->
+        T.CRES_IfIndentThen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4841,7 +4390,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfIndentThenBranch row col ->
+        T.CRES_IfIndentThenBranch row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4860,7 +4409,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfIndentElseBranch row col ->
+        T.CRES_IfIndentElseBranch row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -4879,7 +4428,7 @@ toIfReport source context if_ startRow startCol =
                         ]
                     )
 
-        CRES_IfIndentElse row col ->
+        T.CRES_IfIndentElse row col ->
             case Code.nextLineStartsWithKeyword "else" source row of
                 Just ( elseRow, elseCol ) ->
                     let
@@ -4963,10 +4512,10 @@ toIfReport source context if_ startRow startCol =
 -- RECORD
 
 
-toRecordReport : Code.Source -> Context -> CRES_Record -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toRecordReport : Code.Source -> Context -> T.CRES_Record -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toRecordReport source context record startRow startCol =
     case record of
-        CRES_RecordOpen row col ->
+        T.CRES_RecordOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -5028,7 +4577,7 @@ toRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_RecordEnd row col ->
+        T.CRES_RecordEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5069,7 +4618,7 @@ toRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_RecordField row col ->
+        T.CRES_RecordField row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -5169,7 +4718,7 @@ toRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_RecordEquals row col ->
+        T.CRES_RecordEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5212,13 +4761,13 @@ toRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_RecordExpr expr row col ->
+        T.CRES_RecordExpr expr row col ->
             toExprReport source (InNode NRecord startRow startCol context) expr row col
 
-        CRES_RecordSpace space row col ->
+        T.CRES_RecordSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_RecordIndentOpen row col ->
+        T.CRES_RecordIndentOpen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5253,7 +4802,7 @@ toRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_RecordIndentEnd row col ->
+        T.CRES_RecordIndentEnd row col ->
             case Code.nextLineStartsWithCloseCurly source row of
                 Just ( curlyRow, curlyCol ) ->
                     let
@@ -5314,7 +4863,7 @@ toRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_RecordIndentField row col ->
+        T.CRES_RecordIndentField row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5333,7 +4882,7 @@ toRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_RecordIndentEquals row col ->
+        T.CRES_RecordIndentEquals row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5361,7 +4910,7 @@ toRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_RecordIndentExpr row col ->
+        T.CRES_RecordIndentExpr row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5425,16 +4974,16 @@ noteForRecordIndentError =
 -- TUPLE
 
 
-toTupleReport : Code.Source -> Context -> CRES_Tuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toTupleReport : Code.Source -> Context -> T.CRES_Tuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTupleReport source context tuple startRow startCol =
     case tuple of
-        CRES_TupleExpr expr row col ->
+        T.CRES_TupleExpr expr row col ->
             toExprReport source (InNode NParens startRow startCol context) expr row col
 
-        CRES_TupleSpace space row col ->
+        T.CRES_TupleSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_TupleEnd row col ->
+        T.CRES_TupleEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5463,7 +5012,7 @@ toTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TupleOperatorClose row col ->
+        T.CRES_TupleOperatorClose row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5492,7 +5041,7 @@ toTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TupleOperatorReserved operator row col ->
+        T.CRES_TupleOperatorReserved operator row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5507,7 +5056,7 @@ toTupleReport source context tuple startRow startCol =
                     ( D.reflow "I ran into an unexpected symbol here:"
                     , D.fillSep
                         (case operator of
-                            CPS_BadDot ->
+                            T.CPS_BadDot ->
                                 [ D.fromChars "Maybe"
                                 , D.fromChars "you"
                                 , D.fromChars "wanted"
@@ -5521,7 +5070,7 @@ toTupleReport source context tuple startRow startCol =
                                 , D.fromChars "instead?"
                                 ]
 
-                            CPS_BadPipe ->
+                            T.CPS_BadPipe ->
                                 [ D.fromChars "Try"
                                 , D.dullyellow <| D.fromChars "(||)"
                                 , D.fromChars "instead?"
@@ -5534,7 +5083,7 @@ toTupleReport source context tuple startRow startCol =
                                 , D.fromChars "function?"
                                 ]
 
-                            CPS_BadArrow ->
+                            T.CPS_BadArrow ->
                                 [ D.fromChars "Maybe"
                                 , D.fromChars "you"
                                 , D.fromChars "wanted"
@@ -5544,7 +5093,7 @@ toTupleReport source context tuple startRow startCol =
                                 , D.fromChars "instead?"
                                 ]
 
-                            CPS_BadEquals ->
+                            T.CPS_BadEquals ->
                                 [ D.fromChars "Try"
                                 , D.dullyellow <| D.fromChars "(==)"
                                 , D.fromChars "instead?"
@@ -5557,7 +5106,7 @@ toTupleReport source context tuple startRow startCol =
                                 , D.fromChars "equality?"
                                 ]
 
-                            CPS_BadHasType ->
+                            T.CPS_BadHasType ->
                                 [ D.fromChars "Try"
                                 , D.dullyellow <| D.fromChars "(::)"
                                 , D.fromChars "instead?"
@@ -5573,7 +5122,7 @@ toTupleReport source context tuple startRow startCol =
                         )
                     )
 
-        CRES_TupleIndentExpr1 row col ->
+        T.CRES_TupleIndentExpr1 row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5608,7 +5157,7 @@ toTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TupleIndentExprN row col ->
+        T.CRES_TupleIndentExprN row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5645,7 +5194,7 @@ toTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TupleIndentEnd row col ->
+        T.CRES_TupleIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5675,13 +5224,13 @@ toTupleReport source context tuple startRow startCol =
                     )
 
 
-toListReport : Code.Source -> Context -> CRES_List_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toListReport : Code.Source -> Context -> T.CRES_List_ -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toListReport source context list startRow startCol =
     case list of
-        CRES_ListSpace space row col ->
+        T.CRES_ListSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_ListOpen row col ->
+        T.CRES_ListOpen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5723,9 +5272,9 @@ toListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_ListExpr expr row col ->
+        T.CRES_ListExpr expr row col ->
             case expr of
-                CRES_Start r c ->
+                T.CRES_Start r c ->
                     let
                         surroundings : T.CRA_Region
                         surroundings =
@@ -5755,7 +5304,7 @@ toListReport source context list startRow startCol =
                 _ ->
                     toExprReport source (InNode NList startRow startCol context) expr row col
 
-        CRES_ListEnd row col ->
+        T.CRES_ListEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5797,7 +5346,7 @@ toListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_ListIndentOpen row col ->
+        T.CRES_ListIndentOpen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5860,7 +5409,7 @@ toListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_ListIndentEnd row col ->
+        T.CRES_ListIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5904,7 +5453,7 @@ toListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_ListIndentExpr row col ->
+        T.CRES_ListIndentExpr row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -5932,19 +5481,19 @@ toListReport source context list startRow startCol =
                     )
 
 
-toFuncReport : Code.Source -> Context -> CRES_Func -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toFuncReport : Code.Source -> Context -> T.CRES_Func -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toFuncReport source context func startRow startCol =
     case func of
-        CRES_FuncSpace space row col ->
+        T.CRES_FuncSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_FuncArg pattern row col ->
+        T.CRES_FuncArg pattern row col ->
             toPatternReport source PArg pattern row col
 
-        CRES_FuncBody expr row col ->
+        T.CRES_FuncBody expr row col ->
             toExprReport source (InNode NFunc startRow startCol context) expr row col
 
-        CRES_FuncArrow row col ->
+        T.CRES_FuncArrow row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -5998,7 +5547,7 @@ toFuncReport source context func startRow startCol =
                                 ]
                             )
 
-        CRES_FuncIndentArg row col ->
+        T.CRES_FuncIndentArg row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6031,7 +5580,7 @@ toFuncReport source context func startRow startCol =
                         ]
                     )
 
-        CRES_FuncIndentArrow row col ->
+        T.CRES_FuncIndentArrow row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6070,7 +5619,7 @@ toFuncReport source context func startRow startCol =
                         ]
                     )
 
-        CRES_FuncIndentBody row col ->
+        T.CRES_FuncIndentBody row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6118,19 +5667,19 @@ type PContext
     | PLet
 
 
-toPatternReport : Code.Source -> PContext -> CRES_Pattern -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toPatternReport : Code.Source -> PContext -> T.CRES_Pattern -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPatternReport source context pattern startRow startCol =
     case pattern of
-        CRES_PRecord record row col ->
+        T.CRES_PRecord record row col ->
             toPRecordReport source record row col
 
-        CRES_PTuple tuple row col ->
+        T.CRES_PTuple tuple row col ->
             toPTupleReport source context tuple row col
 
-        CRES_PList list row col ->
+        T.CRES_PList list row col ->
             toPListReport source context list row col
 
-        CRES_PStart row col ->
+        T.CRES_PStart row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -6226,16 +5775,16 @@ toPatternReport source context pattern startRow startCol =
                                 ]
                             )
 
-        CRES_PChar char row col ->
+        T.CRES_PChar char row col ->
             toCharReport source char row col
 
-        CRES_PString string row col ->
+        T.CRES_PString string row col ->
             toStringReport source string row col
 
-        CRES_PNumber number row col ->
+        T.CRES_PNumber number row col ->
             toNumberReport source number row col
 
-        CRES_PFloat width row col ->
+        T.CRES_PFloat width row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -6271,7 +5820,7 @@ toPatternReport source context pattern startRow startCol =
                         ]
                     )
 
-        CRES_PAlias row col ->
+        T.CRES_PAlias row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -6329,7 +5878,7 @@ toPatternReport source context pattern startRow startCol =
                         ]
                     )
 
-        CRES_PWildcardNotVar name width row col ->
+        T.CRES_PWildcardNotVar name width row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -6379,10 +5928,10 @@ toPatternReport source context pattern startRow startCol =
                         )
                     )
 
-        CRES_PSpace space row col ->
+        T.CRES_PSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_PIndentStart row col ->
+        T.CRES_PIndentStart row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6432,7 +5981,7 @@ toPatternReport source context pattern startRow startCol =
                         ]
                     )
 
-        CRES_PIndentAlias row col ->
+        T.CRES_PIndentAlias row col ->
             let
                 region : T.CRA_Region
                 region =
@@ -6490,14 +6039,14 @@ toPatternReport source context pattern startRow startCol =
                     )
 
 
-toPRecordReport : Code.Source -> CRES_PRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toPRecordReport : Code.Source -> T.CRES_PRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPRecordReport source record startRow startCol =
     case record of
-        CRES_PRecordOpen row col ->
+        T.CRES_PRecordOpen row col ->
             toUnfinishRecordPatternReport source row col startRow startCol <|
                 D.reflow "I was expecting to see a field name next."
 
-        CRES_PRecordEnd row col ->
+        T.CRES_PRecordEnd row col ->
             toUnfinishRecordPatternReport source row col startRow startCol <|
                 D.fillSep
                     [ D.fromChars "I"
@@ -6517,7 +6066,7 @@ toPRecordReport source record startRow startCol =
                     , D.fromChars "here?"
                     ]
 
-        CRES_PRecordField row col ->
+        T.CRES_PRecordField row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -6543,14 +6092,14 @@ toPRecordReport source record startRow startCol =
                     toUnfinishRecordPatternReport source row col startRow startCol <|
                         D.reflow "I was expecting to see a field name next."
 
-        CRES_PRecordSpace space row col ->
+        T.CRES_PRecordSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_PRecordIndentOpen row col ->
+        T.CRES_PRecordIndentOpen row col ->
             toUnfinishRecordPatternReport source row col startRow startCol <|
                 D.reflow "I was expecting to see a field name next."
 
-        CRES_PRecordIndentEnd row col ->
+        T.CRES_PRecordIndentEnd row col ->
             toUnfinishRecordPatternReport source row col startRow startCol <|
                 D.fillSep
                     [ D.fromChars "I"
@@ -6570,7 +6119,7 @@ toPRecordReport source record startRow startCol =
                     , D.fromChars "here?"
                     ]
 
-        CRES_PRecordIndentField row col ->
+        T.CRES_PRecordIndentField row col ->
             toUnfinishRecordPatternReport source row col startRow startCol <|
                 D.reflow "I was expecting to see a field name next."
 
@@ -6615,10 +6164,10 @@ toUnfinishRecordPatternReport source row col startRow startCol message =
             )
 
 
-toPTupleReport : Code.Source -> PContext -> CRES_PTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toPTupleReport : Code.Source -> PContext -> T.CRES_PTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPTupleReport source context tuple startRow startCol =
     case tuple of
-        CRES_PTupleOpen row col ->
+        T.CRES_PTupleOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -6678,7 +6227,7 @@ toPTupleReport source context tuple startRow startCol =
                                 ]
                             )
 
-        CRES_PTupleEnd row col ->
+        T.CRES_PTupleEnd row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -6779,13 +6328,13 @@ toPTupleReport source context tuple startRow startCol =
                                 ]
                             )
 
-        CRES_PTupleExpr pattern row col ->
+        T.CRES_PTupleExpr pattern row col ->
             toPatternReport source context pattern row col
 
-        CRES_PTupleSpace space row col ->
+        T.CRES_PTupleSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_PTupleIndentEnd row col ->
+        T.CRES_PTupleIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6816,7 +6365,7 @@ toPTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_PTupleIndentExpr1 row col ->
+        T.CRES_PTupleIndentExpr1 row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6854,7 +6403,7 @@ toPTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_PTupleIndentExprN row col ->
+        T.CRES_PTupleIndentExprN row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6899,10 +6448,10 @@ toPTupleReport source context tuple startRow startCol =
                     )
 
 
-toPListReport : Code.Source -> PContext -> CRES_PList -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toPListReport : Code.Source -> PContext -> T.CRES_PList -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toPListReport source context list startRow startCol =
     case list of
-        CRES_PListOpen row col ->
+        T.CRES_PListOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -6946,7 +6495,7 @@ toPListReport source context list startRow startCol =
                                 ]
                             )
 
-        CRES_PListEnd row col ->
+        T.CRES_PListEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -6972,13 +6521,13 @@ toPListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_PListExpr pattern row col ->
+        T.CRES_PListExpr pattern row col ->
             toPatternReport source context pattern row col
 
-        CRES_PListSpace space row col ->
+        T.CRES_PListSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_PListIndentOpen row col ->
+        T.CRES_PListIndentOpen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7007,7 +6556,7 @@ toPListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_PListIndentEnd row col ->
+        T.CRES_PListIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7036,7 +6585,7 @@ toPListReport source context list startRow startCol =
                         ]
                     )
 
-        CRES_PListIndentExpr row col ->
+        T.CRES_PListIndentExpr row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7067,16 +6616,16 @@ type TContext
     | TC_Port
 
 
-toTypeReport : Code.Source -> TContext -> CRES_Type -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toTypeReport : Code.Source -> TContext -> T.CRES_Type -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTypeReport source context tipe startRow startCol =
     case tipe of
-        CRES_TRecord record row col ->
+        T.CRES_TRecord record row col ->
             toTRecordReport source context record row col
 
-        CRES_TTuple tuple row col ->
+        T.CRES_TTuple tuple row col ->
             toTTupleReport source context tuple row col
 
-        CRES_TStart row col ->
+        T.CRES_TStart row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -7156,10 +6705,10 @@ toTypeReport source context tipe startRow startCol =
                                 ]
                             )
 
-        CRES_TSpace space row col ->
+        T.CRES_TSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_TIndentStart row col ->
+        T.CRES_TIndentStart row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7210,10 +6759,10 @@ toTypeReport source context tipe startRow startCol =
                     )
 
 
-toTRecordReport : Code.Source -> TContext -> CRES_TRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toTRecordReport : Code.Source -> TContext -> T.CRES_TRecord -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTRecordReport source context record startRow startCol =
     case record of
-        CRES_TRecordOpen row col ->
+        T.CRES_TRecordOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -7263,7 +6812,7 @@ toTRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_TRecordEnd row col ->
+        T.CRES_TRecordEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7304,7 +6853,7 @@ toTRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_TRecordField row col ->
+        T.CRES_TRecordField row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -7403,7 +6952,7 @@ toTRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_TRecordColon row col ->
+        T.CRES_TRecordColon row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7445,13 +6994,13 @@ toTRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_TRecordType tipe row col ->
+        T.CRES_TRecordType tipe row col ->
             toTypeReport source context tipe row col
 
-        CRES_TRecordSpace space row col ->
+        T.CRES_TRecordSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_TRecordIndentOpen row col ->
+        T.CRES_TRecordIndentOpen row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7486,7 +7035,7 @@ toTRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_TRecordIndentEnd row col ->
+        T.CRES_TRecordIndentEnd row col ->
             case Code.nextLineStartsWithCloseCurly source row of
                 Just ( curlyRow, curlyCol ) ->
                     let
@@ -7547,7 +7096,7 @@ toTRecordReport source context record startRow startCol =
                                 ]
                             )
 
-        CRES_TRecordIndentField row col ->
+        T.CRES_TRecordIndentField row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7566,7 +7115,7 @@ toTRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_TRecordIndentColon row col ->
+        T.CRES_TRecordIndentColon row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7594,7 +7143,7 @@ toTRecordReport source context record startRow startCol =
                         ]
                     )
 
-        CRES_TRecordIndentType row col ->
+        T.CRES_TRecordIndentType row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7658,10 +7207,10 @@ noteForRecordTypeIndentError =
         ]
 
 
-toTTupleReport : Code.Source -> TContext -> CRES_TTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
+toTTupleReport : Code.Source -> TContext -> T.CRES_TTuple -> T.CPP_Row -> T.CPP_Col -> Report.Report
 toTTupleReport source context tuple startRow startCol =
     case tuple of
-        CRES_TTupleOpen row col ->
+        T.CRES_TTupleOpen row col ->
             case Code.whatIsNext source row col of
                 Code.Keyword keyword ->
                     let
@@ -7713,7 +7262,7 @@ toTTupleReport source context tuple startRow startCol =
                                 ]
                             )
 
-        CRES_TTupleEnd row col ->
+        T.CRES_TTupleEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7744,13 +7293,13 @@ toTTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TTupleType tipe row col ->
+        T.CRES_TTupleType tipe row col ->
             toTypeReport source context tipe row col
 
-        CRES_TTupleSpace space row col ->
+        T.CRES_TTupleSpace space row col ->
             toSpaceReport source space row col
 
-        CRES_TTupleIndentType1 row col ->
+        T.CRES_TTupleIndentType1 row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7786,7 +7335,7 @@ toTTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TTupleIndentTypeN row col ->
+        T.CRES_TTupleIndentTypeN row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7825,7 +7374,7 @@ toTTupleReport source context tuple startRow startCol =
                         ]
                     )
 
-        CRES_TTupleIndentEnd row col ->
+        T.CRES_TTupleIndentEnd row col ->
             let
                 surroundings : T.CRA_Region
                 surroundings =
@@ -7861,127 +7410,127 @@ toTTupleReport source context tuple startRow startCol =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : CRES_Error -> Encode.Value
+errorEncoder : T.CRES_Error -> Encode.Value
 errorEncoder error =
     case error of
-        CRES_ModuleNameUnspecified name ->
+        T.CRES_ModuleNameUnspecified name ->
             Encode.object
                 [ ( "type", Encode.string "ModuleNameUnspecified" )
                 , ( "name", ModuleName.rawEncoder name )
                 ]
 
-        CRES_ModuleNameMismatch expectedName actualName ->
+        T.CRES_ModuleNameMismatch expectedName actualName ->
             Encode.object
                 [ ( "type", Encode.string "ModuleNameMismatch" )
                 , ( "expectedName", ModuleName.rawEncoder expectedName )
                 , ( "actualName", A.locatedEncoder ModuleName.rawEncoder actualName )
                 ]
 
-        CRES_UnexpectedPort region ->
+        T.CRES_UnexpectedPort region ->
             Encode.object
                 [ ( "type", Encode.string "UnexpectedPort" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRES_NoPorts region ->
+        T.CRES_NoPorts region ->
             Encode.object
                 [ ( "type", Encode.string "NoPorts" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRES_NoPortsInPackage name ->
+        T.CRES_NoPortsInPackage name ->
             Encode.object
                 [ ( "type", Encode.string "NoPortsInPackage" )
                 , ( "name", A.locatedEncoder Encode.string name )
                 ]
 
-        CRES_NoPortModulesInPackage region ->
+        T.CRES_NoPortModulesInPackage region ->
             Encode.object
                 [ ( "type", Encode.string "NoPortModulesInPackage" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRES_NoEffectsOutsideKernel region ->
+        T.CRES_NoEffectsOutsideKernel region ->
             Encode.object
                 [ ( "type", Encode.string "NoEffectsOutsideKernel" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRES_ParseError modul ->
+        T.CRES_ParseError modul ->
             Encode.object
                 [ ( "type", Encode.string "ParseError" )
                 , ( "modul", moduleEncoder modul )
                 ]
 
 
-errorDecoder : Decode.Decoder CRES_Error
+errorDecoder : Decode.Decoder T.CRES_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ModuleNameUnspecified" ->
-                        Decode.map CRES_ModuleNameUnspecified (Decode.field "name" ModuleName.rawDecoder)
+                        Decode.map T.CRES_ModuleNameUnspecified (Decode.field "name" ModuleName.rawDecoder)
 
                     "ModuleNameMismatch" ->
-                        Decode.map2 CRES_ModuleNameMismatch
+                        Decode.map2 T.CRES_ModuleNameMismatch
                             (Decode.field "expectedName" ModuleName.rawDecoder)
                             (Decode.field "actualName" (A.locatedDecoder ModuleName.rawDecoder))
 
                     "UnexpectedPort" ->
-                        Decode.map CRES_UnexpectedPort (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRES_UnexpectedPort (Decode.field "region" A.regionDecoder)
 
                     "NoPorts" ->
-                        Decode.map CRES_NoPorts (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRES_NoPorts (Decode.field "region" A.regionDecoder)
 
                     "NoPortsInPackage" ->
-                        Decode.map CRES_NoPortsInPackage (Decode.field "name" (A.locatedDecoder Decode.string))
+                        Decode.map T.CRES_NoPortsInPackage (Decode.field "name" (A.locatedDecoder Decode.string))
 
                     "NoPortModulesInPackage" ->
-                        Decode.map CRES_NoPortModulesInPackage (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRES_NoPortModulesInPackage (Decode.field "region" A.regionDecoder)
 
                     "NoEffectsOutsideKernel" ->
-                        Decode.map CRES_NoEffectsOutsideKernel (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRES_NoEffectsOutsideKernel (Decode.field "region" A.regionDecoder)
 
                     "ParseError" ->
-                        Decode.map CRES_ParseError (Decode.field "modul" moduleDecoder)
+                        Decode.map T.CRES_ParseError (Decode.field "modul" moduleDecoder)
 
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
 
 
-spaceEncoder : CRES_Space -> Encode.Value
+spaceEncoder : T.CRES_Space -> Encode.Value
 spaceEncoder space =
     case space of
-        CRES_HasTab ->
+        T.CRES_HasTab ->
             Encode.string "HasTab"
 
-        CRES_EndlessMultiComment ->
+        T.CRES_EndlessMultiComment ->
             Encode.string "EndlessMultiComment"
 
 
-spaceDecoder : Decode.Decoder CRES_Space
+spaceDecoder : Decode.Decoder T.CRES_Space
 spaceDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "HasTab" ->
-                        Decode.succeed CRES_HasTab
+                        Decode.succeed T.CRES_HasTab
 
                     "EndlessMultiComment" ->
-                        Decode.succeed CRES_EndlessMultiComment
+                        Decode.succeed T.CRES_EndlessMultiComment
 
                     _ ->
                         Decode.fail ("Unknown Space: " ++ str)
             )
 
 
-moduleEncoder : CRES_Module -> Encode.Value
+moduleEncoder : T.CRES_Module -> Encode.Value
 moduleEncoder modul =
     case modul of
-        CRES_ModuleSpace space row col ->
+        T.CRES_ModuleSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "ModuleSpace" )
                 , ( "space", spaceEncoder space )
@@ -7989,28 +7538,28 @@ moduleEncoder modul =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ModuleBadEnd row col ->
+        T.CRES_ModuleBadEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ModuleBadEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ModuleProblem row col ->
+        T.CRES_ModuleProblem row col ->
             Encode.object
                 [ ( "type", Encode.string "ModuleProblem" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ModuleName row col ->
+        T.CRES_ModuleName row col ->
             Encode.object
                 [ ( "type", Encode.string "ModuleName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ModuleExposing exposing_ row col ->
+        T.CRES_ModuleExposing exposing_ row col ->
             Encode.object
                 [ ( "type", Encode.string "ModuleExposing" )
                 , ( "exposing", exposingEncoder exposing_ )
@@ -8018,21 +7567,21 @@ moduleEncoder modul =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortModuleProblem row col ->
+        T.CRES_PortModuleProblem row col ->
             Encode.object
                 [ ( "type", Encode.string "PortModuleProblem" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortModuleName row col ->
+        T.CRES_PortModuleName row col ->
             Encode.object
                 [ ( "type", Encode.string "PortModuleName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortModuleExposing exposing_ row col ->
+        T.CRES_PortModuleExposing exposing_ row col ->
             Encode.object
                 [ ( "type", Encode.string "PortModuleExposing" )
                 , ( "exposing", exposingEncoder exposing_ )
@@ -8040,56 +7589,56 @@ moduleEncoder modul =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Effect row col ->
+        T.CRES_Effect row col ->
             Encode.object
                 [ ( "type", Encode.string "Effect" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FreshLine row col ->
+        T.CRES_FreshLine row col ->
             Encode.object
                 [ ( "type", Encode.string "FreshLine" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportStart row col ->
+        T.CRES_ImportStart row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportName row col ->
+        T.CRES_ImportName row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportAs row col ->
+        T.CRES_ImportAs row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportAs" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportAlias row col ->
+        T.CRES_ImportAlias row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportAlias" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportExposing row col ->
+        T.CRES_ImportExposing row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportExposing" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportExposingList exposing_ row col ->
+        T.CRES_ImportExposingList exposing_ row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportExposingList" )
                 , ( "exposing", exposingEncoder exposing_ )
@@ -8097,42 +7646,42 @@ moduleEncoder modul =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportEnd row col ->
+        T.CRES_ImportEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportIndentName row col ->
+        T.CRES_ImportIndentName row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportIndentName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportIndentAlias row col ->
+        T.CRES_ImportIndentAlias row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportIndentAlias" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ImportIndentExposingList row col ->
+        T.CRES_ImportIndentExposingList row col ->
             Encode.object
                 [ ( "type", Encode.string "ImportIndentExposingList" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Infix row col ->
+        T.CRES_Infix row col ->
             Encode.object
                 [ ( "type", Encode.string "Infix" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Declarations decl row col ->
+        T.CRES_Declarations decl row col ->
             Encode.object
                 [ ( "type", Encode.string "Declarations" )
                 , ( "decl", declEncoder decl )
@@ -8141,123 +7690,123 @@ moduleEncoder modul =
                 ]
 
 
-moduleDecoder : Decode.Decoder CRES_Module
+moduleDecoder : Decode.Decoder T.CRES_Module
 moduleDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ModuleSpace" ->
-                        Decode.map3 CRES_ModuleSpace
+                        Decode.map3 T.CRES_ModuleSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ModuleBadEnd" ->
-                        Decode.map2 CRES_ModuleBadEnd
+                        Decode.map2 T.CRES_ModuleBadEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ModuleProblem" ->
-                        Decode.map2 CRES_ModuleProblem
+                        Decode.map2 T.CRES_ModuleProblem
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ModuleName" ->
-                        Decode.map2 CRES_ModuleName
+                        Decode.map2 T.CRES_ModuleName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ModuleExposing" ->
-                        Decode.map3 CRES_ModuleExposing
+                        Decode.map3 T.CRES_ModuleExposing
                             (Decode.field "exposing" exposingDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortModuleProblem" ->
-                        Decode.map2 CRES_PortModuleProblem
+                        Decode.map2 T.CRES_PortModuleProblem
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortModuleName" ->
-                        Decode.map2 CRES_PortModuleName
+                        Decode.map2 T.CRES_PortModuleName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortModuleExposing" ->
-                        Decode.map3 CRES_PortModuleExposing
+                        Decode.map3 T.CRES_PortModuleExposing
                             (Decode.field "exposing" exposingDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Effect" ->
-                        Decode.map2 CRES_Effect
+                        Decode.map2 T.CRES_Effect
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FreshLine" ->
-                        Decode.map2 CRES_FreshLine
+                        Decode.map2 T.CRES_FreshLine
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportStart" ->
-                        Decode.map2 CRES_ImportStart
+                        Decode.map2 T.CRES_ImportStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportName" ->
-                        Decode.map2 CRES_ImportName
+                        Decode.map2 T.CRES_ImportName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportAs" ->
-                        Decode.map2 CRES_ImportAs
+                        Decode.map2 T.CRES_ImportAs
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportAlias" ->
-                        Decode.map2 CRES_ImportAlias
+                        Decode.map2 T.CRES_ImportAlias
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportExposing" ->
-                        Decode.map2 CRES_ImportExposing
+                        Decode.map2 T.CRES_ImportExposing
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportExposingList" ->
-                        Decode.map3 CRES_ImportExposingList
+                        Decode.map3 T.CRES_ImportExposingList
                             (Decode.field "exposing" exposingDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportEnd" ->
-                        Decode.map2 CRES_ImportEnd
+                        Decode.map2 T.CRES_ImportEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportIndentName" ->
-                        Decode.map2 CRES_ImportIndentName
+                        Decode.map2 T.CRES_ImportIndentName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportIndentAlias" ->
-                        Decode.map2 CRES_ImportIndentAlias
+                        Decode.map2 T.CRES_ImportIndentAlias
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ImportIndentExposingList" ->
-                        Decode.map2 CRES_ImportIndentExposingList
+                        Decode.map2 T.CRES_ImportIndentExposingList
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Infix" ->
-                        Decode.map2 CRES_Infix
+                        Decode.map2 T.CRES_Infix
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Declarations" ->
-                        Decode.map3 CRES_Declarations
+                        Decode.map3 T.CRES_Declarations
                             (Decode.field "decl" declDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
@@ -8267,10 +7816,10 @@ moduleDecoder =
             )
 
 
-exposingEncoder : CRES_Exposing -> Encode.Value
+exposingEncoder : T.CRES_Exposing -> Encode.Value
 exposingEncoder exposing_ =
     case exposing_ of
-        CRES_ExposingSpace space row col ->
+        T.CRES_ExposingSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingSpace" )
                 , ( "space", spaceEncoder space )
@@ -8278,28 +7827,28 @@ exposingEncoder exposing_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingStart row col ->
+        T.CRES_ExposingStart row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingValue row col ->
+        T.CRES_ExposingValue row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingValue" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingOperator row col ->
+        T.CRES_ExposingOperator row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingOperator" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingOperatorReserved op row col ->
+        T.CRES_ExposingOperatorReserved op row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingOperatorReserved" )
                 , ( "op", Compiler.Parse.Symbol.badOperatorEncoder op )
@@ -8307,35 +7856,35 @@ exposingEncoder exposing_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingOperatorRightParen row col ->
+        T.CRES_ExposingOperatorRightParen row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingOperatorRightParen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingTypePrivacy row col ->
+        T.CRES_ExposingTypePrivacy row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingTypePrivacy" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingEnd row col ->
+        T.CRES_ExposingEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingIndentEnd row col ->
+        T.CRES_ExposingIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ExposingIndentValue row col ->
+        T.CRES_ExposingIndentValue row col ->
             Encode.object
                 [ ( "type", Encode.string "ExposingIndentValue" )
                 , ( "row", Encode.int row )
@@ -8343,61 +7892,61 @@ exposingEncoder exposing_ =
                 ]
 
 
-exposingDecoder : Decode.Decoder CRES_Exposing
+exposingDecoder : Decode.Decoder T.CRES_Exposing
 exposingDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ExposingSpace" ->
-                        Decode.map3 CRES_ExposingSpace
+                        Decode.map3 T.CRES_ExposingSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingStart" ->
-                        Decode.map2 CRES_ExposingStart
+                        Decode.map2 T.CRES_ExposingStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingValue" ->
-                        Decode.map2 CRES_ExposingValue
+                        Decode.map2 T.CRES_ExposingValue
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingOperator" ->
-                        Decode.map2 CRES_ExposingOperator
+                        Decode.map2 T.CRES_ExposingOperator
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingOperatorReserved" ->
-                        Decode.map3 CRES_ExposingOperatorReserved
+                        Decode.map3 T.CRES_ExposingOperatorReserved
                             (Decode.field "op" Compiler.Parse.Symbol.badOperatorDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingOperatorRightParen" ->
-                        Decode.map2 CRES_ExposingOperatorRightParen
+                        Decode.map2 T.CRES_ExposingOperatorRightParen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingTypePrivacy" ->
-                        Decode.map2 CRES_ExposingTypePrivacy
+                        Decode.map2 T.CRES_ExposingTypePrivacy
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingEnd" ->
-                        Decode.map2 CRES_ExposingEnd
+                        Decode.map2 T.CRES_ExposingEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingIndentEnd" ->
-                        Decode.map2 CRES_ExposingIndentEnd
+                        Decode.map2 T.CRES_ExposingIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ExposingIndentValue" ->
-                        Decode.map2 CRES_ExposingIndentValue
+                        Decode.map2 T.CRES_ExposingIndentValue
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8406,17 +7955,17 @@ exposingDecoder =
             )
 
 
-declEncoder : CRES_Decl -> Encode.Value
+declEncoder : T.CRES_Decl -> Encode.Value
 declEncoder decl =
     case decl of
-        CRES_DeclStart row col ->
+        T.CRES_DeclStart row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclSpace space row col ->
+        T.CRES_DeclSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclSpace" )
                 , ( "space", spaceEncoder space )
@@ -8424,7 +7973,7 @@ declEncoder decl =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Port port_ row col ->
+        T.CRES_Port port_ row col ->
             Encode.object
                 [ ( "type", Encode.string "Port" )
                 , ( "port", portEncoder port_ )
@@ -8432,7 +7981,7 @@ declEncoder decl =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclType declType row col ->
+        T.CRES_DeclType declType row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclType" )
                 , ( "declType", declTypeEncoder declType )
@@ -8440,7 +7989,7 @@ declEncoder decl =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDef name declDef row col ->
+        T.CRES_DeclDef name declDef row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDef" )
                 , ( "name", Encode.string name )
@@ -8449,7 +7998,7 @@ declEncoder decl =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclFreshLineAfterDocComment row col ->
+        T.CRES_DeclFreshLineAfterDocComment row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclFreshLineAfterDocComment" )
                 , ( "row", Encode.int row )
@@ -8457,44 +8006,44 @@ declEncoder decl =
                 ]
 
 
-declDecoder : Decode.Decoder CRES_Decl
+declDecoder : Decode.Decoder T.CRES_Decl
 declDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DeclStart" ->
-                        Decode.map2 CRES_DeclStart
+                        Decode.map2 T.CRES_DeclStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclSpace" ->
-                        Decode.map3 CRES_DeclSpace
+                        Decode.map3 T.CRES_DeclSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Port" ->
-                        Decode.map3 CRES_Port
+                        Decode.map3 T.CRES_Port
                             (Decode.field "port" portDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclType" ->
-                        Decode.map3 CRES_DeclType
+                        Decode.map3 T.CRES_DeclType
                             (Decode.field "declType" declTypeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDef" ->
-                        Decode.map4 CRES_DeclDef
+                        Decode.map4 T.CRES_DeclDef
                             (Decode.field "name" Decode.string)
                             (Decode.field "declDef" declDefDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclFreshLineAfterDocComment" ->
-                        Decode.map2 CRES_DeclFreshLineAfterDocComment
+                        Decode.map2 T.CRES_DeclFreshLineAfterDocComment
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8503,10 +8052,10 @@ declDecoder =
             )
 
 
-portEncoder : CRES_Port -> Encode.Value
+portEncoder : T.CRES_Port -> Encode.Value
 portEncoder port_ =
     case port_ of
-        CRES_PortSpace space row col ->
+        T.CRES_PortSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PortSpace" )
                 , ( "space", spaceEncoder space )
@@ -8514,21 +8063,21 @@ portEncoder port_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortName row col ->
+        T.CRES_PortName row col ->
             Encode.object
                 [ ( "type", Encode.string "PortName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortColon row col ->
+        T.CRES_PortColon row col ->
             Encode.object
                 [ ( "type", Encode.string "PortColon" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortType tipe row col ->
+        T.CRES_PortType tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "PortType" )
                 , ( "tipe", typeEncoder tipe )
@@ -8536,21 +8085,21 @@ portEncoder port_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortIndentName row col ->
+        T.CRES_PortIndentName row col ->
             Encode.object
                 [ ( "type", Encode.string "PortIndentName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortIndentColon row col ->
+        T.CRES_PortIndentColon row col ->
             Encode.object
                 [ ( "type", Encode.string "PortIndentColon" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PortIndentType row col ->
+        T.CRES_PortIndentType row col ->
             Encode.object
                 [ ( "type", Encode.string "PortIndentType" )
                 , ( "row", Encode.int row )
@@ -8558,46 +8107,46 @@ portEncoder port_ =
                 ]
 
 
-portDecoder : Decode.Decoder CRES_Port
+portDecoder : Decode.Decoder T.CRES_Port
 portDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PortSpace" ->
-                        Decode.map3 CRES_PortSpace
+                        Decode.map3 T.CRES_PortSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortName" ->
-                        Decode.map2 CRES_PortName
+                        Decode.map2 T.CRES_PortName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortColon" ->
-                        Decode.map2 CRES_PortColon
+                        Decode.map2 T.CRES_PortColon
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortType" ->
-                        Decode.map3 CRES_PortType
+                        Decode.map3 T.CRES_PortType
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortIndentName" ->
-                        Decode.map2 CRES_PortIndentName
+                        Decode.map2 T.CRES_PortIndentName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortIndentColon" ->
-                        Decode.map2 CRES_PortIndentColon
+                        Decode.map2 T.CRES_PortIndentColon
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PortIndentType" ->
-                        Decode.map2 CRES_PortIndentType
+                        Decode.map2 T.CRES_PortIndentType
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8606,10 +8155,10 @@ portDecoder =
             )
 
 
-declTypeEncoder : CRES_DeclType -> Encode.Value
+declTypeEncoder : T.CRES_DeclType -> Encode.Value
 declTypeEncoder declType =
     case declType of
-        CRES_DT_Space space row col ->
+        T.CRES_DT_Space space row col ->
             Encode.object
                 [ ( "type", Encode.string "DT_Space" )
                 , ( "space", spaceEncoder space )
@@ -8617,14 +8166,14 @@ declTypeEncoder declType =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DT_Name row col ->
+        T.CRES_DT_Name row col ->
             Encode.object
                 [ ( "type", Encode.string "DT_Name" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DT_Alias typeAlias row col ->
+        T.CRES_DT_Alias typeAlias row col ->
             Encode.object
                 [ ( "type", Encode.string "DT_Alias" )
                 , ( "typeAlias", typeAliasEncoder typeAlias )
@@ -8632,7 +8181,7 @@ declTypeEncoder declType =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DT_Union customType row col ->
+        T.CRES_DT_Union customType row col ->
             Encode.object
                 [ ( "type", Encode.string "DT_Union" )
                 , ( "customType", customTypeEncoder customType )
@@ -8640,7 +8189,7 @@ declTypeEncoder declType =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DT_IndentName row col ->
+        T.CRES_DT_IndentName row col ->
             Encode.object
                 [ ( "type", Encode.string "DT_IndentName" )
                 , ( "row", Encode.int row )
@@ -8648,37 +8197,37 @@ declTypeEncoder declType =
                 ]
 
 
-declTypeDecoder : Decode.Decoder CRES_DeclType
+declTypeDecoder : Decode.Decoder T.CRES_DeclType
 declTypeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DT_Space" ->
-                        Decode.map3 CRES_DT_Space
+                        Decode.map3 T.CRES_DT_Space
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DT_Name" ->
-                        Decode.map2 CRES_DT_Name
+                        Decode.map2 T.CRES_DT_Name
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DT_Alias" ->
-                        Decode.map3 CRES_DT_Alias
+                        Decode.map3 T.CRES_DT_Alias
                             (Decode.field "typeAlias" typeAliasDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DT_Union" ->
-                        Decode.map3 CRES_DT_Union
+                        Decode.map3 T.CRES_DT_Union
                             (Decode.field "customType" customTypeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DT_IndentName" ->
-                        Decode.map2 CRES_DT_IndentName
+                        Decode.map2 T.CRES_DT_IndentName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8687,10 +8236,10 @@ declTypeDecoder =
             )
 
 
-declDefEncoder : CRES_DeclDef -> Encode.Value
+declDefEncoder : T.CRES_DeclDef -> Encode.Value
 declDefEncoder declDef =
     case declDef of
-        CRES_DeclDefSpace space row col ->
+        T.CRES_DeclDefSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefSpace" )
                 , ( "space", spaceEncoder space )
@@ -8698,14 +8247,14 @@ declDefEncoder declDef =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefEquals row col ->
+        T.CRES_DeclDefEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefType tipe row col ->
+        T.CRES_DeclDefType tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefType" )
                 , ( "tipe", typeEncoder tipe )
@@ -8713,7 +8262,7 @@ declDefEncoder declDef =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefArg pattern row col ->
+        T.CRES_DeclDefArg pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefArg" )
                 , ( "pattern", patternEncoder pattern )
@@ -8721,7 +8270,7 @@ declDefEncoder declDef =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefBody expr row col ->
+        T.CRES_DeclDefBody expr row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefBody" )
                 , ( "expr", exprEncoder expr )
@@ -8729,14 +8278,14 @@ declDefEncoder declDef =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefNameRepeat row col ->
+        T.CRES_DeclDefNameRepeat row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefNameRepeat" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefNameMatch name row col ->
+        T.CRES_DeclDefNameMatch name row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefNameMatch" )
                 , ( "name", Encode.string name )
@@ -8744,21 +8293,21 @@ declDefEncoder declDef =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefIndentType row col ->
+        T.CRES_DeclDefIndentType row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefIndentType" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefIndentEquals row col ->
+        T.CRES_DeclDefIndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefIndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DeclDefIndentBody row col ->
+        T.CRES_DeclDefIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "DeclDefIndentBody" )
                 , ( "row", Encode.int row )
@@ -8766,64 +8315,64 @@ declDefEncoder declDef =
                 ]
 
 
-declDefDecoder : Decode.Decoder CRES_DeclDef
+declDefDecoder : Decode.Decoder T.CRES_DeclDef
 declDefDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DeclDefSpace" ->
-                        Decode.map3 CRES_DeclDefSpace
+                        Decode.map3 T.CRES_DeclDefSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefEquals" ->
-                        Decode.map2 CRES_DeclDefEquals
+                        Decode.map2 T.CRES_DeclDefEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefType" ->
-                        Decode.map3 CRES_DeclDefType
+                        Decode.map3 T.CRES_DeclDefType
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefArg" ->
-                        Decode.map3 CRES_DeclDefArg
+                        Decode.map3 T.CRES_DeclDefArg
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefBody" ->
-                        Decode.map3 CRES_DeclDefBody
+                        Decode.map3 T.CRES_DeclDefBody
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefNameRepeat" ->
-                        Decode.map2 CRES_DeclDefNameRepeat
+                        Decode.map2 T.CRES_DeclDefNameRepeat
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefNameMatch" ->
-                        Decode.map3 CRES_DeclDefNameMatch
+                        Decode.map3 T.CRES_DeclDefNameMatch
                             (Decode.field "name" Decode.string)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefIndentType" ->
-                        Decode.map2 CRES_DeclDefIndentType
+                        Decode.map2 T.CRES_DeclDefIndentType
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefIndentEquals" ->
-                        Decode.map2 CRES_DeclDefIndentEquals
+                        Decode.map2 T.CRES_DeclDefIndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DeclDefIndentBody" ->
-                        Decode.map2 CRES_DeclDefIndentBody
+                        Decode.map2 T.CRES_DeclDefIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8832,10 +8381,10 @@ declDefDecoder =
             )
 
 
-typeEncoder : CRES_Type -> Encode.Value
+typeEncoder : T.CRES_Type -> Encode.Value
 typeEncoder type_ =
     case type_ of
-        CRES_TRecord record row col ->
+        T.CRES_TRecord record row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecord" )
                 , ( "record", tRecordEncoder record )
@@ -8843,7 +8392,7 @@ typeEncoder type_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTuple tuple row col ->
+        T.CRES_TTuple tuple row col ->
             Encode.object
                 [ ( "type", Encode.string "TTuple" )
                 , ( "tuple", tTupleEncoder tuple )
@@ -8851,14 +8400,14 @@ typeEncoder type_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TStart row col ->
+        T.CRES_TStart row col ->
             Encode.object
                 [ ( "type", Encode.string "TStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TSpace space row col ->
+        T.CRES_TSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "TSpace" )
                 , ( "space", spaceEncoder space )
@@ -8866,7 +8415,7 @@ typeEncoder type_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TIndentStart row col ->
+        T.CRES_TIndentStart row col ->
             Encode.object
                 [ ( "type", Encode.string "TIndentStart" )
                 , ( "row", Encode.int row )
@@ -8874,37 +8423,37 @@ typeEncoder type_ =
                 ]
 
 
-typeDecoder : Decode.Decoder CRES_Type
+typeDecoder : Decode.Decoder T.CRES_Type
 typeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TRecord" ->
-                        Decode.map3 CRES_TRecord
+                        Decode.map3 T.CRES_TRecord
                             (Decode.field "record" tRecordDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTuple" ->
-                        Decode.map3 CRES_TTuple
+                        Decode.map3 T.CRES_TTuple
                             (Decode.field "tuple" tTupleDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TStart" ->
-                        Decode.map2 CRES_TStart
+                        Decode.map2 T.CRES_TStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TSpace" ->
-                        Decode.map3 CRES_TSpace
+                        Decode.map3 T.CRES_TSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TIndentStart" ->
-                        Decode.map2 CRES_TIndentStart
+                        Decode.map2 T.CRES_TIndentStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -8913,10 +8462,10 @@ typeDecoder =
             )
 
 
-patternEncoder : CRES_Pattern -> Encode.Value
+patternEncoder : T.CRES_Pattern -> Encode.Value
 patternEncoder pattern =
     case pattern of
-        CRES_PRecord record row col ->
+        T.CRES_PRecord record row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecord" )
                 , ( "record", pRecordEncoder record )
@@ -8924,7 +8473,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTuple tuple row col ->
+        T.CRES_PTuple tuple row col ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 , ( "tuple", pTupleEncoder tuple )
@@ -8932,7 +8481,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PList list row col ->
+        T.CRES_PList list row col ->
             Encode.object
                 [ ( "type", Encode.string "PList" )
                 , ( "list", pListEncoder list )
@@ -8940,14 +8489,14 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PStart row col ->
+        T.CRES_PStart row col ->
             Encode.object
                 [ ( "type", Encode.string "PStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PChar char row col ->
+        T.CRES_PChar char row col ->
             Encode.object
                 [ ( "type", Encode.string "PChar" )
                 , ( "char", charEncoder char )
@@ -8955,7 +8504,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PString string row col ->
+        T.CRES_PString string row col ->
             Encode.object
                 [ ( "type", Encode.string "PString" )
                 , ( "string", stringEncoder string )
@@ -8963,7 +8512,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PNumber number row col ->
+        T.CRES_PNumber number row col ->
             Encode.object
                 [ ( "type", Encode.string "PNumber" )
                 , ( "number", numberEncoder number )
@@ -8971,7 +8520,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PFloat width row col ->
+        T.CRES_PFloat width row col ->
             Encode.object
                 [ ( "type", Encode.string "PFloat" )
                 , ( "width", Encode.int width )
@@ -8979,14 +8528,14 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PAlias row col ->
+        T.CRES_PAlias row col ->
             Encode.object
                 [ ( "type", Encode.string "PAlias" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PWildcardNotVar name width row col ->
+        T.CRES_PWildcardNotVar name width row col ->
             Encode.object
                 [ ( "type", Encode.string "PWildcardNotVar" )
                 , ( "name", Encode.string name )
@@ -8995,7 +8544,7 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PSpace space row col ->
+        T.CRES_PSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PSpace" )
                 , ( "space", spaceEncoder space )
@@ -9003,14 +8552,14 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PIndentStart row col ->
+        T.CRES_PIndentStart row col ->
             Encode.object
                 [ ( "type", Encode.string "PIndentStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PIndentAlias row col ->
+        T.CRES_PIndentAlias row col ->
             Encode.object
                 [ ( "type", Encode.string "PIndentAlias" )
                 , ( "row", Encode.int row )
@@ -9018,84 +8567,84 @@ patternEncoder pattern =
                 ]
 
 
-patternDecoder : Decode.Decoder CRES_Pattern
+patternDecoder : Decode.Decoder T.CRES_Pattern
 patternDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PRecord" ->
-                        Decode.map3 CRES_PRecord
+                        Decode.map3 T.CRES_PRecord
                             (Decode.field "record" pRecordDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTuple" ->
-                        Decode.map3 CRES_PTuple
+                        Decode.map3 T.CRES_PTuple
                             (Decode.field "tuple" pTupleDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PList" ->
-                        Decode.map3 CRES_PList
+                        Decode.map3 T.CRES_PList
                             (Decode.field "list" pListDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PStart" ->
-                        Decode.map2 CRES_PStart
+                        Decode.map2 T.CRES_PStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PChar" ->
-                        Decode.map3 CRES_PChar
+                        Decode.map3 T.CRES_PChar
                             (Decode.field "char" charDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PString" ->
-                        Decode.map3 CRES_PString
+                        Decode.map3 T.CRES_PString
                             (Decode.field "string" stringDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PNumber" ->
-                        Decode.map3 CRES_PNumber
+                        Decode.map3 T.CRES_PNumber
                             (Decode.field "number" numberDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PFloat" ->
-                        Decode.map3 CRES_PFloat
+                        Decode.map3 T.CRES_PFloat
                             (Decode.field "width" Decode.int)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PAlias" ->
-                        Decode.map2 CRES_PAlias
+                        Decode.map2 T.CRES_PAlias
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PWildcardNotVar" ->
-                        Decode.map4 CRES_PWildcardNotVar
+                        Decode.map4 T.CRES_PWildcardNotVar
                             (Decode.field "name" Decode.string)
                             (Decode.field "width" Decode.int)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PSpace" ->
-                        Decode.map3 CRES_PSpace
+                        Decode.map3 T.CRES_PSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PIndentStart" ->
-                        Decode.map2 CRES_PIndentStart
+                        Decode.map2 T.CRES_PIndentStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PIndentAlias" ->
-                        Decode.map2 CRES_PIndentAlias
+                        Decode.map2 T.CRES_PIndentAlias
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -9104,10 +8653,10 @@ patternDecoder =
             )
 
 
-exprEncoder : CRES_Expr -> Encode.Value
+exprEncoder : T.CRES_Expr -> Encode.Value
 exprEncoder expr =
     case expr of
-        CRES_Let let_ row col ->
+        T.CRES_Let let_ row col ->
             Encode.object
                 [ ( "type", Encode.string "Let" )
                 , ( "let", letEncoder let_ )
@@ -9115,7 +8664,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Case case_ row col ->
+        T.CRES_Case case_ row col ->
             Encode.object
                 [ ( "type", Encode.string "Case" )
                 , ( "case", caseEncoder case_ )
@@ -9123,7 +8672,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_If if_ row col ->
+        T.CRES_If if_ row col ->
             Encode.object
                 [ ( "type", Encode.string "If" )
                 , ( "if", ifEncoder if_ )
@@ -9131,7 +8680,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_List list row col ->
+        T.CRES_List list row col ->
             Encode.object
                 [ ( "type", Encode.string "List" )
                 , ( "list", listEncoder list )
@@ -9139,7 +8688,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Record record row col ->
+        T.CRES_Record record row col ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 , ( "record", recordEncoder record )
@@ -9147,7 +8696,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Tuple tuple row col ->
+        T.CRES_Tuple tuple row col ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "tuple", tupleEncoder tuple )
@@ -9155,7 +8704,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Func func row col ->
+        T.CRES_Func func row col ->
             Encode.object
                 [ ( "type", Encode.string "Func" )
                 , ( "func", funcEncoder func )
@@ -9163,21 +8712,21 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Dot row col ->
+        T.CRES_Dot row col ->
             Encode.object
                 [ ( "type", Encode.string "Dot" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Access row col ->
+        T.CRES_Access row col ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_OperatorRight op row col ->
+        T.CRES_OperatorRight op row col ->
             Encode.object
                 [ ( "type", Encode.string "OperatorRight" )
                 , ( "op", Encode.string op )
@@ -9185,7 +8734,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_OperatorReserved operator row col ->
+        T.CRES_OperatorReserved operator row col ->
             Encode.object
                 [ ( "type", Encode.string "OperatorReserved" )
                 , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
@@ -9193,14 +8742,14 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Start row col ->
+        T.CRES_Start row col ->
             Encode.object
                 [ ( "type", Encode.string "Start" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Char char row col ->
+        T.CRES_Char char row col ->
             Encode.object
                 [ ( "type", Encode.string "Char" )
                 , ( "char", charEncoder char )
@@ -9208,7 +8757,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_String_ string row col ->
+        T.CRES_String_ string row col ->
             Encode.object
                 [ ( "type", Encode.string "String" )
                 , ( "string", stringEncoder string )
@@ -9216,7 +8765,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Number number row col ->
+        T.CRES_Number number row col ->
             Encode.object
                 [ ( "type", Encode.string "Number" )
                 , ( "number", numberEncoder number )
@@ -9224,7 +8773,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_Space space row col ->
+        T.CRES_Space space row col ->
             Encode.object
                 [ ( "type", Encode.string "Space" )
                 , ( "space", spaceEncoder space )
@@ -9232,14 +8781,14 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_EndlessShader row col ->
+        T.CRES_EndlessShader row col ->
             Encode.object
                 [ ( "type", Encode.string "EndlessShader" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ShaderProblem problem row col ->
+        T.CRES_ShaderProblem problem row col ->
             Encode.object
                 [ ( "type", Encode.string "ShaderProblem" )
                 , ( "problem", Encode.string problem )
@@ -9247,7 +8796,7 @@ exprEncoder expr =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IndentOperatorRight op row col ->
+        T.CRES_IndentOperatorRight op row col ->
             Encode.object
                 [ ( "type", Encode.string "IndentOperatorRight" )
                 , ( "op", Encode.string op )
@@ -9256,118 +8805,118 @@ exprEncoder expr =
                 ]
 
 
-exprDecoder : Decode.Decoder CRES_Expr
+exprDecoder : Decode.Decoder T.CRES_Expr
 exprDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Let" ->
-                        Decode.map3 CRES_Let
+                        Decode.map3 T.CRES_Let
                             (Decode.field "let" letDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Case" ->
-                        Decode.map3 CRES_Case
+                        Decode.map3 T.CRES_Case
                             (Decode.field "case" caseDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "If" ->
-                        Decode.map3 CRES_If
+                        Decode.map3 T.CRES_If
                             (Decode.field "if" ifDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "List" ->
-                        Decode.map3 CRES_List
+                        Decode.map3 T.CRES_List
                             (Decode.field "list" listDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Record" ->
-                        Decode.map3 CRES_Record
+                        Decode.map3 T.CRES_Record
                             (Decode.field "record" recordDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Tuple" ->
-                        Decode.map3 CRES_Tuple
+                        Decode.map3 T.CRES_Tuple
                             (Decode.field "tuple" tupleDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Func" ->
-                        Decode.map3 CRES_Func
+                        Decode.map3 T.CRES_Func
                             (Decode.field "func" funcDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Dot" ->
-                        Decode.map2 CRES_Dot
+                        Decode.map2 T.CRES_Dot
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Access" ->
-                        Decode.map2 CRES_Access
+                        Decode.map2 T.CRES_Access
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "OperatorRight" ->
-                        Decode.map3 CRES_OperatorRight
+                        Decode.map3 T.CRES_OperatorRight
                             (Decode.field "op" Decode.string)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "OperatorReserved" ->
-                        Decode.map3 CRES_OperatorReserved
+                        Decode.map3 T.CRES_OperatorReserved
                             (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Start" ->
-                        Decode.map2 CRES_Start
+                        Decode.map2 T.CRES_Start
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Char" ->
-                        Decode.map3 CRES_Char
+                        Decode.map3 T.CRES_Char
                             (Decode.field "char" charDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "String" ->
-                        Decode.map3 CRES_String_
+                        Decode.map3 T.CRES_String_
                             (Decode.field "string" stringDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Number" ->
-                        Decode.map3 CRES_Number
+                        Decode.map3 T.CRES_Number
                             (Decode.field "number" numberDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Space" ->
-                        Decode.map3 CRES_Space
+                        Decode.map3 T.CRES_Space
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "EndlessShader" ->
-                        Decode.map2 CRES_EndlessShader
+                        Decode.map2 T.CRES_EndlessShader
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ShaderProblem" ->
-                        Decode.map3 CRES_ShaderProblem
+                        Decode.map3 T.CRES_ShaderProblem
                             (Decode.field "problem" Decode.string)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IndentOperatorRight" ->
-                        Decode.map3 CRES_IndentOperatorRight
+                        Decode.map3 T.CRES_IndentOperatorRight
                             (Decode.field "op" Decode.string)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
@@ -9377,10 +8926,10 @@ exprDecoder =
             )
 
 
-letEncoder : CRES_Let -> Encode.Value
+letEncoder : T.CRES_Let -> Encode.Value
 letEncoder let_ =
     case let_ of
-        CRES_LetSpace space row col ->
+        T.CRES_LetSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "LetSpace" )
                 , ( "space", spaceEncoder space )
@@ -9388,14 +8937,14 @@ letEncoder let_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetIn row col ->
+        T.CRES_LetIn row col ->
             Encode.object
                 [ ( "type", Encode.string "LetIn" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetDefAlignment int row col ->
+        T.CRES_LetDefAlignment int row col ->
             Encode.object
                 [ ( "type", Encode.string "LetDefAlignment" )
                 , ( "int", Encode.int int )
@@ -9403,14 +8952,14 @@ letEncoder let_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetDefName row col ->
+        T.CRES_LetDefName row col ->
             Encode.object
                 [ ( "type", Encode.string "LetDefName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetDef name def row col ->
+        T.CRES_LetDef name def row col ->
             Encode.object
                 [ ( "type", Encode.string "LetDef" )
                 , ( "name", Encode.string name )
@@ -9419,7 +8968,7 @@ letEncoder let_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetDestruct destruct row col ->
+        T.CRES_LetDestruct destruct row col ->
             Encode.object
                 [ ( "type", Encode.string "LetDestruct" )
                 , ( "destruct", destructEncoder destruct )
@@ -9427,7 +8976,7 @@ letEncoder let_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetBody expr row col ->
+        T.CRES_LetBody expr row col ->
             Encode.object
                 [ ( "type", Encode.string "LetBody" )
                 , ( "expr", exprEncoder expr )
@@ -9435,21 +8984,21 @@ letEncoder let_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetIndentDef row col ->
+        T.CRES_LetIndentDef row col ->
             Encode.object
                 [ ( "type", Encode.string "LetIndentDef" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetIndentIn row col ->
+        T.CRES_LetIndentIn row col ->
             Encode.object
                 [ ( "type", Encode.string "LetIndentIn" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_LetIndentBody row col ->
+        T.CRES_LetIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "LetIndentBody" )
                 , ( "row", Encode.int row )
@@ -9457,65 +9006,65 @@ letEncoder let_ =
                 ]
 
 
-letDecoder : Decode.Decoder CRES_Let
+letDecoder : Decode.Decoder T.CRES_Let
 letDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "LetSpace" ->
-                        Decode.map3 CRES_LetSpace
+                        Decode.map3 T.CRES_LetSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetIn" ->
-                        Decode.map2 CRES_LetIn
+                        Decode.map2 T.CRES_LetIn
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetDefAlignment" ->
-                        Decode.map3 CRES_LetDefAlignment
+                        Decode.map3 T.CRES_LetDefAlignment
                             (Decode.field "int" Decode.int)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetDefName" ->
-                        Decode.map2 CRES_LetDefName
+                        Decode.map2 T.CRES_LetDefName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetDef" ->
-                        Decode.map4 CRES_LetDef
+                        Decode.map4 T.CRES_LetDef
                             (Decode.field "name" Decode.string)
                             (Decode.field "def" defDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetDestruct" ->
-                        Decode.map3 CRES_LetDestruct
+                        Decode.map3 T.CRES_LetDestruct
                             (Decode.field "destruct" destructDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetBody" ->
-                        Decode.map3 CRES_LetBody
+                        Decode.map3 T.CRES_LetBody
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetIndentDef" ->
-                        Decode.map2 CRES_LetIndentDef
+                        Decode.map2 T.CRES_LetIndentDef
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetIndentIn" ->
-                        Decode.map2 CRES_LetIndentIn
+                        Decode.map2 T.CRES_LetIndentIn
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "LetIndentBody" ->
-                        Decode.map2 CRES_LetIndentBody
+                        Decode.map2 T.CRES_LetIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -9524,10 +9073,10 @@ letDecoder =
             )
 
 
-caseEncoder : CRES_Case -> Encode.Value
+caseEncoder : T.CRES_Case -> Encode.Value
 caseEncoder case_ =
     case case_ of
-        CRES_CaseSpace space row col ->
+        T.CRES_CaseSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseSpace" )
                 , ( "space", spaceEncoder space )
@@ -9535,14 +9084,14 @@ caseEncoder case_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseOf row col ->
+        T.CRES_CaseOf row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseOf" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CasePattern pattern row col ->
+        T.CRES_CasePattern pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "CasePattern" )
                 , ( "pattern", patternEncoder pattern )
@@ -9550,14 +9099,14 @@ caseEncoder case_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseArrow row col ->
+        T.CRES_CaseArrow row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseArrow" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseExpr expr row col ->
+        T.CRES_CaseExpr expr row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseExpr" )
                 , ( "expr", exprEncoder expr )
@@ -9565,7 +9114,7 @@ caseEncoder case_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseBranch expr row col ->
+        T.CRES_CaseBranch expr row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseBranch" )
                 , ( "expr", exprEncoder expr )
@@ -9573,42 +9122,42 @@ caseEncoder case_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseIndentOf row col ->
+        T.CRES_CaseIndentOf row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseIndentOf" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseIndentExpr row col ->
+        T.CRES_CaseIndentExpr row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseIndentExpr" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseIndentPattern row col ->
+        T.CRES_CaseIndentPattern row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseIndentPattern" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseIndentArrow row col ->
+        T.CRES_CaseIndentArrow row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseIndentArrow" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CaseIndentBranch row col ->
+        T.CRES_CaseIndentBranch row col ->
             Encode.object
                 [ ( "type", Encode.string "CaseIndentBranch" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CasePatternAlignment indent row col ->
+        T.CRES_CasePatternAlignment indent row col ->
             Encode.object
                 [ ( "type", Encode.string "CasePatternAlignment" )
                 , ( "indent", Encode.int indent )
@@ -9617,73 +9166,73 @@ caseEncoder case_ =
                 ]
 
 
-caseDecoder : Decode.Decoder CRES_Case
+caseDecoder : Decode.Decoder T.CRES_Case
 caseDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "CaseSpace" ->
-                        Decode.map3 CRES_CaseSpace
+                        Decode.map3 T.CRES_CaseSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseOf" ->
-                        Decode.map2 CRES_CaseOf
+                        Decode.map2 T.CRES_CaseOf
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CasePattern" ->
-                        Decode.map3 CRES_CasePattern
+                        Decode.map3 T.CRES_CasePattern
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseArrow" ->
-                        Decode.map2 CRES_CaseArrow
+                        Decode.map2 T.CRES_CaseArrow
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseExpr" ->
-                        Decode.map3 CRES_CaseExpr
+                        Decode.map3 T.CRES_CaseExpr
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseBranch" ->
-                        Decode.map3 CRES_CaseBranch
+                        Decode.map3 T.CRES_CaseBranch
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseIndentOf" ->
-                        Decode.map2 CRES_CaseIndentOf
+                        Decode.map2 T.CRES_CaseIndentOf
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseIndentExpr" ->
-                        Decode.map2 CRES_CaseIndentExpr
+                        Decode.map2 T.CRES_CaseIndentExpr
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseIndentPattern" ->
-                        Decode.map2 CRES_CaseIndentPattern
+                        Decode.map2 T.CRES_CaseIndentPattern
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseIndentArrow" ->
-                        Decode.map2 CRES_CaseIndentArrow
+                        Decode.map2 T.CRES_CaseIndentArrow
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CaseIndentBranch" ->
-                        Decode.map2 CRES_CaseIndentBranch
+                        Decode.map2 T.CRES_CaseIndentBranch
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CasePatternAlignment" ->
-                        Decode.map3 CRES_CasePatternAlignment
+                        Decode.map3 T.CRES_CasePatternAlignment
                             (Decode.field "indent" Decode.int)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
@@ -9693,10 +9242,10 @@ caseDecoder =
             )
 
 
-ifEncoder : CRES_If -> Encode.Value
+ifEncoder : T.CRES_If -> Encode.Value
 ifEncoder if_ =
     case if_ of
-        CRES_IfSpace space row col ->
+        T.CRES_IfSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "IfSpace" )
                 , ( "space", spaceEncoder space )
@@ -9704,28 +9253,28 @@ ifEncoder if_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfThen row col ->
+        T.CRES_IfThen row col ->
             Encode.object
                 [ ( "type", Encode.string "IfThen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfElse row col ->
+        T.CRES_IfElse row col ->
             Encode.object
                 [ ( "type", Encode.string "IfElse" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfElseBranchStart row col ->
+        T.CRES_IfElseBranchStart row col ->
             Encode.object
                 [ ( "type", Encode.string "IfElseBranchStart" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfCondition expr row col ->
+        T.CRES_IfCondition expr row col ->
             Encode.object
                 [ ( "type", Encode.string "IfCondition" )
                 , ( "expr", exprEncoder expr )
@@ -9733,7 +9282,7 @@ ifEncoder if_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfThenBranch expr row col ->
+        T.CRES_IfThenBranch expr row col ->
             Encode.object
                 [ ( "type", Encode.string "IfThenBranch" )
                 , ( "expr", exprEncoder expr )
@@ -9741,7 +9290,7 @@ ifEncoder if_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfElseBranch expr row col ->
+        T.CRES_IfElseBranch expr row col ->
             Encode.object
                 [ ( "type", Encode.string "IfElseBranch" )
                 , ( "expr", exprEncoder expr )
@@ -9749,35 +9298,35 @@ ifEncoder if_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfIndentCondition row col ->
+        T.CRES_IfIndentCondition row col ->
             Encode.object
                 [ ( "type", Encode.string "IfIndentCondition" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfIndentThen row col ->
+        T.CRES_IfIndentThen row col ->
             Encode.object
                 [ ( "type", Encode.string "IfIndentThen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfIndentThenBranch row col ->
+        T.CRES_IfIndentThenBranch row col ->
             Encode.object
                 [ ( "type", Encode.string "IfIndentThenBranch" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfIndentElseBranch row col ->
+        T.CRES_IfIndentElseBranch row col ->
             Encode.object
                 [ ( "type", Encode.string "IfIndentElseBranch" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_IfIndentElse row col ->
+        T.CRES_IfIndentElse row col ->
             Encode.object
                 [ ( "type", Encode.string "IfIndentElse" )
                 , ( "row", Encode.int row )
@@ -9785,73 +9334,73 @@ ifEncoder if_ =
                 ]
 
 
-ifDecoder : Decode.Decoder CRES_If
+ifDecoder : Decode.Decoder T.CRES_If
 ifDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "IfSpace" ->
-                        Decode.map3 CRES_IfSpace
+                        Decode.map3 T.CRES_IfSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfThen" ->
-                        Decode.map2 CRES_IfThen
+                        Decode.map2 T.CRES_IfThen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfElse" ->
-                        Decode.map2 CRES_IfElse
+                        Decode.map2 T.CRES_IfElse
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfElseBranchStart" ->
-                        Decode.map2 CRES_IfElseBranchStart
+                        Decode.map2 T.CRES_IfElseBranchStart
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfCondition" ->
-                        Decode.map3 CRES_IfCondition
+                        Decode.map3 T.CRES_IfCondition
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfThenBranch" ->
-                        Decode.map3 CRES_IfThenBranch
+                        Decode.map3 T.CRES_IfThenBranch
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfElseBranch" ->
-                        Decode.map3 CRES_IfElseBranch
+                        Decode.map3 T.CRES_IfElseBranch
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfIndentCondition" ->
-                        Decode.map2 CRES_IfIndentCondition
+                        Decode.map2 T.CRES_IfIndentCondition
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfIndentThen" ->
-                        Decode.map2 CRES_IfIndentThen
+                        Decode.map2 T.CRES_IfIndentThen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfIndentThenBranch" ->
-                        Decode.map2 CRES_IfIndentThenBranch
+                        Decode.map2 T.CRES_IfIndentThenBranch
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfIndentElseBranch" ->
-                        Decode.map2 CRES_IfIndentElseBranch
+                        Decode.map2 T.CRES_IfIndentElseBranch
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "IfIndentElse" ->
-                        Decode.map2 CRES_IfIndentElse
+                        Decode.map2 T.CRES_IfIndentElse
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -9860,10 +9409,10 @@ ifDecoder =
             )
 
 
-listEncoder : CRES_List_ -> Encode.Value
+listEncoder : T.CRES_List_ -> Encode.Value
 listEncoder list_ =
     case list_ of
-        CRES_ListSpace space row col ->
+        T.CRES_ListSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "ListSpace" )
                 , ( "space", spaceEncoder space )
@@ -9871,14 +9420,14 @@ listEncoder list_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListOpen row col ->
+        T.CRES_ListOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "ListOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListExpr expr row col ->
+        T.CRES_ListExpr expr row col ->
             Encode.object
                 [ ( "type", Encode.string "ListExpr" )
                 , ( "expr", exprEncoder expr )
@@ -9886,28 +9435,28 @@ listEncoder list_ =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListEnd row col ->
+        T.CRES_ListEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ListEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListIndentOpen row col ->
+        T.CRES_ListIndentOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "ListIndentOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListIndentEnd row col ->
+        T.CRES_ListIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "ListIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_ListIndentExpr row col ->
+        T.CRES_ListIndentExpr row col ->
             Encode.object
                 [ ( "type", Encode.string "ListIndentExpr" )
                 , ( "row", Encode.int row )
@@ -9915,46 +9464,46 @@ listEncoder list_ =
                 ]
 
 
-listDecoder : Decode.Decoder CRES_List_
+listDecoder : Decode.Decoder T.CRES_List_
 listDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "ListSpace" ->
-                        Decode.map3 CRES_ListSpace
+                        Decode.map3 T.CRES_ListSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListOpen" ->
-                        Decode.map2 CRES_ListOpen
+                        Decode.map2 T.CRES_ListOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListExpr" ->
-                        Decode.map3 CRES_ListExpr
+                        Decode.map3 T.CRES_ListExpr
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListEnd" ->
-                        Decode.map2 CRES_ListEnd
+                        Decode.map2 T.CRES_ListEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListIndentOpen" ->
-                        Decode.map2 CRES_ListIndentOpen
+                        Decode.map2 T.CRES_ListIndentOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListIndentEnd" ->
-                        Decode.map2 CRES_ListIndentEnd
+                        Decode.map2 T.CRES_ListIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "ListIndentExpr" ->
-                        Decode.map2 CRES_ListIndentExpr
+                        Decode.map2 T.CRES_ListIndentExpr
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -9963,38 +9512,38 @@ listDecoder =
             )
 
 
-recordEncoder : CRES_Record -> Encode.Value
+recordEncoder : T.CRES_Record -> Encode.Value
 recordEncoder record =
     case record of
-        CRES_RecordOpen row col ->
+        T.CRES_RecordOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordEnd row col ->
+        T.CRES_RecordEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordField row col ->
+        T.CRES_RecordField row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordField" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordEquals row col ->
+        T.CRES_RecordEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordExpr expr row col ->
+        T.CRES_RecordExpr expr row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordExpr" )
                 , ( "expr", exprEncoder expr )
@@ -10002,7 +9551,7 @@ recordEncoder record =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordSpace space row col ->
+        T.CRES_RecordSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordSpace" )
                 , ( "space", spaceEncoder space )
@@ -10010,35 +9559,35 @@ recordEncoder record =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordIndentOpen row col ->
+        T.CRES_RecordIndentOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordIndentOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordIndentEnd row col ->
+        T.CRES_RecordIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordIndentField row col ->
+        T.CRES_RecordIndentField row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordIndentField" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordIndentEquals row col ->
+        T.CRES_RecordIndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordIndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_RecordIndentExpr row col ->
+        T.CRES_RecordIndentExpr row col ->
             Encode.object
                 [ ( "type", Encode.string "RecordIndentExpr" )
                 , ( "row", Encode.int row )
@@ -10046,66 +9595,66 @@ recordEncoder record =
                 ]
 
 
-recordDecoder : Decode.Decoder CRES_Record
+recordDecoder : Decode.Decoder T.CRES_Record
 recordDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "RecordOpen" ->
-                        Decode.map2 CRES_RecordOpen
+                        Decode.map2 T.CRES_RecordOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordEnd" ->
-                        Decode.map2 CRES_RecordEnd
+                        Decode.map2 T.CRES_RecordEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordField" ->
-                        Decode.map2 CRES_RecordField
+                        Decode.map2 T.CRES_RecordField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordEquals" ->
-                        Decode.map2 CRES_RecordEquals
+                        Decode.map2 T.CRES_RecordEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordExpr" ->
-                        Decode.map3 CRES_RecordExpr
+                        Decode.map3 T.CRES_RecordExpr
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordSpace" ->
-                        Decode.map3 CRES_RecordSpace
+                        Decode.map3 T.CRES_RecordSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordIndentOpen" ->
-                        Decode.map2 CRES_RecordIndentOpen
+                        Decode.map2 T.CRES_RecordIndentOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordIndentEnd" ->
-                        Decode.map2 CRES_RecordIndentEnd
+                        Decode.map2 T.CRES_RecordIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordIndentField" ->
-                        Decode.map2 CRES_RecordIndentField
+                        Decode.map2 T.CRES_RecordIndentField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordIndentEquals" ->
-                        Decode.map2 CRES_RecordIndentEquals
+                        Decode.map2 T.CRES_RecordIndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "RecordIndentExpr" ->
-                        Decode.map2 CRES_RecordIndentExpr
+                        Decode.map2 T.CRES_RecordIndentExpr
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10114,10 +9663,10 @@ recordDecoder =
             )
 
 
-tupleEncoder : CRES_Tuple -> Encode.Value
+tupleEncoder : T.CRES_Tuple -> Encode.Value
 tupleEncoder tuple =
     case tuple of
-        CRES_TupleExpr expr row col ->
+        T.CRES_TupleExpr expr row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleExpr" )
                 , ( "expr", exprEncoder expr )
@@ -10125,7 +9674,7 @@ tupleEncoder tuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleSpace space row col ->
+        T.CRES_TupleSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleSpace" )
                 , ( "space", spaceEncoder space )
@@ -10133,21 +9682,21 @@ tupleEncoder tuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleEnd row col ->
+        T.CRES_TupleEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleOperatorClose row col ->
+        T.CRES_TupleOperatorClose row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleOperatorClose" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleOperatorReserved operator row col ->
+        T.CRES_TupleOperatorReserved operator row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleOperatorReserved" )
                 , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
@@ -10155,21 +9704,21 @@ tupleEncoder tuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleIndentExpr1 row col ->
+        T.CRES_TupleIndentExpr1 row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleIndentExpr1" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleIndentExprN row col ->
+        T.CRES_TupleIndentExprN row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleIndentExprN" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TupleIndentEnd row col ->
+        T.CRES_TupleIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TupleIndentEnd" )
                 , ( "row", Encode.int row )
@@ -10177,52 +9726,52 @@ tupleEncoder tuple =
                 ]
 
 
-tupleDecoder : Decode.Decoder CRES_Tuple
+tupleDecoder : Decode.Decoder T.CRES_Tuple
 tupleDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TupleExpr" ->
-                        Decode.map3 CRES_TupleExpr
+                        Decode.map3 T.CRES_TupleExpr
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleSpace" ->
-                        Decode.map3 CRES_TupleSpace
+                        Decode.map3 T.CRES_TupleSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleEnd" ->
-                        Decode.map2 CRES_TupleEnd
+                        Decode.map2 T.CRES_TupleEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleOperatorClose" ->
-                        Decode.map2 CRES_TupleOperatorClose
+                        Decode.map2 T.CRES_TupleOperatorClose
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleOperatorReserved" ->
-                        Decode.map3 CRES_TupleOperatorReserved
+                        Decode.map3 T.CRES_TupleOperatorReserved
                             (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleIndentExpr1" ->
-                        Decode.map2 CRES_TupleIndentExpr1
+                        Decode.map2 T.CRES_TupleIndentExpr1
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleIndentExprN" ->
-                        Decode.map2 CRES_TupleIndentExprN
+                        Decode.map2 T.CRES_TupleIndentExprN
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TupleIndentEnd" ->
-                        Decode.map2 CRES_TupleIndentEnd
+                        Decode.map2 T.CRES_TupleIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10231,10 +9780,10 @@ tupleDecoder =
             )
 
 
-funcEncoder : CRES_Func -> Encode.Value
+funcEncoder : T.CRES_Func -> Encode.Value
 funcEncoder func =
     case func of
-        CRES_FuncSpace space row col ->
+        T.CRES_FuncSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncSpace" )
                 , ( "space", spaceEncoder space )
@@ -10242,7 +9791,7 @@ funcEncoder func =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncArg pattern row col ->
+        T.CRES_FuncArg pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncArg" )
                 , ( "pattern", patternEncoder pattern )
@@ -10250,7 +9799,7 @@ funcEncoder func =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncBody expr row col ->
+        T.CRES_FuncBody expr row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncBody" )
                 , ( "expr", exprEncoder expr )
@@ -10258,28 +9807,28 @@ funcEncoder func =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncArrow row col ->
+        T.CRES_FuncArrow row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncArrow" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncIndentArg row col ->
+        T.CRES_FuncIndentArg row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncIndentArg" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncIndentArrow row col ->
+        T.CRES_FuncIndentArrow row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncIndentArrow" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_FuncIndentBody row col ->
+        T.CRES_FuncIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "FuncIndentBody" )
                 , ( "row", Encode.int row )
@@ -10287,47 +9836,47 @@ funcEncoder func =
                 ]
 
 
-funcDecoder : Decode.Decoder CRES_Func
+funcDecoder : Decode.Decoder T.CRES_Func
 funcDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "FuncSpace" ->
-                        Decode.map3 CRES_FuncSpace
+                        Decode.map3 T.CRES_FuncSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncArg" ->
-                        Decode.map3 CRES_FuncArg
+                        Decode.map3 T.CRES_FuncArg
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncBody" ->
-                        Decode.map3 CRES_FuncBody
+                        Decode.map3 T.CRES_FuncBody
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncArrow" ->
-                        Decode.map2 CRES_FuncArrow
+                        Decode.map2 T.CRES_FuncArrow
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncIndentArg" ->
-                        Decode.map2 CRES_FuncIndentArg
+                        Decode.map2 T.CRES_FuncIndentArg
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncIndentArrow" ->
-                        Decode.map2 CRES_FuncIndentArrow
+                        Decode.map2 T.CRES_FuncIndentArrow
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "FuncIndentBody" ->
-                        Decode.map2 CRES_FuncIndentBody
+                        Decode.map2 T.CRES_FuncIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10336,154 +9885,154 @@ funcDecoder =
             )
 
 
-charEncoder : CRES_Char -> Encode.Value
+charEncoder : T.CRES_Char -> Encode.Value
 charEncoder char =
     case char of
-        CRES_CharEndless ->
+        T.CRES_CharEndless ->
             Encode.object
                 [ ( "type", Encode.string "CharEndless" )
                 ]
 
-        CRES_CharEscape escape ->
+        T.CRES_CharEscape escape ->
             Encode.object
                 [ ( "type", Encode.string "CharEscape" )
                 , ( "escape", escapeEncoder escape )
                 ]
 
-        CRES_CharNotString width ->
+        T.CRES_CharNotString width ->
             Encode.object
                 [ ( "type", Encode.string "CharNotString" )
                 , ( "width", Encode.int width )
                 ]
 
 
-charDecoder : Decode.Decoder CRES_Char
+charDecoder : Decode.Decoder T.CRES_Char
 charDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "CharEndless" ->
-                        Decode.succeed CRES_CharEndless
+                        Decode.succeed T.CRES_CharEndless
 
                     "CharEscape" ->
-                        Decode.map CRES_CharEscape (Decode.field "escape" escapeDecoder)
+                        Decode.map T.CRES_CharEscape (Decode.field "escape" escapeDecoder)
 
                     "CharNotString" ->
-                        Decode.map CRES_CharNotString (Decode.field "width" Decode.int)
+                        Decode.map T.CRES_CharNotString (Decode.field "width" Decode.int)
 
                     _ ->
                         Decode.fail ("Failed to decode Char's type: " ++ type_)
             )
 
 
-stringEncoder : CRES_String_ -> Encode.Value
+stringEncoder : T.CRES_String_ -> Encode.Value
 stringEncoder string_ =
     case string_ of
-        CRES_StringEndless_Single ->
+        T.CRES_StringEndless_Single ->
             Encode.object
                 [ ( "type", Encode.string "StringEndless_Single" ) ]
 
-        CRES_StringEndless_Multi ->
+        T.CRES_StringEndless_Multi ->
             Encode.object
                 [ ( "type", Encode.string "StringEndless_Multi" ) ]
 
-        CRES_StringEscape escape ->
+        T.CRES_StringEscape escape ->
             Encode.object
                 [ ( "type", Encode.string "StringEscape" )
                 , ( "escape", escapeEncoder escape )
                 ]
 
 
-stringDecoder : Decode.Decoder CRES_String_
+stringDecoder : Decode.Decoder T.CRES_String_
 stringDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "StringEndless_Single" ->
-                        Decode.succeed CRES_StringEndless_Single
+                        Decode.succeed T.CRES_StringEndless_Single
 
                     "StringEndless_Multi" ->
-                        Decode.succeed CRES_StringEndless_Multi
+                        Decode.succeed T.CRES_StringEndless_Multi
 
                     "StringEscape" ->
-                        Decode.map CRES_StringEscape (Decode.field "escape" escapeDecoder)
+                        Decode.map T.CRES_StringEscape (Decode.field "escape" escapeDecoder)
 
                     _ ->
                         Decode.fail ("Failed to decode String's type: " ++ type_)
             )
 
 
-numberEncoder : CRES_Number -> Encode.Value
+numberEncoder : T.CRES_Number -> Encode.Value
 numberEncoder number =
     case number of
-        CRES_NumberEnd ->
+        T.CRES_NumberEnd ->
             Encode.object
                 [ ( "type", Encode.string "NumberEnd" )
                 ]
 
-        CRES_NumberDot n ->
+        T.CRES_NumberDot n ->
             Encode.object
                 [ ( "type", Encode.string "NumberDot" )
                 , ( "n", Encode.int n )
                 ]
 
-        CRES_NumberHexDigit ->
+        T.CRES_NumberHexDigit ->
             Encode.object
                 [ ( "type", Encode.string "NumberHexDigit" )
                 ]
 
-        CRES_NumberNoLeadingZero ->
+        T.CRES_NumberNoLeadingZero ->
             Encode.object
                 [ ( "type", Encode.string "NumberNoLeadingZero" )
                 ]
 
 
-numberDecoder : Decode.Decoder CRES_Number
+numberDecoder : Decode.Decoder T.CRES_Number
 numberDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NumberEnd" ->
-                        Decode.succeed CRES_NumberEnd
+                        Decode.succeed T.CRES_NumberEnd
 
                     "NumberDot" ->
-                        Decode.map CRES_NumberDot (Decode.field "n" Decode.int)
+                        Decode.map T.CRES_NumberDot (Decode.field "n" Decode.int)
 
                     "NumberHexDigit" ->
-                        Decode.succeed CRES_NumberHexDigit
+                        Decode.succeed T.CRES_NumberHexDigit
 
                     "NumberNoLeadingZero" ->
-                        Decode.succeed CRES_NumberNoLeadingZero
+                        Decode.succeed T.CRES_NumberNoLeadingZero
 
                     _ ->
                         Decode.fail ("Failed to decode Number's type: " ++ type_)
             )
 
 
-escapeEncoder : CRES_Escape -> Encode.Value
+escapeEncoder : T.CRES_Escape -> Encode.Value
 escapeEncoder escape =
     case escape of
-        CRES_EscapeUnknown ->
+        T.CRES_EscapeUnknown ->
             Encode.object
                 [ ( "type", Encode.string "EscapeUnknown" )
                 ]
 
-        CRES_BadUnicodeFormat width ->
+        T.CRES_BadUnicodeFormat width ->
             Encode.object
                 [ ( "type", Encode.string "BadUnicodeFormat" )
                 , ( "width", Encode.int width )
                 ]
 
-        CRES_BadUnicodeCode width ->
+        T.CRES_BadUnicodeCode width ->
             Encode.object
                 [ ( "type", Encode.string "BadUnicodeCode" )
                 , ( "width", Encode.int width )
                 ]
 
-        CRES_BadUnicodeLength width numDigits badCode ->
+        T.CRES_BadUnicodeLength width numDigits badCode ->
             Encode.object
                 [ ( "type", Encode.string "BadUnicodeLength" )
                 , ( "width", Encode.int width )
@@ -10492,23 +10041,23 @@ escapeEncoder escape =
                 ]
 
 
-escapeDecoder : Decode.Decoder CRES_Escape
+escapeDecoder : Decode.Decoder T.CRES_Escape
 escapeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "EscapeUnknown" ->
-                        Decode.succeed CRES_EscapeUnknown
+                        Decode.succeed T.CRES_EscapeUnknown
 
                     "BadUnicodeFormat" ->
-                        Decode.map CRES_BadUnicodeFormat (Decode.field "width" Decode.int)
+                        Decode.map T.CRES_BadUnicodeFormat (Decode.field "width" Decode.int)
 
                     "BadUnicodeCode" ->
-                        Decode.map CRES_BadUnicodeCode (Decode.field "width" Decode.int)
+                        Decode.map T.CRES_BadUnicodeCode (Decode.field "width" Decode.int)
 
                     "BadUnicodeLength" ->
-                        Decode.map3 CRES_BadUnicodeLength
+                        Decode.map3 T.CRES_BadUnicodeLength
                             (Decode.field "width" Decode.int)
                             (Decode.field "numDigits" Decode.int)
                             (Decode.field "badCode" Decode.int)
@@ -10518,10 +10067,10 @@ escapeDecoder =
             )
 
 
-defEncoder : CRES_Def -> Encode.Value
+defEncoder : T.CRES_Def -> Encode.Value
 defEncoder def =
     case def of
-        CRES_DefSpace space row col ->
+        T.CRES_DefSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "DefSpace" )
                 , ( "space", spaceEncoder space )
@@ -10529,7 +10078,7 @@ defEncoder def =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefType tipe row col ->
+        T.CRES_DefType tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "DefType" )
                 , ( "tipe", typeEncoder tipe )
@@ -10537,14 +10086,14 @@ defEncoder def =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefNameRepeat row col ->
+        T.CRES_DefNameRepeat row col ->
             Encode.object
                 [ ( "type", Encode.string "DefNameRepeat" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefNameMatch name row col ->
+        T.CRES_DefNameMatch name row col ->
             Encode.object
                 [ ( "type", Encode.string "DefNameMatch" )
                 , ( "name", Encode.string name )
@@ -10552,7 +10101,7 @@ defEncoder def =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefArg pattern row col ->
+        T.CRES_DefArg pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "DefArg" )
                 , ( "pattern", patternEncoder pattern )
@@ -10560,14 +10109,14 @@ defEncoder def =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefEquals row col ->
+        T.CRES_DefEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DefEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefBody expr row col ->
+        T.CRES_DefBody expr row col ->
             Encode.object
                 [ ( "type", Encode.string "DefBody" )
                 , ( "expr", exprEncoder expr )
@@ -10575,28 +10124,28 @@ defEncoder def =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefIndentEquals row col ->
+        T.CRES_DefIndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DefIndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefIndentType row col ->
+        T.CRES_DefIndentType row col ->
             Encode.object
                 [ ( "type", Encode.string "DefIndentType" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefIndentBody row col ->
+        T.CRES_DefIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "DefIndentBody" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DefAlignment indent row col ->
+        T.CRES_DefAlignment indent row col ->
             Encode.object
                 [ ( "type", Encode.string "DefAlignment" )
                 , ( "indent", Encode.int indent )
@@ -10605,69 +10154,69 @@ defEncoder def =
                 ]
 
 
-defDecoder : Decode.Decoder CRES_Def
+defDecoder : Decode.Decoder T.CRES_Def
 defDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DefSpace" ->
-                        Decode.map3 CRES_DefSpace
+                        Decode.map3 T.CRES_DefSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefType" ->
-                        Decode.map3 CRES_DefType
+                        Decode.map3 T.CRES_DefType
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefNameRepeat" ->
-                        Decode.map2 CRES_DefNameRepeat
+                        Decode.map2 T.CRES_DefNameRepeat
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefNameMatch" ->
-                        Decode.map3 CRES_DefNameMatch
+                        Decode.map3 T.CRES_DefNameMatch
                             (Decode.field "name" Decode.string)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefArg" ->
-                        Decode.map3 CRES_DefArg
+                        Decode.map3 T.CRES_DefArg
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefEquals" ->
-                        Decode.map2 CRES_DefEquals
+                        Decode.map2 T.CRES_DefEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefBody" ->
-                        Decode.map3 CRES_DefBody
+                        Decode.map3 T.CRES_DefBody
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefIndentEquals" ->
-                        Decode.map2 CRES_DefIndentEquals
+                        Decode.map2 T.CRES_DefIndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefIndentType" ->
-                        Decode.map2 CRES_DefIndentType
+                        Decode.map2 T.CRES_DefIndentType
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefIndentBody" ->
-                        Decode.map2 CRES_DefIndentBody
+                        Decode.map2 T.CRES_DefIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DefAlignment" ->
-                        Decode.map3 CRES_DefAlignment
+                        Decode.map3 T.CRES_DefAlignment
                             (Decode.field "indent" Decode.int)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
@@ -10677,10 +10226,10 @@ defDecoder =
             )
 
 
-destructEncoder : CRES_Destruct -> Encode.Value
+destructEncoder : T.CRES_Destruct -> Encode.Value
 destructEncoder destruct =
     case destruct of
-        CRES_DestructSpace space row col ->
+        T.CRES_DestructSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructSpace" )
                 , ( "space", spaceEncoder space )
@@ -10688,7 +10237,7 @@ destructEncoder destruct =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DestructPattern pattern row col ->
+        T.CRES_DestructPattern pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructPattern" )
                 , ( "pattern", patternEncoder pattern )
@@ -10696,14 +10245,14 @@ destructEncoder destruct =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DestructEquals row col ->
+        T.CRES_DestructEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DestructBody expr row col ->
+        T.CRES_DestructBody expr row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructBody" )
                 , ( "expr", exprEncoder expr )
@@ -10711,14 +10260,14 @@ destructEncoder destruct =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DestructIndentEquals row col ->
+        T.CRES_DestructIndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructIndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_DestructIndentBody row col ->
+        T.CRES_DestructIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "DestructIndentBody" )
                 , ( "row", Encode.int row )
@@ -10726,42 +10275,42 @@ destructEncoder destruct =
                 ]
 
 
-destructDecoder : Decode.Decoder CRES_Destruct
+destructDecoder : Decode.Decoder T.CRES_Destruct
 destructDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "DestructSpace" ->
-                        Decode.map3 CRES_DestructSpace
+                        Decode.map3 T.CRES_DestructSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DestructPattern" ->
-                        Decode.map3 CRES_DestructPattern
+                        Decode.map3 T.CRES_DestructPattern
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DestructEquals" ->
-                        Decode.map2 CRES_DestructEquals
+                        Decode.map2 T.CRES_DestructEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DestructBody" ->
-                        Decode.map3 CRES_DestructBody
+                        Decode.map3 T.CRES_DestructBody
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DestructIndentEquals" ->
-                        Decode.map2 CRES_DestructIndentEquals
+                        Decode.map2 T.CRES_DestructIndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "DestructIndentBody" ->
-                        Decode.map2 CRES_DestructIndentBody
+                        Decode.map2 T.CRES_DestructIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10770,31 +10319,31 @@ destructDecoder =
             )
 
 
-pRecordEncoder : CRES_PRecord -> Encode.Value
+pRecordEncoder : T.CRES_PRecord -> Encode.Value
 pRecordEncoder pRecord =
     case pRecord of
-        CRES_PRecordOpen row col ->
+        T.CRES_PRecordOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordEnd row col ->
+        T.CRES_PRecordEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordField row col ->
+        T.CRES_PRecordField row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordField" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordSpace space row col ->
+        T.CRES_PRecordSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordSpace" )
                 , ( "space", spaceEncoder space )
@@ -10802,21 +10351,21 @@ pRecordEncoder pRecord =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordIndentOpen row col ->
+        T.CRES_PRecordIndentOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordIndentOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordIndentEnd row col ->
+        T.CRES_PRecordIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PRecordIndentField row col ->
+        T.CRES_PRecordIndentField row col ->
             Encode.object
                 [ ( "type", Encode.string "PRecordIndentField" )
                 , ( "row", Encode.int row )
@@ -10824,45 +10373,45 @@ pRecordEncoder pRecord =
                 ]
 
 
-pRecordDecoder : Decode.Decoder CRES_PRecord
+pRecordDecoder : Decode.Decoder T.CRES_PRecord
 pRecordDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PRecordOpen" ->
-                        Decode.map2 CRES_PRecordOpen
+                        Decode.map2 T.CRES_PRecordOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordEnd" ->
-                        Decode.map2 CRES_PRecordEnd
+                        Decode.map2 T.CRES_PRecordEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordField" ->
-                        Decode.map2 CRES_PRecordField
+                        Decode.map2 T.CRES_PRecordField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordSpace" ->
-                        Decode.map3 CRES_PRecordSpace
+                        Decode.map3 T.CRES_PRecordSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordIndentOpen" ->
-                        Decode.map2 CRES_PRecordIndentOpen
+                        Decode.map2 T.CRES_PRecordIndentOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordIndentEnd" ->
-                        Decode.map2 CRES_PRecordIndentEnd
+                        Decode.map2 T.CRES_PRecordIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PRecordIndentField" ->
-                        Decode.map2 CRES_PRecordIndentField
+                        Decode.map2 T.CRES_PRecordIndentField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10871,24 +10420,24 @@ pRecordDecoder =
             )
 
 
-pTupleEncoder : CRES_PTuple -> Encode.Value
+pTupleEncoder : T.CRES_PTuple -> Encode.Value
 pTupleEncoder pTuple =
     case pTuple of
-        CRES_PTupleOpen row col ->
+        T.CRES_PTupleOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleEnd row col ->
+        T.CRES_PTupleEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleExpr pattern row col ->
+        T.CRES_PTupleExpr pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleExpr" )
                 , ( "pattern", patternEncoder pattern )
@@ -10896,7 +10445,7 @@ pTupleEncoder pTuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleSpace space row col ->
+        T.CRES_PTupleSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleSpace" )
                 , ( "space", spaceEncoder space )
@@ -10904,21 +10453,21 @@ pTupleEncoder pTuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleIndentEnd row col ->
+        T.CRES_PTupleIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleIndentExpr1 row col ->
+        T.CRES_PTupleIndentExpr1 row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleIndentExpr1" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PTupleIndentExprN row col ->
+        T.CRES_PTupleIndentExprN row col ->
             Encode.object
                 [ ( "type", Encode.string "PTupleIndentExprN" )
                 , ( "row", Encode.int row )
@@ -10926,46 +10475,46 @@ pTupleEncoder pTuple =
                 ]
 
 
-pTupleDecoder : Decode.Decoder CRES_PTuple
+pTupleDecoder : Decode.Decoder T.CRES_PTuple
 pTupleDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PTupleOpen" ->
-                        Decode.map2 CRES_PTupleOpen
+                        Decode.map2 T.CRES_PTupleOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleEnd" ->
-                        Decode.map2 CRES_PTupleEnd
+                        Decode.map2 T.CRES_PTupleEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleExpr" ->
-                        Decode.map3 CRES_PTupleExpr
+                        Decode.map3 T.CRES_PTupleExpr
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleSpace" ->
-                        Decode.map3 CRES_PTupleSpace
+                        Decode.map3 T.CRES_PTupleSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleIndentEnd" ->
-                        Decode.map2 CRES_PTupleIndentEnd
+                        Decode.map2 T.CRES_PTupleIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleIndentExpr1" ->
-                        Decode.map2 CRES_PTupleIndentExpr1
+                        Decode.map2 T.CRES_PTupleIndentExpr1
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PTupleIndentExprN" ->
-                        Decode.map2 CRES_PTupleIndentExprN
+                        Decode.map2 T.CRES_PTupleIndentExprN
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -10974,24 +10523,24 @@ pTupleDecoder =
             )
 
 
-pListEncoder : CRES_PList -> Encode.Value
+pListEncoder : T.CRES_PList -> Encode.Value
 pListEncoder pList =
     case pList of
-        CRES_PListOpen row col ->
+        T.CRES_PListOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "PListOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListEnd row col ->
+        T.CRES_PListEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PListEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListExpr pattern row col ->
+        T.CRES_PListExpr pattern row col ->
             Encode.object
                 [ ( "type", Encode.string "PListExpr" )
                 , ( "pattern", patternEncoder pattern )
@@ -10999,7 +10548,7 @@ pListEncoder pList =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListSpace space row col ->
+        T.CRES_PListSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PListSpace" )
                 , ( "space", spaceEncoder space )
@@ -11007,21 +10556,21 @@ pListEncoder pList =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListIndentOpen row col ->
+        T.CRES_PListIndentOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "PListIndentOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListIndentEnd row col ->
+        T.CRES_PListIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "PListIndentEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_PListIndentExpr row col ->
+        T.CRES_PListIndentExpr row col ->
             Encode.object
                 [ ( "type", Encode.string "PListIndentExpr" )
                 , ( "row", Encode.int row )
@@ -11029,46 +10578,46 @@ pListEncoder pList =
                 ]
 
 
-pListDecoder : Decode.Decoder CRES_PList
+pListDecoder : Decode.Decoder T.CRES_PList
 pListDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "PListOpen" ->
-                        Decode.map2 CRES_PListOpen
+                        Decode.map2 T.CRES_PListOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListEnd" ->
-                        Decode.map2 CRES_PListEnd
+                        Decode.map2 T.CRES_PListEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListExpr" ->
-                        Decode.map3 CRES_PListExpr
+                        Decode.map3 T.CRES_PListExpr
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListSpace" ->
-                        Decode.map3 CRES_PListSpace
+                        Decode.map3 T.CRES_PListSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListIndentOpen" ->
-                        Decode.map2 CRES_PListIndentOpen
+                        Decode.map2 T.CRES_PListIndentOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListIndentEnd" ->
-                        Decode.map2 CRES_PListIndentEnd
+                        Decode.map2 T.CRES_PListIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "PListIndentExpr" ->
-                        Decode.map2 CRES_PListIndentExpr
+                        Decode.map2 T.CRES_PListIndentExpr
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -11077,38 +10626,38 @@ pListDecoder =
             )
 
 
-tRecordEncoder : CRES_TRecord -> Encode.Value
+tRecordEncoder : T.CRES_TRecord -> Encode.Value
 tRecordEncoder tRecord =
     case tRecord of
-        CRES_TRecordOpen row col ->
+        T.CRES_TRecordOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordEnd row col ->
+        T.CRES_TRecordEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordField row col ->
+        T.CRES_TRecordField row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordField" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordColon row col ->
+        T.CRES_TRecordColon row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordColon" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordType tipe row col ->
+        T.CRES_TRecordType tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordType" )
                 , ( "tipe", typeEncoder tipe )
@@ -11116,7 +10665,7 @@ tRecordEncoder tRecord =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordSpace space row col ->
+        T.CRES_TRecordSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordSpace" )
                 , ( "space", spaceEncoder space )
@@ -11124,35 +10673,35 @@ tRecordEncoder tRecord =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordIndentOpen row col ->
+        T.CRES_TRecordIndentOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordIndentOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordIndentField row col ->
+        T.CRES_TRecordIndentField row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordIndentField" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordIndentColon row col ->
+        T.CRES_TRecordIndentColon row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordIndentColon" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordIndentType row col ->
+        T.CRES_TRecordIndentType row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordIndentType" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TRecordIndentEnd row col ->
+        T.CRES_TRecordIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TRecordIndentEnd" )
                 , ( "row", Encode.int row )
@@ -11160,66 +10709,66 @@ tRecordEncoder tRecord =
                 ]
 
 
-tRecordDecoder : Decode.Decoder CRES_TRecord
+tRecordDecoder : Decode.Decoder T.CRES_TRecord
 tRecordDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TRecordOpen" ->
-                        Decode.map2 CRES_TRecordOpen
+                        Decode.map2 T.CRES_TRecordOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordEnd" ->
-                        Decode.map2 CRES_TRecordEnd
+                        Decode.map2 T.CRES_TRecordEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordField" ->
-                        Decode.map2 CRES_TRecordField
+                        Decode.map2 T.CRES_TRecordField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordColon" ->
-                        Decode.map2 CRES_TRecordColon
+                        Decode.map2 T.CRES_TRecordColon
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordType" ->
-                        Decode.map3 CRES_TRecordType
+                        Decode.map3 T.CRES_TRecordType
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordSpace" ->
-                        Decode.map3 CRES_TRecordSpace
+                        Decode.map3 T.CRES_TRecordSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordIndentOpen" ->
-                        Decode.map2 CRES_TRecordIndentOpen
+                        Decode.map2 T.CRES_TRecordIndentOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordIndentField" ->
-                        Decode.map2 CRES_TRecordIndentField
+                        Decode.map2 T.CRES_TRecordIndentField
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordIndentColon" ->
-                        Decode.map2 CRES_TRecordIndentColon
+                        Decode.map2 T.CRES_TRecordIndentColon
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordIndentType" ->
-                        Decode.map2 CRES_TRecordIndentType
+                        Decode.map2 T.CRES_TRecordIndentType
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TRecordIndentEnd" ->
-                        Decode.map2 CRES_TRecordIndentEnd
+                        Decode.map2 T.CRES_TRecordIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -11228,24 +10777,24 @@ tRecordDecoder =
             )
 
 
-tTupleEncoder : CRES_TTuple -> Encode.Value
+tTupleEncoder : T.CRES_TTuple -> Encode.Value
 tTupleEncoder tTuple =
     case tTuple of
-        CRES_TTupleOpen row col ->
+        T.CRES_TTupleOpen row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleOpen" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleEnd row col ->
+        T.CRES_TTupleEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleEnd" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleType tipe row col ->
+        T.CRES_TTupleType tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleType" )
                 , ( "tipe", typeEncoder tipe )
@@ -11253,7 +10802,7 @@ tTupleEncoder tTuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleSpace space row col ->
+        T.CRES_TTupleSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleSpace" )
                 , ( "space", spaceEncoder space )
@@ -11261,21 +10810,21 @@ tTupleEncoder tTuple =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleIndentType1 row col ->
+        T.CRES_TTupleIndentType1 row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleIndentType1" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleIndentTypeN row col ->
+        T.CRES_TTupleIndentTypeN row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleIndentTypeN" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_TTupleIndentEnd row col ->
+        T.CRES_TTupleIndentEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "TTupleIndentEnd" )
                 , ( "row", Encode.int row )
@@ -11283,46 +10832,46 @@ tTupleEncoder tTuple =
                 ]
 
 
-tTupleDecoder : Decode.Decoder CRES_TTuple
+tTupleDecoder : Decode.Decoder T.CRES_TTuple
 tTupleDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "TTupleOpen" ->
-                        Decode.map2 CRES_TTupleOpen
+                        Decode.map2 T.CRES_TTupleOpen
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleEnd" ->
-                        Decode.map2 CRES_TTupleEnd
+                        Decode.map2 T.CRES_TTupleEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleType" ->
-                        Decode.map3 CRES_TTupleType
+                        Decode.map3 T.CRES_TTupleType
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleSpace" ->
-                        Decode.map3 CRES_TTupleSpace
+                        Decode.map3 T.CRES_TTupleSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleIndentType1" ->
-                        Decode.map2 CRES_TTupleIndentType1
+                        Decode.map2 T.CRES_TTupleIndentType1
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleIndentTypeN" ->
-                        Decode.map2 CRES_TTupleIndentTypeN
+                        Decode.map2 T.CRES_TTupleIndentTypeN
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "TTupleIndentEnd" ->
-                        Decode.map2 CRES_TTupleIndentEnd
+                        Decode.map2 T.CRES_TTupleIndentEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -11331,10 +10880,10 @@ tTupleDecoder =
             )
 
 
-customTypeEncoder : CRES_CustomType -> Encode.Value
+customTypeEncoder : T.CRES_CustomType -> Encode.Value
 customTypeEncoder customType =
     case customType of
-        CRES_CT_Space space row col ->
+        T.CRES_CT_Space space row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_Space" )
                 , ( "space", spaceEncoder space )
@@ -11342,35 +10891,35 @@ customTypeEncoder customType =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_Name row col ->
+        T.CRES_CT_Name row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_Name" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_Equals row col ->
+        T.CRES_CT_Equals row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_Equals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_Bar row col ->
+        T.CRES_CT_Bar row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_Bar" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_Variant row col ->
+        T.CRES_CT_Variant row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_Variant" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_VariantArg tipe row col ->
+        T.CRES_CT_VariantArg tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_VariantArg" )
                 , ( "tipe", typeEncoder tipe )
@@ -11378,28 +10927,28 @@ customTypeEncoder customType =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_IndentEquals row col ->
+        T.CRES_CT_IndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_IndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_IndentBar row col ->
+        T.CRES_CT_IndentBar row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_IndentBar" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_IndentAfterBar row col ->
+        T.CRES_CT_IndentAfterBar row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_IndentAfterBar" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_CT_IndentAfterEquals row col ->
+        T.CRES_CT_IndentAfterEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "CT_IndentAfterEquals" )
                 , ( "row", Encode.int row )
@@ -11407,61 +10956,61 @@ customTypeEncoder customType =
                 ]
 
 
-customTypeDecoder : Decode.Decoder CRES_CustomType
+customTypeDecoder : Decode.Decoder T.CRES_CustomType
 customTypeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "CT_Space" ->
-                        Decode.map3 CRES_CT_Space
+                        Decode.map3 T.CRES_CT_Space
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_Name" ->
-                        Decode.map2 CRES_CT_Name
+                        Decode.map2 T.CRES_CT_Name
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_Equals" ->
-                        Decode.map2 CRES_CT_Equals
+                        Decode.map2 T.CRES_CT_Equals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_Bar" ->
-                        Decode.map2 CRES_CT_Bar
+                        Decode.map2 T.CRES_CT_Bar
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_Variant" ->
-                        Decode.map2 CRES_CT_Variant
+                        Decode.map2 T.CRES_CT_Variant
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_VariantArg" ->
-                        Decode.map3 CRES_CT_VariantArg
+                        Decode.map3 T.CRES_CT_VariantArg
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_IndentEquals" ->
-                        Decode.map2 CRES_CT_IndentEquals
+                        Decode.map2 T.CRES_CT_IndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_IndentBar" ->
-                        Decode.map2 CRES_CT_IndentBar
+                        Decode.map2 T.CRES_CT_IndentBar
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_IndentAfterBar" ->
-                        Decode.map2 CRES_CT_IndentAfterBar
+                        Decode.map2 T.CRES_CT_IndentAfterBar
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "CT_IndentAfterEquals" ->
-                        Decode.map2 CRES_CT_IndentAfterEquals
+                        Decode.map2 T.CRES_CT_IndentAfterEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -11470,10 +11019,10 @@ customTypeDecoder =
             )
 
 
-typeAliasEncoder : CRES_TypeAlias -> Encode.Value
+typeAliasEncoder : T.CRES_TypeAlias -> Encode.Value
 typeAliasEncoder typeAlias =
     case typeAlias of
-        CRES_AliasSpace space row col ->
+        T.CRES_AliasSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasSpace" )
                 , ( "space", spaceEncoder space )
@@ -11481,21 +11030,21 @@ typeAliasEncoder typeAlias =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_AliasName row col ->
+        T.CRES_AliasName row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasName" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_AliasEquals row col ->
+        T.CRES_AliasEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_AliasBody tipe row col ->
+        T.CRES_AliasBody tipe row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasBody" )
                 , ( "tipe", typeEncoder tipe )
@@ -11503,14 +11052,14 @@ typeAliasEncoder typeAlias =
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_AliasIndentEquals row col ->
+        T.CRES_AliasIndentEquals row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasIndentEquals" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRES_AliasIndentBody row col ->
+        T.CRES_AliasIndentBody row col ->
             Encode.object
                 [ ( "type", Encode.string "AliasIndentBody" )
                 , ( "row", Encode.int row )
@@ -11518,41 +11067,41 @@ typeAliasEncoder typeAlias =
                 ]
 
 
-typeAliasDecoder : Decode.Decoder CRES_TypeAlias
+typeAliasDecoder : Decode.Decoder T.CRES_TypeAlias
 typeAliasDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "AliasSpace" ->
-                        Decode.map3 CRES_AliasSpace
+                        Decode.map3 T.CRES_AliasSpace
                             (Decode.field "space" spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "AliasName" ->
-                        Decode.map2 CRES_AliasName
+                        Decode.map2 T.CRES_AliasName
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "AliasEquals" ->
-                        Decode.map2 CRES_AliasEquals
+                        Decode.map2 T.CRES_AliasEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "AliasBody" ->
-                        Decode.map3 CRES_AliasBody
+                        Decode.map3 T.CRES_AliasBody
                             (Decode.field "tipe" typeDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "AliasIndentEquals" ->
-                        Decode.map2 CRES_AliasIndentEquals
+                        Decode.map2 T.CRES_AliasIndentEquals
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "AliasIndentBody" ->
-                        Decode.map2 CRES_AliasIndentBody
+                        Decode.map2 T.CRES_AliasIndentBody
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 

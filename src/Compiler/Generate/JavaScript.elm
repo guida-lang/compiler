@@ -17,7 +17,6 @@ import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Generate.Mode as Mode
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
-import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
@@ -76,7 +75,7 @@ perfNote mode =
                 ++ " for better performance and smaller assets.');"
 
 
-generateForRepl : Bool -> L.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Annotation -> String
+generateForRepl : Bool -> T.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Annotation -> String
 generateForRepl ansi localizer (T.CASTO_GlobalGraph graph _) home name (T.CASTC_Forall _ tipe) =
     let
         mode : Mode.Mode
@@ -97,7 +96,7 @@ generateForRepl ansi localizer (T.CASTO_GlobalGraph graph _) home name (T.CASTC_
         ++ print ansi localizer home name tipe
 
 
-print : Bool -> L.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Type -> String
+print : Bool -> T.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> T.CASTC_Type -> String
 print ansi localizer home name tipe =
     let
         value : JsName.Name
@@ -137,7 +136,7 @@ print ansi localizer home name tipe =
 -- GENERATE FOR REPL ENDPOINT
 
 
-generateForReplEndpoint : L.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Annotation -> String
+generateForReplEndpoint : T.CRRTL_Localizer -> T.CASTO_GlobalGraph -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Annotation -> String
 generateForReplEndpoint localizer (T.CASTO_GlobalGraph graph _) home maybeName (T.CASTC_Forall _ tipe) =
     let
         name : T.CDN_Name
@@ -161,7 +160,7 @@ generateForReplEndpoint localizer (T.CASTO_GlobalGraph graph _) home maybeName (
         ++ postMessage localizer home maybeName tipe
 
 
-postMessage : L.CRRTL_Localizer -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Type -> String
+postMessage : T.CRRTL_Localizer -> T.CEMN_Canonical -> Maybe T.CDN_Name -> T.CASTC_Type -> String
 postMessage localizer home maybeName tipe =
     let
         name : T.CDN_Name

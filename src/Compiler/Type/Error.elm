@@ -1,9 +1,6 @@
 module Compiler.Type.Error exposing
     ( Direction(..)
-    , Extension(..)
     , Problem(..)
-    , Super(..)
-    , Type(..)
     , isChar
     , isFloat
     , isInt
@@ -32,42 +29,10 @@ import Prelude
 import Types as T
 
 
-
--- ERROR TYPES
-
-
-type Type
-    = Lambda Type Type (List Type)
-    | Infinite
-    | Error
-    | FlexVar T.CDN_Name
-    | FlexSuper Super T.CDN_Name
-    | RigidVar T.CDN_Name
-    | RigidSuper Super T.CDN_Name
-    | Type T.CEMN_Canonical T.CDN_Name (List Type)
-    | Record (Dict String T.CDN_Name Type) Extension
-    | Unit
-    | Tuple Type Type (Maybe Type)
-    | Alias T.CEMN_Canonical T.CDN_Name (List ( T.CDN_Name, Type )) Type
-
-
-type Super
-    = Number
-    | Comparable
-    | Appendable
-    | CompAppend
-
-
-type Extension
-    = Closed
-    | FlexOpen T.CDN_Name
-    | RigidOpen T.CDN_Name
-
-
-iteratedDealias : Type -> Type
+iteratedDealias : T.CTE_Type -> T.CTE_Type
 iteratedDealias tipe =
     case tipe of
-        Alias _ _ _ real ->
+        T.CTE_Alias _ _ _ real ->
             iteratedDealias real
 
         _ ->
@@ -78,67 +43,67 @@ iteratedDealias tipe =
 -- TO DOC
 
 
-toDoc : L.CRRTL_Localizer -> RT.Context -> Type -> D.Doc
+toDoc : T.CRRTL_Localizer -> RT.Context -> T.CTE_Type -> D.Doc
 toDoc localizer ctx tipe =
     case tipe of
-        Lambda a b cs ->
+        T.CTE_Lambda a b cs ->
             RT.lambda ctx
                 (toDoc localizer RT.Func a)
                 (toDoc localizer RT.Func b)
                 (List.map (toDoc localizer RT.Func) cs)
 
-        Infinite ->
+        T.CTE_Infinite ->
             D.fromChars "∞"
 
-        Error ->
+        T.CTE_Error ->
             D.fromChars "?"
 
-        FlexVar name ->
+        T.CTE_FlexVar name ->
             D.fromName name
 
-        FlexSuper _ name ->
+        T.CTE_FlexSuper _ name ->
             D.fromName name
 
-        RigidVar name ->
+        T.CTE_RigidVar name ->
             D.fromName name
 
-        RigidSuper _ name ->
+        T.CTE_RigidSuper _ name ->
             D.fromName name
 
-        Type home name args ->
+        T.CTE_Type home name args ->
             RT.apply ctx
                 (L.toDoc localizer home name)
                 (List.map (toDoc localizer RT.App) args)
 
-        Record fields ext ->
+        T.CTE_Record fields ext ->
             RT.record (fieldsToDocs localizer fields) (extToDoc ext)
 
-        Unit ->
+        T.CTE_Unit ->
             D.fromChars "()"
 
-        Tuple a b maybeC ->
+        T.CTE_Tuple a b maybeC ->
             RT.tuple
                 (toDoc localizer RT.None a)
                 (toDoc localizer RT.None b)
                 (List.map (toDoc localizer RT.None) (Maybe.toList maybeC))
 
-        Alias home name args _ ->
+        T.CTE_Alias home name args _ ->
             aliasToDoc localizer ctx home name args
 
 
-aliasToDoc : L.CRRTL_Localizer -> RT.Context -> T.CEMN_Canonical -> T.CDN_Name -> List ( T.CDN_Name, Type ) -> D.Doc
+aliasToDoc : T.CRRTL_Localizer -> RT.Context -> T.CEMN_Canonical -> T.CDN_Name -> List ( T.CDN_Name, T.CTE_Type ) -> D.Doc
 aliasToDoc localizer ctx home name args =
     RT.apply ctx
         (L.toDoc localizer home name)
         (List.map (toDoc localizer RT.App << Tuple.second) args)
 
 
-fieldsToDocs : L.CRRTL_Localizer -> Dict String T.CDN_Name Type -> List ( D.Doc, D.Doc )
+fieldsToDocs : T.CRRTL_Localizer -> Dict String T.CDN_Name T.CTE_Type -> List ( D.Doc, D.Doc )
 fieldsToDocs localizer fields =
     Dict.foldr compare (addField localizer) [] fields
 
 
-addField : L.CRRTL_Localizer -> T.CDN_Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
+addField : T.CRRTL_Localizer -> T.CDN_Name -> T.CTE_Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
 addField localizer fieldName fieldType docs =
     let
         f : D.Doc
@@ -152,16 +117,16 @@ addField localizer fieldName fieldType docs =
     ( f, t ) :: docs
 
 
-extToDoc : Extension -> Maybe D.Doc
+extToDoc : T.CTE_Extension -> Maybe D.Doc
 extToDoc ext =
     case ext of
-        Closed ->
+        T.CTE_Closed ->
             Nothing
 
-        FlexOpen x ->
+        T.CTE_FlexOpen x ->
             Just (D.fromName x)
 
-        RigidOpen x ->
+        T.CTE_RigidOpen x ->
             Just (D.fromName x)
 
 
@@ -187,9 +152,9 @@ type Problem
     | AnythingToBool
     | AnythingFromMaybe
     | ArityMismatch Int Int
-    | BadFlexSuper Direction Super Type
-    | BadRigidVar T.CDN_Name Type
-    | BadRigidSuper Super T.CDN_Name Type
+    | BadFlexSuper Direction T.CTE_Super T.CTE_Type
+    | BadRigidVar T.CDN_Name T.CTE_Type
+    | BadRigidSuper T.CTE_Super T.CDN_Name T.CTE_Type
     | FieldTypo T.CDN_Name (List T.CDN_Name)
     | FieldsMissing (List T.CDN_Name)
 
@@ -238,7 +203,7 @@ merge status1 status2 =
 -- COMPARISON
 
 
-toComparison : L.CRRTL_Localizer -> Type -> Type -> ( D.Doc, D.Doc, List Problem )
+toComparison : T.CRRTL_Localizer -> T.CTE_Type -> T.CTE_Type -> ( D.Doc, D.Doc, List Problem )
 toComparison localizer tipe1 tipe2 =
     case toDiff localizer RT.None tipe1 tipe2 of
         Diff doc1 doc2 Similar ->
@@ -248,67 +213,67 @@ toComparison localizer tipe1 tipe2 =
             ( doc1, doc2, Bag.toList problems )
 
 
-toDiff : L.CRRTL_Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+toDiff : T.CRRTL_Localizer -> RT.Context -> T.CTE_Type -> T.CTE_Type -> Diff D.Doc
 toDiff localizer ctx tipe1 tipe2 =
     case ( tipe1, tipe2 ) of
-        ( Unit, Unit ) ->
+        ( T.CTE_Unit, T.CTE_Unit ) ->
             same localizer ctx tipe1
 
-        ( Error, Error ) ->
+        ( T.CTE_Error, T.CTE_Error ) ->
             same localizer ctx tipe1
 
-        ( Infinite, Infinite ) ->
+        ( T.CTE_Infinite, T.CTE_Infinite ) ->
             same localizer ctx tipe1
 
-        ( FlexVar x, FlexVar y ) ->
+        ( T.CTE_FlexVar x, T.CTE_FlexVar y ) ->
             if x == y then
                 same localizer ctx tipe1
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( FlexSuper _ x, FlexSuper _ y ) ->
+        ( T.CTE_FlexSuper _ x, T.CTE_FlexSuper _ y ) ->
             if x == y then
                 same localizer ctx tipe1
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( RigidVar x, RigidVar y ) ->
+        ( T.CTE_RigidVar x, T.CTE_RigidVar y ) ->
             if x == y then
                 same localizer ctx tipe1
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( RigidSuper _ x, RigidSuper _ y ) ->
+        ( T.CTE_RigidSuper _ x, T.CTE_RigidSuper _ y ) ->
             if x == y then
                 same localizer ctx tipe1
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( FlexVar _, _ ) ->
+        ( T.CTE_FlexVar _, _ ) ->
             similar localizer ctx tipe1 tipe2
 
-        ( _, FlexVar _ ) ->
+        ( _, T.CTE_FlexVar _ ) ->
             similar localizer ctx tipe1 tipe2
 
-        ( FlexSuper s _, t ) ->
+        ( T.CTE_FlexSuper s _, t ) ->
             if isSuper s t then
                 similar localizer ctx tipe1 tipe2
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( t, FlexSuper s _ ) ->
+        ( t, T.CTE_FlexSuper s _ ) ->
             if isSuper s t then
                 similar localizer ctx tipe1 tipe2
 
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( Lambda a b cs, Lambda x y zs ) ->
+        ( T.CTE_Lambda a b cs, T.CTE_Lambda x y zs ) ->
             if List.length cs == List.length zs then
                 toDiff localizer RT.Func a x
                     |> fmapDiff (RT.lambda ctx)
@@ -320,7 +285,7 @@ toDiff localizer ctx tipe1 tipe2 =
 
             else
                 let
-                    f : Type -> D.Doc
+                    f : T.CTE_Type -> D.Doc
                     f =
                         toDoc localizer RT.Func
                 in
@@ -329,22 +294,22 @@ toDiff localizer ctx tipe1 tipe2 =
                     (D.dullyellow (RT.lambda ctx (f x) (f y) (List.map f zs)))
                     (Bag.one (ArityMismatch (2 + List.length cs) (2 + List.length zs)))
 
-        ( Tuple a b Nothing, Tuple x y Nothing ) ->
+        ( T.CTE_Tuple a b Nothing, T.CTE_Tuple x y Nothing ) ->
             toDiff localizer RT.None a x
                 |> fmapDiff RT.tuple
                 |> applyDiff (toDiff localizer RT.None b y)
                 |> applyDiff (Diff [] [] Similar)
 
-        ( Tuple a b (Just c), Tuple x y (Just z) ) ->
+        ( T.CTE_Tuple a b (Just c), T.CTE_Tuple x y (Just z) ) ->
             toDiff localizer RT.None a x
                 |> fmapDiff RT.tuple
                 |> applyDiff (toDiff localizer RT.None b y)
                 |> applyDiff (fmapDiff List.singleton (toDiff localizer RT.None c z))
 
-        ( Record fields1 ext1, Record fields2 ext2 ) ->
+        ( T.CTE_Record fields1 ext1, T.CTE_Record fields2 ext2 ) ->
             diffRecord localizer fields1 ext1 fields2 ext2
 
-        ( Type home1 name1 args1, Type home2 name2 args2 ) ->
+        ( T.CTE_Type home1 name1 args1, T.CTE_Type home2 name2 args2 ) ->
             if home1 == home2 && name1 == name2 then
                 List.map2 (toDiff localizer RT.App) args1 args2
                     |> List.foldr (liftA2 (::)) (pureDiff [])
@@ -360,7 +325,7 @@ toDiff localizer ctx tipe1 tipe2 =
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( Alias home1 name1 args1 _, Alias home2 name2 args2 _ ) ->
+        ( T.CTE_Alias home1 name1 args1 _, T.CTE_Alias home2 name2 args2 _ ) ->
             if home1 == home2 && name1 == name2 then
                 List.map2 (toDiff localizer RT.App) (List.map Tuple.second args1) (List.map Tuple.second args2)
                     |> List.foldr (liftA2 (::)) (pureDiff [])
@@ -370,7 +335,7 @@ toDiff localizer ctx tipe1 tipe2 =
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
         -- start trying to find specific problems (moved first check above)
-        ( Type home name [ t1 ], t2 ) ->
+        ( T.CTE_Type home name [ t1 ], t2 ) ->
             if isMaybe home name && isSimilar (toDiff localizer ctx t1 t2) then
                 different
                     (RT.apply ctx (D.dullyellow (L.toDoc localizer home name)) [ toDoc localizer RT.App t1 ])
@@ -380,7 +345,7 @@ toDiff localizer ctx tipe1 tipe2 =
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( t1, Type home name [ t2 ] ) ->
+        ( t1, T.CTE_Type home name [ t2 ] ) ->
             if isList home name && isSimilar (toDiff localizer ctx t1 t2) then
                 different
                     (toDoc localizer ctx t1)
@@ -390,14 +355,14 @@ toDiff localizer ctx tipe1 tipe2 =
             else
                 toDiffOtherwise localizer ctx ( tipe1, tipe2 )
 
-        ( Alias home1 name1 args1 t1, t2 ) ->
+        ( T.CTE_Alias home1 name1 args1 t1, t2 ) ->
             case diffAliasedRecord localizer t1 t2 of
                 Just (Diff _ doc2 status) ->
                     Diff (D.dullyellow (aliasToDoc localizer ctx home1 name1 args1)) doc2 status
 
                 Nothing ->
                     case tipe2 of
-                        Type home2 name2 args2 ->
+                        T.CTE_Type home2 name2 args2 ->
                             if L.toChars localizer home1 name1 == L.toChars localizer home2 name2 then
                                 different
                                     (nameClashToDoc ctx localizer home1 name1 (List.map Tuple.second args1))
@@ -416,14 +381,14 @@ toDiff localizer ctx tipe1 tipe2 =
                                 (D.dullyellow (toDoc localizer ctx tipe2))
                                 Bag.empty
 
-        ( _, Alias home2 name2 args2 _ ) ->
+        ( _, T.CTE_Alias home2 name2 args2 _ ) ->
             case diffAliasedRecord localizer tipe1 tipe2 of
                 Just (Diff doc1 _ status) ->
                     Diff doc1 (D.dullyellow (aliasToDoc localizer ctx home2 name2 args2)) status
 
                 Nothing ->
                     case tipe1 of
-                        Type home1 name1 args1 ->
+                        T.CTE_Type home1 name1 args1 ->
                             if L.toChars localizer home1 name1 == L.toChars localizer home2 name2 then
                                 different
                                     (nameClashToDoc ctx localizer home1 name1 args1)
@@ -446,7 +411,7 @@ toDiff localizer ctx tipe1 tipe2 =
             toDiffOtherwise localizer ctx pair
 
 
-toDiffOtherwise : L.CRRTL_Localizer -> RT.Context -> ( Type, Type ) -> Diff D.Doc
+toDiffOtherwise : T.CRRTL_Localizer -> RT.Context -> ( T.CTE_Type, T.CTE_Type ) -> Diff D.Doc
 toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
     let
         doc1 : D.Doc
@@ -459,25 +424,25 @@ toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
     in
     different doc1 doc2 <|
         case pair of
-            ( RigidVar x, other ) ->
+            ( T.CTE_RigidVar x, other ) ->
                 Bag.one <| BadRigidVar x other
 
-            ( FlexSuper s _, other ) ->
+            ( T.CTE_FlexSuper s _, other ) ->
                 Bag.one <| BadFlexSuper Have s other
 
-            ( RigidSuper s x, other ) ->
+            ( T.CTE_RigidSuper s x, other ) ->
                 Bag.one <| BadRigidSuper s x other
 
-            ( other, RigidVar x ) ->
+            ( other, T.CTE_RigidVar x ) ->
                 Bag.one <| BadRigidVar x other
 
-            ( other, FlexSuper s _ ) ->
+            ( other, T.CTE_FlexSuper s _ ) ->
                 Bag.one <| BadFlexSuper Need s other
 
-            ( other, RigidSuper s x ) ->
+            ( other, T.CTE_RigidSuper s x ) ->
                 Bag.one <| BadRigidSuper s x other
 
-            ( Type home1 name1 [], Type home2 name2 [] ) ->
+            ( T.CTE_Type home1 name1 [], T.CTE_Type home2 name2 [] ) ->
                 if isInt home1 name1 && isFloat home2 name2 then
                     Bag.one <| IntFloat
 
@@ -510,7 +475,7 @@ toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
 -- DIFF HELPERS
 
 
-same : L.CRRTL_Localizer -> RT.Context -> Type -> Diff D.Doc
+same : T.CRRTL_Localizer -> RT.Context -> T.CTE_Type -> Diff D.Doc
 same localizer ctx tipe =
     let
         doc : D.Doc
@@ -520,7 +485,7 @@ same localizer ctx tipe =
     Diff doc doc Similar
 
 
-similar : L.CRRTL_Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+similar : T.CRRTL_Localizer -> RT.Context -> T.CTE_Type -> T.CTE_Type -> Diff D.Doc
 similar localizer ctx t1 t2 =
     Diff (toDoc localizer ctx t1) (toDoc localizer ctx t2) Similar
 
@@ -583,35 +548,35 @@ isList home name =
 -- IS SUPER?
 
 
-isSuper : Super -> Type -> Bool
+isSuper : T.CTE_Super -> T.CTE_Type -> Bool
 isSuper super tipe =
     case iteratedDealias tipe of
-        Type h n args ->
+        T.CTE_Type h n args ->
             case super of
-                Number ->
+                T.CTE_Number ->
                     isInt h n || isFloat h n
 
-                Comparable ->
+                T.CTE_Comparable ->
                     isInt h n || isFloat h n || isString h n || isChar h n || isList h n && isSuper super (Prelude.head args)
 
-                Appendable ->
+                T.CTE_Appendable ->
                     isString h n || isList h n
 
-                CompAppend ->
-                    isString h n || isList h n && isSuper Comparable (Prelude.head args)
+                T.CTE_CompAppend ->
+                    isString h n || isList h n && isSuper T.CTE_Comparable (Prelude.head args)
 
-        Tuple a b maybeC ->
+        T.CTE_Tuple a b maybeC ->
             case super of
-                Number ->
+                T.CTE_Number ->
                     False
 
-                Comparable ->
+                T.CTE_Comparable ->
                     isSuper super a && isSuper super b && Maybe.withDefault True (Maybe.map (isSuper super) maybeC)
 
-                Appendable ->
+                T.CTE_Appendable ->
                     False
 
-                CompAppend ->
+                T.CTE_CompAppend ->
                     False
 
         _ ->
@@ -622,7 +587,7 @@ isSuper super tipe =
 -- NAME CLASH
 
 
-nameClashToDoc : RT.Context -> L.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> List Type -> D.Doc
+nameClashToDoc : RT.Context -> T.CRRTL_Localizer -> T.CEMN_Canonical -> T.CDN_Name -> List T.CTE_Type -> D.Doc
 nameClashToDoc ctx localizer (T.CEMN_Canonical _ home) name args =
     RT.apply ctx
         (D.yellow (D.fromName home) |> D.a (D.dullyellow (D.fromChars "." |> D.a (D.fromName name))))
@@ -633,10 +598,10 @@ nameClashToDoc ctx localizer (T.CEMN_Canonical _ home) name args =
 -- DIFF ALIASED RECORD
 
 
-diffAliasedRecord : L.CRRTL_Localizer -> Type -> Type -> Maybe (Diff D.Doc)
+diffAliasedRecord : T.CRRTL_Localizer -> T.CTE_Type -> T.CTE_Type -> Maybe (Diff D.Doc)
 diffAliasedRecord localizer t1 t2 =
     case ( iteratedDealias t1, iteratedDealias t2 ) of
-        ( Record fields1 ext1, Record fields2 ext2 ) ->
+        ( T.CTE_Record fields1 ext1, T.CTE_Record fields2 ext2 ) ->
             Just (diffRecord localizer fields1 ext1 fields2 ext2)
 
         _ ->
@@ -647,14 +612,14 @@ diffAliasedRecord localizer t1 t2 =
 -- RECORD DIFFS
 
 
-diffRecord : L.CRRTL_Localizer -> Dict String T.CDN_Name Type -> Extension -> Dict String T.CDN_Name Type -> Extension -> Diff D.Doc
+diffRecord : T.CRRTL_Localizer -> Dict String T.CDN_Name T.CTE_Type -> T.CTE_Extension -> Dict String T.CDN_Name T.CTE_Type -> T.CTE_Extension -> Diff D.Doc
 diffRecord localizer fields1 ext1 fields2 ext2 =
     let
-        toUnknownDocs : T.CDN_Name -> Type -> ( D.Doc, D.Doc )
+        toUnknownDocs : T.CDN_Name -> T.CTE_Type -> ( D.Doc, D.Doc )
         toUnknownDocs field tipe =
             ( D.dullyellow (D.fromName field), toDoc localizer RT.None tipe )
 
-        toOverlapDocs : T.CDN_Name -> Type -> Type -> Diff ( D.Doc, D.Doc )
+        toOverlapDocs : T.CDN_Name -> T.CTE_Type -> T.CTE_Type -> Diff ( D.Doc, D.Doc )
         toOverlapDocs field t1 t2 =
             fmapDiff (Tuple.pair (D.fromName field)) <| toDiff localizer RT.None t1 t2
 
@@ -757,16 +722,16 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
                     Similar
 
 
-hasFixedFields : Extension -> Bool
+hasFixedFields : T.CTE_Extension -> Bool
 hasFixedFields ext =
     case ext of
-        Closed ->
+        T.CTE_Closed ->
             True
 
-        FlexOpen _ ->
+        T.CTE_FlexOpen _ ->
             False
 
-        RigidOpen _ ->
+        T.CTE_RigidOpen _ ->
             True
 
 
@@ -774,7 +739,7 @@ hasFixedFields ext =
 -- DIFF RECORD EXTENSION
 
 
-extToDiff : Extension -> Extension -> Diff (Maybe D.Doc)
+extToDiff : T.CTE_Extension -> T.CTE_Extension -> Diff (Maybe D.Doc)
 extToDiff ext1 ext2 =
     let
         status : Status
@@ -797,47 +762,47 @@ extToDiff ext1 ext2 =
             Diff (Maybe.map D.dullyellow extDoc1) (Maybe.map D.dullyellow extDoc2) status
 
 
-extToStatus : Extension -> Extension -> Status
+extToStatus : T.CTE_Extension -> T.CTE_Extension -> Status
 extToStatus ext1 ext2 =
     case ext1 of
-        Closed ->
+        T.CTE_Closed ->
             case ext2 of
-                Closed ->
+                T.CTE_Closed ->
                     Similar
 
-                FlexOpen _ ->
+                T.CTE_FlexOpen _ ->
                     Similar
 
-                RigidOpen _ ->
+                T.CTE_RigidOpen _ ->
                     Different Bag.empty
 
-        FlexOpen _ ->
+        T.CTE_FlexOpen _ ->
             Similar
 
-        RigidOpen x ->
+        T.CTE_RigidOpen x ->
             case ext2 of
-                Closed ->
+                T.CTE_Closed ->
                     Different Bag.empty
 
-                FlexOpen _ ->
+                T.CTE_FlexOpen _ ->
                     Similar
 
-                RigidOpen y ->
+                T.CTE_RigidOpen y ->
                     if x == y then
                         Similar
 
                     else
-                        Different (Bag.one (BadRigidVar x (RigidVar y)))
+                        Different (Bag.one (BadRigidVar x (T.CTE_RigidVar y)))
 
 
 
 -- ENCODERS and DECODERS
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : T.CTE_Type -> Encode.Value
 typeEncoder type_ =
     case type_ of
-        Lambda x y zs ->
+        T.CTE_Lambda x y zs ->
             Encode.object
                 [ ( "type", Encode.string "Lambda" )
                 , ( "x", typeEncoder x )
@@ -845,43 +810,43 @@ typeEncoder type_ =
                 , ( "zs", Encode.list typeEncoder zs )
                 ]
 
-        Infinite ->
+        T.CTE_Infinite ->
             Encode.object
                 [ ( "type", Encode.string "Infinite" )
                 ]
 
-        Error ->
+        T.CTE_Error ->
             Encode.object
                 [ ( "type", Encode.string "Error" )
                 ]
 
-        FlexVar name ->
+        T.CTE_FlexVar name ->
             Encode.object
                 [ ( "type", Encode.string "FlexVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        FlexSuper s x ->
+        T.CTE_FlexSuper s x ->
             Encode.object
                 [ ( "type", Encode.string "FlexSuper" )
                 , ( "s", superEncoder s )
                 , ( "x", Encode.string x )
                 ]
 
-        RigidVar name ->
+        T.CTE_RigidVar name ->
             Encode.object
                 [ ( "type", Encode.string "RigidVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        RigidSuper s x ->
+        T.CTE_RigidSuper s x ->
             Encode.object
                 [ ( "type", Encode.string "RigidSuper" )
                 , ( "s", superEncoder s )
                 , ( "x", Encode.string x )
                 ]
 
-        Type home name args ->
+        T.CTE_Type home name args ->
             Encode.object
                 [ ( "type", Encode.string "Type" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -889,19 +854,19 @@ typeEncoder type_ =
                 , ( "args", Encode.list typeEncoder args )
                 ]
 
-        Record msgType decoder ->
+        T.CTE_Record msgType decoder ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 , ( "msgType", EncodeX.assocListDict compare Encode.string typeEncoder msgType )
                 , ( "decoder", extensionEncoder decoder )
                 ]
 
-        Unit ->
+        T.CTE_Unit ->
             Encode.object
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        T.CTE_Tuple a b maybeC ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", typeEncoder a )
@@ -909,7 +874,7 @@ typeEncoder type_ =
                 , ( "maybeC", EncodeX.maybe typeEncoder maybeC )
                 ]
 
-        Alias home name args tipe ->
+        T.CTE_Alias home name args tipe ->
             Encode.object
                 [ ( "type", Encode.string "Alias" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -919,62 +884,62 @@ typeEncoder type_ =
                 ]
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : Decode.Decoder T.CTE_Type
 typeDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Lambda" ->
-                        Decode.map3 Lambda
+                        Decode.map3 T.CTE_Lambda
                             (Decode.field "x" typeDecoder)
                             (Decode.field "y" typeDecoder)
                             (Decode.field "zs" (Decode.list typeDecoder))
 
                     "Infinite" ->
-                        Decode.succeed Infinite
+                        Decode.succeed T.CTE_Infinite
 
                     "Error" ->
-                        Decode.succeed Error
+                        Decode.succeed T.CTE_Error
 
                     "FlexVar" ->
-                        Decode.map FlexVar (Decode.field "name" Decode.string)
+                        Decode.map T.CTE_FlexVar (Decode.field "name" Decode.string)
 
                     "FlexSuper" ->
-                        Decode.map2 FlexSuper
+                        Decode.map2 T.CTE_FlexSuper
                             (Decode.field "s" superDecoder)
                             (Decode.field "x" Decode.string)
 
                     "RigidVar" ->
-                        Decode.map RigidVar (Decode.field "name" Decode.string)
+                        Decode.map T.CTE_RigidVar (Decode.field "name" Decode.string)
 
                     "RigidSuper" ->
-                        Decode.map2 RigidSuper
+                        Decode.map2 T.CTE_RigidSuper
                             (Decode.field "s" superDecoder)
                             (Decode.field "x" Decode.string)
 
                     "Type" ->
-                        Decode.map3 Type
+                        Decode.map3 T.CTE_Type
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list typeDecoder))
 
                     "Record" ->
-                        Decode.map2 Record
+                        Decode.map2 T.CTE_Record
                             (Decode.field "msgType" (DecodeX.assocListDict identity Decode.string typeDecoder))
                             (Decode.field "decoder" extensionDecoder)
 
                     "Unit" ->
-                        Decode.succeed Unit
+                        Decode.succeed T.CTE_Unit
 
                     "Tuple" ->
-                        Decode.map3 Tuple
+                        Decode.map3 T.CTE_Tuple
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
                             (Decode.field "maybeC" (Decode.maybe typeDecoder))
 
                     "Alias" ->
-                        Decode.map4 Alias
+                        Decode.map4 T.CTE_Alias
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list (DecodeX.jsonPair Decode.string typeDecoder)))
@@ -985,80 +950,80 @@ typeDecoder =
             )
 
 
-superEncoder : Super -> Encode.Value
+superEncoder : T.CTE_Super -> Encode.Value
 superEncoder super =
     case super of
-        Number ->
+        T.CTE_Number ->
             Encode.string "Number"
 
-        Comparable ->
+        T.CTE_Comparable ->
             Encode.string "Comparable"
 
-        Appendable ->
+        T.CTE_Appendable ->
             Encode.string "Appendable"
 
-        CompAppend ->
+        T.CTE_CompAppend ->
             Encode.string "CompAppend"
 
 
-superDecoder : Decode.Decoder Super
+superDecoder : Decode.Decoder T.CTE_Super
 superDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "Number" ->
-                        Decode.succeed Number
+                        Decode.succeed T.CTE_Number
 
                     "Comparable" ->
-                        Decode.succeed Comparable
+                        Decode.succeed T.CTE_Comparable
 
                     "Appendable" ->
-                        Decode.succeed Appendable
+                        Decode.succeed T.CTE_Appendable
 
                     "CompAppend" ->
-                        Decode.succeed CompAppend
+                        Decode.succeed T.CTE_CompAppend
 
                     _ ->
                         Decode.fail ("Unknown Super: " ++ str)
             )
 
 
-extensionEncoder : Extension -> Encode.Value
+extensionEncoder : T.CTE_Extension -> Encode.Value
 extensionEncoder extension =
     case extension of
-        Closed ->
+        T.CTE_Closed ->
             Encode.object
                 [ ( "type", Encode.string "Closed" )
                 ]
 
-        FlexOpen x ->
+        T.CTE_FlexOpen x ->
             Encode.object
                 [ ( "type", Encode.string "FlexOpen" )
                 , ( "x", Encode.string x )
                 ]
 
-        RigidOpen x ->
+        T.CTE_RigidOpen x ->
             Encode.object
                 [ ( "type", Encode.string "RigidOpen" )
                 , ( "x", Encode.string x )
                 ]
 
 
-extensionDecoder : Decode.Decoder Extension
+extensionDecoder : Decode.Decoder T.CTE_Extension
 extensionDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Closed" ->
-                        Decode.succeed Closed
+                        Decode.succeed T.CTE_Closed
 
                     "FlexOpen" ->
-                        Decode.map FlexOpen (Decode.field "x" Decode.string)
+                        Decode.map T.CTE_FlexOpen (Decode.field "x" Decode.string)
 
                     "RigidOpen" ->
-                        Decode.map RigidOpen (Decode.field "x" Decode.string)
+                        Decode.map T.CTE_RigidOpen (Decode.field "x" Decode.string)
 
                     _ ->
                         Decode.fail ("Unknown Extension's type: " ++ type_)

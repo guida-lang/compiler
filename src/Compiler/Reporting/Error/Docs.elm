@@ -1,9 +1,5 @@
 module Compiler.Reporting.Error.Docs exposing
-    ( CRED_DefProblem(..)
-    , CRED_Error(..)
-    , CRED_NameProblem(..)
-    , CRED_SyntaxProblem(..)
-    , errorDecoder
+    ( errorDecoder
     , errorEncoder
     , toReports
     )
@@ -11,7 +7,7 @@ module Compiler.Reporting.Error.Docs exposing
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as EncodeX
-import Compiler.Parse.Symbol exposing (CPS_BadOperator)
+import Compiler.Parse.Symbol
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as E
@@ -22,38 +18,10 @@ import Json.Encode as Encode
 import Types as T
 
 
-type CRED_Error
-    = CRED_NoDocs T.CRA_Region
-    | CRED_ImplicitExposing T.CRA_Region
-    | CRED_SyntaxProblem CRED_SyntaxProblem
-    | CRED_NameProblems (NE.Nonempty CRED_NameProblem)
-    | CRED_DefProblems (NE.Nonempty CRED_DefProblem)
-
-
-type CRED_SyntaxProblem
-    = CRED_Op T.CPP_Row T.CPP_Col
-    | CRED_OpBad CPS_BadOperator T.CPP_Row T.CPP_Col
-    | CRED_Name T.CPP_Row T.CPP_Col
-    | CRED_Space E.CRES_Space T.CPP_Row T.CPP_Col
-    | CRED_Comma T.CPP_Row T.CPP_Col
-    | CRED_BadEnd T.CPP_Row T.CPP_Col
-
-
-type CRED_NameProblem
-    = CRED_NameDuplicate T.CDN_Name T.CRA_Region T.CRA_Region
-    | CRED_NameOnlyInDocs T.CDN_Name T.CRA_Region
-    | CRED_NameOnlyInExports T.CDN_Name T.CRA_Region
-
-
-type CRED_DefProblem
-    = CRED_NoComment T.CDN_Name T.CRA_Region
-    | CRED_NoAnnotation T.CDN_Name T.CRA_Region
-
-
-toReports : Code.Source -> CRED_Error -> NE.Nonempty Report.Report
+toReports : Code.Source -> T.CRED_Error -> NE.Nonempty Report.Report
 toReports source err =
     case err of
-        CRED_NoDocs region ->
+        T.CRED_NoDocs region ->
             NE.singleton <|
                 Report.Report "NO DOCS" region [] <|
                     Code.toSnippet source
@@ -63,7 +31,7 @@ toReports source err =
                         , D.reflow "Learn more at <https://package.elm-lang.org/help/documentation-format>"
                         )
 
-        CRED_ImplicitExposing region ->
+        T.CRED_ImplicitExposing region ->
             NE.singleton <|
                 Report.Report "IMPLICIT EXPOSING" region [] <|
                     Code.toSnippet source
@@ -73,18 +41,18 @@ toReports source err =
                         , D.reflow "A great API usually hides some implementation details, so it is rare that everything in the file should be exposed. And requiring package authors to be explicit about this is a way of adding another quality check before code gets published. So as you write out the public API, ask yourself if it will be easy to understand as people read the documentation!"
                         )
 
-        CRED_SyntaxProblem problem ->
+        T.CRED_SyntaxProblem problem ->
             NE.singleton <|
                 toSyntaxProblemReport source problem
 
-        CRED_NameProblems problems ->
+        T.CRED_NameProblems problems ->
             NE.map (toNameProblemReport source) problems
 
-        CRED_DefProblems problems ->
+        T.CRED_DefProblems problems ->
             NE.map (toDefProblemReport source) problems
 
 
-toSyntaxProblemReport : Code.Source -> CRED_SyntaxProblem -> Report.Report
+toSyntaxProblemReport : Code.Source -> T.CRED_SyntaxProblem -> Report.Report
 toSyntaxProblemReport source problem =
     let
         toSyntaxReport : T.CPP_Row -> T.CPP_Col -> String -> Report.Report
@@ -106,22 +74,22 @@ toSyntaxProblemReport source problem =
                     )
     in
     case problem of
-        CRED_Op row col ->
+        T.CRED_Op row col ->
             toSyntaxReport row col "I am trying to parse an operator like (+) or (*) but something is going wrong."
 
-        CRED_OpBad _ row col ->
+        T.CRED_OpBad _ row col ->
             toSyntaxReport row col "I am trying to parse an operator like (+) or (*) but it looks like you are using a reserved symbol in this case."
 
-        CRED_Name row col ->
+        T.CRED_Name row col ->
             toSyntaxReport row col "I was expecting to see the name of another exposed value from this module."
 
-        CRED_Space space row col ->
+        T.CRED_Space space row col ->
             E.toSpaceReport source space row col
 
-        CRED_Comma row col ->
+        T.CRED_Comma row col ->
             toSyntaxReport row col "I was expecting to see a comma next."
 
-        CRED_BadEnd row col ->
+        T.CRED_BadEnd row col ->
             toSyntaxReport row col "I am not really sure what I am getting stuck on though."
 
 
@@ -135,10 +103,10 @@ toRegion row col =
     T.CRA_Region pos pos
 
 
-toNameProblemReport : Code.Source -> CRED_NameProblem -> Report.Report
+toNameProblemReport : Code.Source -> T.CRED_NameProblem -> Report.Report
 toNameProblemReport source problem =
     case problem of
-        CRED_NameDuplicate name r1 r2 ->
+        T.CRED_NameDuplicate name r1 r2 ->
             Report.Report "DUPLICATE DOCS" r2 [] <|
                 Code.toPair source
                     r1
@@ -151,7 +119,7 @@ toNameProblemReport source problem =
                     , D.fromChars "Remove one of them!"
                     )
 
-        CRED_NameOnlyInDocs name region ->
+        T.CRED_NameOnlyInDocs name region ->
             Report.Report "DOCS MISTAKE" region [] <|
                 Code.toSnippet source
                     region
@@ -160,7 +128,7 @@ toNameProblemReport source problem =
                     , D.reflow ("Does it need to be added to the `exposing` list as well? Or maybe you removed `" ++ name ++ "` and forgot to delete it here?")
                     )
 
-        CRED_NameOnlyInExports name region ->
+        T.CRED_NameOnlyInExports name region ->
             Report.Report "DOCS MISTAKE" region [] <|
                 Code.toSnippet source
                     region
@@ -173,10 +141,10 @@ toNameProblemReport source problem =
                     )
 
 
-toDefProblemReport : Code.Source -> CRED_DefProblem -> Report.Report
+toDefProblemReport : Code.Source -> T.CRED_DefProblem -> Report.Report
 toDefProblemReport source problem =
     case problem of
-        CRED_NoComment name region ->
+        T.CRED_NoComment name region ->
             Report.Report "NO DOCS" region [] <|
                 Code.toSnippet source
                     region
@@ -188,7 +156,7 @@ toDefProblemReport source problem =
                         ]
                     )
 
-        CRED_NoAnnotation name region ->
+        T.CRED_NoAnnotation name region ->
             Report.Report "NO TYPE ANNOTATION" region [] <|
                 Code.toSnippet source
                     region
@@ -205,77 +173,77 @@ toDefProblemReport source problem =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : CRED_Error -> Encode.Value
+errorEncoder : T.CRED_Error -> Encode.Value
 errorEncoder error =
     case error of
-        CRED_NoDocs region ->
+        T.CRED_NoDocs region ->
             Encode.object
                 [ ( "type", Encode.string "NoDocs" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRED_ImplicitExposing region ->
+        T.CRED_ImplicitExposing region ->
             Encode.object
                 [ ( "type", Encode.string "ImplicitExposing" )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRED_SyntaxProblem problem ->
+        T.CRED_SyntaxProblem problem ->
             Encode.object
                 [ ( "type", Encode.string "SyntaxProblem" )
                 , ( "problem", syntaxProblemEncoder problem )
                 ]
 
-        CRED_NameProblems problems ->
+        T.CRED_NameProblems problems ->
             Encode.object
                 [ ( "type", Encode.string "NameProblems" )
                 , ( "problems", EncodeX.nonempty nameProblemEncoder problems )
                 ]
 
-        CRED_DefProblems problems ->
+        T.CRED_DefProblems problems ->
             Encode.object
                 [ ( "type", Encode.string "DefProblems" )
                 , ( "problems", EncodeX.nonempty defProblemEncoder problems )
                 ]
 
 
-errorDecoder : Decode.Decoder CRED_Error
+errorDecoder : Decode.Decoder T.CRED_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NoDocs" ->
-                        Decode.map CRED_NoDocs (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRED_NoDocs (Decode.field "region" A.regionDecoder)
 
                     "ImplicitExposing" ->
-                        Decode.map CRED_ImplicitExposing (Decode.field "region" A.regionDecoder)
+                        Decode.map T.CRED_ImplicitExposing (Decode.field "region" A.regionDecoder)
 
                     "SyntaxProblem" ->
-                        Decode.map CRED_SyntaxProblem (Decode.field "problem" syntaxProblemDecoder)
+                        Decode.map T.CRED_SyntaxProblem (Decode.field "problem" syntaxProblemDecoder)
 
                     "NameProblems" ->
-                        Decode.map CRED_NameProblems (Decode.field "problems" (DecodeX.nonempty nameProblemDecoder))
+                        Decode.map T.CRED_NameProblems (Decode.field "problems" (DecodeX.nonempty nameProblemDecoder))
 
                     "DefProblems" ->
-                        Decode.map CRED_DefProblems (Decode.field "problems" (DecodeX.nonempty defProblemDecoder))
+                        Decode.map T.CRED_DefProblems (Decode.field "problems" (DecodeX.nonempty defProblemDecoder))
 
                     _ ->
                         Decode.fail ("Failed to decode Error's type: " ++ type_)
             )
 
 
-syntaxProblemEncoder : CRED_SyntaxProblem -> Encode.Value
+syntaxProblemEncoder : T.CRED_SyntaxProblem -> Encode.Value
 syntaxProblemEncoder syntaxProblem =
     case syntaxProblem of
-        CRED_Op row col ->
+        T.CRED_Op row col ->
             Encode.object
                 [ ( "type", Encode.string "Op" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRED_OpBad badOperator row col ->
+        T.CRED_OpBad badOperator row col ->
             Encode.object
                 [ ( "type", Encode.string "OpBad" )
                 , ( "badOperator", Compiler.Parse.Symbol.badOperatorEncoder badOperator )
@@ -283,14 +251,14 @@ syntaxProblemEncoder syntaxProblem =
                 , ( "col", Encode.int col )
                 ]
 
-        CRED_Name row col ->
+        T.CRED_Name row col ->
             Encode.object
                 [ ( "type", Encode.string "Name" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRED_Space name row col ->
+        T.CRED_Space name row col ->
             Encode.object
                 [ ( "type", Encode.string "Space" )
                 , ( "name", E.spaceEncoder name )
@@ -298,14 +266,14 @@ syntaxProblemEncoder syntaxProblem =
                 , ( "col", Encode.int col )
                 ]
 
-        CRED_Comma row col ->
+        T.CRED_Comma row col ->
             Encode.object
                 [ ( "type", Encode.string "Comma" )
                 , ( "row", Encode.int row )
                 , ( "col", Encode.int col )
                 ]
 
-        CRED_BadEnd row col ->
+        T.CRED_BadEnd row col ->
             Encode.object
                 [ ( "type", Encode.string "BadEnd" )
                 , ( "row", Encode.int row )
@@ -313,41 +281,41 @@ syntaxProblemEncoder syntaxProblem =
                 ]
 
 
-syntaxProblemDecoder : Decode.Decoder CRED_SyntaxProblem
+syntaxProblemDecoder : Decode.Decoder T.CRED_SyntaxProblem
 syntaxProblemDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Op" ->
-                        Decode.map2 CRED_Op
+                        Decode.map2 T.CRED_Op
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "OpBad" ->
-                        Decode.map3 CRED_OpBad
+                        Decode.map3 T.CRED_OpBad
                             (Decode.field "badOperator" Compiler.Parse.Symbol.badOperatorDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Name" ->
-                        Decode.map2 CRED_Name
+                        Decode.map2 T.CRED_Name
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Space" ->
-                        Decode.map3 CRED_Space
+                        Decode.map3 T.CRED_Space
                             (Decode.field "name" E.spaceDecoder)
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "Comma" ->
-                        Decode.map2 CRED_Comma
+                        Decode.map2 T.CRED_Comma
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
                     "BadEnd" ->
-                        Decode.map2 CRED_BadEnd
+                        Decode.map2 T.CRED_BadEnd
                             (Decode.field "row" Decode.int)
                             (Decode.field "col" Decode.int)
 
@@ -356,10 +324,10 @@ syntaxProblemDecoder =
             )
 
 
-nameProblemEncoder : CRED_NameProblem -> Encode.Value
+nameProblemEncoder : T.CRED_NameProblem -> Encode.Value
 nameProblemEncoder nameProblem =
     case nameProblem of
-        CRED_NameDuplicate name r1 r2 ->
+        T.CRED_NameDuplicate name r1 r2 ->
             Encode.object
                 [ ( "type", Encode.string "NameDuplicate" )
                 , ( "name", Encode.string name )
@@ -367,14 +335,14 @@ nameProblemEncoder nameProblem =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        CRED_NameOnlyInDocs name region ->
+        T.CRED_NameOnlyInDocs name region ->
             Encode.object
                 [ ( "type", Encode.string "NameOnlyInDocs" )
                 , ( "name", Encode.string name )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRED_NameOnlyInExports name region ->
+        T.CRED_NameOnlyInExports name region ->
             Encode.object
                 [ ( "type", Encode.string "NameOnlyInExports" )
                 , ( "name", Encode.string name )
@@ -382,25 +350,25 @@ nameProblemEncoder nameProblem =
                 ]
 
 
-nameProblemDecoder : Decode.Decoder CRED_NameProblem
+nameProblemDecoder : Decode.Decoder T.CRED_NameProblem
 nameProblemDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NameDuplicate" ->
-                        Decode.map3 CRED_NameDuplicate
+                        Decode.map3 T.CRED_NameDuplicate
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
 
                     "NameOnlyInDocs" ->
-                        Decode.map2 CRED_NameOnlyInDocs
+                        Decode.map2 T.CRED_NameOnlyInDocs
                             (Decode.field "name" Decode.string)
                             (Decode.field "region" A.regionDecoder)
 
                     "NameOnlyInExports" ->
-                        Decode.map2 CRED_NameOnlyInExports
+                        Decode.map2 T.CRED_NameOnlyInExports
                             (Decode.field "name" Decode.string)
                             (Decode.field "region" A.regionDecoder)
 
@@ -409,17 +377,17 @@ nameProblemDecoder =
             )
 
 
-defProblemEncoder : CRED_DefProblem -> Encode.Value
+defProblemEncoder : T.CRED_DefProblem -> Encode.Value
 defProblemEncoder defProblem =
     case defProblem of
-        CRED_NoComment name region ->
+        T.CRED_NoComment name region ->
             Encode.object
                 [ ( "type", Encode.string "NoComment" )
                 , ( "name", Encode.string name )
                 , ( "region", A.regionEncoder region )
                 ]
 
-        CRED_NoAnnotation name region ->
+        T.CRED_NoAnnotation name region ->
             Encode.object
                 [ ( "type", Encode.string "NoAnnotation" )
                 , ( "name", Encode.string name )
@@ -427,19 +395,19 @@ defProblemEncoder defProblem =
                 ]
 
 
-defProblemDecoder : Decode.Decoder CRED_DefProblem
+defProblemDecoder : Decode.Decoder T.CRED_DefProblem
 defProblemDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "NoComment" ->
-                        Decode.map2 CRED_NoComment
+                        Decode.map2 T.CRED_NoComment
                             (Decode.field "name" Decode.string)
                             (Decode.field "region" A.regionDecoder)
 
                     "NoAnnotation" ->
-                        Decode.map2 CRED_NoAnnotation
+                        Decode.map2 T.CRED_NoAnnotation
                             (Decode.field "name" Decode.string)
                             (Decode.field "region" A.regionDecoder)
 

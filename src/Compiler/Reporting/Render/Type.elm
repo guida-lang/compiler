@@ -210,7 +210,7 @@ collectSrcArgs tipe =
 -- CANONICAL TYPE TO DOC
 
 
-canToDoc : L.CRRTL_Localizer -> Context -> T.CASTC_Type -> D.Doc
+canToDoc : T.CRRTL_Localizer -> Context -> T.CASTC_Type -> D.Doc
 canToDoc localizer context tipe =
     case tipe of
         T.CASTC_TLambda arg1 result ->
@@ -239,7 +239,7 @@ canToDoc localizer context tipe =
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App << Tuple.second) args)
 
 
-canFieldToDoc : L.CRRTL_Localizer -> ( T.CDN_Name, T.CASTC_Type ) -> ( D.Doc, D.Doc )
+canFieldToDoc : T.CRRTL_Localizer -> ( T.CDN_Name, T.CASTC_Type ) -> ( D.Doc, D.Doc )
 canFieldToDoc localizer ( name, tipe ) =
     ( D.fromName name, canToDoc localizer None tipe )
 

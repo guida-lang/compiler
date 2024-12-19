@@ -8,7 +8,6 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
-import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report exposing (Report(..))
 import Types as T
 
@@ -32,7 +31,7 @@ type Context
 -- TO REPORT
 
 
-toReport : L.CRRTL_Localizer -> Code.Source -> Warning -> Report
+toReport : T.CRRTL_Localizer -> Code.Source -> Warning -> Report
 toReport localizer source warning =
     case warning of
         UnusedImport region moduleName ->

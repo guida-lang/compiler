@@ -4,7 +4,6 @@ import Compiler.AST.Canonical as Can
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Constrain.Expression as Expr
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..), mkFlexVar, nameToRigid)
@@ -49,16 +48,16 @@ constrain (Can.Module home _ _ decls _ _ _ effects) =
 -- CONSTRAIN DECLARATIONS
 
 
-constrainDecls : Can.Decls -> Constraint -> IO Constraint
+constrainDecls : T.CASTC_Decls -> Constraint -> IO Constraint
 constrainDecls decls finalConstraint =
     case decls of
-        Can.Declare def otherDecls ->
+        T.CASTC_Declare def otherDecls ->
             IO.bind (Expr.constrainDef Dict.empty def) (constrainDecls otherDecls finalConstraint)
 
-        Can.DeclareRec def defs otherDecls ->
+        T.CASTC_DeclareRec def defs otherDecls ->
             IO.bind (Expr.constrainRecursiveDefs Dict.empty (def :: defs)) (constrainDecls otherDecls finalConstraint)
 
-        Can.SaveTheEnvironment ->
+        T.CASTC_SaveTheEnvironment ->
             IO.pure finalConstraint
 
 
@@ -221,12 +220,12 @@ constrainEffects home r0 r1 r2 manager =
                                                                                             effectCons : Constraint
                                                                                             effectCons =
                                                                                                 CAnd
-                                                                                                    [ CLocal r0 "init" (E.NoExpectation (task state0))
-                                                                                                    , CLocal r1 "onEffects" (E.NoExpectation onEffects)
-                                                                                                    , CLocal r2 "onSelfMsg" (E.NoExpectation onSelfMsg)
-                                                                                                    , CEqual r1 E.CRET_Effects state0 (E.NoExpectation state1)
-                                                                                                    , CEqual r2 E.CRET_Effects state0 (E.NoExpectation state2)
-                                                                                                    , CEqual r2 E.CRET_Effects self1 (E.NoExpectation self2)
+                                                                                                    [ CLocal r0 "init" (T.CRET_NoExpectation (task state0))
+                                                                                                    , CLocal r1 "onEffects" (T.CRET_NoExpectation onEffects)
+                                                                                                    , CLocal r2 "onSelfMsg" (T.CRET_NoExpectation onSelfMsg)
+                                                                                                    , CEqual r1 T.CRET_Effects state0 (T.CRET_NoExpectation state1)
+                                                                                                    , CEqual r2 T.CRET_Effects state0 (T.CRET_NoExpectation state2)
+                                                                                                    , CEqual r2 T.CRET_Effects self1 (T.CRET_NoExpectation self2)
                                                                                                     ]
                                                                                         in
                                                                                         IO.fmap (CLet [] [ s0, s1, s2, m1, m2, sm1, sm2 ] Dict.empty effectCons)
@@ -280,7 +279,7 @@ checkMap name home tipe constraint =
 
                                 mapCon : Constraint
                                 mapCon =
-                                    CLocal A.zero name (E.NoExpectation mapType)
+                                    CLocal A.zero name (T.CRET_NoExpectation mapType)
                             in
                             CLet [ a, b ] [] Dict.empty mapCon constraint
                         )

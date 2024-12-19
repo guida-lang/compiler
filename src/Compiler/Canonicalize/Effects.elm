@@ -9,7 +9,6 @@ import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Maybe exposing (Maybe(..))
@@ -21,7 +20,7 @@ import Types as T
 
 
 type alias EResult i w a =
-    R.RResult i w Error.CREC_Error a
+    R.RResult i w T.CREC_Error a
 
 
 
@@ -41,7 +40,7 @@ canonicalize env values unions effects =
 
         T.CASTS_Ports ports ->
             let
-                pairs : R.RResult i w Error.CREC_Error (List ( T.CDN_Name, Can.Port ))
+                pairs : R.RResult i w T.CREC_Error (List ( T.CDN_Name, Can.Port ))
                 pairs =
                     R.traverse (canonicalizePort env) ports
             in
@@ -108,7 +107,7 @@ canonicalizePort env (T.CASTS_Port (T.CRA_At region portName) tipe) =
                         if home == ModuleName.cmd && name == Name.cmd then
                             case revArgs of
                                 [] ->
-                                    R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_CmdNoArg)
+                                    R.throw (T.CREC_PortTypeInvalid region portName T.CREC_CmdNoArg)
 
                                 [ outgoingType ] ->
                                     case msg of
@@ -125,13 +124,13 @@ canonicalizePort env (T.CASTS_Port (T.CRA_At region portName) tipe) =
                                                         )
 
                                                 Err ( badType, err ) ->
-                                                    R.throw (Error.CREC_PortPayloadInvalid region portName badType err)
+                                                    R.throw (T.CREC_PortPayloadInvalid region portName badType err)
 
                                         _ ->
-                                            R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_CmdBadMsg)
+                                            R.throw (T.CREC_PortTypeInvalid region portName T.CREC_CmdBadMsg)
 
                                 _ ->
-                                    R.throw (Error.CREC_PortTypeInvalid region portName (Error.CREC_CmdExtraArgs (List.length revArgs)))
+                                    R.throw (T.CREC_PortTypeInvalid region portName (T.CREC_CmdExtraArgs (List.length revArgs)))
 
                         else if home == ModuleName.sub && name == Name.sub then
                             case revArgs of
@@ -151,22 +150,22 @@ canonicalizePort env (T.CASTS_Port (T.CRA_At region portName) tipe) =
                                                             )
 
                                                     Err ( badType, err ) ->
-                                                        R.throw (Error.CREC_PortPayloadInvalid region portName badType err)
+                                                        R.throw (T.CREC_PortPayloadInvalid region portName badType err)
 
                                             else
-                                                R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_SubBad)
+                                                R.throw (T.CREC_PortTypeInvalid region portName T.CREC_SubBad)
 
                                         _ ->
-                                            R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_SubBad)
+                                            R.throw (T.CREC_PortTypeInvalid region portName T.CREC_SubBad)
 
                                 _ ->
-                                    R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_SubBad)
+                                    R.throw (T.CREC_PortTypeInvalid region portName T.CREC_SubBad)
 
                         else
-                            R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_NotCmdOrSub)
+                            R.throw (T.CREC_PortTypeInvalid region portName T.CREC_NotCmdOrSub)
 
                     _ ->
-                        R.throw (Error.CREC_PortTypeInvalid region portName Error.CREC_NotCmdOrSub)
+                        R.throw (T.CREC_PortTypeInvalid region portName T.CREC_NotCmdOrSub)
             )
 
 
@@ -180,7 +179,7 @@ verifyEffectType (T.CRA_At region name) unions =
         R.ok name
 
     else
-        R.throw (Error.CREC_EffectNotFound region name)
+        R.throw (T.CREC_EffectNotFound region name)
 
 
 toNameRegion : T.CRA_Located T.CASTS_Value -> ( T.CDN_Name, T.CRA_Region )
@@ -195,14 +194,14 @@ verifyManager tagRegion values name =
             R.ok region
 
         Nothing ->
-            R.throw (Error.CREC_EffectFunctionNotFound tagRegion name)
+            R.throw (T.CREC_EffectFunctionNotFound tagRegion name)
 
 
 
 -- CHECK PAYLOAD TYPES
 
 
-checkPayload : T.CASTC_Type -> Result ( T.CASTC_Type, Error.CREC_InvalidPayload ) ()
+checkPayload : T.CASTC_Type -> Result ( T.CASTC_Type, T.CREC_InvalidPayload ) ()
 checkPayload tipe =
     case tipe of
         T.CASTC_TAlias _ _ args aliasedType ->
@@ -215,17 +214,17 @@ checkPayload tipe =
                         Ok ()
 
                     else
-                        Err ( tipe, Error.CREC_UnsupportedType name )
+                        Err ( tipe, T.CREC_UnsupportedType name )
 
                 [ arg ] ->
                     if isList home name || isMaybe home name || isArray home name then
                         checkPayload arg
 
                     else
-                        Err ( tipe, Error.CREC_UnsupportedType name )
+                        Err ( tipe, T.CREC_UnsupportedType name )
 
                 _ ->
-                    Err ( tipe, Error.CREC_UnsupportedType name )
+                    Err ( tipe, T.CREC_UnsupportedType name )
 
         T.CASTC_TUnit ->
             Ok ()
@@ -244,13 +243,13 @@ checkPayload tipe =
                     )
 
         T.CASTC_TVar name ->
-            Err ( tipe, Error.CREC_TypeVariable name )
+            Err ( tipe, T.CREC_TypeVariable name )
 
         T.CASTC_TLambda _ _ ->
-            Err ( tipe, Error.CREC_Function )
+            Err ( tipe, T.CREC_Function )
 
         T.CASTC_TRecord _ (Just _) ->
-            Err ( tipe, Error.CREC_ExtendedRecord )
+            Err ( tipe, T.CREC_ExtendedRecord )
 
         T.CASTC_TRecord fields Nothing ->
             Dict.foldl compare
@@ -259,7 +258,7 @@ checkPayload tipe =
                 fields
 
 
-checkFieldPayload : T.CASTC_FieldType -> Result ( T.CASTC_Type, Error.CREC_InvalidPayload ) ()
+checkFieldPayload : T.CASTC_FieldType -> Result ( T.CASTC_Type, T.CREC_InvalidPayload ) ()
 checkFieldPayload (T.CASTC_FieldType _ tipe) =
     checkPayload tipe
 

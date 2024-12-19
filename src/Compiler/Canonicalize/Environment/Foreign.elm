@@ -9,7 +9,6 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Map as Dict exposing (Dict)
 import Types as T
@@ -18,7 +17,7 @@ import Utils.Main as Utils
 
 
 type alias FResult i w a =
-    R.RResult i w Error.CREC_Error a
+    R.RResult i w T.CREC_Error a
 
 
 createInitialEnv : T.CEMN_Canonical -> Dict String T.CEMN_Raw T.CEI_Interface -> List T.CASTS_Import -> FResult i w Env.Env
@@ -274,7 +273,7 @@ addExposedValue home vars types binops state exposed =
                     R.ok { state | vars = Utils.mapInsertWith identity Env.mergeInfo name info state.vars }
 
                 Nothing ->
-                    R.throw (Error.CREC_ImportExposingNotFound region home name (Dict.keys compare vars))
+                    R.throw (T.CREC_ImportExposingNotFound region home name (Dict.keys compare vars))
 
         T.CASTS_Upper (T.CRA_At region name) privacy ->
             case privacy of
@@ -305,10 +304,10 @@ addExposedValue home vars types binops state exposed =
                         Nothing ->
                             case checkForCtorMistake name types of
                                 tipe :: _ ->
-                                    R.throw <| Error.CREC_ImportCtorByName region name tipe
+                                    R.throw <| T.CREC_ImportCtorByName region name tipe
 
                                 [] ->
-                                    R.throw <| Error.CREC_ImportExposingNotFound region home name (Dict.keys compare types)
+                                    R.throw <| T.CREC_ImportExposingNotFound region home name (Dict.keys compare types)
 
                 T.CASTS_Public dotDotRegion ->
                     case Dict.get identity name types of
@@ -327,10 +326,10 @@ addExposedValue home vars types binops state exposed =
                                     R.ok { state | types = ts2, ctors = cs2 }
 
                                 Env.Alias _ _ _ _ ->
-                                    R.throw (Error.CREC_ImportOpenAlias dotDotRegion name)
+                                    R.throw (T.CREC_ImportOpenAlias dotDotRegion name)
 
                         Nothing ->
-                            R.throw (Error.CREC_ImportExposingNotFound region home name (Dict.keys compare types))
+                            R.throw (T.CREC_ImportExposingNotFound region home name (Dict.keys compare types))
 
         T.CASTS_Operator region op ->
             case Dict.get identity op binops of
@@ -343,7 +342,7 @@ addExposedValue home vars types binops state exposed =
                     R.ok { state | binops = bs2 }
 
                 Nothing ->
-                    R.throw (Error.CREC_ImportExposingNotFound region home op (Dict.keys compare binops))
+                    R.throw (T.CREC_ImportExposingNotFound region home op (Dict.keys compare binops))
 
 
 checkForCtorMistake : T.CDN_Name -> Dict String T.CDN_Name ( Env.Type, Env.Exposed Env.Ctor ) -> List T.CDN_Name

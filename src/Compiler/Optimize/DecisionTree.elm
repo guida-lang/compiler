@@ -44,10 +44,10 @@ make that work nicely. When is JS getting goto?! ;) That is outside the scope
 of this module though.
 
 -}
-compile : List ( Can.Pattern, Int ) -> DecisionTree
+compile : List ( T.CASTC_Pattern, Int ) -> DecisionTree
 compile rawBranches =
     let
-        format : ( Can.Pattern, Int ) -> Branch
+        format : ( T.CASTC_Pattern, Int ) -> Branch
         format ( pattern, index ) =
             Branch index [ ( T.CODT_Empty, pattern ) ]
     in
@@ -68,7 +68,7 @@ type DecisionTree
 
 
 type Branch
-    = Branch Int (List ( T.CODT_Path, Can.Pattern ))
+    = Branch Int (List ( T.CODT_Path, T.CASTC_Pattern ))
 
 
 toDecisionTree : List Branch -> DecisionTree
@@ -149,16 +149,16 @@ flattenPatterns (Branch goal pathPatterns) =
     Branch goal (List.foldr flatten [] pathPatterns)
 
 
-flatten : ( T.CODT_Path, Can.Pattern ) -> List ( T.CODT_Path, Can.Pattern ) -> List ( T.CODT_Path, Can.Pattern )
+flatten : ( T.CODT_Path, T.CASTC_Pattern ) -> List ( T.CODT_Path, T.CASTC_Pattern ) -> List ( T.CODT_Path, T.CASTC_Pattern )
 flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
     case pattern of
-        Can.PVar _ ->
+        T.CASTC_PVar _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PAnything ->
+        T.CASTC_PAnything ->
             pathPattern :: otherPathPatterns
 
-        Can.PCtor { union, args } ->
+        T.CASTC_PCtor { union, args } ->
             let
                 (T.CASTC_Union _ _ numAlts _) =
                     union
@@ -174,7 +174,7 @@ flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
             else
                 pathPattern :: otherPathPatterns
 
-        Can.PTuple a b maybeC ->
+        T.CASTC_PTuple a b maybeC ->
             flatten ( T.CODT_Index Index.first path, a ) <|
                 flatten ( T.CODT_Index Index.second path, b ) <|
                     case maybeC of
@@ -184,43 +184,43 @@ flatten (( path, T.CRA_At region pattern ) as pathPattern) otherPathPatterns =
                         Just c ->
                             flatten ( T.CODT_Index Index.third path, c ) otherPathPatterns
 
-        Can.PUnit ->
+        T.CASTC_PUnit ->
             otherPathPatterns
 
-        Can.PAlias realPattern alias ->
+        T.CASTC_PAlias realPattern alias ->
             flatten ( path, realPattern ) <|
-                ( path, T.CRA_At region (Can.PVar alias) )
+                ( path, T.CRA_At region (T.CASTC_PVar alias) )
                     :: otherPathPatterns
 
-        Can.PRecord _ ->
+        T.CASTC_PRecord _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PList _ ->
+        T.CASTC_PList _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PCons _ _ ->
+        T.CASTC_PCons _ _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PChr _ ->
+        T.CASTC_PChr _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PStr _ ->
+        T.CASTC_PStr _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PInt _ ->
+        T.CASTC_PInt _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PBool _ _ ->
+        T.CASTC_PBool _ _ ->
             pathPattern :: otherPathPatterns
 
 
-subPositions : T.CODT_Path -> List Can.Pattern -> List ( T.CODT_Path, Can.Pattern )
+subPositions : T.CODT_Path -> List T.CASTC_Pattern -> List ( T.CODT_Path, T.CASTC_Pattern )
 subPositions path patterns =
     Index.indexedMap (\index pattern -> ( T.CODT_Index index path, pattern )) patterns
 
 
-dearg : Can.PatternCtorArg -> Can.Pattern
-dearg (Can.PatternCtorArg _ _ pattern) =
+dearg : T.CASTC_PatternCtorArg -> T.CASTC_Pattern
+dearg (T.CASTC_PatternCtorArg _ _ pattern) =
     pattern
 
 
@@ -303,14 +303,14 @@ testAtPath selectedPath (Branch _ pathPatterns) =
         |> Maybe.andThen
             (\(T.CRA_At _ pattern) ->
                 case pattern of
-                    Can.PCtor { home, union, name, index } ->
+                    T.CASTC_PCtor { home, union, name, index } ->
                         let
                             (T.CASTC_Union _ _ numAlts opts) =
                                 union
                         in
                         Just (T.CODT_IsCtor home name index numAlts opts)
 
-                    Can.PList ps ->
+                    T.CASTC_PList ps ->
                         Just
                             (case ps of
                                 [] ->
@@ -320,37 +320,37 @@ testAtPath selectedPath (Branch _ pathPatterns) =
                                     T.CODT_IsCons
                             )
 
-                    Can.PCons _ _ ->
+                    T.CASTC_PCons _ _ ->
                         Just T.CODT_IsCons
 
-                    Can.PTuple _ _ _ ->
+                    T.CASTC_PTuple _ _ _ ->
                         Just T.CODT_IsTuple
 
-                    Can.PUnit ->
+                    T.CASTC_PUnit ->
                         Just T.CODT_IsTuple
 
-                    Can.PVar _ ->
+                    T.CASTC_PVar _ ->
                         Nothing
 
-                    Can.PAnything ->
+                    T.CASTC_PAnything ->
                         Nothing
 
-                    Can.PInt int ->
+                    T.CASTC_PInt int ->
                         Just (T.CODT_IsInt int)
 
-                    Can.PStr str ->
+                    T.CASTC_PStr str ->
                         Just (T.CODT_IsStr str)
 
-                    Can.PChr chr ->
+                    T.CASTC_PChr chr ->
                         Just (T.CODT_IsChr chr)
 
-                    Can.PBool _ bool ->
+                    T.CASTC_PBool _ bool ->
                         Just (T.CODT_IsBool bool)
 
-                    Can.PRecord _ ->
+                    T.CASTC_PRecord _ ->
                         Nothing
 
-                    Can.PAlias _ _ ->
+                    T.CASTC_PAlias _ _ ->
                         crash "aliases should never reach 'testAtPath' function"
             )
 
@@ -371,7 +371,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
     case extract path pathPatterns of
         Found start (T.CRA_At region pattern) end ->
             case pattern of
-                Can.PCtor { union, name, args } ->
+                T.CASTC_PCtor { union, name, args } ->
                     case test of
                         T.CODT_IsCtor _ testName _ _ _ ->
                             if name == testName then
@@ -399,7 +399,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PList [] ->
+                T.CASTC_PList [] ->
                     case test of
                         T.CODT_IsNil ->
                             Just (Branch goal (start ++ end))
@@ -407,20 +407,20 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PList (hd :: tl) ->
+                T.CASTC_PList (hd :: tl) ->
                     case test of
                         T.CODT_IsCons ->
                             let
-                                tl_ : T.CRA_Located Can.Pattern_
+                                tl_ : T.CRA_Located T.CASTC_Pattern_
                                 tl_ =
-                                    T.CRA_At region (Can.PList tl)
+                                    T.CRA_At region (T.CASTC_PList tl)
                             in
                             Just (Branch goal (start ++ subPositions path [ hd, tl_ ] ++ end))
 
                         _ ->
                             Nothing
 
-                Can.PCons hd tl ->
+                T.CASTC_PCons hd tl ->
                     case test of
                         T.CODT_IsCons ->
                             Just (Branch goal (start ++ subPositions path [ hd, tl ] ++ end))
@@ -428,7 +428,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PChr chr ->
+                T.CASTC_PChr chr ->
                     case test of
                         T.CODT_IsChr testChr ->
                             if chr == testChr then
@@ -440,7 +440,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PStr str ->
+                T.CASTC_PStr str ->
                     case test of
                         T.CODT_IsStr testStr ->
                             if str == testStr then
@@ -452,7 +452,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PInt int ->
+                T.CASTC_PInt int ->
                     case test of
                         T.CODT_IsInt testInt ->
                             if int == testInt then
@@ -464,7 +464,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PBool _ bool ->
+                T.CASTC_PBool _ bool ->
                     case test of
                         T.CODT_IsBool testBool ->
                             if bool == testBool then
@@ -476,10 +476,10 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PUnit ->
+                T.CASTC_PUnit ->
                     Just (Branch goal (start ++ end))
 
-                Can.PTuple a b maybeC ->
+                T.CASTC_PTuple a b maybeC ->
                     Just
                         (Branch goal
                             (start
@@ -494,16 +494,16 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                             )
                         )
 
-                Can.PVar _ ->
+                T.CASTC_PVar _ ->
                     Just branch
 
-                Can.PAnything ->
+                T.CASTC_PAnything ->
                     Just branch
 
-                Can.PRecord _ ->
+                T.CASTC_PRecord _ ->
                     Just branch
 
-                Can.PAlias _ _ ->
+                T.CASTC_PAlias _ _ ->
                     Just branch
 
         NotFound ->
@@ -512,10 +512,10 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
 
 type Extract
     = NotFound
-    | Found (List ( T.CODT_Path, Can.Pattern )) Can.Pattern (List ( T.CODT_Path, Can.Pattern ))
+    | Found (List ( T.CODT_Path, T.CASTC_Pattern )) T.CASTC_Pattern (List ( T.CODT_Path, T.CASTC_Pattern ))
 
 
-extract : T.CODT_Path -> List ( T.CODT_Path, Can.Pattern ) -> Extract
+extract : T.CODT_Path -> List ( T.CODT_Path, T.CASTC_Pattern ) -> Extract
 extract selectedPath pathPatterns =
     case pathPatterns of
         [] ->
@@ -548,46 +548,46 @@ isIrrelevantTo selectedPath (Branch _ pathPatterns) =
             not (needsTests pattern)
 
 
-needsTests : Can.Pattern -> Bool
+needsTests : T.CASTC_Pattern -> Bool
 needsTests (T.CRA_At _ pattern) =
     case pattern of
-        Can.PVar _ ->
+        T.CASTC_PVar _ ->
             False
 
-        Can.PAnything ->
+        T.CASTC_PAnything ->
             False
 
-        Can.PRecord _ ->
+        T.CASTC_PRecord _ ->
             False
 
-        Can.PCtor _ ->
+        T.CASTC_PCtor _ ->
             True
 
-        Can.PList _ ->
+        T.CASTC_PList _ ->
             True
 
-        Can.PCons _ _ ->
+        T.CASTC_PCons _ _ ->
             True
 
-        Can.PUnit ->
+        T.CASTC_PUnit ->
             True
 
-        Can.PTuple _ _ _ ->
+        T.CASTC_PTuple _ _ _ ->
             True
 
-        Can.PChr _ ->
+        T.CASTC_PChr _ ->
             True
 
-        Can.PStr _ ->
+        T.CASTC_PStr _ ->
             True
 
-        Can.PInt _ ->
+        T.CASTC_PInt _ ->
             True
 
-        Can.PBool _ _ ->
+        T.CASTC_PBool _ _ ->
             True
 
-        Can.PAlias _ _ ->
+        T.CASTC_PAlias _ _ ->
             crash "aliases should never reach 'isIrrelevantTo' function"
 
 
@@ -610,7 +610,7 @@ pickPath branches =
             Prelude.head (bests (addWeights (smallBranchingFactor branches) tiedPaths))
 
 
-isChoicePath : ( T.CODT_Path, Can.Pattern ) -> Maybe T.CODT_Path
+isChoicePath : ( T.CODT_Path, T.CASTC_Pattern ) -> Maybe T.CODT_Path
 isChoicePath ( path, pattern ) =
     if needsTests pattern then
         Just path

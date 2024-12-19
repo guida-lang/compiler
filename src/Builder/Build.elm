@@ -1,7 +1,5 @@
 module Builder.Build exposing
     ( Artifacts(..)
-    , BB_BResult
-    , BB_CachedInterface(..)
     , Dependencies
     , DocsGoal(..)
     , Module(..)
@@ -40,7 +38,6 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Error as Error
-import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
@@ -60,7 +57,7 @@ import Utils.Main as Utils
 
 
 type Env
-    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) Details.BED_BuildID (Dict String T.CEMN_Raw Details.BED_Local) (Dict String T.CEMN_Raw Details.Foreign)
+    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) T.BED_BuildID (Dict String T.CEMN_Raw T.BED_Local) (Dict String T.CEMN_Raw Details.Foreign)
 
 
 makeEnv : Reporting.BKey -> T.FilePath -> Details.Details -> IO Env
@@ -210,7 +207,7 @@ type Artifacts
 
 type Module
     = Fresh T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
-    | Cached T.CEMN_Raw Bool (T.MVar BB_CachedInterface)
+    | Cached T.CEMN_Raw Bool (T.MVar T.BB_CachedInterface)
 
 
 type alias Dependencies =
@@ -320,10 +317,10 @@ type alias StatusDict =
 
 
 type Status
-    = SCached Details.BED_Local
-    | SChanged Details.BED_Local String T.CASTS_Module DocsNeed
-    | SBadImport Import.CREI_Problem
-    | SBadSyntax T.FilePath File.BF_Time String Syntax.CRES_Error
+    = SCached T.BED_Local
+    | SChanged T.BED_Local String T.CASTS_Module DocsNeed
+    | SBadImport T.CREI_Problem
+    | SBadSyntax T.FilePath T.BF_Time String T.CRES_Error
     | SForeign T.CEP_Name
     | SKernel
 
@@ -374,7 +371,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                     [ path ] ->
                         case Dict.get identity name foreigns of
                             Just (Details.Foreign dep deps) ->
-                                IO.pure <| SBadImport <| Import.CREI_Ambiguous path [] dep deps
+                                IO.pure <| SBadImport <| T.CREI_Ambiguous path [] dep deps
 
                             Nothing ->
                                 File.getTime path
@@ -384,7 +381,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                 Nothing ->
                                                     crawlFile env mvar docsNeed name path newTime buildID
 
-                                                Just ((Details.BED_Local oldPath oldTime deps _ lastChange _) as local) ->
+                                                Just ((T.BED_Local oldPath oldTime deps _ lastChange _) as local) ->
                                                     if path /= oldPath || oldTime /= newTime || needsDocs then
                                                         crawlFile env mvar docsNeed name path newTime lastChange
 
@@ -393,7 +390,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         )
 
                     p1 :: p2 :: ps ->
-                        IO.pure <| SBadImport <| Import.CREI_AmbiguousLocal (Utils.fpMakeRelative root p1) (Utils.fpMakeRelative root p2) (List.map (Utils.fpMakeRelative root) ps)
+                        IO.pure <| SBadImport <| T.CREI_AmbiguousLocal (Utils.fpMakeRelative root p1) (Utils.fpMakeRelative root p2) (List.map (Utils.fpMakeRelative root) ps)
 
                     [] ->
                         case Dict.get identity name foreigns of
@@ -403,7 +400,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         IO.pure <| SForeign dep
 
                                     d :: ds ->
-                                        IO.pure <| SBadImport <| Import.CREI_AmbiguousForeign dep d ds
+                                        IO.pure <| SBadImport <| T.CREI_AmbiguousForeign dep d ds
 
                             Nothing ->
                                 if Name.isKernel name && Parse.isKernel projectType then
@@ -414,15 +411,15 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                     SKernel
 
                                                 else
-                                                    SBadImport Import.CREI_NotFound
+                                                    SBadImport T.CREI_NotFound
                                             )
 
                                 else
-                                    IO.pure <| SBadImport Import.CREI_NotFound
+                                    IO.pure <| SBadImport T.CREI_NotFound
             )
 
 
-crawlFile : Env -> T.MVar StatusDict -> DocsNeed -> T.CEMN_Raw -> T.FilePath -> File.BF_Time -> Details.BED_BuildID -> IO Status
+crawlFile : Env -> T.MVar StatusDict -> DocsNeed -> T.CEMN_Raw -> T.FilePath -> T.BF_Time -> T.BED_BuildID -> IO Status
 crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
     File.readUtf8 (Utils.fpForwardSlash root path)
         |> IO.bind
@@ -434,7 +431,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                     Ok ((T.CASTS_Module maybeActualName _ _ imports values _ _ _ _) as modul) ->
                         case maybeActualName of
                             Nothing ->
-                                IO.pure <| SBadSyntax path time source (Syntax.CRES_ModuleNameUnspecified expectedName)
+                                IO.pure <| SBadSyntax path time source (T.CRES_ModuleNameUnspecified expectedName)
 
                             Just ((T.CRA_At _ actualName) as name) ->
                                 if expectedName == actualName then
@@ -443,14 +440,14 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                                         deps =
                                             List.map Src.getImportName imports
 
-                                        local : Details.BED_Local
+                                        local : T.BED_Local
                                         local =
-                                            Details.BED_Local path time deps (List.any isMain values) lastChange buildID
+                                            T.BED_Local path time deps (List.any isMain values) lastChange buildID
                                     in
                                     crawlDeps env mvar deps (SChanged local source modul docsNeed)
 
                                 else
-                                    IO.pure <| SBadSyntax path time source (Syntax.CRES_ModuleNameMismatch expectedName name)
+                                    IO.pure <| SBadSyntax path time source (T.CRES_ModuleNameMismatch expectedName name)
             )
 
 
@@ -463,31 +460,10 @@ isMain (T.CRA_At _ (T.CASTS_Value (T.CRA_At _ name) _ _ _)) =
 -- CHECK MODULE
 
 
-type alias ResultDict =
-    Dict String T.CEMN_Raw (T.MVar BB_BResult)
-
-
-type BB_BResult
-    = BB_RNew Details.BED_Local T.CEI_Interface T.CASTO_LocalGraph (Maybe Docs.CED_Module)
-    | BB_RSame Details.BED_Local T.CEI_Interface T.CASTO_LocalGraph (Maybe Docs.CED_Module)
-    | BB_RCached Bool Details.BED_BuildID (T.MVar BB_CachedInterface)
-    | BB_RNotFound Import.CREI_Problem
-    | BB_RProblem Error.CRE_Module
-    | BB_RBlocked
-    | BB_RForeign T.CEI_Interface
-    | BB_RKernel
-
-
-type BB_CachedInterface
-    = BB_Unneeded
-    | BB_Loaded T.CEI_Interface
-    | BB_Corrupted
-
-
-checkModule : Env -> Dependencies -> T.MVar ResultDict -> T.CEMN_Raw -> Status -> IO BB_BResult
+checkModule : Env -> Dependencies -> T.MVar T.BB_ResultDict -> T.CEMN_Raw -> Status -> IO T.BB_BResult
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
-        SCached ((Details.BED_Local path time deps hasMain lastChange lastCompile) as local) ->
+        SCached ((T.BED_Local path time deps hasMain lastChange lastCompile) as local) ->
             Utils.readMVar resultDictDecoder resultsMVar
                 |> IO.bind
                     (\results ->
@@ -505,38 +481,38 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
 
                                                             Err err ->
                                                                 IO.pure <|
-                                                                    BB_RProblem <|
-                                                                        Error.CRE_Module name path time source (Error.CRE_BadSyntax err)
+                                                                    T.BB_RProblem <|
+                                                                        T.CRE_Module name path time source (T.CRE_BadSyntax err)
                                                     )
 
                                         DepsSame _ _ ->
-                                            Utils.newMVar cachedInterfaceEncoder BB_Unneeded
+                                            Utils.newMVar cachedInterfaceEncoder T.BB_Unneeded
                                                 |> IO.fmap
                                                     (\mvar ->
-                                                        BB_RCached hasMain lastChange mvar
+                                                        T.BB_RCached hasMain lastChange mvar
                                                     )
 
                                         DepsBlock ->
-                                            IO.pure BB_RBlocked
+                                            IO.pure T.BB_RBlocked
 
                                         DepsNotFound problems ->
                                             File.readUtf8 path
                                                 |> IO.bind
                                                     (\source ->
                                                         IO.pure <|
-                                                            BB_RProblem <|
-                                                                Error.CRE_Module name path time source <|
+                                                            T.BB_RProblem <|
+                                                                T.CRE_Module name path time source <|
                                                                     case Parse.fromByteString projectType source of
                                                                         Ok (T.CASTS_Module _ _ _ imports _ _ _ _ _) ->
-                                                                            Error.CRE_BadImports (toImportErrors env results imports problems)
+                                                                            T.CRE_BadImports (toImportErrors env results imports problems)
 
                                                                         Err err ->
-                                                                            Error.CRE_BadSyntax err
+                                                                            T.CRE_BadSyntax err
                                                     )
                                 )
                     )
 
-        SChanged ((Details.BED_Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
+        SChanged ((T.BED_Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
             Utils.readMVar resultDictDecoder resultsMVar
                 |> IO.bind
                     (\results ->
@@ -553,42 +529,42 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                     (\maybeLoaded ->
                                                         case maybeLoaded of
                                                             Nothing ->
-                                                                IO.pure BB_RBlocked
+                                                                IO.pure T.BB_RBlocked
 
                                                             Just ifaces ->
                                                                 compile env docsNeed local source ifaces modul
                                                     )
 
                                         DepsBlock ->
-                                            IO.pure BB_RBlocked
+                                            IO.pure T.BB_RBlocked
 
                                         DepsNotFound problems ->
                                             IO.pure <|
-                                                BB_RProblem <|
-                                                    Error.CRE_Module name path time source <|
-                                                        Error.CRE_BadImports (toImportErrors env results imports problems)
+                                                T.BB_RProblem <|
+                                                    T.CRE_Module name path time source <|
+                                                        T.CRE_BadImports (toImportErrors env results imports problems)
                                 )
                     )
 
         SBadImport importProblem ->
-            IO.pure (BB_RNotFound importProblem)
+            IO.pure (T.BB_RNotFound importProblem)
 
         SBadSyntax path time source err ->
             IO.pure <|
-                BB_RProblem <|
-                    Error.CRE_Module name path time source <|
-                        Error.CRE_BadSyntax err
+                T.BB_RProblem <|
+                    T.CRE_Module name path time source <|
+                        T.CRE_BadSyntax err
 
         SForeign home ->
             case Utils.find ModuleName.toComparableCanonical (T.CEMN_Canonical home name) foreigns of
                 I.Public iface ->
-                    IO.pure (BB_RForeign iface)
+                    IO.pure (T.BB_RForeign iface)
 
                 I.Private _ _ _ ->
                     crash <| "mistakenly seeing private interface for " ++ Pkg.toChars home ++ " " ++ name
 
         SKernel ->
-            IO.pure BB_RKernel
+            IO.pure T.BB_RKernel
 
 
 
@@ -599,10 +575,10 @@ type DepsStatus
     = DepsChange (Dict String T.CEMN_Raw T.CEI_Interface)
     | DepsSame (List Dep) (List CDep)
     | DepsBlock
-    | DepsNotFound (NE.Nonempty ( T.CEMN_Raw, Import.CREI_Problem ))
+    | DepsNotFound (NE.Nonempty ( T.CEMN_Raw, T.CREI_Problem ))
 
 
-checkDeps : T.FilePath -> ResultDict -> List T.CEMN_Raw -> Details.BED_BuildID -> IO DepsStatus
+checkDeps : T.FilePath -> T.BB_ResultDict -> List T.CEMN_Raw -> T.BED_BuildID -> IO DepsStatus
 checkDeps root results deps lastCompile =
     checkDepsHelp root results deps [] [] [] [] False 0 lastCompile
 
@@ -612,10 +588,10 @@ type alias Dep =
 
 
 type alias CDep =
-    ( T.CEMN_Raw, T.MVar BB_CachedInterface )
+    ( T.CEMN_Raw, T.MVar T.BB_CachedInterface )
 
 
-checkDepsHelp : T.FilePath -> ResultDict -> List T.CEMN_Raw -> List Dep -> List Dep -> List CDep -> List ( T.CEMN_Raw, Import.CREI_Problem ) -> Bool -> Details.BED_BuildID -> Details.BED_BuildID -> IO DepsStatus
+checkDepsHelp : T.FilePath -> T.BB_ResultDict -> List T.CEMN_Raw -> List Dep -> List Dep -> List CDep -> List ( T.CEMN_Raw, T.CREI_Problem ) -> Bool -> T.BED_BuildID -> T.BED_BuildID -> IO DepsStatus
 checkDepsHelp root results deps new same cached importProblems isBlocked lastDepChange lastCompile =
     case deps of
         dep :: otherDeps ->
@@ -623,28 +599,28 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
                 |> IO.bind
                     (\result ->
                         case result of
-                            BB_RNew (Details.BED_Local _ _ _ _ lastChange _) iface _ _ ->
+                            T.BB_RNew (T.BED_Local _ _ _ _ lastChange _) iface _ _ ->
                                 checkDepsHelp root results otherDeps (( dep, iface ) :: new) same cached importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
-                            BB_RSame (Details.BED_Local _ _ _ _ lastChange _) iface _ _ ->
+                            T.BB_RSame (T.BED_Local _ _ _ _ lastChange _) iface _ _ ->
                                 checkDepsHelp root results otherDeps new (( dep, iface ) :: same) cached importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
-                            BB_RCached _ lastChange mvar ->
+                            T.BB_RCached _ lastChange mvar ->
                                 checkDepsHelp root results otherDeps new same (( dep, mvar ) :: cached) importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
-                            BB_RNotFound prob ->
+                            T.BB_RNotFound prob ->
                                 checkDepsHelp root results otherDeps new same cached (( dep, prob ) :: importProblems) True lastDepChange lastCompile
 
-                            BB_RProblem _ ->
+                            T.BB_RProblem _ ->
                                 checkDepsHelp root results otherDeps new same cached importProblems True lastDepChange lastCompile
 
-                            BB_RBlocked ->
+                            T.BB_RBlocked ->
                                 checkDepsHelp root results otherDeps new same cached importProblems True lastDepChange lastCompile
 
-                            BB_RForeign iface ->
+                            T.BB_RForeign iface ->
                                 checkDepsHelp root results otherDeps new (( dep, iface ) :: same) cached importProblems isBlocked lastDepChange lastCompile
 
-                            BB_RKernel ->
+                            T.BB_RKernel ->
                                 checkDepsHelp root results otherDeps new same cached importProblems isBlocked lastDepChange lastCompile
                     )
 
@@ -677,7 +653,7 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
 -- TO IMPORT ERROR
 
 
-toImportErrors : Env -> ResultDict -> List T.CASTS_Import -> NE.Nonempty ( T.CEMN_Raw, Import.CREI_Problem ) -> NE.Nonempty Import.CREI_Error
+toImportErrors : Env -> T.BB_ResultDict -> List T.CASTS_Import -> NE.Nonempty ( T.CEMN_Raw, T.CREI_Problem ) -> NE.Nonempty T.CREI_Error
 toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
     let
         knownModules : EverySet.EverySet String T.CEMN_Raw
@@ -698,9 +674,9 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
         regionDict =
             Dict.fromList identity (List.map (\(T.CASTS_Import (T.CRA_At region name) _ _) -> ( name, region )) imports)
 
-        toError : ( T.CDN_Name, Import.CREI_Problem ) -> Import.CREI_Error
+        toError : ( T.CDN_Name, T.CREI_Problem ) -> T.CREI_Error
         toError ( name, problem ) =
-            Import.CREI_Error (Utils.find identity name regionDict) name unimportedModules problem
+            T.CREI_Error (Utils.find identity name regionDict) name unimportedModules problem
     in
     NE.map toError problems
 
@@ -733,25 +709,25 @@ loadInterface root ( name, ciMvar ) =
         |> IO.bind
             (\cachedInterface ->
                 case cachedInterface of
-                    BB_Corrupted ->
+                    T.BB_Corrupted ->
                         Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
                             |> IO.fmap (\_ -> Nothing)
 
-                    BB_Loaded iface ->
+                    T.BB_Loaded iface ->
                         Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
                             |> IO.fmap (\_ -> Just ( name, iface ))
 
-                    BB_Unneeded ->
+                    T.BB_Unneeded ->
                         File.readBinary I.interfaceDecoder (Stuff.elmi root name)
                             |> IO.bind
                                 (\maybeIface ->
                                     case maybeIface of
                                         Nothing ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar BB_Corrupted
+                                            Utils.putMVar cachedInterfaceEncoder ciMvar T.BB_Corrupted
                                                 |> IO.fmap (\_ -> Nothing)
 
                                         Just iface ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar (BB_Loaded iface)
+                                            Utils.putMVar cachedInterfaceEncoder ciMvar (T.BB_Loaded iface)
                                                 |> IO.fmap (\_ -> Just ( name, iface ))
                                 )
             )
@@ -853,10 +829,10 @@ addToGraph name status graph =
         dependencies : List T.CEMN_Raw
         dependencies =
             case status of
-                SCached (Details.BED_Local _ _ deps _ _ _) ->
+                SCached (T.BED_Local _ _ deps _ _ _) ->
                     deps
 
-                SChanged (Details.BED_Local _ _ deps _ _ _) _ _ _ ->
+                SChanged (T.BED_Local _ _ deps _ _ _) _ _ _ ->
                     deps
 
                 SBadImport _ ->
@@ -904,7 +880,7 @@ rootStatusToNamePathPair sroot =
         SInside _ ->
             Nothing
 
-        SOutsideOk (Details.BED_Local path _ _ _ _ _) _ modul ->
+        SOutsideOk (T.BED_Local path _ _ _ _ _) _ modul ->
             Just ( Src.getName modul, OneOrMore.one path )
 
         SOutsideErr _ ->
@@ -924,10 +900,10 @@ checkOutside name paths =
 checkInside : T.CEMN_Raw -> T.FilePath -> Status -> Result Exit.BuildProjectProblem ()
 checkInside name p1 status =
     case status of
-        SCached (Details.BED_Local p2 _ _ _ _ _) ->
+        SCached (T.BED_Local p2 _ _ _ _ _) ->
             Err (Exit.BP_RootNameDuplicate name p1 p2)
 
-        SChanged (Details.BED_Local p2 _ _ _ _ _) _ _ _ ->
+        SChanged (T.BED_Local p2 _ _ _ _ _) _ _ _ ->
             Err (Exit.BP_RootNameDuplicate name p1 p2)
 
         SBadImport _ ->
@@ -947,8 +923,8 @@ checkInside name p1 status =
 -- COMPILE MODULE
 
 
-compile : Env -> DocsNeed -> Details.BED_Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO BB_BResult
-compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local path time deps main lastChange _) source ifaces modul =
+compile : Env -> DocsNeed -> T.BED_Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO T.BB_BResult
+compile (Env key root projectType _ buildID _ _) docsNeed (T.BED_Local path time deps main lastChange _) source ifaces modul =
     let
         pkg : T.CEP_Name
         pkg =
@@ -962,8 +938,8 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local pat
                         case makeDocs docsNeed canonical of
                             Err err ->
                                 IO.pure <|
-                                    BB_RProblem <|
-                                        Error.CRE_Module (Src.getName modul) path time source (Error.CRE_BadDocs err)
+                                    T.BB_RProblem <|
+                                        T.CRE_Module (Src.getName modul) path time source (T.CRE_BadDocs err)
 
                             Ok docs ->
                                 let
@@ -993,11 +969,11 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local pat
                                                                         |> IO.fmap
                                                                             (\_ ->
                                                                                 let
-                                                                                    local : Details.BED_Local
+                                                                                    local : T.BED_Local
                                                                                     local =
-                                                                                        Details.BED_Local path time deps main lastChange buildID
+                                                                                        T.BED_Local path time deps main lastChange buildID
                                                                                 in
-                                                                                BB_RSame local iface objects docs
+                                                                                T.BB_RSame local iface objects docs
                                                                             )
 
                                                                 else
@@ -1008,11 +984,11 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local pat
                                                                                     |> IO.fmap
                                                                                         (\_ ->
                                                                                             let
-                                                                                                local : Details.BED_Local
+                                                                                                local : T.BED_Local
                                                                                                 local =
-                                                                                                    Details.BED_Local path time deps main buildID buildID
+                                                                                                    T.BED_Local path time deps main buildID buildID
                                                                                             in
-                                                                                            BB_RNew local iface objects docs
+                                                                                            T.BB_RNew local iface objects docs
                                                                                         )
                                                                             )
 
@@ -1025,11 +1001,11 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local pat
                                                                                 |> IO.fmap
                                                                                     (\_ ->
                                                                                         let
-                                                                                            local : Details.BED_Local
+                                                                                            local : T.BED_Local
                                                                                             local =
-                                                                                                Details.BED_Local path time deps main buildID buildID
+                                                                                                T.BED_Local path time deps main buildID buildID
                                                                                         in
-                                                                                        BB_RNew local iface objects docs
+                                                                                        T.BB_RNew local iface objects docs
                                                                                     )
                                                                         )
                                                     )
@@ -1037,8 +1013,8 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.BED_Local pat
 
                     Err err ->
                         IO.pure <|
-                            BB_RProblem <|
-                                Error.CRE_Module (Src.getName modul) path time source err
+                            T.BB_RProblem <|
+                                T.CRE_Module (Src.getName modul) path time source err
             )
 
 
@@ -1056,37 +1032,37 @@ projectTypeToPkg projectType =
 -- WRITE DETAILS
 
 
-writeDetails : T.FilePath -> Details.Details -> Dict String T.CEMN_Raw BB_BResult -> IO ()
+writeDetails : T.FilePath -> Details.Details -> Dict String T.CEMN_Raw T.BB_BResult -> IO ()
 writeDetails root (Details.Details time outline buildID locals foreigns extras) results =
     File.writeBinary Details.detailsEncoder (Stuff.details root) <|
         Details.Details time outline buildID (Dict.foldr compare addNewLocal locals results) foreigns extras
 
 
-addNewLocal : T.CEMN_Raw -> BB_BResult -> Dict String T.CEMN_Raw Details.BED_Local -> Dict String T.CEMN_Raw Details.BED_Local
+addNewLocal : T.CEMN_Raw -> T.BB_BResult -> Dict String T.CEMN_Raw T.BED_Local -> Dict String T.CEMN_Raw T.BED_Local
 addNewLocal name result locals =
     case result of
-        BB_RNew local _ _ _ ->
+        T.BB_RNew local _ _ _ ->
             Dict.insert identity name local locals
 
-        BB_RSame local _ _ _ ->
+        T.BB_RSame local _ _ _ ->
             Dict.insert identity name local locals
 
-        BB_RCached _ _ _ ->
+        T.BB_RCached _ _ _ ->
             locals
 
-        BB_RNotFound _ ->
+        T.BB_RNotFound _ ->
             locals
 
-        BB_RProblem _ ->
+        T.BB_RProblem _ ->
             locals
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             locals
 
-        BB_RForeign _ ->
+        T.BB_RForeign _ ->
             locals
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             locals
 
 
@@ -1094,7 +1070,7 @@ addNewLocal name result locals =
 -- FINALIZE EXPOSED
 
 
-finalizeExposed : T.FilePath -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> Dict String T.CEMN_Raw BB_BResult -> IO (Result Exit.BuildProblem docs)
+finalizeExposed : T.FilePath -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> Dict String T.CEMN_Raw T.BB_BResult -> IO (Result Exit.BuildProblem docs)
 finalizeExposed root docsGoal exposed results =
     case List.foldr (addImportProblems results) [] (NE.toList exposed) of
         p :: ps ->
@@ -1109,59 +1085,59 @@ finalizeExposed root docsGoal exposed results =
                     IO.pure <| Err <| Exit.BuildBadModules root e es
 
 
-addErrors : BB_BResult -> List Error.CRE_Module -> List Error.CRE_Module
+addErrors : T.BB_BResult -> List T.CRE_Module -> List T.CRE_Module
 addErrors result errors =
     case result of
-        BB_RNew _ _ _ _ ->
+        T.BB_RNew _ _ _ _ ->
             errors
 
-        BB_RSame _ _ _ _ ->
+        T.BB_RSame _ _ _ _ ->
             errors
 
-        BB_RCached _ _ _ ->
+        T.BB_RCached _ _ _ ->
             errors
 
-        BB_RNotFound _ ->
+        T.BB_RNotFound _ ->
             errors
 
-        BB_RProblem e ->
+        T.BB_RProblem e ->
             e :: errors
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             errors
 
-        BB_RForeign _ ->
+        T.BB_RForeign _ ->
             errors
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             errors
 
 
-addImportProblems : Dict String T.CEMN_Raw BB_BResult -> T.CEMN_Raw -> List ( T.CEMN_Raw, Import.CREI_Problem ) -> List ( T.CEMN_Raw, Import.CREI_Problem )
+addImportProblems : Dict String T.CEMN_Raw T.BB_BResult -> T.CEMN_Raw -> List ( T.CEMN_Raw, T.CREI_Problem ) -> List ( T.CEMN_Raw, T.CREI_Problem )
 addImportProblems results name problems =
     case Utils.find identity name results of
-        BB_RNew _ _ _ _ ->
+        T.BB_RNew _ _ _ _ ->
             problems
 
-        BB_RSame _ _ _ _ ->
+        T.BB_RSame _ _ _ _ ->
             problems
 
-        BB_RCached _ _ _ ->
+        T.BB_RCached _ _ _ ->
             problems
 
-        BB_RNotFound p ->
+        T.BB_RNotFound p ->
             ( name, p ) :: problems
 
-        BB_RProblem _ ->
+        T.BB_RProblem _ ->
             problems
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             problems
 
-        BB_RForeign _ ->
+        T.BB_RForeign _ ->
             problems
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             problems
 
 
@@ -1170,12 +1146,12 @@ addImportProblems results name problems =
 
 
 type DocsGoal docs
-    = KeepDocs (Dict String T.CEMN_Raw BB_BResult -> docs)
-    | WriteDocs (Dict String T.CEMN_Raw BB_BResult -> IO docs)
+    = KeepDocs (Dict String T.CEMN_Raw T.BB_BResult -> docs)
+    | WriteDocs (Dict String T.CEMN_Raw T.BB_BResult -> IO docs)
     | IgnoreDocs docs
 
 
-keepDocs : DocsGoal (Dict String T.CEMN_Raw Docs.CED_Module)
+keepDocs : DocsGoal (Dict String T.CEMN_Raw T.CED_Module)
 keepDocs =
     KeepDocs (Utils.mapMapMaybe identity compare toDocs)
 
@@ -1207,7 +1183,7 @@ toDocsNeed goal =
             DocsNeed True
 
 
-makeDocs : DocsNeed -> Can.Module -> Result EDocs.CRED_Error (Maybe Docs.CED_Module)
+makeDocs : DocsNeed -> Can.Module -> Result T.CRED_Error (Maybe T.CED_Module)
 makeDocs (DocsNeed isNeeded) modul =
     if isNeeded then
         case Docs.fromModule modul of
@@ -1221,7 +1197,7 @@ makeDocs (DocsNeed isNeeded) modul =
         Ok Nothing
 
 
-finalizeDocs : DocsGoal docs -> Dict String T.CEMN_Raw BB_BResult -> IO docs
+finalizeDocs : DocsGoal docs -> Dict String T.CEMN_Raw T.BB_BResult -> IO docs
 finalizeDocs goal results =
     case goal of
         KeepDocs f ->
@@ -1234,31 +1210,31 @@ finalizeDocs goal results =
             IO.pure val
 
 
-toDocs : BB_BResult -> Maybe Docs.CED_Module
+toDocs : T.BB_BResult -> Maybe T.CED_Module
 toDocs result =
     case result of
-        BB_RNew _ _ _ d ->
+        T.BB_RNew _ _ _ d ->
             d
 
-        BB_RSame _ _ _ d ->
+        T.BB_RSame _ _ _ d ->
             d
 
-        BB_RCached _ _ _ ->
+        T.BB_RCached _ _ _ ->
             Nothing
 
-        BB_RNotFound _ ->
+        T.BB_RNotFound _ ->
             Nothing
 
-        BB_RProblem _ ->
+        T.BB_RProblem _ ->
             Nothing
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             Nothing
 
-        BB_RForeign _ ->
+        T.BB_RForeign _ ->
             Nothing
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             Nothing
 
 
@@ -1270,7 +1246,7 @@ toDocs result =
 
 
 type ReplArtifacts
-    = ReplArtifacts T.CEMN_Canonical (List Module) L.CRRTL_Localizer (Dict String T.CDN_Name T.CASTC_Annotation)
+    = ReplArtifacts T.CEMN_Canonical (List Module) T.CRRTL_Localizer (Dict String T.CDN_Name T.CASTC_Annotation)
 
 
 fromRepl : T.FilePath -> Details.Details -> String -> IO (Result Exit.Repl ReplArtifacts)
@@ -1280,7 +1256,7 @@ fromRepl root details source =
             (\((Env _ _ projectType _ _ _ _) as env) ->
                 case Parse.fromByteString projectType source of
                     Err syntaxError ->
-                        IO.pure <| Err <| Exit.ReplBadInput source <| Error.CRE_BadSyntax syntaxError
+                        IO.pure <| Err <| Exit.ReplBadInput source <| T.CRE_BadSyntax syntaxError
 
                     Ok ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
                         Details.loadInterfaces root details
@@ -1341,7 +1317,7 @@ fromRepl root details source =
             )
 
 
-finalizeReplArtifacts : Env -> String -> T.CASTS_Module -> DepsStatus -> ResultDict -> Dict String T.CEMN_Raw BB_BResult -> IO (Result Exit.Repl ReplArtifacts)
+finalizeReplArtifacts : Env -> String -> T.CASTS_Module -> DepsStatus -> T.BB_ResultDict -> Dict String T.CEMN_Raw T.BB_BResult -> IO (Result Exit.Repl ReplArtifacts)
 finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
     let
         pkg : T.CEP_Name
@@ -1402,7 +1378,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((T.CASTS
             IO.pure <|
                 Err <|
                     Exit.ReplBadInput source <|
-                        Error.CRE_BadImports <|
+                        T.CRE_BadImports <|
                             toImportErrors env resultMVars imports problems
 
 
@@ -1588,8 +1564,8 @@ dropPrefix roots paths =
 
 type RootStatus
     = SInside T.CEMN_Raw
-    | SOutsideOk Details.BED_Local String T.CASTS_Module
-    | SOutsideErr Error.CRE_Module
+    | SOutsideOk T.BED_Local String T.CASTS_Module
+    | SOutsideErr T.CRE_Module
 
 
 crawlRoot : Env -> T.MVar StatusDict -> RootLocation -> IO RootStatus
@@ -1625,16 +1601,16 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                                                 deps =
                                                     List.map Src.getImportName imports
 
-                                                local : Details.BED_Local
+                                                local : T.BED_Local
                                                 local =
-                                                    Details.BED_Local path time deps (List.any isMain values) buildID buildID
+                                                    T.BED_Local path time deps (List.any isMain values) buildID buildID
                                             in
                                             crawlDeps env mvar deps (SOutsideOk local source modul)
 
                                         Err syntaxError ->
                                             IO.pure <|
                                                 SOutsideErr <|
-                                                    Error.CRE_Module "???" path time source (Error.CRE_BadSyntax syntaxError)
+                                                    T.CRE_Module "???" path time source (T.CRE_BadSyntax syntaxError)
                                 )
                     )
 
@@ -1646,11 +1622,11 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
 type RootResult
     = RInside T.CEMN_Raw
     | ROutsideOk T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
-    | ROutsideErr Error.CRE_Module
+    | ROutsideErr T.CRE_Module
     | ROutsideBlocked
 
 
-checkRoot : Env -> ResultDict -> RootStatus -> IO RootResult
+checkRoot : Env -> T.BB_ResultDict -> RootStatus -> IO RootResult
 checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
     case rootStatus of
         SInside name ->
@@ -1659,7 +1635,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
         SOutsideErr err ->
             IO.pure (ROutsideErr err)
 
-        SOutsideOk ((Details.BED_Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
+        SOutsideOk ((T.BED_Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) ->
             checkDeps root results deps lastCompile
                 |> IO.bind
                     (\depsStatus ->
@@ -1685,13 +1661,13 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
                             DepsNotFound problems ->
                                 IO.pure <|
                                     ROutsideErr <|
-                                        Error.CRE_Module (Src.getName modul) path time source <|
-                                            Error.CRE_BadImports (toImportErrors env results imports problems)
+                                        T.CRE_Module (Src.getName modul) path time source <|
+                                            T.CRE_BadImports (toImportErrors env results imports problems)
                     )
 
 
-compileOutside : Env -> Details.BED_Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO RootResult
-compileOutside (Env key _ projectType _ _ _ _) (Details.BED_Local path time _ _ _ _) source ifaces modul =
+compileOutside : Env -> T.BED_Local -> String -> Dict String T.CEMN_Raw T.CEI_Interface -> T.CASTS_Module -> IO RootResult
+compileOutside (Env key _ projectType _ _ _ _) (T.BED_Local path time _ _ _ _) source ifaces modul =
     let
         pkg : T.CEP_Name
         pkg =
@@ -1710,7 +1686,7 @@ compileOutside (Env key _ projectType _ _ _ _) (Details.BED_Local path time _ _ 
                             |> IO.fmap (\_ -> ROutsideOk name (I.fromModule pkg canonical annotations) objects)
 
                     Err errors ->
-                        IO.pure <| ROutsideErr <| Error.CRE_Module name path time source errors
+                        IO.pure <| ROutsideErr <| T.CRE_Module name path time source errors
             )
 
 
@@ -1723,7 +1699,7 @@ type Root
     | Outside T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
 
 
-toArtifacts : Env -> Dependencies -> Dict String T.CEMN_Raw BB_BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
+toArtifacts : Env -> Dependencies -> Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
 toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
     case gatherProblemsOrMains results rootResults of
         Err (NE.Nonempty e es) ->
@@ -1735,10 +1711,10 @@ toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
                     Dict.foldr compare addInside (NE.foldr addOutside [] rootResults) results
 
 
-gatherProblemsOrMains : Dict String T.CEMN_Raw BB_BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty Error.CRE_Module) (NE.Nonempty Root)
+gatherProblemsOrMains : Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty T.CRE_Module) (NE.Nonempty Root)
 gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
     let
-        addResult : RootResult -> ( List Error.CRE_Module, List Root ) -> ( List Error.CRE_Module, List Root )
+        addResult : RootResult -> ( List T.CRE_Module, List Root ) -> ( List T.CRE_Module, List Root )
         addResult result ( es, roots ) =
             case result of
                 RInside n ->
@@ -1753,7 +1729,7 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
                 ROutsideBlocked ->
                     ( es, roots )
 
-        errors : List Error.CRE_Module
+        errors : List T.CRE_Module
         errors =
             Dict.foldr compare (\_ -> addErrors) [] results
     in
@@ -1780,31 +1756,31 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
             Err (NE.Nonempty e es)
 
 
-addInside : T.CEMN_Raw -> BB_BResult -> List Module -> List Module
+addInside : T.CEMN_Raw -> T.BB_BResult -> List Module -> List Module
 addInside name result modules =
     case result of
-        BB_RNew _ iface objs _ ->
+        T.BB_RNew _ iface objs _ ->
             Fresh name iface objs :: modules
 
-        BB_RSame _ iface objs _ ->
+        T.BB_RSame _ iface objs _ ->
             Fresh name iface objs :: modules
 
-        BB_RCached main _ mvar ->
+        T.BB_RCached main _ mvar ->
             Cached name main mvar :: modules
 
-        BB_RNotFound _ ->
+        T.BB_RNotFound _ ->
             crash (badInside name)
 
-        BB_RProblem _ ->
+        T.BB_RProblem _ ->
             crash (badInside name)
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             crash (badInside name)
 
-        BB_RForeign _ ->
+        T.BB_RForeign _ ->
             modules
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             modules
 
 
@@ -1833,15 +1809,15 @@ addOutside root modules =
 -- ENCODERS and DECODERS
 
 
-dictRawMVarBResultEncoder : Dict String T.CEMN_Raw (T.MVar BB_BResult) -> Encode.Value
+dictRawMVarBResultEncoder : Dict String T.CEMN_Raw (T.MVar T.BB_BResult) -> Encode.Value
 dictRawMVarBResultEncoder =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-bResultEncoder : BB_BResult -> Encode.Value
+bResultEncoder : T.BB_BResult -> Encode.Value
 bResultEncoder bResult =
     case bResult of
-        BB_RNew local iface objects docs ->
+        T.BB_RNew local iface objects docs ->
             Encode.object
                 [ ( "type", Encode.string "RNew" )
                 , ( "local", Details.localEncoder local )
@@ -1854,7 +1830,7 @@ bResultEncoder bResult =
                   )
                 ]
 
-        BB_RSame local iface objects docs ->
+        T.BB_RSame local iface objects docs ->
             Encode.object
                 [ ( "type", Encode.string "RSame" )
                 , ( "local", Details.localEncoder local )
@@ -1863,7 +1839,7 @@ bResultEncoder bResult =
                 , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
                 ]
 
-        BB_RCached main lastChange (T.MVar ref) ->
+        T.BB_RCached main lastChange (T.MVar ref) ->
             Encode.object
                 [ ( "type", Encode.string "RCached" )
                 , ( "main", Encode.bool main )
@@ -1871,74 +1847,74 @@ bResultEncoder bResult =
                 , ( "mvar", Encode.int ref )
                 ]
 
-        BB_RNotFound importProblem ->
+        T.BB_RNotFound importProblem ->
             Encode.object
                 [ ( "type", Encode.string "RNotFound" )
                 , ( "importProblem", Import.problemEncoder importProblem )
                 ]
 
-        BB_RProblem e ->
+        T.BB_RProblem e ->
             Encode.object
                 [ ( "type", Encode.string "RProblem" )
                 , ( "e", Error.moduleEncoder e )
                 ]
 
-        BB_RBlocked ->
+        T.BB_RBlocked ->
             Encode.object [ ( "type", Encode.string "RBlocked" ) ]
 
-        BB_RForeign iface ->
+        T.BB_RForeign iface ->
             Encode.object
                 [ ( "type", Encode.string "RForeign" )
                 , ( "iface", I.interfaceEncoder iface )
                 ]
 
-        BB_RKernel ->
+        T.BB_RKernel ->
             Encode.object [ ( "type", Encode.string "RKernel" ) ]
 
 
-bResultDecoder : Decode.Decoder BB_BResult
+bResultDecoder : Decode.Decoder T.BB_BResult
 bResultDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "RNew" ->
-                        Decode.map4 BB_RNew
+                        Decode.map4 T.BB_RNew
                             (Decode.field "local" Details.localDecoder)
                             (Decode.field "iface" I.interfaceDecoder)
                             (Decode.field "objects" Opt.localGraphDecoder)
                             (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
 
                     "RSame" ->
-                        Decode.map4 BB_RSame
+                        Decode.map4 T.BB_RSame
                             (Decode.field "local" Details.localDecoder)
                             (Decode.field "iface" I.interfaceDecoder)
                             (Decode.field "objects" Opt.localGraphDecoder)
                             (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
 
                     "RCached" ->
-                        Decode.map3 BB_RCached
+                        Decode.map3 T.BB_RCached
                             (Decode.field "main" Decode.bool)
                             (Decode.field "lastChange" Decode.int)
                             (Decode.field "mvar" (Decode.map T.MVar Decode.int))
 
                     "RNotFound" ->
-                        Decode.map BB_RNotFound
+                        Decode.map T.BB_RNotFound
                             (Decode.field "importProblem" Import.problemDecoder)
 
                     "RProblem" ->
-                        Decode.map BB_RProblem
+                        Decode.map T.BB_RProblem
                             (Decode.field "e" Error.moduleDecoder)
 
                     "RBlocked" ->
-                        Decode.succeed BB_RBlocked
+                        Decode.succeed T.BB_RBlocked
 
                     "RForeign" ->
-                        Decode.map BB_RForeign
+                        Decode.map T.BB_RForeign
                             (Decode.field "iface" I.interfaceDecoder)
 
                     "RKernel" ->
-                        Decode.succeed BB_RKernel
+                        Decode.succeed T.BB_RKernel
 
                     _ ->
                         Decode.fail ("Failed to decode BResult's type: " ++ type_)
@@ -2084,12 +2060,12 @@ rootStatusDecoder =
             )
 
 
-resultDictEncoder : ResultDict -> Encode.Value
+resultDictEncoder : T.BB_ResultDict -> Encode.Value
 resultDictEncoder =
     E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-resultDictDecoder : Decode.Decoder ResultDict
+resultDictDecoder : Decode.Decoder T.BB_ResultDict
 resultDictDecoder =
     D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
@@ -2184,40 +2160,40 @@ resultBuildProjectProblemRootInfoDecoder =
     D.result Exit.buildProjectProblemDecoder rootInfoDecoder
 
 
-cachedInterfaceEncoder : BB_CachedInterface -> Encode.Value
+cachedInterfaceEncoder : T.BB_CachedInterface -> Encode.Value
 cachedInterfaceEncoder cachedInterface =
     case cachedInterface of
-        BB_Unneeded ->
+        T.BB_Unneeded ->
             Encode.object
                 [ ( "type", Encode.string "Unneeded" )
                 ]
 
-        BB_Loaded iface ->
+        T.BB_Loaded iface ->
             Encode.object
                 [ ( "type", Encode.string "Loaded" )
                 , ( "iface", I.interfaceEncoder iface )
                 ]
 
-        BB_Corrupted ->
+        T.BB_Corrupted ->
             Encode.object
                 [ ( "type", Encode.string "Corrupted" )
                 ]
 
 
-cachedInterfaceDecoder : Decode.Decoder BB_CachedInterface
+cachedInterfaceDecoder : Decode.Decoder T.BB_CachedInterface
 cachedInterfaceDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Unneeded" ->
-                        Decode.succeed BB_Unneeded
+                        Decode.succeed T.BB_Unneeded
 
                     "Loaded" ->
-                        Decode.map BB_Loaded (Decode.field "iface" I.interfaceDecoder)
+                        Decode.map T.BB_Loaded (Decode.field "iface" I.interfaceDecoder)
 
                     "Corrupted" ->
-                        Decode.succeed BB_Corrupted
+                        Decode.succeed T.BB_Corrupted
 
                     _ ->
                         Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)

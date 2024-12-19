@@ -21,7 +21,7 @@ import Utils.Main as Utils
 
 type Answer
     = AnswerOk (List IO.Variable)
-    | AnswerErr (List IO.Variable) Error.Type Error.Type
+    | AnswerErr (List IO.Variable) T.CTE_Type T.CTE_Type
 
 
 unify : IO.Variable -> IO.Variable -> IO Answer

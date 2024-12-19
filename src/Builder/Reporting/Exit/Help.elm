@@ -15,6 +15,7 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error
 import Maybe.Extra as Maybe
 import System.IO as IO exposing (IO)
+import Types as T
 
 
 
@@ -22,7 +23,7 @@ import System.IO as IO exposing (IO)
 
 
 type Report
-    = CompilerReport String Error.CRE_Module (List Error.CRE_Module)
+    = CompilerReport String T.CRE_Module (List T.CRE_Module)
     | Report String (Maybe String) D.Doc
 
 
@@ -41,7 +42,7 @@ jsonReport =
     Report
 
 
-compilerReport : String -> Error.CRE_Module -> List Error.CRE_Module -> Report
+compilerReport : String -> T.CRE_Module -> List T.CRE_Module -> Report
 compilerReport =
     CompilerReport
 

@@ -1,6 +1,5 @@
 module Compiler.Parse.Symbol exposing
-    ( CPS_BadOperator(..)
-    , badOperatorDecoder
+    ( badOperatorDecoder
     , badOperatorEncoder
     , binopCharSet
     , operator
@@ -17,15 +16,7 @@ import Types as T
 -- OPERATOR
 
 
-type CPS_BadOperator
-    = CPS_BadDot
-    | CPS_BadPipe
-    | CPS_BadArrow
-    | CPS_BadEquals
-    | CPS_BadHasType
-
-
-operator : (T.CPP_Row -> T.CPP_Col -> x) -> (CPS_BadOperator -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x T.CDN_Name
+operator : (T.CPP_Row -> T.CPP_Col -> x) -> (T.CPS_BadOperator -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x T.CDN_Name
 operator toExpectation toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -40,19 +31,19 @@ operator toExpectation toError =
             else
                 case String.slice pos newPos src of
                     "." ->
-                        Err (P.PErr P.Empty row col (toError CPS_BadDot))
+                        Err (P.PErr P.Empty row col (toError T.CPS_BadDot))
 
                     "|" ->
-                        Err (P.PErr P.Consumed row col (toError CPS_BadPipe))
+                        Err (P.PErr P.Consumed row col (toError T.CPS_BadPipe))
 
                     "->" ->
-                        Err (P.PErr P.Consumed row col (toError CPS_BadArrow))
+                        Err (P.PErr P.Consumed row col (toError T.CPS_BadArrow))
 
                     "=" ->
-                        Err (P.PErr P.Consumed row col (toError CPS_BadEquals))
+                        Err (P.PErr P.Consumed row col (toError T.CPS_BadEquals))
 
                     ":" ->
-                        Err (P.PErr P.Consumed row col (toError CPS_BadHasType))
+                        Err (P.PErr P.Consumed row col (toError T.CPS_BadHasType))
 
                     op ->
                         let
@@ -95,45 +86,45 @@ binopCharSet =
 -- ENCODERS and DECODERS
 
 
-badOperatorEncoder : CPS_BadOperator -> Encode.Value
+badOperatorEncoder : T.CPS_BadOperator -> Encode.Value
 badOperatorEncoder badOperator =
     case badOperator of
-        CPS_BadDot ->
+        T.CPS_BadDot ->
             Encode.string "BadDot"
 
-        CPS_BadPipe ->
+        T.CPS_BadPipe ->
             Encode.string "BadPipe"
 
-        CPS_BadArrow ->
+        T.CPS_BadArrow ->
             Encode.string "BadArrow"
 
-        CPS_BadEquals ->
+        T.CPS_BadEquals ->
             Encode.string "BadEquals"
 
-        CPS_BadHasType ->
+        T.CPS_BadHasType ->
             Encode.string "BadHasType"
 
 
-badOperatorDecoder : Decode.Decoder CPS_BadOperator
+badOperatorDecoder : Decode.Decoder T.CPS_BadOperator
 badOperatorDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "BadDot" ->
-                        Decode.succeed CPS_BadDot
+                        Decode.succeed T.CPS_BadDot
 
                     "BadPipe" ->
-                        Decode.succeed CPS_BadPipe
+                        Decode.succeed T.CPS_BadPipe
 
                     "BadArrow" ->
-                        Decode.succeed CPS_BadArrow
+                        Decode.succeed T.CPS_BadArrow
 
                     "BadEquals" ->
-                        Decode.succeed CPS_BadEquals
+                        Decode.succeed T.CPS_BadEquals
 
                     "BadHasType" ->
-                        Decode.succeed CPS_BadHasType
+                        Decode.succeed T.CPS_BadHasType
 
                     _ ->
                         Decode.fail ("Unknown BadOperator: " ++ str)

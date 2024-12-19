@@ -1,6 +1,5 @@
 module Compiler.Reporting.Error.Main exposing
-    ( CREM_Error(..)
-    , errorDecoder
+    ( errorDecoder
     , errorEncoder
     , toReport
     )
@@ -11,7 +10,6 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Canonicalize as E
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
-import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -19,23 +17,13 @@ import Types as T
 
 
 
--- ERROR
-
-
-type CREM_Error
-    = CREM_BadType T.CRA_Region T.CASTC_Type
-    | CREM_BadCycle T.CRA_Region T.CDN_Name (List T.CDN_Name)
-    | CREM_BadFlags T.CRA_Region T.CASTC_Type E.CREC_InvalidPayload
-
-
-
 -- TO REPORT
 
 
-toReport : L.CRRTL_Localizer -> Code.Source -> CREM_Error -> Report.Report
+toReport : T.CRRTL_Localizer -> Code.Source -> T.CREM_Error -> Report.Report
 toReport localizer source err =
     case err of
-        CREM_BadType region tipe ->
+        T.CREM_BadType region tipe ->
             Report.Report "BAD MAIN TYPE" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.fromChars "I cannot handle this type of `main` value:"
@@ -46,7 +34,7 @@ toReport localizer source err =
                         ]
                     )
 
-        CREM_BadCycle region name names ->
+        T.CREM_BadCycle region name names ->
             Report.Report "BAD MAIN" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.fromChars "A `main` definition cannot be defined in terms of itself."
@@ -56,7 +44,7 @@ toReport localizer source err =
                         ]
                     )
 
-        CREM_BadFlags region _ invalidPayload ->
+        T.CREM_BadFlags region _ invalidPayload ->
             let
                 formatDetails : ( String, D.Doc ) -> Report.Report
                 formatDetails ( aBadKindOfThing, butThatIsNoGood ) =
@@ -68,22 +56,22 @@ toReport localizer source err =
             in
             formatDetails <|
                 case invalidPayload of
-                    E.CREC_ExtendedRecord ->
+                    T.CREC_ExtendedRecord ->
                         ( "an extended record"
                         , D.reflow "But the exact shape of the record must be known at compile time. No type variables!"
                         )
 
-                    E.CREC_Function ->
+                    T.CREC_Function ->
                         ( "a function"
                         , D.reflow "But if I allowed functions from JS, it would be possible to sneak side-effects and runtime exceptions into Elm!"
                         )
 
-                    E.CREC_TypeVariable name ->
+                    T.CREC_TypeVariable name ->
                         ( "an unspecified type"
                         , D.reflow ("But type variables like `" ++ name ++ "` cannot be given as flags. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Elm program.")
                         )
 
-                    E.CREC_UnsupportedType name ->
+                    T.CREC_UnsupportedType name ->
                         ( "a `" ++ name ++ "` value"
                         , D.stack
                             [ D.reflow "I cannot handle that. The types that CAN be in flags include:"
@@ -98,17 +86,17 @@ toReport localizer source err =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : CREM_Error -> Encode.Value
+errorEncoder : T.CREM_Error -> Encode.Value
 errorEncoder error =
     case error of
-        CREM_BadType region tipe ->
+        T.CREM_BadType region tipe ->
             Encode.object
                 [ ( "type", Encode.string "BadType" )
                 , ( "region", A.regionEncoder region )
                 , ( "tipe", Can.typeEncoder tipe )
                 ]
 
-        CREM_BadCycle region name names ->
+        T.CREM_BadCycle region name names ->
             Encode.object
                 [ ( "type", Encode.string "BadCycle" )
                 , ( "region", A.regionEncoder region )
@@ -116,7 +104,7 @@ errorEncoder error =
                 , ( "names", Encode.list Encode.string names )
                 ]
 
-        CREM_BadFlags region subType invalidPayload ->
+        T.CREM_BadFlags region subType invalidPayload ->
             Encode.object
                 [ ( "type", Encode.string "BadFlags" )
                 , ( "region", A.regionEncoder region )
@@ -125,25 +113,25 @@ errorEncoder error =
                 ]
 
 
-errorDecoder : Decode.Decoder CREM_Error
+errorDecoder : Decode.Decoder T.CREM_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "BadType" ->
-                        Decode.map2 CREM_BadType
+                        Decode.map2 T.CREM_BadType
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "tipe" Can.typeDecoder)
 
                     "BadCycle" ->
-                        Decode.map3 CREM_BadCycle
+                        Decode.map3 T.CREM_BadCycle
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "names" (Decode.list Decode.string))
 
                     "BadFlags" ->
-                        Decode.map3 CREM_BadFlags
+                        Decode.map3 T.CREM_BadFlags
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "subType" Can.typeDecoder)
                             (Decode.field "invalidPayload" E.invalidPayloadDecoder)

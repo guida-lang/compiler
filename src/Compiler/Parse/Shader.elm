@@ -3,7 +3,6 @@ module Compiler.Parse.Shader exposing (shader)
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Parse.Primitives as P exposing (Parser)
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Syntax as E
 import Data.Map as Dict
 import Language.GLSL.Parser as GLP
 import Language.GLSL.Syntax as GLS
@@ -15,7 +14,7 @@ import Utils.Crash as Crash
 -- SHADER
 
 
-shader : T.CRA_Position -> Parser E.CRES_Expr T.CASTS_Expr
+shader : T.CRA_Position -> Parser T.CRES_Expr T.CASTS_Expr
 shader ((T.CRA_Position row col) as start) =
     parseBlock
         |> P.bind
@@ -36,7 +35,7 @@ shader ((T.CRA_Position row col) as start) =
 -- BLOCK
 
 
-parseBlock : Parser E.CRES_Expr String
+parseBlock : Parser T.CRES_Expr String
 parseBlock =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -80,10 +79,10 @@ parseBlock =
                         Ok (P.POk P.Consumed block newState)
 
                     Unending ->
-                        Err (P.PErr P.Consumed row col E.CRES_EndlessShader)
+                        Err (P.PErr P.Consumed row col T.CRES_EndlessShader)
 
             else
-                Err (P.PErr P.Empty row col E.CRES_Start)
+                Err (P.PErr P.Empty row col T.CRES_Start)
 
 
 type Status
@@ -121,7 +120,7 @@ eatShader src pos end row col =
 -- GLSL
 
 
-parseGlsl : T.CPP_Row -> T.CPP_Col -> String -> Parser E.CRES_Expr T.CASTUS_Types
+parseGlsl : T.CPP_Row -> T.CPP_Col -> String -> Parser T.CRES_Expr T.CASTUS_Types
 parseGlsl startRow startCol src =
     case GLP.parse src of
         Ok (GLS.TranslationUnit decls) ->
@@ -168,11 +167,11 @@ showErrorMessages msgs =
         String.join "\n" msgs
 
 
-failure : T.CPP_Row -> T.CPP_Col -> String -> Parser E.CRES_Expr a
+failure : T.CPP_Row -> T.CPP_Col -> String -> Parser T.CRES_Expr a
 failure row col msg =
     P.Parser <|
         \_ ->
-            Err (P.PErr P.Consumed row col (E.CRES_ShaderProblem msg))
+            Err (P.PErr P.Consumed row col (T.CRES_ShaderProblem msg))
 
 
 

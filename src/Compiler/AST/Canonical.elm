@@ -1,19 +1,10 @@
 module Compiler.AST.Canonical exposing
     ( Binop(..)
-    , CaseBranch(..)
-    , Decls(..)
-    , Def(..)
     , Effects(..)
     , Export(..)
     , Exports(..)
-    , Expr
-    , Expr_(..)
-    , FieldUpdate(..)
     , Manager(..)
     , Module(..)
-    , Pattern
-    , PatternCtorArg(..)
-    , Pattern_(..)
     , Port(..)
     , aliasDecoder
     , aliasEncoder
@@ -62,116 +53,6 @@ import Types as T
 
 
 
--- EXPRESSIONS
-
-
-type alias Expr =
-    T.CRA_Located Expr_
-
-
-
--- CACHE Annotations for type inference
-
-
-type Expr_
-    = VarLocal T.CDN_Name
-    | VarTopLevel T.CEMN_Canonical T.CDN_Name
-    | VarKernel T.CDN_Name T.CDN_Name
-    | VarForeign T.CEMN_Canonical T.CDN_Name T.CASTC_Annotation
-    | VarCtor T.CASTC_CtorOpts T.CEMN_Canonical T.CDN_Name T.CDI_ZeroBased T.CASTC_Annotation
-    | VarDebug T.CEMN_Canonical T.CDN_Name T.CASTC_Annotation
-    | VarOperator T.CDN_Name T.CEMN_Canonical T.CDN_Name T.CASTC_Annotation -- CACHE real name for optimization
-    | Chr String
-    | Str String
-    | Int Int
-    | Float Float
-    | List (List Expr)
-    | Negate Expr
-    | Binop T.CDN_Name T.CEMN_Canonical T.CDN_Name T.CASTC_Annotation Expr Expr -- CACHE real name for optimization
-    | Lambda (List Pattern) Expr
-    | Call Expr (List Expr)
-    | If (List ( Expr, Expr )) Expr
-    | Let Def Expr
-    | LetRec (List Def) Expr
-    | LetDestruct Pattern Expr Expr
-    | Case Expr (List CaseBranch)
-    | Accessor T.CDN_Name
-    | Access Expr (T.CRA_Located T.CDN_Name)
-    | Update T.CDN_Name Expr (Dict String T.CDN_Name FieldUpdate)
-    | Record (Dict String T.CDN_Name Expr)
-    | Unit
-    | Tuple Expr Expr (Maybe Expr)
-    | Shader T.CASTUS_Source T.CASTUS_Types
-
-
-type CaseBranch
-    = CaseBranch Pattern Expr
-
-
-type FieldUpdate
-    = FieldUpdate T.CRA_Region Expr
-
-
-
--- DEFS
-
-
-type Def
-    = Def (T.CRA_Located T.CDN_Name) (List Pattern) Expr
-    | TypedDef (T.CRA_Located T.CDN_Name) T.CASTC_FreeVars (List ( Pattern, T.CASTC_Type )) Expr T.CASTC_Type
-
-
-type Decls
-    = Declare Def Decls
-    | DeclareRec Def (List Def) Decls
-    | SaveTheEnvironment
-
-
-
--- PATTERNS
-
-
-type alias Pattern =
-    T.CRA_Located Pattern_
-
-
-type Pattern_
-    = PAnything
-    | PVar T.CDN_Name
-    | PRecord (List T.CDN_Name)
-    | PAlias Pattern T.CDN_Name
-    | PUnit
-    | PTuple Pattern Pattern (Maybe Pattern)
-    | PList (List Pattern)
-    | PCons Pattern Pattern
-    | PBool T.CASTC_Union Bool
-    | PChr String
-    | PStr String
-    | PInt Int
-    | PCtor
-        -- CACHE p_home, p_type, and p_vars for type inference
-        -- CACHE p_index to replace p_name in PROD code gen
-        -- CACHE p_opts to allocate less in PROD code gen
-        -- CACHE p_alts and p_numAlts for exhaustiveness checker
-        { home : T.CEMN_Canonical
-        , type_ : T.CDN_Name
-        , union : T.CASTC_Union
-        , name : T.CDN_Name
-        , index : T.CDI_ZeroBased
-        , args : List PatternCtorArg
-        }
-
-
-type PatternCtorArg
-    = PatternCtorArg
-        -- CACHE for destructors/errors
-        T.CDI_ZeroBased
-        -- CACHE for type inference
-        T.CASTC_Type
-        Pattern
-
-
-
 -- TYPES
 -- NOTE: The Word16 marks the source order, but it may not be available
 -- for every canonical type. For example, if the canonical type is inferred
@@ -199,7 +80,7 @@ fieldsToList fields =
 
 
 type Module
-    = Module T.CEMN_Canonical Exports T.CASTS_Docs Decls (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias) (Dict String T.CDN_Name Binop) Effects
+    = Module T.CEMN_Canonical Exports T.CASTS_Docs T.CASTC_Decls (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias) (Dict String T.CDN_Name Binop) Effects
 
 
 type Binop
@@ -519,8 +400,8 @@ ctorOptsDecoder =
             )
 
 
-fieldUpdateEncoder : FieldUpdate -> Encode.Value
-fieldUpdateEncoder (FieldUpdate fieldRegion expr) =
+fieldUpdateEncoder : T.CASTC_FieldUpdate -> Encode.Value
+fieldUpdateEncoder (T.CASTC_FieldUpdate fieldRegion expr) =
     Encode.object
         [ ( "type", Encode.string "FieldUpdate" )
         , ( "fieldRegion", A.regionEncoder fieldRegion )
@@ -528,47 +409,47 @@ fieldUpdateEncoder (FieldUpdate fieldRegion expr) =
         ]
 
 
-fieldUpdateDecoder : Decode.Decoder FieldUpdate
+fieldUpdateDecoder : Decode.Decoder T.CASTC_FieldUpdate
 fieldUpdateDecoder =
-    Decode.map2 FieldUpdate
+    Decode.map2 T.CASTC_FieldUpdate
         (Decode.field "fieldRegion" A.regionDecoder)
         (Decode.field "expr" exprDecoder)
 
 
-exprEncoder : Expr -> Encode.Value
+exprEncoder : T.CASTC_Expr -> Encode.Value
 exprEncoder =
     A.locatedEncoder expr_Encoder
 
 
-exprDecoder : Decode.Decoder Expr
+exprDecoder : Decode.Decoder T.CASTC_Expr
 exprDecoder =
     A.locatedDecoder expr_Decoder
 
 
-expr_Encoder : Expr_ -> Encode.Value
+expr_Encoder : T.CASTC_Expr_ -> Encode.Value
 expr_Encoder expr_ =
     case expr_ of
-        VarLocal name ->
+        T.CASTC_VarLocal name ->
             Encode.object
                 [ ( "type", Encode.string "VarLocal" )
                 , ( "name", Encode.string name )
                 ]
 
-        VarTopLevel home name ->
+        T.CASTC_VarTopLevel home name ->
             Encode.object
                 [ ( "type", Encode.string "VarTopLevel" )
                 , ( "home", ModuleName.canonicalEncoder home )
                 , ( "name", Encode.string name )
                 ]
 
-        VarKernel home name ->
+        T.CASTC_VarKernel home name ->
             Encode.object
                 [ ( "type", Encode.string "VarKernel" )
                 , ( "home", Encode.string home )
                 , ( "name", Encode.string name )
                 ]
 
-        VarForeign home name annotation ->
+        T.CASTC_VarForeign home name annotation ->
             Encode.object
                 [ ( "type", Encode.string "VarForeign" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -576,7 +457,7 @@ expr_Encoder expr_ =
                 , ( "annotation", annotationEncoder annotation )
                 ]
 
-        VarCtor opts home name index annotation ->
+        T.CASTC_VarCtor opts home name index annotation ->
             Encode.object
                 [ ( "type", Encode.string "VarCtor" )
                 , ( "opts", ctorOptsEncoder opts )
@@ -586,7 +467,7 @@ expr_Encoder expr_ =
                 , ( "annotation", annotationEncoder annotation )
                 ]
 
-        VarDebug home name annotation ->
+        T.CASTC_VarDebug home name annotation ->
             Encode.object
                 [ ( "type", Encode.string "VarDebug" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -594,7 +475,7 @@ expr_Encoder expr_ =
                 , ( "annotation", annotationEncoder annotation )
                 ]
 
-        VarOperator op home name annotation ->
+        T.CASTC_VarOperator op home name annotation ->
             Encode.object
                 [ ( "type", Encode.string "VarOperator" )
                 , ( "op", Encode.string op )
@@ -603,43 +484,43 @@ expr_Encoder expr_ =
                 , ( "annotation", annotationEncoder annotation )
                 ]
 
-        Chr chr ->
+        T.CASTC_Chr chr ->
             Encode.object
                 [ ( "type", Encode.string "Chr" )
                 , ( "chr", Encode.string chr )
                 ]
 
-        Str str ->
+        T.CASTC_Str str ->
             Encode.object
                 [ ( "type", Encode.string "Str" )
                 , ( "str", Encode.string str )
                 ]
 
-        Int int ->
+        T.CASTC_Int int ->
             Encode.object
                 [ ( "type", Encode.string "Int" )
                 , ( "int", Encode.int int )
                 ]
 
-        Float float ->
+        T.CASTC_Float float ->
             Encode.object
                 [ ( "type", Encode.string "Float" )
                 , ( "float", Encode.float float )
                 ]
 
-        List entries ->
+        T.CASTC_List entries ->
             Encode.object
                 [ ( "type", Encode.string "List" )
                 , ( "entries", Encode.list exprEncoder entries )
                 ]
 
-        Negate expr ->
+        T.CASTC_Negate expr ->
             Encode.object
                 [ ( "type", Encode.string "Negate" )
                 , ( "expr", exprEncoder expr )
                 ]
 
-        Binop op home name annotation left right ->
+        T.CASTC_Binop op home name annotation left right ->
             Encode.object
                 [ ( "type", Encode.string "Binop" )
                 , ( "op", Encode.string op )
@@ -650,42 +531,42 @@ expr_Encoder expr_ =
                 , ( "right", exprEncoder right )
                 ]
 
-        Lambda args body ->
+        T.CASTC_Lambda args body ->
             Encode.object
                 [ ( "type", Encode.string "Lambda" )
                 , ( "args", Encode.list patternEncoder args )
                 , ( "body", exprEncoder body )
                 ]
 
-        Call func args ->
+        T.CASTC_Call func args ->
             Encode.object
                 [ ( "type", Encode.string "Call" )
                 , ( "func", exprEncoder func )
                 , ( "args", Encode.list exprEncoder args )
                 ]
 
-        If branches finally ->
+        T.CASTC_If branches finally ->
             Encode.object
                 [ ( "type", Encode.string "If" )
                 , ( "branches", Encode.list (E.jsonPair exprEncoder exprEncoder) branches )
                 , ( "finally", exprEncoder finally )
                 ]
 
-        Let def body ->
+        T.CASTC_Let def body ->
             Encode.object
                 [ ( "type", Encode.string "Let" )
                 , ( "def", defEncoder def )
                 , ( "body", exprEncoder body )
                 ]
 
-        LetRec defs body ->
+        T.CASTC_LetRec defs body ->
             Encode.object
                 [ ( "type", Encode.string "LetRec" )
                 , ( "defs", Encode.list defEncoder defs )
                 , ( "body", exprEncoder body )
                 ]
 
-        LetDestruct pattern expr body ->
+        T.CASTC_LetDestruct pattern expr body ->
             Encode.object
                 [ ( "type", Encode.string "LetDestruct" )
                 , ( "pattern", patternEncoder pattern )
@@ -693,27 +574,27 @@ expr_Encoder expr_ =
                 , ( "body", exprEncoder body )
                 ]
 
-        Case expr branches ->
+        T.CASTC_Case expr branches ->
             Encode.object
                 [ ( "type", Encode.string "Case" )
                 , ( "expr", exprEncoder expr )
                 , ( "branches", Encode.list caseBranchEncoder branches )
                 ]
 
-        Accessor field ->
+        T.CASTC_Accessor field ->
             Encode.object
                 [ ( "type", Encode.string "Accessor" )
                 , ( "field", Encode.string field )
                 ]
 
-        Access record field ->
+        T.CASTC_Access record field ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "record", exprEncoder record )
                 , ( "field", A.locatedEncoder Encode.string field )
                 ]
 
-        Update name record updates ->
+        T.CASTC_Update name record updates ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
                 , ( "name", Encode.string name )
@@ -721,18 +602,18 @@ expr_Encoder expr_ =
                 , ( "updates", E.assocListDict compare Encode.string fieldUpdateEncoder updates )
                 ]
 
-        Record fields ->
+        T.CASTC_Record fields ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
                 , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
                 ]
 
-        Unit ->
+        T.CASTC_Unit ->
             Encode.object
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        T.CASTC_Tuple a b maybeC ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", exprEncoder a )
@@ -740,7 +621,7 @@ expr_Encoder expr_ =
                 , ( "maybeC", E.maybe exprEncoder maybeC )
                 ]
 
-        Shader src types ->
+        T.CASTC_Shader src types ->
             Encode.object
                 [ ( "type", Encode.string "Shader" )
                 , ( "src", Shader.sourceEncoder src )
@@ -748,33 +629,33 @@ expr_Encoder expr_ =
                 ]
 
 
-expr_Decoder : Decode.Decoder Expr_
+expr_Decoder : Decode.Decoder T.CASTC_Expr_
 expr_Decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "VarLocal" ->
-                        Decode.map VarLocal (Decode.field "name" Decode.string)
+                        Decode.map T.CASTC_VarLocal (Decode.field "name" Decode.string)
 
                     "VarTopLevel" ->
-                        Decode.map2 VarTopLevel
+                        Decode.map2 T.CASTC_VarTopLevel
                             (Decode.field "moduleName" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
 
                     "VarKernel" ->
-                        Decode.map2 VarKernel
+                        Decode.map2 T.CASTC_VarKernel
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "VarForeign" ->
-                        Decode.map3 VarForeign
+                        Decode.map3 T.CASTC_VarForeign
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "annotation" annotationDecoder)
 
                     "VarCtor" ->
-                        Decode.map5 VarCtor
+                        Decode.map5 T.CASTC_VarCtor
                             (Decode.field "opts" ctorOptsDecoder)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
@@ -782,38 +663,38 @@ expr_Decoder =
                             (Decode.field "annotation" annotationDecoder)
 
                     "VarDebug" ->
-                        Decode.map3 VarDebug
+                        Decode.map3 T.CASTC_VarDebug
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "annotation" annotationDecoder)
 
                     "VarOperator" ->
-                        Decode.map4 VarOperator
+                        Decode.map4 T.CASTC_VarOperator
                             (Decode.field "op" Decode.string)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "annotation" annotationDecoder)
 
                     "Chr" ->
-                        Decode.map Chr (Decode.field "chr" Decode.string)
+                        Decode.map T.CASTC_Chr (Decode.field "chr" Decode.string)
 
                     "Str" ->
-                        Decode.map Str (Decode.field "str" Decode.string)
+                        Decode.map T.CASTC_Str (Decode.field "str" Decode.string)
 
                     "Int" ->
-                        Decode.map Int (Decode.field "int" Decode.int)
+                        Decode.map T.CASTC_Int (Decode.field "int" Decode.int)
 
                     "Float" ->
-                        Decode.map Float (Decode.field "float" Decode.float)
+                        Decode.map T.CASTC_Float (Decode.field "float" Decode.float)
 
                     "List" ->
-                        Decode.map List (Decode.field "entries" (Decode.list exprDecoder))
+                        Decode.map T.CASTC_List (Decode.field "entries" (Decode.list exprDecoder))
 
                     "Negate" ->
-                        Decode.map Negate (Decode.field "expr" exprDecoder)
+                        Decode.map T.CASTC_Negate (Decode.field "expr" exprDecoder)
 
                     "Binop" ->
-                        Decode.map6 Binop
+                        Decode.map6 T.CASTC_Binop
                             (Decode.field "op" Decode.string)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
@@ -822,70 +703,70 @@ expr_Decoder =
                             (Decode.field "right" exprDecoder)
 
                     "Lambda" ->
-                        Decode.map2 Lambda
+                        Decode.map2 T.CASTC_Lambda
                             (Decode.field "args" (Decode.list patternDecoder))
                             (Decode.field "body" exprDecoder)
 
                     "Call" ->
-                        Decode.map2 Call
+                        Decode.map2 T.CASTC_Call
                             (Decode.field "func" exprDecoder)
                             (Decode.field "args" (Decode.list exprDecoder))
 
                     "If" ->
-                        Decode.map2 If
+                        Decode.map2 T.CASTC_If
                             (Decode.field "branches" (Decode.list (D.jsonPair exprDecoder exprDecoder)))
                             (Decode.field "finally" exprDecoder)
 
                     "Let" ->
-                        Decode.map2 Let
+                        Decode.map2 T.CASTC_Let
                             (Decode.field "def" defDecoder)
                             (Decode.field "body" exprDecoder)
 
                     "LetRec" ->
-                        Decode.map2 LetRec
+                        Decode.map2 T.CASTC_LetRec
                             (Decode.field "defs" (Decode.list defDecoder))
                             (Decode.field "body" exprDecoder)
 
                     "LetDestruct" ->
-                        Decode.map3 LetDestruct
+                        Decode.map3 T.CASTC_LetDestruct
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "body" exprDecoder)
 
                     "Case" ->
-                        Decode.map2 Case
+                        Decode.map2 T.CASTC_Case
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "branches" (Decode.list caseBranchDecoder))
 
                     "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
+                        Decode.map T.CASTC_Accessor (Decode.field "field" Decode.string)
 
                     "Access" ->
-                        Decode.map2 Access
+                        Decode.map2 T.CASTC_Access
                             (Decode.field "record" exprDecoder)
                             (Decode.field "field" (A.locatedDecoder Decode.string))
 
                     "Update" ->
-                        Decode.map3 Update
+                        Decode.map3 T.CASTC_Update
                             (Decode.field "name" Decode.string)
                             (Decode.field "record" exprDecoder)
                             (Decode.field "updates" (D.assocListDict identity Decode.string fieldUpdateDecoder))
 
                     "Record" ->
-                        Decode.map Record
+                        Decode.map T.CASTC_Record
                             (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
 
                     "Unit" ->
-                        Decode.succeed Unit
+                        Decode.succeed T.CASTC_Unit
 
                     "Tuple" ->
-                        Decode.map3 Tuple
+                        Decode.map3 T.CASTC_Tuple
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
                             (Decode.field "maybeC" (Decode.maybe exprDecoder))
 
                     "Shader" ->
-                        Decode.map2 Shader
+                        Decode.map2 T.CASTC_Shader
                             (Decode.field "src" Shader.sourceDecoder)
                             (Decode.field "types" Shader.typesDecoder)
 
@@ -894,49 +775,49 @@ expr_Decoder =
             )
 
 
-patternEncoder : Pattern -> Encode.Value
+patternEncoder : T.CASTC_Pattern -> Encode.Value
 patternEncoder =
     A.locatedEncoder pattern_Encoder
 
 
-patternDecoder : Decode.Decoder Pattern
+patternDecoder : Decode.Decoder T.CASTC_Pattern
 patternDecoder =
     A.locatedDecoder pattern_Decoder
 
 
-pattern_Encoder : Pattern_ -> Encode.Value
+pattern_Encoder : T.CASTC_Pattern_ -> Encode.Value
 pattern_Encoder pattern_ =
     case pattern_ of
-        PAnything ->
+        T.CASTC_PAnything ->
             Encode.object
                 [ ( "type", Encode.string "PAnything" )
                 ]
 
-        PVar name ->
+        T.CASTC_PVar name ->
             Encode.object
                 [ ( "type", Encode.string "PVar" )
                 , ( "name", Encode.string name )
                 ]
 
-        PRecord names ->
+        T.CASTC_PRecord names ->
             Encode.object
                 [ ( "type", Encode.string "PRecord" )
                 , ( "names", Encode.list Encode.string names )
                 ]
 
-        PAlias pattern name ->
+        T.CASTC_PAlias pattern name ->
             Encode.object
                 [ ( "type", Encode.string "PAlias" )
                 , ( "pattern", patternEncoder pattern )
                 , ( "name", Encode.string name )
                 ]
 
-        PUnit ->
+        T.CASTC_PUnit ->
             Encode.object
                 [ ( "type", Encode.string "PUnit" )
                 ]
 
-        PTuple pattern1 pattern2 maybePattern3 ->
+        T.CASTC_PTuple pattern1 pattern2 maybePattern3 ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 , ( "pattern1", patternEncoder pattern1 )
@@ -944,45 +825,45 @@ pattern_Encoder pattern_ =
                 , ( "pattern3", E.maybe patternEncoder maybePattern3 )
                 ]
 
-        PList patterns ->
+        T.CASTC_PList patterns ->
             Encode.object
                 [ ( "type", Encode.string "PList" )
                 , ( "patterns", Encode.list patternEncoder patterns )
                 ]
 
-        PCons pattern1 pattern2 ->
+        T.CASTC_PCons pattern1 pattern2 ->
             Encode.object
                 [ ( "type", Encode.string "PCons" )
                 , ( "pattern1", patternEncoder pattern1 )
                 , ( "pattern2", patternEncoder pattern2 )
                 ]
 
-        PBool union bool ->
+        T.CASTC_PBool union bool ->
             Encode.object
                 [ ( "type", Encode.string "PBool" )
                 , ( "union", unionEncoder union )
                 , ( "bool", Encode.bool bool )
                 ]
 
-        PChr chr ->
+        T.CASTC_PChr chr ->
             Encode.object
                 [ ( "type", Encode.string "PChr" )
                 , ( "chr", Encode.string chr )
                 ]
 
-        PStr str ->
+        T.CASTC_PStr str ->
             Encode.object
                 [ ( "type", Encode.string "PStr" )
                 , ( "str", Encode.string str )
                 ]
 
-        PInt int ->
+        T.CASTC_PInt int ->
             Encode.object
                 [ ( "type", Encode.string "PInt" )
                 , ( "int", Encode.int int )
                 ]
 
-        PCtor { home, type_, union, name, index, args } ->
+        T.CASTC_PCtor { home, type_, union, name, index, args } ->
             Encode.object
                 [ ( "type", Encode.string "PCtor" )
                 , ( "home", ModuleName.canonicalEncoder home )
@@ -994,64 +875,64 @@ pattern_Encoder pattern_ =
                 ]
 
 
-pattern_Decoder : Decode.Decoder Pattern_
+pattern_Decoder : Decode.Decoder T.CASTC_Pattern_
 pattern_Decoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\patternType ->
                 case patternType of
                     "PAnything" ->
-                        Decode.succeed PAnything
+                        Decode.succeed T.CASTC_PAnything
 
                     "PVar" ->
-                        Decode.map PVar
+                        Decode.map T.CASTC_PVar
                             (Decode.field "name" Decode.string)
 
                     "PRecord" ->
-                        Decode.map PRecord
+                        Decode.map T.CASTC_PRecord
                             (Decode.field "names" (Decode.list Decode.string))
 
                     "PAlias" ->
-                        Decode.map2 PAlias
+                        Decode.map2 T.CASTC_PAlias
                             (Decode.field "pattern" patternDecoder)
                             (Decode.field "name" Decode.string)
 
                     "PUnit" ->
-                        Decode.succeed PUnit
+                        Decode.succeed T.CASTC_PUnit
 
                     "PTuple" ->
-                        Decode.map3 PTuple
+                        Decode.map3 T.CASTC_PTuple
                             (Decode.field "pattern1" patternDecoder)
                             (Decode.field "pattern2" patternDecoder)
                             (Decode.field "pattern3" (Decode.maybe patternDecoder))
 
                     "PList" ->
-                        Decode.map PList
+                        Decode.map T.CASTC_PList
                             (Decode.field "patterns" (Decode.list patternDecoder))
 
                     "PCons" ->
-                        Decode.map2 PCons
+                        Decode.map2 T.CASTC_PCons
                             (Decode.field "pattern1" patternDecoder)
                             (Decode.field "pattern2" patternDecoder)
 
                     "PBool" ->
-                        Decode.map2 PBool
+                        Decode.map2 T.CASTC_PBool
                             (Decode.field "union" unionDecoder)
                             (Decode.field "bool" Decode.bool)
 
                     "PChr" ->
-                        Decode.map PChr (Decode.field "chr" Decode.string)
+                        Decode.map T.CASTC_PChr (Decode.field "chr" Decode.string)
 
                     "PStr" ->
-                        Decode.map PStr (Decode.field "str" Decode.string)
+                        Decode.map T.CASTC_PStr (Decode.field "str" Decode.string)
 
                     "PInt" ->
-                        Decode.map PInt (Decode.field "int" Decode.int)
+                        Decode.map T.CASTC_PInt (Decode.field "int" Decode.int)
 
                     "PCtor" ->
                         Decode.map6
                             (\home type_ union name index args ->
-                                PCtor
+                                T.CASTC_PCtor
                                     { home = home
                                     , type_ = type_
                                     , union = union
@@ -1072,8 +953,8 @@ pattern_Decoder =
             )
 
 
-patternCtorArgEncoder : PatternCtorArg -> Encode.Value
-patternCtorArgEncoder (PatternCtorArg index srcType pattern) =
+patternCtorArgEncoder : T.CASTC_PatternCtorArg -> Encode.Value
+patternCtorArgEncoder (T.CASTC_PatternCtorArg index srcType pattern) =
     Encode.object
         [ ( "type", Encode.string "PatternCtorArg" )
         , ( "index", Index.zeroBasedEncoder index )
@@ -1082,18 +963,18 @@ patternCtorArgEncoder (PatternCtorArg index srcType pattern) =
         ]
 
 
-patternCtorArgDecoder : Decode.Decoder PatternCtorArg
+patternCtorArgDecoder : Decode.Decoder T.CASTC_PatternCtorArg
 patternCtorArgDecoder =
-    Decode.map3 PatternCtorArg
+    Decode.map3 T.CASTC_PatternCtorArg
         (Decode.field "index" Index.zeroBasedDecoder)
         (Decode.field "srcType" typeDecoder)
         (Decode.field "pattern" patternDecoder)
 
 
-defEncoder : Def -> Encode.Value
+defEncoder : T.CASTC_Def -> Encode.Value
 defEncoder def =
     case def of
-        Def name args expr ->
+        T.CASTC_Def name args expr ->
             Encode.object
                 [ ( "type", Encode.string "Def" )
                 , ( "name", A.locatedEncoder Encode.string name )
@@ -1101,7 +982,7 @@ defEncoder def =
                 , ( "expr", exprEncoder expr )
                 ]
 
-        TypedDef name freeVars typedArgs expr srcResultType ->
+        T.CASTC_TypedDef name freeVars typedArgs expr srcResultType ->
             Encode.object
                 [ ( "type", Encode.string "TypedDef" )
                 , ( "name", A.locatedEncoder Encode.string name )
@@ -1112,20 +993,20 @@ defEncoder def =
                 ]
 
 
-defDecoder : Decode.Decoder Def
+defDecoder : Decode.Decoder T.CASTC_Def
 defDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Def" ->
-                        Decode.map3 Def
+                        Decode.map3 T.CASTC_Def
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "args" (Decode.list patternDecoder))
                             (Decode.field "expr" exprDecoder)
 
                     "TypedDef" ->
-                        Decode.map5 TypedDef
+                        Decode.map5 T.CASTC_TypedDef
                             (Decode.field "name" (A.locatedDecoder Decode.string))
                             (Decode.field "freeVars" freeVarsDecoder)
                             (Decode.field "typedArgs" (Decode.list (D.jsonPair patternDecoder typeDecoder)))
@@ -1137,8 +1018,8 @@ defDecoder =
             )
 
 
-caseBranchEncoder : CaseBranch -> Encode.Value
-caseBranchEncoder (CaseBranch pattern expr) =
+caseBranchEncoder : T.CASTC_CaseBranch -> Encode.Value
+caseBranchEncoder (T.CASTC_CaseBranch pattern expr) =
     Encode.object
         [ ( "type", Encode.string "CaseBranch" )
         , ( "pattern", patternEncoder pattern )
@@ -1146,8 +1027,8 @@ caseBranchEncoder (CaseBranch pattern expr) =
         ]
 
 
-caseBranchDecoder : Decode.Decoder CaseBranch
+caseBranchDecoder : Decode.Decoder T.CASTC_CaseBranch
 caseBranchDecoder =
-    Decode.map2 CaseBranch
+    Decode.map2 T.CASTC_CaseBranch
         (Decode.field "pattern" patternDecoder)
         (Decode.field "expr" exprDecoder)

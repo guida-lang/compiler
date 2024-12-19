@@ -4,12 +4,10 @@ module Compiler.Type.Constrain.Expression exposing
     , constrainRecursiveDefs
     )
 
-import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Type as E exposing (CRET_Category(..), CRET_Context(..), CRET_Expected(..), CRET_MaybeName(..), CRET_PContext(..), CRET_PExpected(..), CRET_SubContext(..))
 import Compiler.Type.Constrain.Pattern as Pattern
 import Compiler.Type.Instantiate as Instantiate
 import Compiler.Type.Type as Type exposing (Constraint(..), Type(..))
@@ -35,50 +33,50 @@ type alias RTV =
     Dict String T.CDN_Name Type
 
 
-constrain : RTV -> Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrain : RTV -> T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrain rtv (T.CRA_At region expression) expected =
     case expression of
-        Can.VarLocal name ->
+        T.CASTC_VarLocal name ->
             IO.pure (CLocal region name expected)
 
-        Can.VarTopLevel _ name ->
+        T.CASTC_VarTopLevel _ name ->
             IO.pure (CLocal region name expected)
 
-        Can.VarKernel _ _ ->
+        T.CASTC_VarKernel _ _ ->
             IO.pure CTrue
 
-        Can.VarForeign _ name annotation ->
+        T.CASTC_VarForeign _ name annotation ->
             IO.pure (CForeign region name annotation expected)
 
-        Can.VarCtor _ _ name _ annotation ->
+        T.CASTC_VarCtor _ _ name _ annotation ->
             IO.pure (CForeign region name annotation expected)
 
-        Can.VarDebug _ name annotation ->
+        T.CASTC_VarDebug _ name annotation ->
             IO.pure (CForeign region name annotation expected)
 
-        Can.VarOperator op _ _ annotation ->
+        T.CASTC_VarOperator op _ _ annotation ->
             IO.pure (CForeign region op annotation expected)
 
-        Can.Str _ ->
-            IO.pure (CEqual region CRET_String Type.string expected)
+        T.CASTC_Str _ ->
+            IO.pure (CEqual region T.CRET_String Type.string expected)
 
-        Can.Chr _ ->
-            IO.pure (CEqual region CRET_Char Type.char expected)
+        T.CASTC_Chr _ ->
+            IO.pure (CEqual region T.CRET_Char Type.char expected)
 
-        Can.Int _ ->
+        T.CASTC_Int _ ->
             Type.mkFlexNumber
                 |> IO.fmap
                     (\var ->
-                        Type.exists [ var ] (CEqual region E.CRET_Number (VarN var) expected)
+                        Type.exists [ var ] (CEqual region T.CRET_Number (VarN var) expected)
                     )
 
-        Can.Float _ ->
-            IO.pure (CEqual region CRET_Float Type.float expected)
+        T.CASTC_Float _ ->
+            IO.pure (CEqual region T.CRET_Float Type.float expected)
 
-        Can.List elements ->
+        T.CASTC_List elements ->
             constrainList rtv region elements expected
 
-        Can.Negate expr ->
+        T.CASTC_Negate expr ->
             Type.mkFlexNumber
                 |> IO.bind
                     (\numberVar ->
@@ -87,46 +85,46 @@ constrain rtv (T.CRA_At region expression) expected =
                             numberType =
                                 VarN numberVar
                         in
-                        constrain rtv expr (FromContext region CRET_Negate numberType)
+                        constrain rtv expr (T.CRET_FromContext region T.CRET_Negate numberType)
                             |> IO.fmap
                                 (\numberCon ->
                                     let
                                         negateCon : Constraint
                                         negateCon =
-                                            CEqual region E.CRET_Number numberType expected
+                                            CEqual region T.CRET_Number numberType expected
                                     in
                                     Type.exists [ numberVar ] (CAnd [ numberCon, negateCon ])
                                 )
                     )
 
-        Can.Binop op _ _ annotation leftExpr rightExpr ->
+        T.CASTC_Binop op _ _ annotation leftExpr rightExpr ->
             constrainBinop rtv region op annotation leftExpr rightExpr expected
 
-        Can.Lambda args body ->
+        T.CASTC_Lambda args body ->
             constrainLambda rtv region args body expected
 
-        Can.Call func args ->
+        T.CASTC_Call func args ->
             constrainCall rtv region func args expected
 
-        Can.If branches finally ->
+        T.CASTC_If branches finally ->
             constrainIf rtv region branches finally expected
 
-        Can.Case expr branches ->
+        T.CASTC_Case expr branches ->
             constrainCase rtv region expr branches expected
 
-        Can.Let def body ->
+        T.CASTC_Let def body ->
             IO.bind (constrainDef rtv def)
                 (constrain rtv body expected)
 
-        Can.LetRec defs body ->
+        T.CASTC_LetRec defs body ->
             IO.bind (constrainRecursiveDefs rtv defs)
                 (constrain rtv body expected)
 
-        Can.LetDestruct pattern expr body ->
+        T.CASTC_LetDestruct pattern expr body ->
             IO.bind (constrainDestruct rtv region pattern expr)
                 (constrain rtv body expected)
 
-        Can.Accessor field ->
+        T.CASTC_Accessor field ->
             Type.mkFlexVar
                 |> IO.bind
                     (\extVar ->
@@ -146,11 +144,11 @@ constrain rtv (T.CRA_At region expression) expected =
                                         recordType =
                                             RecordN (Dict.singleton identity field fieldType) extType
                                     in
-                                    Type.exists [ fieldVar, extVar ] (CEqual region (CRET_Accessor field) (FunN recordType fieldType) expected)
+                                    Type.exists [ fieldVar, extVar ] (CEqual region (T.CRET_Accessor field) (FunN recordType fieldType) expected)
                                 )
                     )
 
-        Can.Access expr (T.CRA_At accessRegion field) ->
+        T.CASTC_Access expr (T.CRA_At accessRegion field) ->
             Type.mkFlexVar
                 |> IO.bind
                     (\extVar ->
@@ -170,31 +168,31 @@ constrain rtv (T.CRA_At region expression) expected =
                                         recordType =
                                             RecordN (Dict.singleton identity field fieldType) extType
 
-                                        context : CRET_Context
+                                        context : T.CRET_Context
                                         context =
-                                            CRET_RecordAccess (A.toRegion expr) (getAccessName expr) accessRegion field
+                                            T.CRET_RecordAccess (A.toRegion expr) (getAccessName expr) accessRegion field
                                     in
-                                    constrain rtv expr (FromContext region context recordType)
+                                    constrain rtv expr (T.CRET_FromContext region context recordType)
                                         |> IO.fmap
                                             (\recordCon ->
-                                                Type.exists [ fieldVar, extVar ] (CAnd [ recordCon, CEqual region (CRET_Access field) fieldType expected ])
+                                                Type.exists [ fieldVar, extVar ] (CAnd [ recordCon, CEqual region (T.CRET_Access field) fieldType expected ])
                                             )
                                 )
                     )
 
-        Can.Update name expr fields ->
+        T.CASTC_Update name expr fields ->
             constrainUpdate rtv region name expr fields expected
 
-        Can.Record fields ->
+        T.CASTC_Record fields ->
             constrainRecord rtv region fields expected
 
-        Can.Unit ->
-            IO.pure (CEqual region CRET_Unit UnitN expected)
+        T.CASTC_Unit ->
+            IO.pure (CEqual region T.CRET_Unit UnitN expected)
 
-        Can.Tuple a b maybeC ->
+        T.CASTC_Tuple a b maybeC ->
             constrainTuple rtv region a b maybeC expected
 
-        Can.Shader _ types ->
+        T.CASTC_Shader _ types ->
             constrainShader region types expected
 
 
@@ -202,12 +200,12 @@ constrain rtv (T.CRA_At region expression) expected =
 -- CONSTRAIN LAMBDA
 
 
-constrainLambda : RTV -> T.CRA_Region -> List Can.Pattern -> Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrainLambda : RTV -> T.CRA_Region -> List T.CASTC_Pattern -> T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainLambda rtv region args body expected =
     constrainArgs args
         |> IO.bind
             (\(Args vars tipe resultType (Pattern.State headers pvars revCons)) ->
-                constrain rtv body (NoExpectation resultType)
+                constrain rtv body (T.CRET_NoExpectation resultType)
                     |> IO.fmap
                         (\bodyCon ->
                             Type.exists vars <|
@@ -217,7 +215,7 @@ constrainLambda rtv region args body expected =
                                         headers
                                         (CAnd (List.reverse revCons))
                                         bodyCon
-                                    , CEqual region CRET_Lambda tipe expected
+                                    , CEqual region T.CRET_Lambda tipe expected
                                     ]
                         )
             )
@@ -227,10 +225,10 @@ constrainLambda rtv region args body expected =
 -- CONSTRAIN CALL
 
 
-constrainCall : RTV -> T.CRA_Region -> Can.Expr -> List Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrainCall : RTV -> T.CRA_Region -> T.CASTC_Expr -> List T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainCall rtv region ((T.CRA_At funcRegion _) as func) args expected =
     let
-        maybeName : CRET_MaybeName
+        maybeName : T.CRET_MaybeName
         maybeName =
             getName func
     in
@@ -249,7 +247,7 @@ constrainCall rtv region ((T.CRA_At funcRegion _) as func) args expected =
                                 resultType =
                                     VarN resultVar
                             in
-                            constrain rtv func (E.NoExpectation funcType)
+                            constrain rtv func (T.CRET_NoExpectation funcType)
                                 |> IO.bind
                                     (\funcCon ->
                                         IO.fmap Utils.unzip3 (IO.traverseIndexed (constrainArg rtv region maybeName) args)
@@ -260,14 +258,14 @@ constrainCall rtv region ((T.CRA_At funcRegion _) as func) args expected =
                                                         arityType =
                                                             List.foldr FunN resultType argTypes
 
-                                                        category : CRET_Category
+                                                        category : T.CRET_Category
                                                         category =
-                                                            CRET_CallResult maybeName
+                                                            T.CRET_CallResult maybeName
                                                     in
                                                     Type.exists (funcVar :: resultVar :: argVars)
                                                         (CAnd
                                                             [ funcCon
-                                                            , CEqual funcRegion category funcType (FromContext region (CRET_CallArity maybeName (List.length args)) arityType)
+                                                            , CEqual funcRegion category funcType (T.CRET_FromContext region (T.CRET_CallArity maybeName (List.length args)) arityType)
                                                             , CAnd argCons
                                                             , CEqual region category resultType expected
                                                             ]
@@ -278,7 +276,7 @@ constrainCall rtv region ((T.CRA_At funcRegion _) as func) args expected =
             )
 
 
-constrainArg : RTV -> T.CRA_Region -> E.CRET_MaybeName -> T.CDI_ZeroBased -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
+constrainArg : RTV -> T.CRA_Region -> T.CRET_MaybeName -> T.CDI_ZeroBased -> T.CASTC_Expr -> IO ( IO.Variable, Type, Constraint )
 constrainArg rtv region maybeName index arg =
     Type.mkFlexVar
         |> IO.bind
@@ -288,7 +286,7 @@ constrainArg rtv region maybeName index arg =
                     argType =
                         VarN argVar
                 in
-                constrain rtv arg (FromContext region (CRET_CallArg maybeName index) argType)
+                constrain rtv arg (T.CRET_FromContext region (T.CRET_CallArg maybeName index) argType)
                     |> IO.fmap
                         (\argCon ->
                             ( argVar, argType, argCon )
@@ -296,41 +294,41 @@ constrainArg rtv region maybeName index arg =
             )
 
 
-getName : Can.Expr -> CRET_MaybeName
+getName : T.CASTC_Expr -> T.CRET_MaybeName
 getName (T.CRA_At _ expr) =
     case expr of
-        Can.VarLocal name ->
-            CRET_FuncName name
+        T.CASTC_VarLocal name ->
+            T.CRET_FuncName name
 
-        Can.VarTopLevel _ name ->
-            CRET_FuncName name
+        T.CASTC_VarTopLevel _ name ->
+            T.CRET_FuncName name
 
-        Can.VarForeign _ name _ ->
-            CRET_FuncName name
+        T.CASTC_VarForeign _ name _ ->
+            T.CRET_FuncName name
 
-        Can.VarCtor _ _ name _ _ ->
-            CRET_CtorName name
+        T.CASTC_VarCtor _ _ name _ _ ->
+            T.CRET_CtorName name
 
-        Can.VarOperator op _ _ _ ->
-            CRET_OpName op
+        T.CASTC_VarOperator op _ _ _ ->
+            T.CRET_OpName op
 
-        Can.VarKernel _ name ->
-            CRET_FuncName name
+        T.CASTC_VarKernel _ name ->
+            T.CRET_FuncName name
 
         _ ->
-            CRET_NoName
+            T.CRET_NoName
 
 
-getAccessName : Can.Expr -> Maybe T.CDN_Name
+getAccessName : T.CASTC_Expr -> Maybe T.CDN_Name
 getAccessName (T.CRA_At _ expr) =
     case expr of
-        Can.VarLocal name ->
+        T.CASTC_VarLocal name ->
             Just name
 
-        Can.VarTopLevel _ name ->
+        T.CASTC_VarTopLevel _ name ->
             Just name
 
-        Can.VarForeign _ name _ ->
+        T.CASTC_VarForeign _ name _ ->
             Just name
 
         _ ->
@@ -341,7 +339,7 @@ getAccessName (T.CRA_At _ expr) =
 -- CONSTRAIN BINOP
 
 
-constrainBinop : RTV -> T.CRA_Region -> T.CDN_Name -> T.CASTC_Annotation -> Can.Expr -> Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrainBinop : RTV -> T.CRA_Region -> T.CDN_Name -> T.CASTC_Annotation -> T.CASTC_Expr -> T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainBinop rtv region op annotation leftExpr rightExpr expected =
     Type.mkFlexVar
         |> IO.bind
@@ -371,12 +369,12 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
 
                                             opCon : Constraint
                                             opCon =
-                                                CForeign region op annotation (NoExpectation binopType)
+                                                CForeign region op annotation (T.CRET_NoExpectation binopType)
                                         in
-                                        constrain rtv leftExpr (FromContext region (CRET_OpLeft op) leftType)
+                                        constrain rtv leftExpr (T.CRET_FromContext region (T.CRET_OpLeft op) leftType)
                                             |> IO.bind
                                                 (\leftCon ->
-                                                    constrain rtv rightExpr (FromContext region (CRET_OpRight op) rightType)
+                                                    constrain rtv rightExpr (T.CRET_FromContext region (T.CRET_OpRight op) rightType)
                                                         |> IO.fmap
                                                             (\rightCon ->
                                                                 Type.exists [ leftVar, rightVar, answerVar ]
@@ -384,7 +382,7 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
                                                                         [ opCon
                                                                         , leftCon
                                                                         , rightCon
-                                                                        , CEqual region (CRET_CallResult (CRET_OpName op)) answerType expected
+                                                                        , CEqual region (T.CRET_CallResult (T.CRET_OpName op)) answerType expected
                                                                         ]
                                                                     )
                                                             )
@@ -398,7 +396,7 @@ constrainBinop rtv region op annotation leftExpr rightExpr expected =
 -- CONSTRAIN LISTS
 
 
-constrainList : RTV -> T.CRA_Region -> List Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrainList : RTV -> T.CRA_Region -> List T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainList rtv region entries expected =
     Type.mkFlexVar
         |> IO.bind
@@ -418,28 +416,28 @@ constrainList rtv region entries expected =
                             Type.exists [ entryVar ]
                                 (CAnd
                                     [ CAnd entryCons
-                                    , CEqual region CRET_List listType expected
+                                    , CEqual region T.CRET_List listType expected
                                     ]
                                 )
                         )
             )
 
 
-constrainListEntry : RTV -> T.CRA_Region -> Type -> T.CDI_ZeroBased -> Can.Expr -> IO Constraint
+constrainListEntry : RTV -> T.CRA_Region -> Type -> T.CDI_ZeroBased -> T.CASTC_Expr -> IO Constraint
 constrainListEntry rtv region tipe index expr =
-    constrain rtv expr (FromContext region (CRET_ListEntry index) tipe)
+    constrain rtv expr (T.CRET_FromContext region (T.CRET_ListEntry index) tipe)
 
 
 
 -- CONSTRAIN IF EXPRESSIONS
 
 
-constrainIf : RTV -> T.CRA_Region -> List ( Can.Expr, Can.Expr ) -> Can.Expr -> E.CRET_Expected Type -> IO Constraint
+constrainIf : RTV -> T.CRA_Region -> List ( T.CASTC_Expr, T.CASTC_Expr ) -> T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainIf rtv region branches final expected =
     let
-        boolExpect : CRET_Expected Type
+        boolExpect : T.CRET_Expected Type
         boolExpect =
-            FromContext region CRET_IfCondition Type.bool
+            T.CRET_FromContext region T.CRET_IfCondition Type.bool
 
         ( conditions, exprs ) =
             List.foldr (\( c, e ) ( cs, es ) -> ( c :: cs, e :: es )) ( [], [ final ] ) branches
@@ -448,8 +446,8 @@ constrainIf rtv region branches final expected =
         |> IO.bind
             (\condCons ->
                 case expected of
-                    FromAnnotation name arity _ tipe ->
-                        IO.indexedForA exprs (\index expr -> constrain rtv expr (FromAnnotation name arity (CRET_TypedIfBranch index) tipe))
+                    T.CRET_FromAnnotation name arity _ tipe ->
+                        IO.indexedForA exprs (\index expr -> constrain rtv expr (T.CRET_FromAnnotation name arity (T.CRET_TypedIfBranch index) tipe))
                             |> IO.fmap
                                 (\branchCons ->
                                     CAnd (CAnd condCons :: branchCons)
@@ -466,7 +464,7 @@ constrainIf rtv region branches final expected =
                                     in
                                     IO.indexedForA exprs
                                         (\index expr ->
-                                            constrain rtv expr (FromContext region (CRET_IfBranch index) branchType)
+                                            constrain rtv expr (T.CRET_FromContext region (T.CRET_IfBranch index) branchType)
                                         )
                                         |> IO.fmap
                                             (\branchCons ->
@@ -474,7 +472,7 @@ constrainIf rtv region branches final expected =
                                                     (CAnd
                                                         [ CAnd condCons
                                                         , CAnd branchCons
-                                                        , CEqual region CRET_If branchType expected
+                                                        , CEqual region T.CRET_If branchType expected
                                                         ]
                                                     )
                                             )
@@ -486,7 +484,7 @@ constrainIf rtv region branches final expected =
 -- CONSTRAIN CASE EXPRESSIONS
 
 
-constrainCase : RTV -> T.CRA_Region -> Can.Expr -> List Can.CaseBranch -> CRET_Expected Type -> IO Constraint
+constrainCase : RTV -> T.CRA_Region -> T.CASTC_Expr -> List T.CASTC_CaseBranch -> T.CRET_Expected Type -> IO Constraint
 constrainCase rtv region expr branches expected =
     Type.mkFlexVar
         |> IO.bind
@@ -496,17 +494,17 @@ constrainCase rtv region expr branches expected =
                     ptrnType =
                         VarN ptrnVar
                 in
-                constrain rtv expr (NoExpectation ptrnType)
+                constrain rtv expr (T.CRET_NoExpectation ptrnType)
                     |> IO.bind
                         (\exprCon ->
                             case expected of
-                                FromAnnotation name arity _ tipe ->
+                                T.CRET_FromAnnotation name arity _ tipe ->
                                     IO.indexedForA branches
                                         (\index branch ->
                                             constrainCaseBranch rtv
                                                 branch
-                                                (CRET_PFromContext region (CRET_PCaseMatch index) ptrnType)
-                                                (FromAnnotation name arity (CRET_TypedCaseBranch index) tipe)
+                                                (T.CRET_PFromContext region (T.CRET_PCaseMatch index) ptrnType)
+                                                (T.CRET_FromAnnotation name arity (T.CRET_TypedCaseBranch index) tipe)
                                         )
                                         |> IO.fmap
                                             (\branchCons ->
@@ -526,8 +524,8 @@ constrainCase rtv region expr branches expected =
                                                     (\index branch ->
                                                         constrainCaseBranch rtv
                                                             branch
-                                                            (CRET_PFromContext region (CRET_PCaseMatch index) ptrnType)
-                                                            (FromContext region (CRET_CaseBranch index) branchType)
+                                                            (T.CRET_PFromContext region (T.CRET_PCaseMatch index) ptrnType)
+                                                            (T.CRET_FromContext region (T.CRET_CaseBranch index) branchType)
                                                     )
                                                     |> IO.fmap
                                                         (\branchCons ->
@@ -535,7 +533,7 @@ constrainCase rtv region expr branches expected =
                                                                 (CAnd
                                                                     [ exprCon
                                                                     , CAnd branchCons
-                                                                    , CEqual region CRET_Case branchType expected
+                                                                    , CEqual region T.CRET_Case branchType expected
                                                                     ]
                                                                 )
                                                         )
@@ -544,8 +542,8 @@ constrainCase rtv region expr branches expected =
             )
 
 
-constrainCaseBranch : RTV -> Can.CaseBranch -> CRET_PExpected Type -> CRET_Expected Type -> IO Constraint
-constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
+constrainCaseBranch : RTV -> T.CASTC_CaseBranch -> T.CRET_PExpected Type -> T.CRET_Expected Type -> IO Constraint
+constrainCaseBranch rtv (T.CASTC_CaseBranch pattern expr) pExpect bExpect =
     Pattern.add pattern pExpect Pattern.emptyState
         |> IO.bind
             (\(Pattern.State headers pvars revCons) ->
@@ -558,7 +556,7 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 -- CONSTRAIN RECORD
 
 
-constrainRecord : RTV -> T.CRA_Region -> Dict String T.CDN_Name Can.Expr -> CRET_Expected Type -> IO Constraint
+constrainRecord : RTV -> T.CRA_Region -> Dict String T.CDN_Name T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
     IO.traverseMap identity compare (constrainField rtv) fields
         |> IO.fmap
@@ -574,7 +572,7 @@ constrainRecord rtv region fields expected =
 
                     recordCon : Constraint
                     recordCon =
-                        CEqual region CRET_Record recordType expected
+                        CEqual region T.CRET_Record recordType expected
 
                     vars : List IO.Variable
                     vars =
@@ -588,7 +586,7 @@ constrainRecord rtv region fields expected =
             )
 
 
-constrainField : RTV -> Can.Expr -> IO ( IO.Variable, Type, Constraint )
+constrainField : RTV -> T.CASTC_Expr -> IO ( IO.Variable, Type, Constraint )
 constrainField rtv expr =
     Type.mkFlexVar
         |> IO.bind
@@ -598,7 +596,7 @@ constrainField rtv expr =
                     tipe =
                         VarN var
                 in
-                constrain rtv expr (NoExpectation tipe)
+                constrain rtv expr (T.CRET_NoExpectation tipe)
                     |> IO.fmap
                         (\con ->
                             ( var, tipe, con )
@@ -610,7 +608,7 @@ constrainField rtv expr =
 -- CONSTRAIN RECORD UPDATE
 
 
-constrainUpdate : RTV -> T.CRA_Region -> T.CDN_Name -> Can.Expr -> Dict String T.CDN_Name Can.FieldUpdate -> CRET_Expected Type -> IO Constraint
+constrainUpdate : RTV -> T.CRA_Region -> T.CDN_Name -> T.CASTC_Expr -> Dict String T.CDN_Name T.CASTC_FieldUpdate -> T.CRET_Expected Type -> IO Constraint
 constrainUpdate rtv region name expr fields expected =
     Type.mkFlexVar
         |> IO.bind
@@ -633,11 +631,11 @@ constrainUpdate rtv region name expr fields expected =
                                             -- NOTE: fieldsType is separate so that Error propagates better
                                             fieldsCon : Constraint
                                             fieldsCon =
-                                                CEqual region CRET_Record recordType (NoExpectation fieldsType)
+                                                CEqual region T.CRET_Record recordType (T.CRET_NoExpectation fieldsType)
 
                                             recordCon : Constraint
                                             recordCon =
-                                                CEqual region CRET_Record recordType expected
+                                                CEqual region T.CRET_Record recordType expected
 
                                             vars : List IO.Variable
                                             vars =
@@ -647,15 +645,15 @@ constrainUpdate rtv region name expr fields expected =
                                             cons =
                                                 Dict.foldr compare (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] fieldDict
                                         in
-                                        constrain rtv expr (FromContext region (CRET_RecordUpdateKeys name fields) recordType)
+                                        constrain rtv expr (T.CRET_FromContext region (T.CRET_RecordUpdateKeys name fields) recordType)
                                             |> IO.fmap (\con -> Type.exists vars (CAnd (fieldsCon :: con :: cons)))
                                     )
                         )
             )
 
 
-constrainUpdateField : RTV -> T.CRA_Region -> T.CDN_Name -> Can.FieldUpdate -> IO ( IO.Variable, Type, Constraint )
-constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
+constrainUpdateField : RTV -> T.CRA_Region -> T.CDN_Name -> T.CASTC_FieldUpdate -> IO ( IO.Variable, Type, Constraint )
+constrainUpdateField rtv region field (T.CASTC_FieldUpdate _ expr) =
     Type.mkFlexVar
         |> IO.bind
             (\var ->
@@ -664,7 +662,7 @@ constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
                     tipe =
                         VarN var
                 in
-                constrain rtv expr (FromContext region (CRET_RecordUpdateValue field) tipe)
+                constrain rtv expr (T.CRET_FromContext region (T.CRET_RecordUpdateValue field) tipe)
                     |> IO.fmap (\con -> ( var, tipe, con ))
             )
 
@@ -673,7 +671,7 @@ constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
 -- CONSTRAIN TUPLE
 
 
-constrainTuple : RTV -> T.CRA_Region -> Can.Expr -> Can.Expr -> Maybe Can.Expr -> CRET_Expected Type -> IO Constraint
+constrainTuple : RTV -> T.CRA_Region -> T.CASTC_Expr -> T.CASTC_Expr -> Maybe T.CASTC_Expr -> T.CRET_Expected Type -> IO Constraint
 constrainTuple rtv region a b maybeC expected =
     Type.mkFlexVar
         |> IO.bind
@@ -690,10 +688,10 @@ constrainTuple rtv region a b maybeC expected =
                                 bType =
                                     VarN bVar
                             in
-                            constrain rtv a (NoExpectation aType)
+                            constrain rtv a (T.CRET_NoExpectation aType)
                                 |> IO.bind
                                     (\aCon ->
-                                        constrain rtv b (NoExpectation bType)
+                                        constrain rtv b (T.CRET_NoExpectation bType)
                                             |> IO.bind
                                                 (\bCon ->
                                                     case maybeC of
@@ -705,7 +703,7 @@ constrainTuple rtv region a b maybeC expected =
 
                                                                 tupleCon : Constraint
                                                                 tupleCon =
-                                                                    CEqual region CRET_Tuple tupleType expected
+                                                                    CEqual region T.CRET_Tuple tupleType expected
                                                             in
                                                             IO.pure (Type.exists [ aVar, bVar ] (CAnd [ aCon, bCon, tupleCon ]))
 
@@ -718,7 +716,7 @@ constrainTuple rtv region a b maybeC expected =
                                                                             cType =
                                                                                 VarN cVar
                                                                         in
-                                                                        constrain rtv c (NoExpectation cType)
+                                                                        constrain rtv c (T.CRET_NoExpectation cType)
                                                                             |> IO.fmap
                                                                                 (\cCon ->
                                                                                     let
@@ -728,7 +726,7 @@ constrainTuple rtv region a b maybeC expected =
 
                                                                                         tupleCon : Constraint
                                                                                         tupleCon =
-                                                                                            CEqual region CRET_Tuple tupleType expected
+                                                                                            CEqual region T.CRET_Tuple tupleType expected
                                                                                     in
                                                                                     Type.exists [ aVar, bVar, cVar ] (CAnd [ aCon, bCon, cCon, tupleCon ])
                                                                                 )
@@ -743,7 +741,7 @@ constrainTuple rtv region a b maybeC expected =
 -- CONSTRAIN SHADER
 
 
-constrainShader : T.CRA_Region -> T.CASTUS_Types -> CRET_Expected Type -> IO Constraint
+constrainShader : T.CRA_Region -> T.CASTUS_Types -> T.CRET_Expected Type -> IO Constraint
 constrainShader region (T.CASTUS_Types attributes uniforms varyings) expected =
     Type.mkFlexVar
         |> IO.bind
@@ -769,7 +767,7 @@ constrainShader region (T.CASTUS_Types attributes uniforms varyings) expected =
                                         , toShaderRecord varyings EmptyRecordN
                                         ]
                             in
-                            Type.exists [ attrVar, unifVar ] (CEqual region CRET_Shader shaderType expected)
+                            Type.exists [ attrVar, unifVar ] (CEqual region T.CRET_Shader shaderType expected)
                         )
             )
 
@@ -812,7 +810,7 @@ glToType glType =
 -- CONSTRAIN DESTRUCTURES
 
 
-constrainDestruct : RTV -> T.CRA_Region -> Can.Pattern -> Can.Expr -> Constraint -> IO Constraint
+constrainDestruct : RTV -> T.CRA_Region -> T.CASTC_Pattern -> T.CASTC_Expr -> Constraint -> IO Constraint
 constrainDestruct rtv region pattern expr bodyCon =
     Type.mkFlexVar
         |> IO.bind
@@ -822,10 +820,10 @@ constrainDestruct rtv region pattern expr bodyCon =
                     patternType =
                         VarN patternVar
                 in
-                Pattern.add pattern (CRET_PNoExpectation patternType) Pattern.emptyState
+                Pattern.add pattern (T.CRET_PNoExpectation patternType) Pattern.emptyState
                     |> IO.bind
                         (\(Pattern.State headers pvars revCons) ->
-                            constrain rtv expr (FromContext region CRET_Destructure patternType)
+                            constrain rtv expr (T.CRET_FromContext region T.CRET_Destructure patternType)
                                 |> IO.fmap
                                     (\exprCon ->
                                         CLet [] (patternVar :: pvars) headers (CAnd (List.reverse (exprCon :: revCons))) bodyCon
@@ -838,14 +836,14 @@ constrainDestruct rtv region pattern expr bodyCon =
 -- CONSTRAIN DEF
 
 
-constrainDef : RTV -> Can.Def -> Constraint -> IO Constraint
+constrainDef : RTV -> T.CASTC_Def -> Constraint -> IO Constraint
 constrainDef rtv def bodyCon =
     case def of
-        Can.Def (T.CRA_At region name) args expr ->
+        T.CASTC_Def (T.CRA_At region name) args expr ->
             constrainArgs args
                 |> IO.bind
                     (\(Args vars tipe resultType (Pattern.State headers pvars revCons)) ->
-                        constrain rtv expr (NoExpectation resultType)
+                        constrain rtv expr (T.CRET_NoExpectation resultType)
                             |> IO.fmap
                                 (\exprCon ->
                                     CLet []
@@ -861,7 +859,7 @@ constrainDef rtv def bodyCon =
                                 )
                     )
 
-        Can.TypedDef (T.CRA_At region name) freeVars typedArgs expr srcResultType ->
+        T.CASTC_TypedDef (T.CRA_At region name) freeVars typedArgs expr srcResultType ->
             let
                 newNames : Dict String T.CDN_Name ()
                 newNames =
@@ -879,9 +877,9 @@ constrainDef rtv def bodyCon =
                             |> IO.bind
                                 (\(TypedArgs tipe resultType (Pattern.State headers pvars revCons)) ->
                                     let
-                                        expected : CRET_Expected Type
+                                        expected : T.CRET_Expected Type
                                         expected =
-                                            FromAnnotation name (List.length typedArgs) CRET_TypedBody resultType
+                                            T.CRET_FromAnnotation name (List.length typedArgs) T.CRET_TypedBody resultType
                                     in
                                     constrain newRtv expr expected
                                         |> IO.fmap
@@ -914,12 +912,12 @@ emptyInfo =
     Info [] [] Dict.empty
 
 
-constrainRecursiveDefs : RTV -> List Can.Def -> Constraint -> IO Constraint
+constrainRecursiveDefs : RTV -> List T.CASTC_Def -> Constraint -> IO Constraint
 constrainRecursiveDefs rtv defs bodyCon =
     recDefsHelp rtv defs bodyCon emptyInfo emptyInfo
 
 
-recDefsHelp : RTV -> List Can.Def -> Constraint -> Info -> Info -> IO Constraint
+recDefsHelp : RTV -> List T.CASTC_Def -> Constraint -> Info -> Info -> IO Constraint
 recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
     case defs of
         [] ->
@@ -937,7 +935,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
 
         def :: otherDefs ->
             case def of
-                Can.Def (T.CRA_At region name) args expr ->
+                T.CASTC_Def (T.CRA_At region name) args expr ->
                     let
                         (Info flexVars flexCons flexHeaders) =
                             flexInfo
@@ -945,7 +943,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                     argsHelp args (Pattern.State Dict.empty flexVars [])
                         |> IO.bind
                             (\(Args newFlexVars tipe resultType (Pattern.State headers pvars revCons)) ->
-                                constrain rtv expr (NoExpectation resultType)
+                                constrain rtv expr (T.CRET_NoExpectation resultType)
                                     |> IO.bind
                                         (\exprCon ->
                                             let
@@ -964,7 +962,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                         )
                             )
 
-                Can.TypedDef (T.CRA_At region name) freeVars typedArgs expr srcResultType ->
+                T.CASTC_TypedDef (T.CRA_At region name) freeVars typedArgs expr srcResultType ->
                     let
                         newNames : Dict String T.CDN_Name ()
                         newNames =
@@ -981,7 +979,7 @@ recDefsHelp rtv defs bodyCon rigidInfo flexInfo =
                                 constrainTypedArgs newRtv name typedArgs srcResultType
                                     |> IO.bind
                                         (\(TypedArgs tipe resultType (Pattern.State headers pvars revCons)) ->
-                                            constrain newRtv expr (FromAnnotation name (List.length typedArgs) CRET_TypedBody resultType)
+                                            constrain newRtv expr (T.CRET_FromAnnotation name (List.length typedArgs) T.CRET_TypedBody resultType)
                                                 |> IO.bind
                                                     (\exprCon ->
                                                         let
@@ -1018,12 +1016,12 @@ type Args
     = Args (List IO.Variable) Type Type Pattern.State
 
 
-constrainArgs : List Can.Pattern -> IO Args
+constrainArgs : List T.CASTC_Pattern -> IO Args
 constrainArgs args =
     argsHelp args Pattern.emptyState
 
 
-argsHelp : List Can.Pattern -> Pattern.State -> IO Args
+argsHelp : List T.CASTC_Pattern -> Pattern.State -> IO Args
 argsHelp args state =
     case args of
         [] ->
@@ -1047,7 +1045,7 @@ argsHelp args state =
                             argType =
                                 VarN argVar
                         in
-                        Pattern.add pattern (CRET_PNoExpectation argType) state
+                        Pattern.add pattern (T.CRET_PNoExpectation argType) state
                             |> IO.bind (argsHelp otherArgs)
                             |> IO.fmap
                                 (\(Args vars tipe result newState) ->
@@ -1064,12 +1062,12 @@ type TypedArgs
     = TypedArgs Type Type Pattern.State
 
 
-constrainTypedArgs : Dict String T.CDN_Name Type -> T.CDN_Name -> List ( Can.Pattern, T.CASTC_Type ) -> T.CASTC_Type -> IO TypedArgs
+constrainTypedArgs : Dict String T.CDN_Name Type -> T.CDN_Name -> List ( T.CASTC_Pattern, T.CASTC_Type ) -> T.CASTC_Type -> IO TypedArgs
 constrainTypedArgs rtv name args srcResultType =
     typedArgsHelp rtv name Index.first args srcResultType Pattern.emptyState
 
 
-typedArgsHelp : Dict String T.CDN_Name Type -> T.CDN_Name -> T.CDI_ZeroBased -> List ( Can.Pattern, T.CASTC_Type ) -> T.CASTC_Type -> Pattern.State -> IO TypedArgs
+typedArgsHelp : Dict String T.CDN_Name Type -> T.CDN_Name -> T.CDI_ZeroBased -> List ( T.CASTC_Pattern, T.CASTC_Type ) -> T.CASTC_Type -> Pattern.State -> IO TypedArgs
 typedArgsHelp rtv name index args srcResultType state =
     case args of
         [] ->
@@ -1084,9 +1082,9 @@ typedArgsHelp rtv name index args srcResultType state =
                 |> IO.bind
                     (\argType ->
                         let
-                            expected : CRET_PExpected Type
+                            expected : T.CRET_PExpected Type
                             expected =
-                                CRET_PFromContext region (CRET_PTypedArg name index) argType
+                                T.CRET_PFromContext region (T.CRET_PTypedArg name index) argType
                         in
                         Pattern.add pattern expected state
                             |> IO.bind (typedArgsHelp rtv name (Index.next index) otherArgs srcResultType)

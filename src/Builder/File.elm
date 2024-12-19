@@ -1,6 +1,5 @@
 module Builder.File exposing
-    ( BF_Time(..)
-    , exists
+    ( exists
     , getTime
     , readBinary
     , readUtf8
@@ -27,18 +26,14 @@ import Utils.Main as Utils
 -- TIME
 
 
-type BF_Time
-    = BF_Time Time.Posix
-
-
-getTime : T.FilePath -> IO BF_Time
+getTime : T.FilePath -> IO T.BF_Time
 getTime path =
-    IO.fmap BF_Time (Utils.dirGetModificationTime path)
+    IO.fmap T.BF_Time (Utils.dirGetModificationTime path)
 
 
-zeroTime : BF_Time
+zeroTime : T.BF_Time
 zeroTime =
-    BF_Time (Time.millisToPosix 0)
+    T.BF_Time (Time.millisToPosix 0)
 
 
 
@@ -189,11 +184,11 @@ remove path =
 -- ENCODERS and DECODERS
 
 
-timeEncoder : BF_Time -> Encode.Value
-timeEncoder (BF_Time posix) =
+timeEncoder : T.BF_Time -> Encode.Value
+timeEncoder (T.BF_Time posix) =
     Encode.int (Time.posixToMillis posix)
 
 
-timeDecoder : Decode.Decoder BF_Time
+timeDecoder : Decode.Decoder T.BF_Time
 timeDecoder =
-    Decode.map (BF_Time << Time.millisToPosix) Decode.int
+    Decode.map (T.BF_Time << Time.millisToPosix) Decode.int

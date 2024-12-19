@@ -1,7 +1,5 @@
 module Builder.Elm.Details exposing
-    ( BED_BuildID
-    , BED_Local(..)
-    , Details(..)
+    ( Details(..)
     , Extras
     , Foreign(..)
     , Interfaces
@@ -58,36 +56,12 @@ import Utils.Main as Utils
 
 
 type Details
-    = Details File.BF_Time ValidOutline BED_BuildID (Dict String T.CEMN_Raw BED_Local) (Dict String T.CEMN_Raw Foreign) Extras
-
-
-type alias BED_BuildID =
-    Int
+    = Details T.BF_Time ValidOutline T.BED_BuildID (Dict String T.CEMN_Raw T.BED_Local) (Dict String T.CEMN_Raw Foreign) Extras
 
 
 type ValidOutline
     = ValidApp (NE.Nonempty Outline.SrcDir)
     | ValidPkg T.CEP_Name (List T.CEMN_Raw) (Dict ( String, String ) T.CEP_Name V.Version {- for docs in reactor -})
-
-
-
--- NOTE: we need two ways to detect if a file must be recompiled:
---
--- (1) _time is the modification time from the last time we compiled the file.
--- By checking EQUALITY with the current modification time, we can detect file
--- saves and `git checkout` of previous versions. Both need a recompile.
---
--- (2) _lastChange is the BuildID from the last time a new interface file was
--- generated, and _lastCompile is the BuildID from the last time the file was
--- compiled. These may be different if a file is recompiled but the interface
--- stayed the same. When the _lastCompile is LESS THAN the _lastChange of any
--- imports, we need to recompile. This can happen when a project has multiple
--- entrypoints and some modules are compiled less often than their imports.
---
-
-
-type BED_Local
-    = BED_Local T.FilePath File.BF_Time (List T.CEMN_Raw) Bool BED_BuildID BED_BuildID
 
 
 type Foreign
@@ -184,7 +158,7 @@ load style scope root =
 -- GENERATE
 
 
-generate : Reporting.Style -> BW.Scope -> T.FilePath -> File.BF_Time -> IO (Result Exit.Details Details)
+generate : Reporting.Style -> BW.Scope -> T.FilePath -> T.BF_Time -> IO (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
         (\key ->
@@ -249,7 +223,7 @@ type alias Task a =
     Task.Task Exit.Details a
 
 
-verifyPkg : Env -> File.BF_Time -> Outline.PkgOutline -> Task Details
+verifyPkg : Env -> T.BF_Time -> Outline.PkgOutline -> Task Details
 verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
         union identity Pkg.compareName noDups direct testDirect
@@ -274,7 +248,7 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
         Task.throw (Exit.DetailsBadElmInPkg elm)
 
 
-verifyApp : Env -> File.BF_Time -> Outline.AppOutline -> Task Details
+verifyApp : Env -> T.BF_Time -> Outline.AppOutline -> Task Details
 verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outline) =
     if elmVersion == V.compiler then
         checkAppDeps outline
@@ -399,7 +373,7 @@ fork_Maybe_CASTO_GlobalGraph work =
 -- VERIFY DEPENDENCIES
 
 
-verifyDependencies : Env -> File.BF_Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
+verifyDependencies : Env -> T.BF_Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
@@ -915,7 +889,7 @@ getDepHome fi =
 
 
 type DResult
-    = RLocal T.CEI_Interface T.CASTO_LocalGraph (Maybe Docs.CED_Module)
+    = RLocal T.CEI_Interface T.CASTO_LocalGraph (Maybe T.CED_Module)
     | RForeign T.CEI_Interface
     | RKernelLocal (List T.CEK_Chunk)
     | RKernelForeign
@@ -946,7 +920,7 @@ compile pkg mvar status =
                                                                     ifaces =
                                                                         I.fromModule pkg canonical annotations
 
-                                                                    docs : Maybe Docs.CED_Module
+                                                                    docs : Maybe T.CED_Module
                                                                     docs =
                                                                         makeDocs docsStatus canonical
                                                                 in
@@ -1001,7 +975,7 @@ getDocsStatus cache pkg vsn =
             )
 
 
-makeDocs : T.BED_DocsStatus -> Can.Module -> Maybe Docs.CED_Module
+makeDocs : T.BED_DocsStatus -> Can.Module -> Maybe T.CED_Module
 makeDocs status modul =
     case status of
         T.BED_DocsNeeded ->
@@ -1027,7 +1001,7 @@ writeDocs cache pkg vsn status results =
             IO.pure ()
 
 
-toDocs : DResult -> Maybe Docs.CED_Module
+toDocs : DResult -> Maybe T.CED_Module
 toDocs result =
     case result of
         RLocal _ _ docs ->
@@ -1262,8 +1236,8 @@ statusDictDecoder =
     D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-localEncoder : BED_Local -> Encode.Value
-localEncoder (BED_Local path time deps hasMain lastChange lastCompile) =
+localEncoder : T.BED_Local -> Encode.Value
+localEncoder (T.BED_Local path time deps hasMain lastChange lastCompile) =
     Encode.object
         [ ( "type", Encode.string "Local" )
         , ( "path", Encode.string path )
@@ -1275,9 +1249,9 @@ localEncoder (BED_Local path time deps hasMain lastChange lastCompile) =
         ]
 
 
-localDecoder : Decode.Decoder BED_Local
+localDecoder : Decode.Decoder T.BED_Local
 localDecoder =
-    Decode.map6 BED_Local
+    Decode.map6 T.BED_Local
         (Decode.field "path" Decode.string)
         (Decode.field "time" File.timeDecoder)
         (Decode.field "deps" (Decode.list ModuleName.rawDecoder))

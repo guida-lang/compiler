@@ -5,7 +5,6 @@ import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Canonicalize.Type as Type
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
@@ -18,7 +17,7 @@ import Utils.Main as Utils
 
 
 type alias LResult i w a =
-    R.RResult i w Error.CREC_Error a
+    R.RResult i w T.CREC_Error a
 
 
 type alias Unions =
@@ -62,7 +61,7 @@ collectVars (T.CASTS_Module _ _ _ _ values _ _ _ effects) =
         addDecl (T.CRA_At _ (T.CASTS_Value (T.CRA_At region name) _ _ _)) =
             Dups.insert name region (Env.TopLevel region)
     in
-    Dups.detect Error.CREC_DuplicateDecl <|
+    Dups.detect T.CREC_DuplicateDecl <|
         List.foldl addDecl (toEffectDups effects) values
 
 
@@ -113,7 +112,7 @@ addTypes (T.CASTS_Module _ _ _ _ _ unions aliases _ _) env =
         typeNameDups =
             List.foldl addUnionDups (List.foldl addAliasDups Dups.none aliases) unions
     in
-    Dups.detect Error.CREC_DuplicateType typeNameDups
+    Dups.detect T.CREC_DuplicateType typeNameDups
         |> R.bind
             (\_ ->
                 Utils.foldM (addUnion env.home) env.types unions
@@ -188,7 +187,7 @@ addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env)
                             toName (T.CRA_At _ (T.CASTS_Alias (T.CRA_At _ name) _ _)) =
                                 name
                         in
-                        R.throw (Error.CREC_RecursiveAlias region name1 args tipe (List.map toName others))
+                        R.throw (T.CREC_RecursiveAlias region name1 args tipe (List.map toName others))
                     )
 
 
@@ -241,7 +240,7 @@ checkUnionFreeVars (T.CRA_At unionRegion (T.CASTS_Union (T.CRA_At _ name) args c
         addCtorFreeVars ( _, tipes ) freeVars =
             List.foldl addFreeVars freeVars tipes
     in
-    Dups.detect (Error.CREC_DuplicateUnionArg name) (List.foldr addArg Dups.none args)
+    Dups.detect (T.CREC_DuplicateUnionArg name) (List.foldr addArg Dups.none args)
         |> R.bind
             (\boundVars ->
                 let
@@ -255,7 +254,7 @@ checkUnionFreeVars (T.CRA_At unionRegion (T.CASTS_Union (T.CRA_At _ name) args c
 
                     unbound :: unbounds ->
                         R.throw <|
-                            Error.CREC_TypeVarsUnboundInUnion unionRegion name (List.map A.toValue args) unbound unbounds
+                            T.CREC_TypeVarsUnboundInUnion unionRegion name (List.map A.toValue args) unbound unbounds
             )
 
 
@@ -266,7 +265,7 @@ checkAliasFreeVars (T.CRA_At aliasRegion (T.CASTS_Alias (T.CRA_At _ name) args t
         addArg (T.CRA_At region arg) dict =
             Dups.insert arg region region dict
     in
-    Dups.detect (Error.CREC_DuplicateAliasArg name) (List.foldr addArg Dups.none args)
+    Dups.detect (T.CREC_DuplicateAliasArg name) (List.foldr addArg Dups.none args)
         |> R.bind
             (\boundVars ->
                 let
@@ -283,7 +282,7 @@ checkAliasFreeVars (T.CRA_At aliasRegion (T.CASTS_Alias (T.CRA_At _ name) args t
 
                 else
                     R.throw <|
-                        Error.CREC_TypeVarsMessedUpInAlias aliasRegion
+                        T.CREC_TypeVarsMessedUpInAlias aliasRegion
                             name
                             (List.map A.toValue args)
                             (Dict.toList compare (Dict.diff boundVars freeVars))
@@ -338,7 +337,7 @@ addCtors (T.CASTS_Module _ _ _ _ _ unions aliases _ _) env =
                 R.traverse (canonicalizeAlias env) aliases
                     |> R.bind
                         (\aliasInfo ->
-                            (Dups.detect Error.CREC_DuplicateCtor <|
+                            (Dups.detect T.CREC_DuplicateCtor <|
                                 Dups.union
                                     (Dups.unions (List.map Tuple.second unionInfo))
                                     (Dups.unions (List.map Tuple.second aliasInfo))

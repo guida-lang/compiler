@@ -9,7 +9,6 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Optimize.Expression as Expr
 import Compiler.Optimize.Names as Names
 import Compiler.Optimize.Port as Port
-import Compiler.Reporting.Error.Main as E
 import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Map as Dict exposing (Dict)
@@ -23,7 +22,7 @@ import Utils.Main as Utils
 
 
 type alias MResult i w a =
-    R.RResult i w E.CREM_Error a
+    R.RResult i w T.CREM_Error a
 
 
 type alias Annotations =
@@ -205,16 +204,16 @@ addToGraph name node fields (T.CASTO_LocalGraph main nodes fieldCounts) =
 -- ADD DECLS
 
 
-addDecls : T.CEMN_Canonical -> Annotations -> Can.Decls -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
+addDecls : T.CEMN_Canonical -> Annotations -> T.CASTC_Decls -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
 addDecls home annotations decls graph =
     case decls of
-        Can.Declare def subDecls ->
+        T.CASTC_Declare def subDecls ->
             addDef home annotations def graph
                 |> R.bind (addDecls home annotations subDecls)
 
-        Can.DeclareRec d ds subDecls ->
+        T.CASTC_DeclareRec d ds subDecls ->
             let
-                defs : List Can.Def
+                defs : List T.CASTC_Def
                 defs =
                     d :: ds
             in
@@ -223,13 +222,13 @@ addDecls home annotations decls graph =
                     addDecls home annotations subDecls (addRecDefs home defs graph)
 
                 Just region ->
-                    R.throw <| E.CREM_BadCycle region (defToName d) (List.map defToName ds)
+                    R.throw <| T.CREM_BadCycle region (defToName d) (List.map defToName ds)
 
-        Can.SaveTheEnvironment ->
+        T.CASTC_SaveTheEnvironment ->
             R.ok graph
 
 
-findMain : List Can.Def -> Maybe T.CRA_Region
+findMain : List T.CASTC_Def -> Maybe T.CRA_Region
 findMain defs =
     case defs of
         [] ->
@@ -237,14 +236,14 @@ findMain defs =
 
         def :: rest ->
             case def of
-                Can.Def (T.CRA_At region name) _ _ ->
+                T.CASTC_Def (T.CRA_At region name) _ _ ->
                     if name == Name.main_ then
                         Just region
 
                     else
                         findMain rest
 
-                Can.TypedDef (T.CRA_At region name) _ _ _ _ ->
+                T.CASTC_TypedDef (T.CRA_At region name) _ _ _ _ ->
                     if name == Name.main_ then
                         Just region
 
@@ -252,13 +251,13 @@ findMain defs =
                         findMain rest
 
 
-defToName : Can.Def -> T.CDN_Name
+defToName : T.CASTC_Def -> T.CDN_Name
 defToName def =
     case def of
-        Can.Def (T.CRA_At _ name) _ _ ->
+        T.CASTC_Def (T.CRA_At _ name) _ _ ->
             name
 
-        Can.TypedDef (T.CRA_At _ name) _ _ _ _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ _ _ _ ->
             name
 
 
@@ -266,10 +265,10 @@ defToName def =
 -- ADD DEFS
 
 
-addDef : T.CEMN_Canonical -> Annotations -> Can.Def -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
+addDef : T.CEMN_Canonical -> Annotations -> T.CASTC_Def -> T.CASTO_LocalGraph -> MResult i (List W.Warning) T.CASTO_LocalGraph
 addDef home annotations def graph =
     case def of
-        Can.Def (T.CRA_At region name) args body ->
+        T.CASTC_Def (T.CRA_At region name) args body ->
             let
                 (T.CASTC_Forall _ tipe) =
                     Utils.find identity name annotations
@@ -277,11 +276,11 @@ addDef home annotations def graph =
             addDefHelp region annotations home name args body graph
                 |> R.then_ (R.warn (W.MissingTypeAnnotation region name tipe))
 
-        Can.TypedDef (T.CRA_At region name) _ typedArgs body _ ->
+        T.CASTC_TypedDef (T.CRA_At region name) _ typedArgs body _ ->
             addDefHelp region annotations home name (List.map Tuple.first typedArgs) body graph
 
 
-addDefHelp : T.CRA_Region -> Annotations -> T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> T.CASTO_LocalGraph -> MResult i w T.CASTO_LocalGraph
+addDefHelp : T.CRA_Region -> Annotations -> T.CEMN_Canonical -> T.CDN_Name -> List T.CASTC_Pattern -> T.CASTC_Expr -> T.CASTO_LocalGraph -> MResult i w T.CASTO_LocalGraph
 addDefHelp region annotations home name args body ((T.CASTO_LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
         R.ok (addDefNode home name args body EverySet.empty graph)
@@ -302,7 +301,7 @@ addDefHelp region annotations home name args body ((T.CASTO_LocalGraph _ nodes f
                     R.ok <| addMain <| Names.run <| Names.registerKernel Name.virtualDom T.CASTO_Static
 
                 else
-                    R.throw (E.CREM_BadType region tipe)
+                    R.throw (T.CREM_BadType region tipe)
 
             T.CASTC_TType hm nm [ flags, _, message ] ->
                 if hm == ModuleName.platform && nm == Name.program then
@@ -311,16 +310,16 @@ addDefHelp region annotations home name args body ((T.CASTO_LocalGraph _ nodes f
                             R.ok <| addMain <| Names.run <| Names.fmap (T.CASTO_Dynamic message) <| Port.toFlagsDecoder flags
 
                         Err ( subType, invalidPayload ) ->
-                            R.throw (E.CREM_BadFlags region subType invalidPayload)
+                            R.throw (T.CREM_BadFlags region subType invalidPayload)
 
                 else
-                    R.throw (E.CREM_BadType region tipe)
+                    R.throw (T.CREM_BadType region tipe)
 
             _ ->
-                R.throw (E.CREM_BadType region tipe)
+                R.throw (T.CREM_BadType region tipe)
 
 
-addDefNode : T.CEMN_Canonical -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) T.CASTO_Global -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addDefNode : T.CEMN_Canonical -> T.CDN_Name -> List T.CASTC_Pattern -> T.CASTC_Expr -> EverySet (List String) T.CASTO_Global -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
 addDefNode home name args body mainDeps graph =
     let
         ( deps, fields, def ) =
@@ -355,7 +354,7 @@ type State
         }
 
 
-addRecDefs : T.CEMN_Canonical -> List Can.Def -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
+addRecDefs : T.CEMN_Canonical -> List T.CASTC_Def -> T.CASTO_LocalGraph -> T.CASTO_LocalGraph
 addRecDefs home defs (T.CASTO_LocalGraph main nodes fieldCounts) =
     let
         names : List T.CDN_Name
@@ -386,27 +385,27 @@ addRecDefs home defs (T.CASTO_LocalGraph main nodes fieldCounts) =
         (Utils.mapUnionWith identity compare (+) fields fieldCounts)
 
 
-toName : Can.Def -> T.CDN_Name
+toName : T.CASTC_Def -> T.CDN_Name
 toName def =
     case def of
-        Can.Def (T.CRA_At _ name) _ _ ->
+        T.CASTC_Def (T.CRA_At _ name) _ _ ->
             name
 
-        Can.TypedDef (T.CRA_At _ name) _ _ _ _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ _ _ _ ->
             name
 
 
-addValueName : Can.Def -> EverySet String T.CDN_Name -> EverySet String T.CDN_Name
+addValueName : T.CASTC_Def -> EverySet String T.CDN_Name -> EverySet String T.CDN_Name
 addValueName def names =
     case def of
-        Can.Def (T.CRA_At _ name) args _ ->
+        T.CASTC_Def (T.CRA_At _ name) args _ ->
             if List.isEmpty args then
                 EverySet.insert identity name names
 
             else
                 names
 
-        Can.TypedDef (T.CRA_At _ name) _ args _ _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ args _ _ ->
             if List.isEmpty args then
                 EverySet.insert identity name names
 
@@ -414,13 +413,13 @@ addValueName def names =
                 names
 
 
-addLink : T.CEMN_Canonical -> T.CASTO_Node -> Can.Def -> Dict (List String) T.CASTO_Global T.CASTO_Node -> Dict (List String) T.CASTO_Global T.CASTO_Node
+addLink : T.CEMN_Canonical -> T.CASTO_Node -> T.CASTC_Def -> Dict (List String) T.CASTO_Global T.CASTO_Node -> Dict (List String) T.CASTO_Global T.CASTO_Node
 addLink home link def links =
     case def of
-        Can.Def (T.CRA_At _ name) _ _ ->
+        T.CASTC_Def (T.CRA_At _ name) _ _ ->
             Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) link links
 
-        Can.TypedDef (T.CRA_At _ name) _ _ _ _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ _ _ _ ->
             Dict.insert Opt.toComparableGlobal (T.CASTO_Global home name) link links
 
 
@@ -428,17 +427,17 @@ addLink home link def links =
 -- ADD RECURSIVE DEFS
 
 
-addRecDef : EverySet String T.CDN_Name -> State -> Can.Def -> Names.Tracker State
+addRecDef : EverySet String T.CDN_Name -> State -> T.CASTC_Def -> Names.Tracker State
 addRecDef cycle state def =
     case def of
-        Can.Def (T.CRA_At _ name) args body ->
+        T.CASTC_Def (T.CRA_At _ name) args body ->
             addRecDefHelp cycle state name args body
 
-        Can.TypedDef (T.CRA_At _ name) _ args body _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ args body _ ->
             addRecDefHelp cycle state name (List.map Tuple.first args) body
 
 
-addRecDefHelp : EverySet String T.CDN_Name -> State -> T.CDN_Name -> List Can.Pattern -> Can.Expr -> Names.Tracker State
+addRecDefHelp : EverySet String T.CDN_Name -> State -> T.CDN_Name -> List T.CASTC_Pattern -> T.CASTC_Expr -> Names.Tracker State
 addRecDefHelp cycle (State { values, functions }) name args body =
     case args of
         [] ->

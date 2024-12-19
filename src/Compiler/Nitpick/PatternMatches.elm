@@ -1,9 +1,5 @@
 module Compiler.Nitpick.PatternMatches exposing
-    ( CNPM_Context(..)
-    , CNPM_Error(..)
-    , CNPM_Literal(..)
-    , CNPM_Pattern(..)
-    , check
+    ( check
     , errorDecoder
     , errorEncoder
     )
@@ -32,70 +28,54 @@ import Utils.Main as Utils
 
 
 
--- PATTERN
-
-
-type CNPM_Pattern
-    = CNPM_Anything
-    | CNPM_Literal CNPM_Literal
-    | CNPM_Ctor T.CASTC_Union T.CDN_Name (List CNPM_Pattern)
-
-
-type CNPM_Literal
-    = CNPM_Chr String
-    | CNPM_Str String
-    | CNPM_Int Int
-
-
-
 -- CREATE SIMPLIFIED PATTERNS
 
 
-simplify : Can.Pattern -> CNPM_Pattern
+simplify : T.CASTC_Pattern -> T.CNPM_Pattern
 simplify (T.CRA_At _ pattern) =
     case pattern of
-        Can.PAnything ->
-            CNPM_Anything
+        T.CASTC_PAnything ->
+            T.CNPM_Anything
 
-        Can.PVar _ ->
-            CNPM_Anything
+        T.CASTC_PVar _ ->
+            T.CNPM_Anything
 
-        Can.PRecord _ ->
-            CNPM_Anything
+        T.CASTC_PRecord _ ->
+            T.CNPM_Anything
 
-        Can.PUnit ->
-            CNPM_Ctor unit unitName []
+        T.CASTC_PUnit ->
+            T.CNPM_Ctor unit unitName []
 
-        Can.PTuple a b Nothing ->
-            CNPM_Ctor pair pairName [ simplify a, simplify b ]
+        T.CASTC_PTuple a b Nothing ->
+            T.CNPM_Ctor pair pairName [ simplify a, simplify b ]
 
-        Can.PTuple a b (Just c) ->
-            CNPM_Ctor triple tripleName [ simplify a, simplify b, simplify c ]
+        T.CASTC_PTuple a b (Just c) ->
+            T.CNPM_Ctor triple tripleName [ simplify a, simplify b, simplify c ]
 
-        Can.PCtor { union, name, args } ->
-            CNPM_Ctor union name <|
-                List.map (\(Can.PatternCtorArg _ _ arg) -> simplify arg) args
+        T.CASTC_PCtor { union, name, args } ->
+            T.CNPM_Ctor union name <|
+                List.map (\(T.CASTC_PatternCtorArg _ _ arg) -> simplify arg) args
 
-        Can.PList entries ->
+        T.CASTC_PList entries ->
             List.foldr cons nil entries
 
-        Can.PCons hd tl ->
+        T.CASTC_PCons hd tl ->
             cons hd (simplify tl)
 
-        Can.PAlias subPattern _ ->
+        T.CASTC_PAlias subPattern _ ->
             simplify subPattern
 
-        Can.PInt int ->
-            CNPM_Literal (CNPM_Int int)
+        T.CASTC_PInt int ->
+            T.CNPM_Literal (T.CNPM_Int int)
 
-        Can.PStr str ->
-            CNPM_Literal (CNPM_Str str)
+        T.CASTC_PStr str ->
+            T.CNPM_Literal (T.CNPM_Str str)
 
-        Can.PChr chr ->
-            CNPM_Literal (CNPM_Chr chr)
+        T.CASTC_PChr chr ->
+            T.CNPM_Literal (T.CNPM_Chr chr)
 
-        Can.PBool union bool ->
-            CNPM_Ctor union
+        T.CASTC_PBool union bool ->
+            T.CNPM_Ctor union
                 (if bool then
                     Name.true
 
@@ -105,14 +85,14 @@ simplify (T.CRA_At _ pattern) =
                 []
 
 
-cons : Can.Pattern -> CNPM_Pattern -> CNPM_Pattern
+cons : T.CASTC_Pattern -> T.CNPM_Pattern -> T.CNPM_Pattern
 cons hd tl =
-    CNPM_Ctor list consName [ simplify hd, tl ]
+    T.CNPM_Ctor list consName [ simplify hd, tl ]
 
 
-nil : CNPM_Pattern
+nil : T.CNPM_Pattern
 nil =
-    CNPM_Ctor list nilName []
+    T.CNPM_Ctor list nilName []
 
 
 
@@ -194,25 +174,10 @@ nilName =
 
 
 
--- ERROR
-
-
-type CNPM_Error
-    = CNPM_Incomplete T.CRA_Region CNPM_Context (List CNPM_Pattern)
-    | CNPM_Redundant T.CRA_Region T.CRA_Region Int
-
-
-type CNPM_Context
-    = CNPM_BadArg
-    | CNPM_BadDestruct
-    | CNPM_BadCase
-
-
-
 -- CHECK
 
 
-check : Can.Module -> Result (NE.Nonempty CNPM_Error) ()
+check : Can.Module -> Result (NE.Nonempty T.CNPM_Error) ()
 check (Can.Module _ _ _ decls _ _ _ _) =
     case checkDecls decls [] of
         [] ->
@@ -226,16 +191,16 @@ check (Can.Module _ _ _ decls _ _ _ _) =
 -- CHECK DECLS
 
 
-checkDecls : Can.Decls -> List CNPM_Error -> List CNPM_Error
+checkDecls : T.CASTC_Decls -> List T.CNPM_Error -> List T.CNPM_Error
 checkDecls decls errors =
     case decls of
-        Can.Declare def subDecls ->
+        T.CASTC_Declare def subDecls ->
             checkDef def (checkDecls subDecls errors)
 
-        Can.DeclareRec def defs subDecls ->
+        T.CASTC_DeclareRec def defs subDecls ->
             checkDef def (List.foldr checkDef (checkDecls subDecls errors) defs)
 
-        Can.SaveTheEnvironment ->
+        T.CASTC_SaveTheEnvironment ->
             errors
 
 
@@ -243,114 +208,114 @@ checkDecls decls errors =
 -- CHECK DEFS
 
 
-checkDef : Can.Def -> List CNPM_Error -> List CNPM_Error
+checkDef : T.CASTC_Def -> List T.CNPM_Error -> List T.CNPM_Error
 checkDef def errors =
     case def of
-        Can.Def _ args body ->
+        T.CASTC_Def _ args body ->
             List.foldr checkArg (checkExpr body errors) args
 
-        Can.TypedDef _ _ args body _ ->
+        T.CASTC_TypedDef _ _ args body _ ->
             List.foldr checkTypedArg (checkExpr body errors) args
 
 
-checkArg : Can.Pattern -> List CNPM_Error -> List CNPM_Error
+checkArg : T.CASTC_Pattern -> List T.CNPM_Error -> List T.CNPM_Error
 checkArg ((T.CRA_At region _) as pattern) errors =
-    checkPatterns region CNPM_BadArg [ pattern ] errors
+    checkPatterns region T.CNPM_BadArg [ pattern ] errors
 
 
-checkTypedArg : ( Can.Pattern, tipe ) -> List CNPM_Error -> List CNPM_Error
+checkTypedArg : ( T.CASTC_Pattern, tipe ) -> List T.CNPM_Error -> List T.CNPM_Error
 checkTypedArg ( (T.CRA_At region _) as pattern, _ ) errors =
-    checkPatterns region CNPM_BadArg [ pattern ] errors
+    checkPatterns region T.CNPM_BadArg [ pattern ] errors
 
 
 
 -- CHECK EXPRESSIONS
 
 
-checkExpr : Can.Expr -> List CNPM_Error -> List CNPM_Error
+checkExpr : T.CASTC_Expr -> List T.CNPM_Error -> List T.CNPM_Error
 checkExpr (T.CRA_At region expression) errors =
     case expression of
-        Can.VarLocal _ ->
+        T.CASTC_VarLocal _ ->
             errors
 
-        Can.VarTopLevel _ _ ->
+        T.CASTC_VarTopLevel _ _ ->
             errors
 
-        Can.VarKernel _ _ ->
+        T.CASTC_VarKernel _ _ ->
             errors
 
-        Can.VarForeign _ _ _ ->
+        T.CASTC_VarForeign _ _ _ ->
             errors
 
-        Can.VarCtor _ _ _ _ _ ->
+        T.CASTC_VarCtor _ _ _ _ _ ->
             errors
 
-        Can.VarDebug _ _ _ ->
+        T.CASTC_VarDebug _ _ _ ->
             errors
 
-        Can.VarOperator _ _ _ _ ->
+        T.CASTC_VarOperator _ _ _ _ ->
             errors
 
-        Can.Chr _ ->
+        T.CASTC_Chr _ ->
             errors
 
-        Can.Str _ ->
+        T.CASTC_Str _ ->
             errors
 
-        Can.Int _ ->
+        T.CASTC_Int _ ->
             errors
 
-        Can.Float _ ->
+        T.CASTC_Float _ ->
             errors
 
-        Can.List entries ->
+        T.CASTC_List entries ->
             List.foldr checkExpr errors entries
 
-        Can.Negate expr ->
+        T.CASTC_Negate expr ->
             checkExpr expr errors
 
-        Can.Binop _ _ _ _ left right ->
+        T.CASTC_Binop _ _ _ _ left right ->
             checkExpr left
                 (checkExpr right errors)
 
-        Can.Lambda args body ->
+        T.CASTC_Lambda args body ->
             List.foldr checkArg (checkExpr body errors) args
 
-        Can.Call func args ->
+        T.CASTC_Call func args ->
             checkExpr func (List.foldr checkExpr errors args)
 
-        Can.If branches finally ->
+        T.CASTC_If branches finally ->
             List.foldr checkIfBranch (checkExpr finally errors) branches
 
-        Can.Let def body ->
+        T.CASTC_Let def body ->
             checkDef def (checkExpr body errors)
 
-        Can.LetRec defs body ->
+        T.CASTC_LetRec defs body ->
             List.foldr checkDef (checkExpr body errors) defs
 
-        Can.LetDestruct ((T.CRA_At reg _) as pattern) expr body ->
-            checkPatterns reg CNPM_BadDestruct [ pattern ] <|
+        T.CASTC_LetDestruct ((T.CRA_At reg _) as pattern) expr body ->
+            checkPatterns reg T.CNPM_BadDestruct [ pattern ] <|
                 checkExpr expr (checkExpr body errors)
 
-        Can.Case expr branches ->
+        T.CASTC_Case expr branches ->
             checkExpr expr (checkCases region branches errors)
 
-        Can.Accessor _ ->
+        T.CASTC_Accessor _ ->
             errors
 
-        Can.Access record _ ->
+        T.CASTC_Access record _ ->
             checkExpr record errors
 
-        Can.Update _ record fields ->
+        T.CASTC_Update _ record fields ->
             checkExpr record <| Dict.foldr compare (\_ -> checkField) errors fields
 
-        Can.Record fields ->
+        T.CASTC_Record fields ->
             Dict.foldr compare (\_ -> checkExpr) errors fields
 
-        Can.Unit ->
+        T.CASTC_Unit ->
             errors
 
-        Can.Tuple a b maybeC ->
+        T.CASTC_Tuple a b maybeC ->
             checkExpr a
                 (checkExpr b
                     (case maybeC of
@@ -362,7 +327,7 @@ checkExpr (T.CRA_At region expression) errors =
                     )
                 )
 
-        Can.Shader _ _ ->
+        T.CASTC_Shader _ _ ->
             errors
 
 
@@ -370,8 +335,8 @@ checkExpr (T.CRA_At region expression) errors =
 -- CHECK FIELD
 
 
-checkField : Can.FieldUpdate -> List CNPM_Error -> List CNPM_Error
-checkField (Can.FieldUpdate _ expr) errors =
+checkField : T.CASTC_FieldUpdate -> List T.CNPM_Error -> List T.CNPM_Error
+checkField (T.CASTC_FieldUpdate _ expr) errors =
     checkExpr expr errors
 
 
@@ -379,7 +344,7 @@ checkField (Can.FieldUpdate _ expr) errors =
 -- CHECK IF BRANCH
 
 
-checkIfBranch : ( Can.Expr, Can.Expr ) -> List CNPM_Error -> List CNPM_Error
+checkIfBranch : ( T.CASTC_Expr, T.CASTC_Expr ) -> List T.CNPM_Error -> List T.CNPM_Error
 checkIfBranch ( condition, branch ) errs =
     checkExpr condition (checkExpr branch errs)
 
@@ -388,17 +353,17 @@ checkIfBranch ( condition, branch ) errs =
 -- CHECK CASE EXPRESSION
 
 
-checkCases : T.CRA_Region -> List Can.CaseBranch -> List CNPM_Error -> List CNPM_Error
+checkCases : T.CRA_Region -> List T.CASTC_CaseBranch -> List T.CNPM_Error -> List T.CNPM_Error
 checkCases region branches errors =
     let
         ( patterns, newErrors ) =
             List.foldr checkCaseBranch ( [], errors ) branches
     in
-    checkPatterns region CNPM_BadCase patterns newErrors
+    checkPatterns region T.CNPM_BadCase patterns newErrors
 
 
-checkCaseBranch : Can.CaseBranch -> ( List Can.Pattern, List CNPM_Error ) -> ( List Can.Pattern, List CNPM_Error )
-checkCaseBranch (Can.CaseBranch pattern expr) ( patterns, errors ) =
+checkCaseBranch : T.CASTC_CaseBranch -> ( List T.CASTC_Pattern, List T.CNPM_Error ) -> ( List T.CASTC_Pattern, List T.CNPM_Error )
+checkCaseBranch (T.CASTC_CaseBranch pattern expr) ( patterns, errors ) =
     ( pattern :: patterns
     , checkExpr expr errors
     )
@@ -408,7 +373,7 @@ checkCaseBranch (Can.CaseBranch pattern expr) ( patterns, errors ) =
 -- CHECK PATTERNS
 
 
-checkPatterns : T.CRA_Region -> CNPM_Context -> List Can.Pattern -> List CNPM_Error -> List CNPM_Error
+checkPatterns : T.CRA_Region -> T.CNPM_Context -> List T.CASTC_Pattern -> List T.CNPM_Error -> List T.CNPM_Error
 checkPatterns region context patterns errors =
     case toNonRedundantRows region patterns of
         Err err ->
@@ -420,7 +385,7 @@ checkPatterns region context patterns errors =
                     errors
 
                 badPatterns ->
-                    CNPM_Incomplete region context (List.map Prelude.head badPatterns) :: errors
+                    T.CNPM_Incomplete region context (List.map Prelude.head badPatterns) :: errors
 
 
 
@@ -433,11 +398,11 @@ checkPatterns region context patterns errors =
 --
 
 
-isExhaustive : List (List CNPM_Pattern) -> Int -> List (List CNPM_Pattern)
+isExhaustive : List (List T.CNPM_Pattern) -> Int -> List (List T.CNPM_Pattern)
 isExhaustive matrix n =
     case matrix of
         [] ->
-            [ List.repeat n CNPM_Anything ]
+            [ List.repeat n T.CNPM_Anything ]
 
         _ ->
             if n == 0 then
@@ -454,7 +419,7 @@ isExhaustive matrix n =
                         Dict.size ctors
                 in
                 if numSeen == 0 then
-                    List.map ((::) CNPM_Anything)
+                    List.map ((::) T.CNPM_Anything)
                         (isExhaustive (List.filterMap specializeRowByAnything matrix) (n - 1))
 
                 else
@@ -469,7 +434,7 @@ isExhaustive matrix n =
 
                     else
                         let
-                            isAltExhaustive : T.CASTC_Ctor -> List (List CNPM_Pattern)
+                            isAltExhaustive : T.CASTC_Ctor -> List (List T.CNPM_Pattern)
                             isAltExhaustive (T.CASTC_Ctor name _ arity _) =
                                 List.map (recoverCtor alts name arity)
                                     (isExhaustive
@@ -480,22 +445,22 @@ isExhaustive matrix n =
                         List.concatMap isAltExhaustive altList
 
 
-isMissing : T.CASTC_Union -> Dict String T.CDN_Name a -> T.CASTC_Ctor -> Maybe CNPM_Pattern
+isMissing : T.CASTC_Union -> Dict String T.CDN_Name a -> T.CASTC_Ctor -> Maybe T.CNPM_Pattern
 isMissing union ctors (T.CASTC_Ctor name _ arity _) =
     if Dict.member identity name ctors then
         Nothing
 
     else
-        Just (CNPM_Ctor union name (List.repeat arity CNPM_Anything))
+        Just (T.CNPM_Ctor union name (List.repeat arity T.CNPM_Anything))
 
 
-recoverCtor : T.CASTC_Union -> T.CDN_Name -> Int -> List CNPM_Pattern -> List CNPM_Pattern
+recoverCtor : T.CASTC_Union -> T.CDN_Name -> Int -> List T.CNPM_Pattern -> List T.CNPM_Pattern
 recoverCtor union name arity patterns =
     let
         ( args, rest ) =
             List.splitAt arity patterns
     in
-    CNPM_Ctor union name args :: rest
+    T.CNPM_Ctor union name args :: rest
 
 
 
@@ -504,14 +469,14 @@ recoverCtor union name arity patterns =
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toNonRedundantRows : T.CRA_Region -> List Can.Pattern -> Result CNPM_Error (List (List CNPM_Pattern))
+toNonRedundantRows : T.CRA_Region -> List T.CASTC_Pattern -> Result T.CNPM_Error (List (List T.CNPM_Pattern))
 toNonRedundantRows region patterns =
     toSimplifiedUsefulRows region [] patterns
 
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toSimplifiedUsefulRows : T.CRA_Region -> List (List CNPM_Pattern) -> List Can.Pattern -> Result CNPM_Error (List (List CNPM_Pattern))
+toSimplifiedUsefulRows : T.CRA_Region -> List (List T.CNPM_Pattern) -> List T.CASTC_Pattern -> Result T.CNPM_Error (List (List T.CNPM_Pattern))
 toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
     case uncheckedPatterns of
         [] ->
@@ -519,7 +484,7 @@ toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
 
         ((T.CRA_At region _) as pattern) :: rest ->
             let
-                nextRow : List CNPM_Pattern
+                nextRow : List T.CNPM_Pattern
                 nextRow =
                     [ simplify pattern ]
             in
@@ -527,14 +492,14 @@ toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
                 toSimplifiedUsefulRows overallRegion (nextRow :: checkedRows) rest
 
             else
-                Err (CNPM_Redundant overallRegion region (List.length checkedRows + 1))
+                Err (T.CNPM_Redundant overallRegion region (List.length checkedRows + 1))
 
 
 
 -- Check if a new row "vector" is useful given previous rows "matrix"
 
 
-isUseful : List (List CNPM_Pattern) -> List CNPM_Pattern -> Bool
+isUseful : List (List T.CNPM_Pattern) -> List T.CNPM_Pattern -> Bool
 isUseful matrix vector =
     case matrix of
         [] ->
@@ -550,13 +515,13 @@ isUseful matrix vector =
 
                 firstPattern :: patterns ->
                     case firstPattern of
-                        CNPM_Ctor _ name args ->
+                        T.CNPM_Ctor _ name args ->
                             -- keep checking rows that start with this Ctor or Anything
                             isUseful
                                 (List.filterMap (specializeRowByCtor name (List.length args)) matrix)
                                 (args ++ patterns)
 
-                        CNPM_Anything ->
+                        T.CNPM_Anything ->
                             -- check if all alts appear in matrix
                             case isComplete matrix of
                                 No ->
@@ -574,11 +539,11 @@ isUseful matrix vector =
                                         isUsefulAlt (T.CASTC_Ctor name _ arity _) =
                                             isUseful
                                                 (List.filterMap (specializeRowByCtor name arity) matrix)
-                                                (List.repeat arity CNPM_Anything ++ patterns)
+                                                (List.repeat arity T.CNPM_Anything ++ patterns)
                                     in
                                     List.any isUsefulAlt alts
 
-                        CNPM_Literal literal ->
+                        T.CNPM_Literal literal ->
                             -- keep checking rows that start with this Literal or Anything
                             isUseful
                                 (List.filterMap (specializeRowByLiteral literal) matrix)
@@ -589,20 +554,20 @@ isUseful matrix vector =
 -- INVARIANT: (length row == N) ==> (length result == arity + N - 1)
 
 
-specializeRowByCtor : T.CDN_Name -> Int -> List CNPM_Pattern -> Maybe (List CNPM_Pattern)
+specializeRowByCtor : T.CDN_Name -> Int -> List T.CNPM_Pattern -> Maybe (List T.CNPM_Pattern)
 specializeRowByCtor ctorName arity row =
     case row of
-        (CNPM_Ctor _ name args) :: patterns ->
+        (T.CNPM_Ctor _ name args) :: patterns ->
             if name == ctorName then
                 Just (args ++ patterns)
 
             else
                 Nothing
 
-        CNPM_Anything :: patterns ->
-            Just (List.repeat arity CNPM_Anything ++ patterns)
+        T.CNPM_Anything :: patterns ->
+            Just (List.repeat arity T.CNPM_Anything ++ patterns)
 
-        (CNPM_Literal _) :: _ ->
+        (T.CNPM_Literal _) :: _ ->
             crash <|
                 "Compiler bug! After type checking, constructors and literals should never align in pattern match exhaustiveness checks."
 
@@ -614,20 +579,20 @@ specializeRowByCtor ctorName arity row =
 -- INVARIANT: (length row == N) ==> (length result == N-1)
 
 
-specializeRowByLiteral : CNPM_Literal -> List CNPM_Pattern -> Maybe (List CNPM_Pattern)
+specializeRowByLiteral : T.CNPM_Literal -> List T.CNPM_Pattern -> Maybe (List T.CNPM_Pattern)
 specializeRowByLiteral literal row =
     case row of
-        (CNPM_Literal lit) :: patterns ->
+        (T.CNPM_Literal lit) :: patterns ->
             if lit == literal then
                 Just patterns
 
             else
                 Nothing
 
-        CNPM_Anything :: patterns ->
+        T.CNPM_Anything :: patterns ->
             Just patterns
 
-        (CNPM_Ctor _ _ _) :: _ ->
+        (T.CNPM_Ctor _ _ _) :: _ ->
             crash <|
                 "Compiler bug! After type checking, constructors and literals should never align in pattern match exhaustiveness checks."
 
@@ -639,19 +604,19 @@ specializeRowByLiteral literal row =
 -- INVARIANT: (length row == N) ==> (length result == N-1)
 
 
-specializeRowByAnything : List CNPM_Pattern -> Maybe (List CNPM_Pattern)
+specializeRowByAnything : List T.CNPM_Pattern -> Maybe (List T.CNPM_Pattern)
 specializeRowByAnything row =
     case row of
         [] ->
             Nothing
 
-        (CNPM_Ctor _ _ _) :: _ ->
+        (T.CNPM_Ctor _ _ _) :: _ ->
             Nothing
 
-        CNPM_Anything :: patterns ->
+        T.CNPM_Anything :: patterns ->
             Just patterns
 
-        (CNPM_Literal _) :: _ ->
+        (T.CNPM_Literal _) :: _ ->
             Nothing
 
 
@@ -664,7 +629,7 @@ type Complete
     | No
 
 
-isComplete : List (List CNPM_Pattern) -> Complete
+isComplete : List (List T.CNPM_Pattern) -> Complete
 isComplete matrix =
     let
         ctors : Dict String T.CDN_Name T.CASTC_Union
@@ -694,15 +659,15 @@ isComplete matrix =
 -- COLLECT CTORS
 
 
-collectCtors : List (List CNPM_Pattern) -> Dict String T.CDN_Name T.CASTC_Union
+collectCtors : List (List T.CNPM_Pattern) -> Dict String T.CDN_Name T.CASTC_Union
 collectCtors matrix =
     List.foldl (\row acc -> collectCtorsHelp acc row) Dict.empty matrix
 
 
-collectCtorsHelp : Dict String T.CDN_Name T.CASTC_Union -> List CNPM_Pattern -> Dict String T.CDN_Name T.CASTC_Union
+collectCtorsHelp : Dict String T.CDN_Name T.CASTC_Union -> List T.CNPM_Pattern -> Dict String T.CDN_Name T.CASTC_Union
 collectCtorsHelp ctors row =
     case row of
-        (CNPM_Ctor union name _) :: _ ->
+        (T.CNPM_Ctor union name _) :: _ ->
             Dict.insert identity name union ctors
 
         _ ->
@@ -713,10 +678,10 @@ collectCtorsHelp ctors row =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : CNPM_Error -> Encode.Value
+errorEncoder : T.CNPM_Error -> Encode.Value
 errorEncoder error =
     case error of
-        CNPM_Incomplete region context unhandled ->
+        T.CNPM_Incomplete region context unhandled ->
             Encode.object
                 [ ( "type", Encode.string "Incomplete" )
                 , ( "region", A.regionEncoder region )
@@ -724,7 +689,7 @@ errorEncoder error =
                 , ( "unhandled", Encode.list patternEncoder unhandled )
                 ]
 
-        CNPM_Redundant caseRegion patternRegion index ->
+        T.CNPM_Redundant caseRegion patternRegion index ->
             Encode.object
                 [ ( "type", Encode.string "Redundant" )
                 , ( "caseRegion", A.regionEncoder caseRegion )
@@ -733,20 +698,20 @@ errorEncoder error =
                 ]
 
 
-errorDecoder : Decode.Decoder CNPM_Error
+errorDecoder : Decode.Decoder T.CNPM_Error
 errorDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Incomplete" ->
-                        Decode.map3 CNPM_Incomplete
+                        Decode.map3 T.CNPM_Incomplete
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "context" contextDecoder)
                             (Decode.field "unhandled" (Decode.list patternDecoder))
 
                     "Redundant" ->
-                        Decode.map3 CNPM_Redundant
+                        Decode.map3 T.CNPM_Redundant
                             (Decode.field "caseRegion" A.regionDecoder)
                             (Decode.field "patternRegion" A.regionDecoder)
                             (Decode.field "index" Decode.int)
@@ -756,54 +721,54 @@ errorDecoder =
             )
 
 
-contextEncoder : CNPM_Context -> Encode.Value
+contextEncoder : T.CNPM_Context -> Encode.Value
 contextEncoder context =
     case context of
-        CNPM_BadArg ->
+        T.CNPM_BadArg ->
             Encode.string "BadArg"
 
-        CNPM_BadDestruct ->
+        T.CNPM_BadDestruct ->
             Encode.string "BadDestruct"
 
-        CNPM_BadCase ->
+        T.CNPM_BadCase ->
             Encode.string "BadCase"
 
 
-contextDecoder : Decode.Decoder CNPM_Context
+contextDecoder : Decode.Decoder T.CNPM_Context
 contextDecoder =
     Decode.string
         |> Decode.andThen
             (\str ->
                 case str of
                     "BadArg" ->
-                        Decode.succeed CNPM_BadArg
+                        Decode.succeed T.CNPM_BadArg
 
                     "BadDestruct" ->
-                        Decode.succeed CNPM_BadDestruct
+                        Decode.succeed T.CNPM_BadDestruct
 
                     "BadCase" ->
-                        Decode.succeed CNPM_BadCase
+                        Decode.succeed T.CNPM_BadCase
 
                     _ ->
                         Decode.fail ("Unknown Context: " ++ str)
             )
 
 
-patternEncoder : CNPM_Pattern -> Encode.Value
+patternEncoder : T.CNPM_Pattern -> Encode.Value
 patternEncoder pattern =
     case pattern of
-        CNPM_Anything ->
+        T.CNPM_Anything ->
             Encode.object
                 [ ( "type", Encode.string "Anything" )
                 ]
 
-        CNPM_Literal index ->
+        T.CNPM_Literal index ->
             Encode.object
                 [ ( "type", Encode.string "Literal" )
                 , ( "index", literalEncoder index )
                 ]
 
-        CNPM_Ctor union name args ->
+        T.CNPM_Ctor union name args ->
             Encode.object
                 [ ( "type", Encode.string "Ctor" )
                 , ( "union", Can.unionEncoder union )
@@ -812,20 +777,20 @@ patternEncoder pattern =
                 ]
 
 
-patternDecoder : Decode.Decoder CNPM_Pattern
+patternDecoder : Decode.Decoder T.CNPM_Pattern
 patternDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Anything" ->
-                        Decode.succeed CNPM_Anything
+                        Decode.succeed T.CNPM_Anything
 
                     "Literal" ->
-                        Decode.map CNPM_Literal (Decode.field "index" literalDecoder)
+                        Decode.map T.CNPM_Literal (Decode.field "index" literalDecoder)
 
                     "Ctor" ->
-                        Decode.map3 CNPM_Ctor
+                        Decode.map3 T.CNPM_Ctor
                             (Decode.field "union" Can.unionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "args" (Decode.list patternDecoder))
@@ -835,42 +800,42 @@ patternDecoder =
             )
 
 
-literalEncoder : CNPM_Literal -> Encode.Value
+literalEncoder : T.CNPM_Literal -> Encode.Value
 literalEncoder literal =
     case literal of
-        CNPM_Chr value ->
+        T.CNPM_Chr value ->
             Encode.object
                 [ ( "type", Encode.string "Chr" )
                 , ( "value", Encode.string value )
                 ]
 
-        CNPM_Str value ->
+        T.CNPM_Str value ->
             Encode.object
                 [ ( "type", Encode.string "Str" )
                 , ( "value", Encode.string value )
                 ]
 
-        CNPM_Int value ->
+        T.CNPM_Int value ->
             Encode.object
                 [ ( "type", Encode.string "Int" )
                 , ( "value", Encode.int value )
                 ]
 
 
-literalDecoder : Decode.Decoder CNPM_Literal
+literalDecoder : Decode.Decoder T.CNPM_Literal
 literalDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Chr" ->
-                        Decode.map CNPM_Chr (Decode.field "value" Decode.string)
+                        Decode.map T.CNPM_Chr (Decode.field "value" Decode.string)
 
                     "Str" ->
-                        Decode.map CNPM_Str (Decode.field "value" Decode.string)
+                        Decode.map T.CNPM_Str (Decode.field "value" Decode.string)
 
                     "Int" ->
-                        Decode.map CNPM_Int (Decode.field "value" Decode.int)
+                        Decode.map T.CNPM_Int (Decode.field "value" Decode.int)
 
                     _ ->
                         Decode.fail ("Unknown Literal's type: " ++ type_)

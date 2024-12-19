@@ -27,7 +27,7 @@ import Utils.Main as Utils
 -- RUN SOLVER
 
 
-run : Constraint -> IO (Result (NE.Nonempty Error.CRET_Error) (Dict String T.CDN_Name T.CASTC_Annotation))
+run : Constraint -> IO (Result (NE.Nonempty T.CRET_Error) (Dict String T.CDN_Name T.CASTC_Annotation))
 run constraint =
     MVector.replicate 8 []
         |> IO.bind
@@ -64,7 +64,7 @@ type alias Pools =
 
 
 type State
-    = State Env Mark (List Error.CRET_Error)
+    = State Env Mark (List T.CRET_Error)
 
 
 solve : Env -> Int -> Pools -> State -> Constraint -> IO State
@@ -96,7 +96,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                             |> IO.fmap
                                                                 (\_ ->
                                                                     addError state <|
-                                                                        Error.CRET_BadExpr region category actualType <|
+                                                                        T.CRET_BadExpr region category actualType <|
                                                                             Error.typeReplace expectation expectedType
                                                                 )
                                             )
@@ -123,7 +123,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                             |> IO.fmap
                                                                 (\_ ->
                                                                     addError state <|
-                                                                        Error.CRET_BadExpr region (Error.CRET_Local name) actualType <|
+                                                                        T.CRET_BadExpr region (T.CRET_Local name) actualType <|
                                                                             Error.typeReplace expectation expectedType
                                                                 )
                                             )
@@ -150,7 +150,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                             |> IO.fmap
                                                                 (\_ ->
                                                                     addError state <|
-                                                                        Error.CRET_BadExpr region (Error.CRET_Foreign name) actualType <|
+                                                                        T.CRET_BadExpr region (T.CRET_Foreign name) actualType <|
                                                                             Error.typeReplace expectation expectedType
                                                                 )
                                             )
@@ -177,7 +177,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                             |> IO.fmap
                                                                 (\_ ->
                                                                     addError state <|
-                                                                        Error.CRET_BadPattern region
+                                                                        T.CRET_BadPattern region
                                                                             category
                                                                             actualType
                                                                             (Error.ptypeReplace expectation expectedType)
@@ -336,28 +336,28 @@ isGeneric var =
 -- EXPECTATIONS TO VARIABLE
 
 
-expectedToVariable : Int -> Pools -> Error.CRET_Expected Type -> IO Variable
+expectedToVariable : Int -> Pools -> T.CRET_Expected Type -> IO Variable
 expectedToVariable rank pools expectation =
     typeToVariable rank pools <|
         case expectation of
-            Error.NoExpectation tipe ->
+            T.CRET_NoExpectation tipe ->
                 tipe
 
-            Error.FromContext _ _ tipe ->
+            T.CRET_FromContext _ _ tipe ->
                 tipe
 
-            Error.FromAnnotation _ _ _ tipe ->
+            T.CRET_FromAnnotation _ _ _ tipe ->
                 tipe
 
 
-patternExpectationToVariable : Int -> Pools -> Error.CRET_PExpected Type -> IO Variable
+patternExpectationToVariable : Int -> Pools -> T.CRET_PExpected Type -> IO Variable
 patternExpectationToVariable rank pools expectation =
     typeToVariable rank pools <|
         case expectation of
-            Error.CRET_PNoExpectation tipe ->
+            T.CRET_PNoExpectation tipe ->
                 tipe
 
-            Error.CRET_PFromContext _ _ tipe ->
+            T.CRET_PFromContext _ _ tipe ->
                 tipe
 
 
@@ -365,7 +365,7 @@ patternExpectationToVariable rank pools expectation =
 -- ERROR HELPERS
 
 
-addError : State -> Error.CRET_Error -> State
+addError : State -> T.CRET_Error -> State
 addError (State savedEnv rank errors) err =
     State savedEnv rank (err :: errors)
 
@@ -387,7 +387,7 @@ occurs state ( name, T.CRA_At region variable ) =
                                     |> IO.bind
                                         (\(Descriptor _ rank mark copy) ->
                                             UF.set variable (Descriptor IO.Error rank mark copy)
-                                                |> IO.fmap (\_ -> addError state (Error.CRET_InfiniteType region name errorType))
+                                                |> IO.fmap (\_ -> addError state (T.CRET_InfiniteType region name errorType))
                                         )
                             )
 

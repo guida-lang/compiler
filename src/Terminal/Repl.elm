@@ -468,22 +468,22 @@ startsWithKeyword keyword lines =
            )
 
 
-toExprPosition : String -> ES.CRES_Expr -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
+toExprPosition : String -> T.CRES_Expr -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toExprPosition src expr row col =
     let
-        decl : ES.CRES_Decl
+        decl : T.CRES_Decl
         decl =
-            ES.CRES_DeclDef N.replValueToPrint (ES.CRES_DeclDefBody expr row col) row col
+            T.CRES_DeclDef N.replValueToPrint (T.CRES_DeclDefBody expr row col) row col
     in
     toDeclPosition src decl row col
 
 
-toDeclPosition : String -> ES.CRES_Decl -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
+toDeclPosition : String -> T.CRES_Decl -> T.CPP_Row -> T.CPP_Col -> ( T.CPP_Row, T.CPP_Col )
 toDeclPosition src decl r c =
     let
-        err : ES.CRES_Error
+        err : T.CRES_Error
         err =
-            ES.CRES_ParseError (ES.CRES_Declarations decl r c)
+            T.CRES_ParseError (T.CRES_Declarations decl r c)
 
         report : Report.Report
         report =

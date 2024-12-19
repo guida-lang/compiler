@@ -31,7 +31,6 @@ module Compiler.Type.Type exposing
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Reporting.Error.Type as E
 import Compiler.Type.Error as ET
 import Compiler.Type.UnionFind as UF
 import Control.Monad.State.TypeCheck.Strict as State exposing (StateT, liftIO)
@@ -49,10 +48,10 @@ import Utils.Crash exposing (crash)
 type Constraint
     = CTrue
     | CSaveTheEnvironment
-    | CEqual T.CRA_Region E.CRET_Category Type (E.CRET_Expected Type)
-    | CLocal T.CRA_Region T.CDN_Name (E.CRET_Expected Type)
-    | CForeign T.CRA_Region T.CDN_Name T.CASTC_Annotation (E.CRET_Expected Type)
-    | CPattern T.CRA_Region E.CRET_PCategory Type (E.CRET_PExpected Type)
+    | CEqual T.CRA_Region T.CRET_Category Type (T.CRET_Expected Type)
+    | CLocal T.CRA_Region T.CDN_Name (T.CRET_Expected Type)
+    | CForeign T.CRA_Region T.CDN_Name T.CASTC_Annotation (T.CRET_Expected Type)
+    | CPattern T.CRA_Region T.CRET_PCategory Type (T.CRET_PExpected Type)
     | CAnd (List Constraint)
     | CLet (List Variable) (List Variable) (Dict String T.CDN_Name (T.CRA_Located Type)) Constraint Constraint
 
@@ -410,7 +409,7 @@ fieldToCanType variable =
 -- TO ERROR TYPE
 
 
-toErrorType : Variable -> IO ET.Type
+toErrorType : Variable -> IO T.CTE_Type
 toErrorType variable =
     getVarNames variable Dict.empty
         |> IO.bind
@@ -419,13 +418,13 @@ toErrorType variable =
             )
 
 
-variableToErrorType : Variable -> StateT NameState ET.Type
+variableToErrorType : Variable -> StateT NameState T.CTE_Type
 variableToErrorType variable =
     liftIO (UF.get variable)
         |> State.bind
             (\(Descriptor content _ mark _) ->
                 if mark == occursMark then
-                    State.pure ET.Infinite
+                    State.pure T.CTE_Infinite
 
                 else
                     liftIO (UF.modify variable (\(Descriptor content_ rank_ _ copy_) -> Descriptor content_ rank_ occursMark copy_))
@@ -441,7 +440,7 @@ variableToErrorType variable =
             )
 
 
-contentToErrorType : Variable -> Content -> StateT NameState ET.Type
+contentToErrorType : Variable -> Content -> StateT NameState T.CTE_Type
 contentToErrorType variable content =
     case content of
         Structure term ->
@@ -450,7 +449,7 @@ contentToErrorType variable content =
         FlexVar maybeName ->
             case maybeName of
                 Just name ->
-                    State.pure (ET.FlexVar name)
+                    State.pure (T.CTE_FlexVar name)
 
                 Nothing ->
                     getFreshVarName
@@ -462,13 +461,13 @@ contentToErrorType variable content =
                                             Descriptor (FlexVar (Just name)) rank mark copy
                                         )
                                     )
-                                    |> State.fmap (\_ -> ET.FlexVar name)
+                                    |> State.fmap (\_ -> T.CTE_FlexVar name)
                             )
 
         FlexSuper super maybeName ->
             case maybeName of
                 Just name ->
-                    State.pure (ET.FlexSuper (superToSuper super) name)
+                    State.pure (T.CTE_FlexSuper (superToSuper super) name)
 
                 Nothing ->
                     getFreshSuperName super
@@ -480,14 +479,14 @@ contentToErrorType variable content =
                                             Descriptor (FlexSuper super (Just name)) rank mark copy
                                         )
                                     )
-                                    |> State.fmap (\_ -> ET.FlexSuper (superToSuper super) name)
+                                    |> State.fmap (\_ -> T.CTE_FlexSuper (superToSuper super) name)
                             )
 
         RigidVar name ->
-            State.pure (ET.RigidVar name)
+            State.pure (T.CTE_RigidVar name)
 
         RigidSuper super name ->
-            State.pure (ET.RigidSuper (superToSuper super) name)
+            State.pure (T.CTE_RigidSuper (superToSuper super) name)
 
         Alias home name args realVariable ->
             State.traverseList (State.traverseTuple variableToErrorType) args
@@ -496,36 +495,36 @@ contentToErrorType variable content =
                         variableToErrorType realVariable
                             |> State.fmap
                                 (\errType ->
-                                    ET.Alias home name errArgs errType
+                                    T.CTE_Alias home name errArgs errType
                                 )
                     )
 
         Error ->
-            State.pure ET.Error
+            State.pure T.CTE_Error
 
 
-superToSuper : SuperType -> ET.Super
+superToSuper : SuperType -> T.CTE_Super
 superToSuper super =
     case super of
         Number ->
-            ET.Number
+            T.CTE_Number
 
         Comparable ->
-            ET.Comparable
+            T.CTE_Comparable
 
         Appendable ->
-            ET.Appendable
+            T.CTE_Appendable
 
         CompAppend ->
-            ET.CompAppend
+            T.CTE_CompAppend
 
 
-termToErrorType : FlatType -> StateT NameState ET.Type
+termToErrorType : FlatType -> StateT NameState T.CTE_Type
 termToErrorType term =
     case term of
         App1 home name args ->
             State.traverseList variableToErrorType args
-                |> State.fmap (ET.Type home name)
+                |> State.fmap (T.CTE_Type home name)
 
         Fun1 a b ->
             variableToErrorType a
@@ -535,16 +534,16 @@ termToErrorType term =
                             |> State.fmap
                                 (\result ->
                                     case result of
-                                        ET.Lambda arg1 arg2 others ->
-                                            ET.Lambda arg arg1 (arg2 :: others)
+                                        T.CTE_Lambda arg1 arg2 others ->
+                                            T.CTE_Lambda arg arg1 (arg2 :: others)
 
                                         _ ->
-                                            ET.Lambda arg result []
+                                            T.CTE_Lambda arg result []
                                 )
                     )
 
         EmptyRecord1 ->
-            State.pure (ET.Record Dict.empty ET.Closed)
+            State.pure (T.CTE_Record Dict.empty T.CTE_Closed)
 
         Record1 fields extension ->
             State.traverseMap compare identity variableToErrorType fields
@@ -555,14 +554,14 @@ termToErrorType term =
                             |> State.fmap
                                 (\errExt ->
                                     case errExt of
-                                        ET.Record subFields subExt ->
-                                            ET.Record (Dict.union subFields errFields) subExt
+                                        T.CTE_Record subFields subExt ->
+                                            T.CTE_Record (Dict.union subFields errFields) subExt
 
-                                        ET.FlexVar ext ->
-                                            ET.Record errFields (ET.FlexOpen ext)
+                                        T.CTE_FlexVar ext ->
+                                            T.CTE_Record errFields (T.CTE_FlexOpen ext)
 
-                                        ET.RigidVar ext ->
-                                            ET.Record errFields (ET.RigidOpen ext)
+                                        T.CTE_RigidVar ext ->
+                                            T.CTE_Record errFields (T.CTE_RigidOpen ext)
 
                                         _ ->
                                             crash "Used toErrorType on a type that is not well-formed"
@@ -570,10 +569,10 @@ termToErrorType term =
                     )
 
         Unit1 ->
-            State.pure ET.Unit
+            State.pure T.CTE_Unit
 
         Tuple1 a b maybeC ->
-            State.pure ET.Tuple
+            State.pure T.CTE_Tuple
                 |> State.apply (variableToErrorType a)
                 |> State.apply (variableToErrorType b)
                 |> State.apply (State.traverseMaybe variableToErrorType maybeC)

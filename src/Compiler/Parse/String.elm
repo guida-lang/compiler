@@ -6,7 +6,6 @@ module Compiler.Parse.String exposing
 import Compiler.Elm.String as ES
 import Compiler.Parse.Number as Number
 import Compiler.Parse.Primitives as P exposing (Parser(..))
-import Compiler.Reporting.Error.Syntax as E
 import Types as T
 
 
@@ -14,7 +13,7 @@ import Types as T
 -- CHARACTER
 
 
-character : (T.CPP_Row -> T.CPP_Col -> x) -> (E.CRES_Char -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
+character : (T.CPP_Row -> T.CPP_Col -> x) -> (T.CRES_Char -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
 character toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
@@ -25,7 +24,7 @@ character toExpectation toError =
                 case chompChar src (pos + 1) end row (col + 1) 0 placeholder of
                     Good newPos newCol numChars mostRecent ->
                         if numChars /= 1 then
-                            Err (P.PErr P.Consumed row col (toError (E.CRES_CharNotString (newCol - col))))
+                            Err (P.PErr P.Consumed row col (toError (T.CRES_CharNotString (newCol - col))))
 
                         else
                             let
@@ -40,17 +39,17 @@ character toExpectation toError =
                             Ok (P.POk P.Consumed char newState)
 
                     CharEndless newCol ->
-                        Err (P.PErr P.Consumed row newCol (toError E.CRES_CharEndless))
+                        Err (P.PErr P.Consumed row newCol (toError T.CRES_CharEndless))
 
                     CharEscape r c escape ->
-                        Err (P.PErr P.Consumed r c (toError (E.CRES_CharEscape escape)))
+                        Err (P.PErr P.Consumed r c (toError (T.CRES_CharEscape escape)))
         )
 
 
 type CharResult
     = Good Int T.CPP_Col Int ES.Chunk
     | CharEndless T.CPP_Col
-    | CharEscape T.CPP_Row T.CPP_Col E.CRES_Escape
+    | CharEscape T.CPP_Row T.CPP_Col T.CRES_Escape
 
 
 chompChar : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> ES.Chunk -> CharResult
@@ -104,7 +103,7 @@ chompChar src pos end row col numChars mostRecent =
 -- STRINGS
 
 
-string : (T.CPP_Row -> T.CPP_Col -> x) -> (E.CRES_String_ -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
+string : (T.CPP_Row -> T.CPP_Col -> x) -> (T.CRES_String_ -> T.CPP_Row -> T.CPP_Col -> x) -> Parser x String
 string toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
@@ -162,7 +161,7 @@ isDoubleQuote src pos end =
 
 type StringResult
     = SROk Int T.CPP_Row T.CPP_Col String
-    | SRErr T.CPP_Row T.CPP_Col E.CRES_String_
+    | SRErr T.CPP_Row T.CPP_Col T.CRES_String_
 
 
 finalize : String -> Int -> Int -> List ES.Chunk -> String
@@ -193,7 +192,7 @@ addEscape chunk start end revChunks =
 singleString : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> List ES.Chunk -> StringResult
 singleString src pos end row col initialPos revChunks =
     if pos >= end then
-        SRErr row col E.CRES_StringEndless_Single
+        SRErr row col T.CRES_StringEndless_Single
 
     else
         let
@@ -206,7 +205,7 @@ singleString src pos end row col initialPos revChunks =
                 finalize src initialPos pos revChunks
 
         else if word == '\n' then
-            SRErr row col E.CRES_StringEndless_Single
+            SRErr row col T.CRES_StringEndless_Single
 
         else if word == '\'' then
             let
@@ -232,10 +231,10 @@ singleString src pos end row col initialPos revChunks =
                         addEscape (ES.CodePoint code) initialPos pos revChunks
 
                 EscapeProblem r c x ->
-                    SRErr r c (E.CRES_StringEscape x)
+                    SRErr r c (T.CRES_StringEscape x)
 
                 EscapeEndOfFile ->
-                    SRErr row (col + 1) E.CRES_StringEndless_Single
+                    SRErr row (col + 1) T.CRES_StringEndless_Single
 
         else
             let
@@ -253,7 +252,7 @@ singleString src pos end row col initialPos revChunks =
 multiString : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Int -> T.CPP_Row -> T.CPP_Col -> List ES.Chunk -> StringResult
 multiString src pos end row col initialPos sr sc revChunks =
     if pos >= end then
-        SRErr sr sc E.CRES_StringEndless_Multi
+        SRErr sr sc T.CRES_StringEndless_Multi
 
     else
         let
@@ -307,10 +306,10 @@ multiString src pos end row col initialPos sr sc revChunks =
                         addEscape (ES.CodePoint code) initialPos pos revChunks
 
                 EscapeProblem r c x ->
-                    SRErr r c (E.CRES_StringEscape x)
+                    SRErr r c (T.CRES_StringEscape x)
 
                 EscapeEndOfFile ->
-                    SRErr sr sc E.CRES_StringEndless_Multi
+                    SRErr sr sc T.CRES_StringEndless_Multi
 
         else
             let
@@ -329,7 +328,7 @@ type Escape
     = EscapeNormal
     | EscapeUnicode Int Int
     | EscapeEndOfFile
-    | EscapeProblem T.CPP_Row T.CPP_Col E.CRES_Escape
+    | EscapeProblem T.CPP_Row T.CPP_Col T.CRES_Escape
 
 
 eatEscape : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Escape
@@ -361,13 +360,13 @@ eatEscape src pos end row col =
                 eatUnicode src (pos + 1) end row col
 
             _ ->
-                EscapeProblem row col E.CRES_EscapeUnknown
+                EscapeProblem row col T.CRES_EscapeUnknown
 
 
 eatUnicode : String -> Int -> Int -> T.CPP_Row -> T.CPP_Col -> Escape
 eatUnicode src pos end row col =
     if pos >= end || P.unsafeIndex src pos /= '{' then
-        EscapeProblem row col (E.CRES_BadUnicodeFormat 2)
+        EscapeProblem row col (T.CRES_BadUnicodeFormat 2)
 
     else
         let
@@ -383,13 +382,13 @@ eatUnicode src pos end row col =
                 newPos - digitPos
         in
         if newPos >= end || P.unsafeIndex src newPos /= '}' then
-            EscapeProblem row col (E.CRES_BadUnicodeFormat (2 + numDigits))
+            EscapeProblem row col (T.CRES_BadUnicodeFormat (2 + numDigits))
 
         else if code < 0 || code > 0x0010FFFF then
-            EscapeProblem row col (E.CRES_BadUnicodeCode (3 + numDigits))
+            EscapeProblem row col (T.CRES_BadUnicodeCode (3 + numDigits))
 
         else if numDigits < 4 || numDigits > 6 then
-            EscapeProblem row col (E.CRES_BadUnicodeLength (3 + numDigits) numDigits code)
+            EscapeProblem row col (T.CRES_BadUnicodeLength (3 + numDigits) numDigits code)
 
         else
             EscapeUnicode (numDigits + 4) code

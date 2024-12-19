@@ -8,7 +8,6 @@ module Compiler.Canonicalize.Expression exposing
     )
 
 import Basics.Extra exposing (flip)
-import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
@@ -19,7 +18,6 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
 import Compiler.Reporting.Warning as W
 import Data.Graph as Graph
@@ -34,7 +32,7 @@ import Utils.Main as Utils
 
 
 type alias EResult i w a =
-    R.RResult i w Error.CREC_Error a
+    R.RResult i w T.CREC_Error a
 
 
 type alias FreeLocals =
@@ -52,21 +50,21 @@ type Uses
 -- CANONICALIZE
 
 
-canonicalize : Env.Env -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalize : Env.Env -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) T.CASTC_Expr
 canonicalize env (T.CRA_At region expression) =
     R.fmap (T.CRA_At region) <|
         case expression of
             T.CASTS_Str string ->
-                R.ok (Can.Str string)
+                R.ok (T.CASTC_Str string)
 
             T.CASTS_Chr char ->
-                R.ok (Can.Chr char)
+                R.ok (T.CASTC_Chr char)
 
             T.CASTS_Int int ->
-                R.ok (Can.Int int)
+                R.ok (T.CASTC_Int int)
 
             T.CASTS_Float float ->
-                R.ok (Can.Float float)
+                R.ok (T.CASTC_Float float)
 
             T.CASTS_Var varType name ->
                 case varType of
@@ -85,24 +83,24 @@ canonicalize env (T.CRA_At region expression) =
                         R.fmap (toVarCtor name) (Env.findCtorQual region env prefix name)
 
             T.CASTS_List exprs ->
-                R.fmap Can.List (R.traverse (canonicalize env) exprs)
+                R.fmap T.CASTC_List (R.traverse (canonicalize env) exprs)
 
             T.CASTS_Op op ->
                 Env.findBinop region env op
                     |> R.fmap
                         (\(Env.Binop _ home name annotation _ _) ->
-                            Can.VarOperator op home name annotation
+                            T.CASTC_VarOperator op home name annotation
                         )
 
             T.CASTS_Negate expr ->
-                R.fmap Can.Negate (canonicalize env expr)
+                R.fmap T.CASTC_Negate (canonicalize env expr)
 
             T.CASTS_Binops ops final ->
                 R.fmap A.toValue (canonicalizeBinops region env ops final)
 
             T.CASTS_Lambda srcArgs body ->
                 delayedUsage <|
-                    (Pattern.verify Error.CREC_DPLambdaArgs
+                    (Pattern.verify T.CREC_DPLambdaArgs
                         (R.traverse (Pattern.canonicalize env) srcArgs)
                         |> R.bind
                             (\( args, bindings ) ->
@@ -112,19 +110,19 @@ canonicalize env (T.CRA_At region expression) =
                                             verifyBindings W.Pattern bindings (canonicalize newEnv body)
                                                 |> R.fmap
                                                     (\( cbody, freeLocals ) ->
-                                                        ( Can.Lambda args cbody, freeLocals )
+                                                        ( T.CASTC_Lambda args cbody, freeLocals )
                                                     )
                                         )
                             )
                     )
 
             T.CASTS_Call func args ->
-                R.pure Can.Call
+                R.pure T.CASTC_Call
                     |> R.apply (canonicalize env func)
                     |> R.apply (R.traverse (canonicalize env) args)
 
             T.CASTS_If branches finally ->
-                R.pure Can.If
+                R.pure T.CASTC_If
                     |> R.apply (R.traverse (canonicalizeIfBranch env) branches)
                     |> R.apply (canonicalize env finally)
 
@@ -132,25 +130,25 @@ canonicalize env (T.CRA_At region expression) =
                 R.fmap A.toValue <| canonicalizeLet region env defs expr
 
             T.CASTS_Case expr branches ->
-                R.pure Can.Case
+                R.pure T.CASTC_Case
                     |> R.apply (canonicalize env expr)
                     |> R.apply (R.traverse (canonicalizeCaseBranch env) branches)
 
             T.CASTS_Accessor field ->
-                R.pure (Can.Accessor field)
+                R.pure (T.CASTC_Accessor field)
 
             T.CASTS_Access record field ->
-                R.pure Can.Access
+                R.pure T.CASTC_Access
                     |> R.apply (canonicalize env record)
                     |> R.apply (R.ok field)
 
             T.CASTS_Update (T.CRA_At reg name) fields ->
                 let
-                    makeCanFields : R.RResult i w Error.CREC_Error (Dict String T.CDN_Name (R.RResult FreeLocals (List W.Warning) Error.CREC_Error Can.FieldUpdate))
+                    makeCanFields : R.RResult i w T.CREC_Error (Dict String T.CDN_Name (R.RResult FreeLocals (List W.Warning) T.CREC_Error T.CASTC_FieldUpdate))
                     makeCanFields =
-                        Dups.checkFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize env t)) fields
+                        Dups.checkFields_ (\r t -> R.fmap (T.CASTC_FieldUpdate r) (canonicalize env t)) fields
                 in
-                R.pure (Can.Update name)
+                R.pure (T.CASTC_Update name)
                     |> R.apply (R.fmap (T.CRA_At reg) (findVar reg env name))
                     |> R.apply (R.bind (Utils.sequenceADict identity compare) makeCanFields)
 
@@ -158,23 +156,23 @@ canonicalize env (T.CRA_At region expression) =
                 Dups.checkFields fields
                     |> R.bind
                         (\fieldDict ->
-                            R.fmap Can.Record (R.traverseDict identity compare (canonicalize env) fieldDict)
+                            R.fmap T.CASTC_Record (R.traverseDict identity compare (canonicalize env) fieldDict)
                         )
 
             T.CASTS_Unit ->
-                R.ok Can.Unit
+                R.ok T.CASTC_Unit
 
             T.CASTS_Tuple a b cs ->
-                R.pure Can.Tuple
+                R.pure T.CASTC_Tuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
                     |> R.apply (canonicalizeTupleExtras region env cs)
 
             T.CASTS_Shader src tipe ->
-                R.ok (Can.Shader src tipe)
+                R.ok (T.CASTC_Shader src tipe)
 
 
-canonicalizeTupleExtras : T.CRA_Region -> Env.Env -> List T.CASTS_Expr -> EResult FreeLocals (List W.Warning) (Maybe Can.Expr)
+canonicalizeTupleExtras : T.CRA_Region -> Env.Env -> List T.CASTS_Expr -> EResult FreeLocals (List W.Warning) (Maybe T.CASTC_Expr)
 canonicalizeTupleExtras region env extras =
     case extras of
         [] ->
@@ -184,14 +182,14 @@ canonicalizeTupleExtras region env extras =
             R.fmap Just <| canonicalize env three
 
         _ ->
-            R.throw (Error.CREC_TupleLargerThanThree region)
+            R.throw (T.CREC_TupleLargerThanThree region)
 
 
 
 -- CANONICALIZE IF BRANCH
 
 
-canonicalizeIfBranch : Env.Env -> ( T.CASTS_Expr, T.CASTS_Expr ) -> EResult FreeLocals (List W.Warning) ( Can.Expr, Can.Expr )
+canonicalizeIfBranch : Env.Env -> ( T.CASTS_Expr, T.CASTS_Expr ) -> EResult FreeLocals (List W.Warning) ( T.CASTC_Expr, T.CASTC_Expr )
 canonicalizeIfBranch env ( condition, branch ) =
     R.pure Tuple.pair
         |> R.apply (canonicalize env condition)
@@ -202,10 +200,10 @@ canonicalizeIfBranch env ( condition, branch ) =
 -- CANONICALIZE CASE BRANCH
 
 
-canonicalizeCaseBranch : Env.Env -> ( T.CASTS_Pattern, T.CASTS_Expr ) -> EResult FreeLocals (List W.Warning) Can.CaseBranch
+canonicalizeCaseBranch : Env.Env -> ( T.CASTS_Pattern, T.CASTS_Expr ) -> EResult FreeLocals (List W.Warning) T.CASTC_CaseBranch
 canonicalizeCaseBranch env ( pattern, expr ) =
     directUsage
-        (Pattern.verify Error.CREC_DPCaseBranch
+        (Pattern.verify T.CREC_DPCaseBranch
             (Pattern.canonicalize env pattern)
             |> R.bind
                 (\( cpattern, bindings ) ->
@@ -215,7 +213,7 @@ canonicalizeCaseBranch env ( pattern, expr ) =
                                 verifyBindings W.Pattern bindings (canonicalize newEnv expr)
                                     |> R.fmap
                                         (\( cexpr, freeLocals ) ->
-                                            ( Can.CaseBranch cpattern cexpr, freeLocals )
+                                            ( T.CASTC_CaseBranch cpattern cexpr, freeLocals )
                                         )
                             )
                 )
@@ -226,10 +224,10 @@ canonicalizeCaseBranch env ( pattern, expr ) =
 -- CANONICALIZE BINOPS
 
 
-canonicalizeBinops : T.CRA_Region -> Env.Env -> List ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalizeBinops : T.CRA_Region -> Env.Env -> List ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) T.CASTC_Expr
 canonicalizeBinops overallRegion env ops final =
     let
-        canonicalizeHelp : ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> R.RResult FreeLocals (List W.Warning) Error.CREC_Error ( Can.Expr, Env.Binop )
+        canonicalizeHelp : ( T.CASTS_Expr, T.CRA_Located T.CDN_Name ) -> R.RResult FreeLocals (List W.Warning) T.CREC_Error ( T.CASTC_Expr, Env.Binop )
         canonicalizeHelp ( expr, T.CRA_At region op ) =
             R.ok Tuple.pair
                 |> R.apply (canonicalize env expr)
@@ -243,12 +241,12 @@ canonicalizeBinops overallRegion env ops final =
 
 
 type Step
-    = Done Can.Expr
-    | More (List ( Can.Expr, Env.Binop )) Can.Expr
+    = Done T.CASTC_Expr
+    | More (List ( T.CASTC_Expr, Env.Binop )) T.CASTC_Expr
     | Error Env.Binop Env.Binop
 
 
-runBinopStepper : T.CRA_Region -> Step -> EResult FreeLocals w Can.Expr
+runBinopStepper : T.CRA_Region -> Step -> EResult FreeLocals w T.CASTC_Expr
 runBinopStepper overallRegion step =
     case step of
         Done expr ->
@@ -262,10 +260,10 @@ runBinopStepper overallRegion step =
                 toBinopStep (toBinop op expr) op rest final
 
         Error (Env.Binop op1 _ _ _ _ _) (Env.Binop op2 _ _ _ _ _) ->
-            R.throw (Error.CREC_Binop overallRegion op1 op2)
+            R.throw (T.CREC_Binop overallRegion op1 op2)
 
 
-toBinopStep : (Can.Expr -> Can.Expr) -> Env.Binop -> List ( Can.Expr, Env.Binop ) -> Can.Expr -> Step
+toBinopStep : (T.CASTC_Expr -> T.CASTC_Expr) -> Env.Binop -> List ( T.CASTC_Expr, Env.Binop ) -> T.CASTC_Expr -> Step
 toBinopStep makeBinop ((Env.Binop _ _ _ _ rootAssociativity rootPrecedence) as rootOp) middle final =
     case middle of
         [] ->
@@ -298,15 +296,15 @@ toBinopStep makeBinop ((Env.Binop _ _ _ _ rootAssociativity rootPrecedence) as r
                         Error rootOp op
 
 
-toBinop : Env.Binop -> Can.Expr -> Can.Expr -> Can.Expr
+toBinop : Env.Binop -> T.CASTC_Expr -> T.CASTC_Expr -> T.CASTC_Expr
 toBinop (Env.Binop op home name annotation _ _) left right =
-    A.merge left right (Can.Binop op home name annotation left right)
+    A.merge left right (T.CASTC_Binop op home name annotation left right)
 
 
-canonicalizeLet : T.CRA_Region -> Env.Env -> List (T.CRA_Located T.CASTS_Def) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalizeLet : T.CRA_Region -> Env.Env -> List (T.CRA_Located T.CASTS_Def) -> T.CASTS_Expr -> EResult FreeLocals (List W.Warning) T.CASTC_Expr
 canonicalizeLet letRegion env defs body =
     directUsage <|
-        (Dups.detect (Error.CREC_DuplicatePattern Error.CREC_DPLetBinding)
+        (Dups.detect (T.CREC_DuplicatePattern T.CREC_DPLetBinding)
             (List.foldl addBindings Dups.none defs)
             |> R.bind
                 (\bindings ->
@@ -393,9 +391,9 @@ type alias Node =
 
 
 type Binding
-    = Define Can.Def
+    = Define T.CASTC_Def
     | Edge (T.CRA_Located T.CDN_Name)
-    | Destruct Can.Pattern Can.Expr
+    | Destruct T.CASTC_Pattern T.CASTC_Expr
 
 
 addDefNodes : Env.Env -> List Node -> T.CRA_Located T.CASTS_Def -> EResult FreeLocals (List W.Warning) (List Node)
@@ -404,7 +402,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
         T.CASTS_Define ((T.CRA_At _ name) as aname) srcArgs body maybeType ->
             case maybeType of
                 Nothing ->
-                    Pattern.verify (Error.CREC_DPFuncArgs name)
+                    Pattern.verify (T.CREC_DPFuncArgs name)
                         (R.traverse (Pattern.canonicalize env) srcArgs)
                         |> R.bind
                             (\( args, argBindings ) ->
@@ -415,9 +413,9 @@ addDefNodes env nodes (T.CRA_At _ def) =
                                                 |> R.bind
                                                     (\( cbody, freeLocals ) ->
                                                         let
-                                                            cdef : Can.Def
+                                                            cdef : T.CASTC_Def
                                                             cdef =
-                                                                Can.Def aname args cbody
+                                                                T.CASTC_Def aname args cbody
 
                                                             node : ( Binding, T.CDN_Name, List T.CDN_Name )
                                                             node =
@@ -432,7 +430,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
                     Type.toAnnotation env tipe
                         |> R.bind
                             (\(T.CASTC_Forall freeVars ctipe) ->
-                                Pattern.verify (Error.CREC_DPFuncArgs name)
+                                Pattern.verify (T.CREC_DPFuncArgs name)
                                     (gatherTypedArgs env name srcArgs ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
@@ -443,9 +441,9 @@ addDefNodes env nodes (T.CRA_At _ def) =
                                                             |> R.bind
                                                                 (\( cbody, freeLocals ) ->
                                                                     let
-                                                                        cdef : Can.Def
+                                                                        cdef : T.CASTC_Def
                                                                         cdef =
-                                                                            Can.TypedDef aname freeVars args cbody resultType
+                                                                            T.CASTC_TypedDef aname freeVars args cbody resultType
 
                                                                         node : ( Binding, T.CDN_Name, List T.CDN_Name )
                                                                         node =
@@ -458,7 +456,7 @@ addDefNodes env nodes (T.CRA_At _ def) =
                             )
 
         T.CASTS_Destruct pattern body ->
-            Pattern.verify Error.CREC_DPDestruct
+            Pattern.verify T.CREC_DPDestruct
                 (Pattern.canonicalize env pattern)
                 |> R.bind
                     (\( cpattern, _ ) ->
@@ -572,8 +570,8 @@ gatherTypedArgs :
     -> List T.CASTS_Pattern
     -> T.CASTC_Type
     -> T.CDI_ZeroBased
-    -> List ( Can.Pattern, T.CASTC_Type )
-    -> EResult Pattern.DupsDict w ( List ( Can.Pattern, T.CASTC_Type ), T.CASTC_Type )
+    -> List ( T.CASTC_Pattern, T.CASTC_Type )
+    -> EResult Pattern.DupsDict w ( List ( T.CASTC_Pattern, T.CASTC_Type ), T.CASTC_Type )
 gatherTypedArgs env name srcArgs tipe index revTypedArgs =
     case srcArgs of
         [] ->
@@ -594,10 +592,10 @@ gatherTypedArgs env name srcArgs tipe index revTypedArgs =
                         ( T.CRA_At start _, T.CRA_At end _ ) =
                             ( Prelude.head srcArgs, Prelude.last srcArgs )
                     in
-                    R.throw (Error.CREC_AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
+                    R.throw (T.CREC_AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
 
 
-detectCycles : T.CRA_Region -> List (Graph.SCC Binding) -> Can.Expr -> EResult i w Can.Expr
+detectCycles : T.CRA_Region -> List (Graph.SCC Binding) -> T.CASTC_Expr -> EResult i w T.CASTC_Expr
 detectCycles letRegion sccs body =
     case sccs of
         [] ->
@@ -609,7 +607,7 @@ detectCycles letRegion sccs body =
                     case binding of
                         Define def ->
                             detectCycles letRegion subSccs body
-                                |> R.fmap (Can.Let def)
+                                |> R.fmap (T.CASTC_Let def)
                                 |> R.fmap (T.CRA_At letRegion)
 
                         Edge _ ->
@@ -617,17 +615,17 @@ detectCycles letRegion sccs body =
 
                         Destruct pattern expr ->
                             detectCycles letRegion subSccs body
-                                |> R.fmap (Can.LetDestruct pattern expr)
+                                |> R.fmap (T.CASTC_LetDestruct pattern expr)
                                 |> R.fmap (T.CRA_At letRegion)
 
                 Graph.CyclicSCC bindings ->
-                    R.ok Can.LetRec
+                    R.ok T.CASTC_LetRec
                         |> R.apply (checkCycle bindings [])
                         |> R.apply (detectCycles letRegion subSccs body)
                         |> R.fmap (T.CRA_At letRegion)
 
 
-checkCycle : List Binding -> List Can.Def -> EResult i w (List Can.Def)
+checkCycle : List Binding -> List T.CASTC_Def -> EResult i w (List T.CASTC_Def)
 checkCycle bindings defs =
     case bindings of
         [] ->
@@ -635,22 +633,22 @@ checkCycle bindings defs =
 
         binding :: otherBindings ->
             case binding of
-                Define ((Can.Def name args _) as def) ->
+                Define ((T.CASTC_Def name args _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
+                        R.throw (T.CREC_RecursiveLet name (toNames otherBindings defs))
 
                     else
                         checkCycle otherBindings (def :: defs)
 
-                Define ((Can.TypedDef name _ args _ _) as def) ->
+                Define ((T.CASTC_TypedDef name _ args _ _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
+                        R.throw (T.CREC_RecursiveLet name (toNames otherBindings defs))
 
                     else
                         checkCycle otherBindings (def :: defs)
 
                 Edge name ->
-                    R.throw (Error.CREC_RecursiveLet name (toNames otherBindings defs))
+                    R.throw (T.CREC_RecursiveLet name (toNames otherBindings defs))
 
                 Destruct _ _ ->
                     -- a Destruct cannot appear in a cycle without any Edge values
@@ -658,7 +656,7 @@ checkCycle bindings defs =
                     checkCycle otherBindings defs
 
 
-toNames : List Binding -> List Can.Def -> List T.CDN_Name
+toNames : List Binding -> List T.CASTC_Def -> List T.CDN_Name
 toNames bindings revDefs =
     case bindings of
         [] ->
@@ -676,13 +674,13 @@ toNames bindings revDefs =
                     toNames otherBindings revDefs
 
 
-getDefName : Can.Def -> T.CDN_Name
+getDefName : T.CASTC_Def -> T.CDN_Name
 getDefName def =
     case def of
-        Can.Def (T.CRA_At _ name) _ _ ->
+        T.CASTC_Def (T.CRA_At _ name) _ _ ->
             name
 
-        Can.TypedDef (T.CRA_At _ name) _ _ _ _ ->
+        T.CASTC_TypedDef (T.CRA_At _ name) _ _ _ _ ->
             name
 
 
@@ -794,34 +792,34 @@ delayedUsage (R.RResult k) =
 -- FIND VARIABLE
 
 
-findVar : T.CRA_Region -> Env.Env -> T.CDN_Name -> EResult FreeLocals w Can.Expr_
+findVar : T.CRA_Region -> Env.Env -> T.CDN_Name -> EResult FreeLocals w T.CASTC_Expr_
 findVar region env name =
     case Dict.get identity name env.vars of
         Just var ->
             case var of
                 Env.Local _ ->
-                    logVar name (Can.VarLocal name)
+                    logVar name (T.CASTC_VarLocal name)
 
                 Env.TopLevel _ ->
-                    logVar name (Can.VarTopLevel env.home name)
+                    logVar name (T.CASTC_VarTopLevel env.home name)
 
                 Env.Foreign home annotation ->
                     R.ok
                         (if home == ModuleName.debug then
-                            Can.VarDebug env.home name annotation
+                            T.CASTC_VarDebug env.home name annotation
 
                          else
-                            Can.VarForeign home name annotation
+                            T.CASTC_VarForeign home name annotation
                         )
 
                 Env.Foreigns h hs ->
-                    R.throw (Error.CREC_AmbiguousVar region Nothing name h hs)
+                    R.throw (T.CREC_AmbiguousVar region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.CREC_NotFoundVar region Nothing name (toPossibleNames env.vars env.q_vars))
+            R.throw (T.CREC_NotFoundVar region Nothing name (toPossibleNames env.vars env.q_vars))
 
 
-findVarQual : T.CRA_Region -> Env.Env -> T.CDN_Name -> T.CDN_Name -> EResult FreeLocals w Can.Expr_
+findVarQual : T.CRA_Region -> Env.Env -> T.CDN_Name -> T.CDN_Name -> EResult FreeLocals w T.CASTC_Expr_
 findVarQual region env prefix name =
     case Dict.get identity prefix env.q_vars of
         Just qualified ->
@@ -829,16 +827,16 @@ findVarQual region env prefix name =
                 Just (Env.Specific home annotation) ->
                     R.ok <|
                         if home == ModuleName.debug then
-                            Can.VarDebug env.home name annotation
+                            T.CASTC_VarDebug env.home name annotation
 
                         else
-                            Can.VarForeign home name annotation
+                            T.CASTC_VarForeign home name annotation
 
                 Just (Env.Ambiguous h hs) ->
-                    R.throw (Error.CREC_AmbiguousVar region (Just prefix) name h hs)
+                    R.throw (T.CREC_AmbiguousVar region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                    R.throw (T.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
         Nothing ->
             let
@@ -846,22 +844,22 @@ findVarQual region env prefix name =
                     env.home
             in
             if Name.isKernel prefix && Pkg.isKernel pkg then
-                R.ok <| Can.VarKernel (Name.getKernel prefix) name
+                R.ok <| T.CASTC_VarKernel (Name.getKernel prefix) name
 
             else
-                R.throw (Error.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                R.throw (T.CREC_NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
 
-toPossibleNames : Dict String T.CDN_Name Env.Var -> Env.Qualified T.CASTC_Annotation -> Error.CREC_PossibleNames
+toPossibleNames : Dict String T.CDN_Name Env.Var -> Env.Qualified T.CASTC_Annotation -> T.CREC_PossibleNames
 toPossibleNames exposed qualified =
-    Error.CREC_PossibleNames (Utils.keysSet identity compare exposed) (Dict.map (\_ -> Utils.keysSet identity compare) qualified)
+    T.CREC_PossibleNames (Utils.keysSet identity compare exposed) (Dict.map (\_ -> Utils.keysSet identity compare) qualified)
 
 
 
 -- FIND CTOR
 
 
-toVarCtor : T.CDN_Name -> Env.Ctor -> Can.Expr_
+toVarCtor : T.CDN_Name -> Env.Ctor -> T.CASTC_Expr_
 toVarCtor name ctor =
     case ctor of
         Env.Ctor home typeName (T.CASTC_Union vars _ _ opts) index args ->
@@ -878,7 +876,7 @@ toVarCtor name ctor =
                 tipe =
                     List.foldr T.CASTC_TLambda result args
             in
-            Can.VarCtor opts home name index (T.CASTC_Forall freeVars tipe)
+            T.CASTC_VarCtor opts home name index (T.CASTC_Forall freeVars tipe)
 
         Env.RecordCtor home vars tipe ->
             let
@@ -886,4 +884,4 @@ toVarCtor name ctor =
                 freeVars =
                     Dict.fromList identity (List.map (\v -> ( v, () )) vars)
             in
-            Can.VarCtor T.CASTC_Normal home name Index.first (T.CASTC_Forall freeVars tipe)
+            T.CASTC_VarCtor T.CASTC_Normal home name Index.first (T.CASTC_Forall freeVars tipe)

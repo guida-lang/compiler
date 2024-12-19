@@ -15,7 +15,6 @@ import Builder.Http as Http
 import Builder.Reporting.Exit as Exit exposing (DocsProblem(..))
 import Builder.Stuff as Stuff
 import Compiler.Data.Name as Name
-import Compiler.Elm.Compiler.Type as Type
 import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V exposing (Version)
@@ -33,7 +32,7 @@ type PackageChanges
 
 
 type ModuleChanges
-    = ModuleChanges (Changes String T.CDN_Name Docs.CED_Union) (Changes String T.CDN_Name Docs.CED_Alias) (Changes String T.CDN_Name Docs.CED_Value) (Changes String T.CDN_Name Docs.CED_Binop)
+    = ModuleChanges (Changes String T.CDN_Name T.CED_Union) (Changes String T.CDN_Name T.CED_Alias) (Changes String T.CDN_Name T.CED_Value) (Changes String T.CDN_Name T.CED_Binop)
 
 
 type Changes c k v
@@ -77,8 +76,8 @@ diff oldDocs newDocs =
         (Dict.keys compare removed)
 
 
-diffModule : ( Docs.CED_Module, Docs.CED_Module ) -> ModuleChanges
-diffModule ( Docs.CED_Module _ _ u1 a1 v1 b1, Docs.CED_Module _ _ u2 a2 v2 b2 ) =
+diffModule : ( T.CED_Module, T.CED_Module ) -> ModuleChanges
+diffModule ( T.CED_Module _ _ u1 a1 v1 b1, T.CED_Module _ _ u2 a2 v2 b2 ) =
     ModuleChanges
         (getChanges identity compare isEquivalentUnion u1 u2)
         (getChanges identity compare isEquivalentAlias a1 a2)
@@ -90,18 +89,18 @@ diffModule ( Docs.CED_Module _ _ u1 a1 v1 b1, Docs.CED_Module _ _ u2 a2 v2 b2 ) 
 -- EQUIVALENCE
 
 
-isEquivalentUnion : Docs.CED_Union -> Docs.CED_Union -> Bool
-isEquivalentUnion (Docs.CED_Union oldComment oldVars oldCtors) (Docs.CED_Union newComment newVars newCtors) =
+isEquivalentUnion : T.CED_Union -> T.CED_Union -> Bool
+isEquivalentUnion (T.CED_Union oldComment oldVars oldCtors) (T.CED_Union newComment newVars newCtors) =
     let
-        equiv : List Type.CECT_Type -> List Type.CECT_Type -> Bool
+        equiv : List T.CECT_Type -> List T.CECT_Type -> Bool
         equiv oldTypes newTypes =
             let
                 allEquivalent : List Bool
                 allEquivalent =
                     List.map2
                         isEquivalentAlias
-                        (List.map (Docs.CED_Alias oldComment oldVars) oldTypes)
-                        (List.map (Docs.CED_Alias newComment newVars) newTypes)
+                        (List.map (T.CED_Alias oldComment oldVars) oldTypes)
+                        (List.map (T.CED_Alias newComment newVars) newTypes)
             in
             (List.length oldTypes == List.length newTypes)
                 && List.all identity allEquivalent
@@ -111,8 +110,8 @@ isEquivalentUnion (Docs.CED_Union oldComment oldVars oldCtors) (Docs.CED_Union n
         && List.all identity (Dict.values compare (Utils.mapIntersectionWith identity compare equiv (Dict.fromList identity oldCtors) (Dict.fromList identity newCtors)))
 
 
-isEquivalentAlias : Docs.CED_Alias -> Docs.CED_Alias -> Bool
-isEquivalentAlias (Docs.CED_Alias _ oldVars oldType) (Docs.CED_Alias _ newVars newType) =
+isEquivalentAlias : T.CED_Alias -> T.CED_Alias -> Bool
+isEquivalentAlias (T.CED_Alias _ oldVars oldType) (T.CED_Alias _ newVars newType) =
     case diffType oldType newType of
         Nothing ->
             False
@@ -122,14 +121,14 @@ isEquivalentAlias (Docs.CED_Alias _ oldVars oldType) (Docs.CED_Alias _ newVars n
                 && isEquivalentRenaming (List.map2 Tuple.pair oldVars newVars ++ renamings)
 
 
-isEquivalentValue : Docs.CED_Value -> Docs.CED_Value -> Bool
-isEquivalentValue (Docs.CED_Value c1 t1) (Docs.CED_Value c2 t2) =
-    isEquivalentAlias (Docs.CED_Alias c1 [] t1) (Docs.CED_Alias c2 [] t2)
+isEquivalentValue : T.CED_Value -> T.CED_Value -> Bool
+isEquivalentValue (T.CED_Value c1 t1) (T.CED_Value c2 t2) =
+    isEquivalentAlias (T.CED_Alias c1 [] t1) (T.CED_Alias c2 [] t2)
 
 
-isEquivalentBinop : Docs.CED_Binop -> Docs.CED_Binop -> Bool
-isEquivalentBinop (Docs.CED_Binop c1 t1 a1 p1) (Docs.CED_Binop c2 t2 a2 p2) =
-    isEquivalentAlias (Docs.CED_Alias c1 [] t1) (Docs.CED_Alias c2 [] t2)
+isEquivalentBinop : T.CED_Binop -> T.CED_Binop -> Bool
+isEquivalentBinop (T.CED_Binop c1 t1 a1 p1) (T.CED_Binop c2 t2 a2 p2) =
+    isEquivalentAlias (T.CED_Alias c1 [] t1) (T.CED_Alias c2 [] t2)
         && (a1 == a2)
         && (p1 == p2)
 
@@ -138,23 +137,23 @@ isEquivalentBinop (Docs.CED_Binop c1 t1 a1 p1) (Docs.CED_Binop c2 t2 a2 p2) =
 -- DIFF TYPES
 
 
-diffType : Type.CECT_Type -> Type.CECT_Type -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
+diffType : T.CECT_Type -> T.CECT_Type -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffType oldType newType =
     case ( oldType, newType ) of
-        ( Type.CECT_Var oldName, Type.CECT_Var newName ) ->
+        ( T.CECT_Var oldName, T.CECT_Var newName ) ->
             Just [ ( oldName, newName ) ]
 
-        ( Type.CECT_Lambda a b, Type.CECT_Lambda a_ b_ ) ->
+        ( T.CECT_Lambda a b, T.CECT_Lambda a_ b_ ) ->
             Maybe.map2 (++) (diffType a a_) (diffType b b_)
 
-        ( Type.CECT_Type oldName oldArgs, Type.CECT_Type newName newArgs ) ->
+        ( T.CECT_Type oldName oldArgs, T.CECT_Type newName newArgs ) ->
             if not (isSameName oldName newName) || List.length oldArgs /= List.length newArgs then
                 Nothing
 
             else
                 Maybe.map List.concat (Utils.zipWithM diffType oldArgs newArgs)
 
-        ( Type.CECT_Record fields maybeExt, Type.CECT_Record fields_ maybeExt_ ) ->
+        ( T.CECT_Record fields maybeExt, T.CECT_Record fields_ maybeExt_ ) ->
             case ( maybeExt, maybeExt_ ) of
                 ( Nothing, Just _ ) ->
                     Nothing
@@ -168,10 +167,10 @@ diffType oldType newType =
                 ( Just oldExt, Just newExt ) ->
                     Maybe.map ((::) ( oldExt, newExt )) (diffFields fields fields_)
 
-        ( Type.CECT_Unit, Type.CECT_Unit ) ->
+        ( T.CECT_Unit, T.CECT_Unit ) ->
             Just []
 
-        ( Type.CECT_Tuple a b cs, Type.CECT_Tuple x y zs ) ->
+        ( T.CECT_Tuple a b cs, T.CECT_Tuple x y zs ) ->
             if List.length cs /= List.length zs then
                 Nothing
 
@@ -207,7 +206,7 @@ isSameName oldFullName newFullName =
             oldFullName == newFullName
 
 
-diffFields : List ( T.CDN_Name, Type.CECT_Type ) -> List ( T.CDN_Name, Type.CECT_Type ) -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
+diffFields : List ( T.CDN_Name, T.CECT_Type ) -> List ( T.CDN_Name, T.CECT_Type ) -> Maybe (List ( T.CDN_Name, T.CDN_Name ))
 diffFields oldRawFields newRawFields =
     if List.length oldRawFields /= List.length newRawFields then
         Nothing
@@ -218,11 +217,11 @@ diffFields oldRawFields newRawFields =
             sort fields =
                 List.sortBy Tuple.first fields
 
-            oldFields : List ( T.CDN_Name, Type.CECT_Type )
+            oldFields : List ( T.CDN_Name, T.CECT_Type )
             oldFields =
                 sort oldRawFields
 
-            newFields : List ( T.CDN_Name, Type.CECT_Type )
+            newFields : List ( T.CDN_Name, T.CECT_Type )
             newFields =
                 sort newRawFields
         in
