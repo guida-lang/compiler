@@ -1,7 +1,5 @@
 module Compiler.Elm.Compiler.Type.Extract exposing
-    ( Types(..)
-    , Types_
-    , fromDependencyInterface
+    ( fromDependencyInterface
     , fromInterface
     , fromMsg
     , fromType
@@ -20,7 +18,7 @@ import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -88,49 +86,38 @@ toPublicName (T.CEMN_Canonical _ home) name =
 -- TRANSITIVELY AVAILABLE TYPES
 
 
-type Types
-    = -- PERF profile Opt.Global representation
-      -- current representation needs less allocation
-      -- but maybe the lookup is much worse
-      Types (Dict (List String) T.CEMN_Canonical Types_)
-
-
-type Types_
-    = Types_ (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias)
-
-
-mergeMany : List Types -> Types
+mergeMany : List T.CECTE_Types -> T.CECTE_Types
 mergeMany listOfTypes =
     case listOfTypes of
         [] ->
-            Types Dict.empty
+            T.CECTE_Types Dict.empty
 
         t :: ts ->
             List.foldr merge t ts
 
 
-merge : Types -> Types -> Types
-merge (Types types1) (Types types2) =
-    Types (Dict.union types1 types2)
+merge : T.CECTE_Types -> T.CECTE_Types -> T.CECTE_Types
+merge (T.CECTE_Types types1) (T.CECTE_Types types2) =
+    T.CECTE_Types (Dict.union types1 types2)
 
 
-fromInterface : T.CEMN_Raw -> T.CEI_Interface -> Types
+fromInterface : T.CEMN_Raw -> T.CEI_Interface -> T.CECTE_Types
 fromInterface name (T.CEI_Interface pkg _ unions aliases _) =
-    Types <|
+    T.CECTE_Types <|
         Dict.singleton ModuleName.toComparableCanonical (T.CEMN_Canonical pkg name) <|
-            Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
+            T.CECTE_Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
 
-fromDependencyInterface : T.CEMN_Canonical -> I.DependencyInterface -> Types
+fromDependencyInterface : T.CEMN_Canonical -> T.CEI_DependencyInterface -> T.CECTE_Types
 fromDependencyInterface home di =
-    Types
+    T.CECTE_Types
         (Dict.singleton ModuleName.toComparableCanonical home <|
             case di of
-                I.Public (T.CEI_Interface _ _ unions aliases _) ->
-                    Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
+                T.CEI_Public (T.CEI_Interface _ _ unions aliases _) ->
+                    T.CECTE_Types_ (Dict.map (\_ -> I.extractUnion) unions) (Dict.map (\_ -> I.extractAlias) aliases)
 
-                I.Private _ unions aliases ->
-                    Types_ unions aliases
+                T.CEI_Private _ unions aliases ->
+                    T.CECTE_Types_ unions aliases
         )
 
 
@@ -138,7 +125,7 @@ fromDependencyInterface home di =
 -- EXTRACT MODEL, MSG, AND ANY TRANSITIVE DEPENDENCIES
 
 
-fromMsg : Types -> T.CASTC_Type -> T.DebugMetadata
+fromMsg : T.CECTE_Types -> T.CASTC_Type -> T.DebugMetadata
 fromMsg types message =
     let
         ( msgDeps, msgType ) =
@@ -150,7 +137,7 @@ fromMsg types message =
     T.DebugMetadata msgType aliases unions
 
 
-extractTransitive : Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
+extractTransitive : T.CECTE_Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
 extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnions) =
     let
         aliases : EverySet (List String) T.CASTO_Global
@@ -183,19 +170,19 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
         ( resultAlias ++ remainingResultAlias, resultUnion ++ remainingResultUnion )
 
 
-extractAlias : Types -> T.CASTO_Global -> Extractor T.Alias
-extractAlias (Types dict) (T.CASTO_Global home name) =
+extractAlias : T.CECTE_Types -> T.CASTO_Global -> Extractor T.Alias
+extractAlias (T.CECTE_Types dict) (T.CASTO_Global home name) =
     let
         (T.CASTC_Alias args aliasType) =
             Utils.find ModuleName.toComparableCanonical home dict
-                |> (\(Types_ _ aliasInfo) -> aliasInfo)
+                |> (\(T.CECTE_Types_ _ aliasInfo) -> aliasInfo)
                 |> Utils.find identity name
     in
     fmap (T.Alias (toPublicName home name) args) (extract aliasType)
 
 
-extractUnion : Types -> T.CASTO_Global -> Extractor T.Union
-extractUnion (Types dict) (T.CASTO_Global home name) =
+extractUnion : T.CECTE_Types -> T.CASTO_Global -> Extractor T.Union
+extractUnion (T.CECTE_Types dict) (T.CASTO_Global home name) =
     if name == Name.list && home == ModuleName.list then
         pure <| T.Union (toPublicName home name) [ "a" ] []
 
@@ -207,7 +194,7 @@ extractUnion (Types dict) (T.CASTO_Global home name) =
 
             (T.CASTC_Union vars ctors _ _) =
                 Utils.find ModuleName.toComparableCanonical home dict
-                    |> (\(Types_ unionInfo _) -> unionInfo)
+                    |> (\(T.CECTE_Types_ unionInfo _) -> unionInfo)
                     |> Utils.find identity name
         in
         fmap (T.Union pname vars) (traverse extractCtor ctors)
@@ -315,18 +302,18 @@ tupleTraverse f ( a, b ) =
 -- ENCODERS and DECODERS
 
 
-typesEncoder : Types -> Encode.Value
-typesEncoder (Types types) =
+typesEncoder : T.CECTE_Types -> Encode.Value
+typesEncoder (T.CECTE_Types types) =
     E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder types_Encoder types
 
 
-typesDecoder : Decode.Decoder Types
+typesDecoder : Decode.Decoder T.CECTE_Types
 typesDecoder =
-    Decode.map Types (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
+    Decode.map T.CECTE_Types (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
 
 
-types_Encoder : Types_ -> Encode.Value
-types_Encoder (Types_ unionInfo aliasInfo) =
+types_Encoder : T.CECTE_Types_ -> Encode.Value
+types_Encoder (T.CECTE_Types_ unionInfo aliasInfo) =
     Encode.object
         [ ( "type", Encode.string "Types_" )
         , ( "unionInfo", E.assocListDict compare Encode.string Can.unionEncoder unionInfo )
@@ -334,8 +321,8 @@ types_Encoder (Types_ unionInfo aliasInfo) =
         ]
 
 
-types_Decoder : Decode.Decoder Types_
+types_Decoder : Decode.Decoder T.CECTE_Types_
 types_Decoder =
-    Decode.map2 Types_
+    Decode.map2 T.CECTE_Types_
         (Decode.field "unionInfo" (D.assocListDict identity Decode.string Can.unionDecoder))
         (Decode.field "aliasInfo" (D.assocListDict identity Decode.string Can.aliasDecoder))

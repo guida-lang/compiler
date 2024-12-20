@@ -1,6 +1,5 @@
 module Compiler.Elm.Version exposing
-    ( Version(..)
-    , bumpMajor
+    ( bumpMajor
     , bumpMinor
     , bumpPatch
     , compare
@@ -33,17 +32,13 @@ import Types as T
 -- VERSION
 
 
-type Version
-    = Version Int Int Int
-
-
-major : Version -> Int
-major (Version major_ _ _) =
+major : T.CEV_Version -> Int
+major (T.CEV_Version major_ _ _) =
     major_
 
 
-compare : Version -> Version -> Order
-compare (Version major1 minor1 patch1) (Version major2 minor2 patch2) =
+compare : T.CEV_Version -> T.CEV_Version -> Order
+compare (T.CEV_Version major1 minor1 patch1) (T.CEV_Version major2 minor2 patch2) =
     case Basics.compare major1 major2 of
         EQ ->
             case Basics.compare minor1 minor2 of
@@ -57,12 +52,12 @@ compare (Version major1 minor1 patch1) (Version major2 minor2 patch2) =
             majorRes
 
 
-toComparable : Version -> ( Int, Int, Int )
-toComparable (Version major_ minor_ patch_) =
+toComparable : T.CEV_Version -> ( Int, Int, Int )
+toComparable (T.CEV_Version major_ minor_ patch_) =
     ( major_, minor_, patch_ )
 
 
-min : Version -> Version -> Version
+min : T.CEV_Version -> T.CEV_Version -> T.CEV_Version
 min v1 v2 =
     case compare v1 v2 of
         GT ->
@@ -72,7 +67,7 @@ min v1 v2 =
             v1
 
 
-max : Version -> Version -> Version
+max : T.CEV_Version -> T.CEV_Version -> T.CEV_Version
 max v1 v2 =
     case compare v1 v2 of
         LT ->
@@ -82,17 +77,17 @@ max v1 v2 =
             v1
 
 
-one : Version
+one : T.CEV_Version
 one =
-    Version 1 0 0
+    T.CEV_Version 1 0 0
 
 
-maxVersion : Version
+maxVersion : T.CEV_Version
 maxVersion =
-    Version 2147483647 0 0
+    T.CEV_Version 2147483647 0 0
 
 
-compiler : Version
+compiler : T.CEV_Version
 compiler =
     --   case map fromIntegral (Version.versionBranch Paths_elm.version) of
     --     major : minor : patch : _ ->
@@ -103,34 +98,34 @@ compiler =
     --       Version major 0 0
     --     [] ->
     --       error "could not detect version of elm-compiler you are using"
-    Version 0 19 1
+    T.CEV_Version 0 19 1
 
 
 
 -- BUMP
 
 
-bumpPatch : Version -> Version
-bumpPatch (Version major_ minor patch) =
-    Version major_ minor (patch + 1)
+bumpPatch : T.CEV_Version -> T.CEV_Version
+bumpPatch (T.CEV_Version major_ minor patch) =
+    T.CEV_Version major_ minor (patch + 1)
 
 
-bumpMinor : Version -> Version
-bumpMinor (Version major_ minor _) =
-    Version major_ (minor + 1) 0
+bumpMinor : T.CEV_Version -> T.CEV_Version
+bumpMinor (T.CEV_Version major_ minor _) =
+    T.CEV_Version major_ (minor + 1) 0
 
 
-bumpMajor : Version -> Version
-bumpMajor (Version major_ _ _) =
-    Version (major_ + 1) 0 0
+bumpMajor : T.CEV_Version -> T.CEV_Version
+bumpMajor (T.CEV_Version major_ _ _) =
+    T.CEV_Version (major_ + 1) 0 0
 
 
 
 -- TO CHARS
 
 
-toChars : Version -> String
-toChars (Version major_ minor patch) =
+toChars : T.CEV_Version -> String
+toChars (T.CEV_Version major_ minor patch) =
     String.fromInt major_ ++ "." ++ String.fromInt minor ++ "." ++ String.fromInt patch
 
 
@@ -138,12 +133,12 @@ toChars (Version major_ minor patch) =
 -- JSON
 
 
-decoder : D.Decoder ( T.CPP_Row, T.CPP_Col ) Version
+decoder : D.Decoder ( T.CPP_Row, T.CPP_Col ) T.CEV_Version
 decoder =
     D.customString parser Tuple.pair
 
 
-encode : Version -> E.Value
+encode : T.CEV_Version -> E.Value
 encode version =
     E.string (toChars version)
 
@@ -152,7 +147,7 @@ encode version =
 -- PARSER
 
 
-parser : P.Parser ( T.CPP_Row, T.CPP_Col ) Version
+parser : P.Parser ( T.CPP_Row, T.CPP_Col ) T.CEV_Version
 parser =
     numberParser
         |> P.bind
@@ -165,7 +160,7 @@ parser =
                                 |> P.bind (\_ -> numberParser)
                                 |> P.fmap
                                     (\patch ->
-                                        Version major_ minor patch
+                                        T.CEV_Version major_ minor patch
                                     )
                         )
             )
@@ -234,7 +229,7 @@ isDigit word =
 -- ENCODERS and DECODERS
 
 
-jsonDecoder : Decode.Decoder Version
+jsonDecoder : Decode.Decoder T.CEV_Version
 jsonDecoder =
     Decode.string
         |> Decode.andThen
@@ -248,8 +243,8 @@ jsonDecoder =
             )
 
 
-versionEncoder : Version -> Encode.Value
-versionEncoder (Version major_ minor_ patch_) =
+versionEncoder : T.CEV_Version -> Encode.Value
+versionEncoder (T.CEV_Version major_ minor_ patch_) =
     Encode.object
         [ ( "type", Encode.string "Version" )
         , ( "major", Encode.int major_ )
@@ -258,14 +253,14 @@ versionEncoder (Version major_ minor_ patch_) =
         ]
 
 
-versionDecoder : Decode.Decoder Version
+versionDecoder : Decode.Decoder T.CEV_Version
 versionDecoder =
-    Decode.map3 Version
+    Decode.map3 T.CEV_Version
         (Decode.field "major" Decode.int)
         (Decode.field "minor" Decode.int)
         (Decode.field "patch" Decode.int)
 
 
-jsonEncoder : Version -> Encode.Value
+jsonEncoder : T.CEV_Version -> Encode.Value
 jsonEncoder version =
     Encode.string (toChars version)

@@ -45,11 +45,11 @@ type Outline
 
 
 type AppOutline
-    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version)
+    = AppOutline T.CEV_Version (NE.Nonempty SrcDir) (Dict ( String, String ) T.CEP_Name T.CEV_Version) (Dict ( String, String ) T.CEP_Name T.CEV_Version) (Dict ( String, String ) T.CEP_Name T.CEV_Version) (Dict ( String, String ) T.CEP_Name T.CEV_Version)
 
 
 type PkgOutline
-    = PkgOutline T.CEP_Name String Licenses.License V.Version Exposed (Dict ( String, String ) T.CEP_Name Con.Constraint) (Dict ( String, String ) T.CEP_Name Con.Constraint) Con.Constraint
+    = PkgOutline T.CEP_Name String Licenses.License T.CEV_Version Exposed (Dict ( String, String ) T.CEP_Name Con.Constraint) (Dict ( String, String ) T.CEP_Name Con.Constraint) Con.Constraint
 
 
 type Exposed
@@ -345,7 +345,7 @@ summaryDecoder =
         (\_ _ -> Exit.OP_BadSummaryTooLong)
 
 
-versionDecoder : Decoder V.Version
+versionDecoder : Decoder T.CEV_Version
 versionDecoder =
     D.mapError (Basics.uncurry Exit.OP_BadVersion) V.decoder
 

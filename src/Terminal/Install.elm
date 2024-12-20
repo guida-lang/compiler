@@ -85,7 +85,7 @@ type alias Task a =
     Task.Task Exit.Install a
 
 
-attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task ()
+attemptChanges : String -> T.BDS_Env -> Outline.Outline -> (a -> String) -> Changes a -> Task ()
 attemptChanges root env oldOutline toChars changes =
     case changes of
         AlreadyInstalled ->
@@ -175,7 +175,7 @@ attemptChanges root env oldOutline toChars changes =
                     ]
 
 
-attemptChangesHelp : T.FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> D.Doc -> Task ()
+attemptChangesHelp : T.FilePath -> T.BDS_Env -> Outline.Outline -> Outline.Outline -> D.Doc -> Task ()
 attemptChangesHelp root env oldOutline newOutline question =
     Task.eio Exit.InstallBadDetails <|
         BW.withScope
@@ -209,8 +209,8 @@ attemptChangesHelp root env oldOutline newOutline question =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> T.CEP_Name -> Outline.AppOutline -> Task (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
+makeAppPlan : T.BDS_Env -> T.CEP_Name -> Outline.AppOutline -> Task (Changes T.CEV_Version)
+makeAppPlan (T.BDS_Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
         Task.pure AlreadyInstalled
 
@@ -261,10 +261,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                                 case Registry.getVersions_ pkg registry of
                                     Err suggestions ->
                                         case connection of
-                                            Solver.Online _ ->
+                                            T.BDS_Online _ ->
                                                 Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
 
-                                            Solver.Offline ->
+                                            T.BDS_Offline ->
                                                 Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
 
                                     Ok _ ->
@@ -290,8 +290,8 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> T.CEP_Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
-makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
+makePkgPlan : T.BDS_Env -> T.CEP_Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
+makePkgPlan (T.BDS_Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
     if Dict.member identity pkg deps then
         Task.pure AlreadyInstalled
 
@@ -316,13 +316,13 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                 case Registry.getVersions_ pkg registry of
                     Err suggestions ->
                         case connection of
-                            Solver.Online _ ->
+                            T.BDS_Online _ ->
                                 Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
 
-                            Solver.Offline ->
+                            T.BDS_Offline ->
                                 Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
 
-                    Ok (Registry.KnownVersions _ _) ->
+                    Ok (T.BDR_KnownVersions _ _) ->
                         let
                             old : Dict ( String, String ) T.CEP_Name C.Constraint
                             old =

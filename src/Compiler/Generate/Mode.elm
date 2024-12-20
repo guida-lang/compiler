@@ -5,7 +5,6 @@ module Compiler.Generate.Mode exposing
     , shortenFieldNames
     )
 
-import Compiler.Elm.Compiler.Type.Extract as Extract
 import Compiler.Generate.JavaScript.Name as JsName
 import Data.Map as Dict exposing (Dict)
 import Types as T
@@ -17,7 +16,7 @@ import Utils.Main as Utils
 
 
 type Mode
-    = Dev (Maybe Extract.Types)
+    = Dev (Maybe T.CECTE_Types)
     | Prod ShortFieldNames
 
 

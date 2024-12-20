@@ -35,9 +35,9 @@ import Types as T
 
 type Args
     = CodeVsLatest
-    | CodeVsExactly V.Version
-    | LocalInquiry V.Version V.Version
-    | GlobalInquiry T.CEP_Name V.Version V.Version
+    | CodeVsExactly T.CEV_Version
+    | LocalInquiry T.CEV_Version T.CEV_Version
+    | GlobalInquiry T.CEP_Name T.CEV_Version T.CEV_Version
 
 
 run : Args -> () -> IO ()
@@ -55,7 +55,7 @@ run args () =
 
 
 type Env
-    = Env (Maybe String) Stuff.PackageCache Http.Manager Registry.Registry
+    = Env (Maybe String) T.BS_PackageCache T.BH_Manager T.BDR_Registry
 
 
 getEnv : Task Env
@@ -141,8 +141,8 @@ diff ((Env _ _ _ registry) as env) args =
 -- GET DOCS
 
 
-getDocs : Env -> T.CEP_Name -> Registry.KnownVersions -> V.Version -> Task Docs.Documentation
-getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) version =
+getDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> T.CEV_Version -> Task Docs.Documentation
+getDocs (Env _ cache manager _) name (T.BDR_KnownVersions latest previous) version =
     if latest == version || List.member version previous then
         Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
 
@@ -150,8 +150,8 @@ getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) ve
         Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
 
 
-getLatestDocs : Env -> T.CEP_Name -> Registry.KnownVersions -> Task Docs.Documentation
-getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
+getLatestDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> Task Docs.Documentation
+getLatestDocs (Env _ cache manager _) name (T.BDR_KnownVersions latest _) =
     Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
 
@@ -159,7 +159,7 @@ getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
 -- READ OUTLINE
 
 
-readOutline : Env -> Task ( T.CEP_Name, Registry.KnownVersions )
+readOutline : Env -> Task ( T.CEP_Name, T.BDR_KnownVersions )
 readOutline (Env maybeRoot _ _ registry) =
     case maybeRoot of
         Nothing ->

@@ -39,7 +39,7 @@ run () () =
 
 
 type Env
-    = Env T.FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.PkgOutline
+    = Env T.FilePath T.BS_PackageCache T.BH_Manager T.BDR_Registry Outline.PkgOutline
 
 
 getEnv : Task.Task Exit.Bump Env
@@ -86,7 +86,7 @@ bump ((Env root _ _ registry ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outlin
     case Registry.getVersions pkg registry of
         Just knownVersions ->
             let
-                bumpableVersions : List V.Version
+                bumpableVersions : List T.CEV_Version
                 bumpableVersions =
                     List.map (\( old, _, _ ) -> old) (Bump.getPossibilities knownVersions)
             in
@@ -140,7 +140,7 @@ suggestVersion (Env root cache manager _ ((Outline.PkgOutline pkg _ _ vsn _ _ _ 
                                 changes =
                                     Diff.diff oldDocs newDocs
 
-                                newVersion : V.Version
+                                newVersion : T.CEV_Version
                                 newVersion =
                                     Diff.bump changes vsn
 
@@ -197,7 +197,7 @@ generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
 -- CHANGE VERSION
 
 
-changeVersion : T.FilePath -> Outline.PkgOutline -> V.Version -> D.Doc -> IO ()
+changeVersion : T.FilePath -> Outline.PkgOutline -> T.CEV_Version -> D.Doc -> IO ()
 changeVersion root (Outline.PkgOutline name summary license _ exposed deps testDeps elmVersion) targetVersion question =
     Reporting.ask question
         |> IO.bind

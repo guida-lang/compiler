@@ -19,6 +19,6 @@ route path params =
     Http.toUrl (domain ++ path) params
 
 
-metadata : T.CEP_Name -> V.Version -> String -> String
+metadata : T.CEP_Name -> T.CEV_Version -> String -> String
 metadata name version file =
     domain ++ "/packages/" ++ Pkg.toUrl name ++ "/" ++ V.toChars version ++ "/" ++ file

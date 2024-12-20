@@ -21,7 +21,6 @@ import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
 import System.IO as IO exposing (IO)
 import Types as T
 import Utils.Main as Utils
@@ -173,7 +172,7 @@ lookupMain pkg locals root =
 
 
 type LoadingObjects
-    = LoadingObjects (T.MVar (Maybe T.CASTO_GlobalGraph)) (Dict String T.CEMN_Raw (T.MVar (Maybe T.CASTO_LocalGraph)))
+    = LoadingObjects T.MVar_Maybe_CASTO_GlobalGraph (Dict String T.CEMN_Raw T.MVar_Maybe_CASTO_LocalGraph)
 
 
 loadObjects : T.FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
@@ -191,7 +190,7 @@ loadObjects root details modules =
         )
 
 
-loadObject : T.FilePath -> Build.Module -> IO ( T.CEMN_Raw, T.MVar (Maybe T.CASTO_LocalGraph) )
+loadObject : T.FilePath -> Build.Module -> IO ( T.CEMN_Raw, T.MVar_Maybe_CASTO_LocalGraph )
 loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
@@ -244,18 +243,18 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
-loadTypes : T.FilePath -> Dict (List String) T.CEMN_Canonical I.DependencyInterface -> List Build.Module -> Task Extract.Types
+loadTypes : T.FilePath -> Dict (List String) T.CEMN_Canonical T.CEI_DependencyInterface -> List Build.Module -> Task T.CECTE_Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules
             |> IO.bind
                 (\mvars ->
                     let
-                        foreigns : Extract.Types
+                        foreigns : T.CECTE_Types
                         foreigns =
                             Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
                     in
-                    Utils.listTraverse (Utils.readMVar (Decode.maybe Extract.typesDecoder)) mvars
+                    Utils.listTraverse Utils.readMVar_Maybe_CECTE_Types mvars
                         |> IO.fmap
                             (\results ->
                                 case Utils.sequenceListMaybe results of
@@ -269,11 +268,11 @@ loadTypes root ifaces modules =
         )
 
 
-loadTypesHelp : T.FilePath -> Build.Module -> IO (T.MVar (Maybe Extract.Types))
+loadTypesHelp : T.FilePath -> Build.Module -> IO T.MVar_Maybe_CECTE_Types
 loadTypesHelp root modul =
     case modul of
         Build.Fresh name iface _ ->
-            Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+            Utils.newMVar_Maybe_CECTE_Types (Just (Extract.fromInterface name iface))
 
         Build.Cached name _ ciMVar ->
             Utils.readMVar Build.cachedInterfaceDecoder ciMVar
@@ -281,22 +280,22 @@ loadTypesHelp root modul =
                     (\cachedInterface ->
                         case cachedInterface of
                             T.BB_Unneeded ->
-                                Utils.newEmptyMVar
+                                Utils.newEmptyMVar_Maybe_CECTE_Types
                                     |> IO.bind
                                         (\mvar ->
                                             Utils.forkIO
                                                 (File.readBinary I.interfaceDecoder (Stuff.elmi root name)
                                                     |> IO.bind
                                                         (\maybeIface ->
-                                                            Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)
+                                                            Utils.putMVar_Maybe_CECTE_Types mvar (Maybe.map (Extract.fromInterface name) maybeIface)
                                                         )
                                                 )
                                                 |> IO.fmap (\_ -> mvar)
                                         )
 
                             T.BB_Loaded iface ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+                                Utils.newMVar_Maybe_CECTE_Types (Just (Extract.fromInterface name iface))
 
                             T.BB_Corrupted ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) Nothing
+                                Utils.newMVar_Maybe_CECTE_Types Nothing
                     )

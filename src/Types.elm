@@ -1,4 +1,4 @@
-module Types exposing (BB_BResult(..), BB_CachedInterface(..), BB_ResultDict, BED_BuildID, BED_DocsStatus(..), BED_Local(..), BED_Status(..), BED_StatusDict, BF_Time(..), CASTC_Alias(..), CASTC_AliasType(..), CASTC_Annotation(..), CASTC_CaseBranch(..), CASTC_Ctor(..), CASTC_CtorOpts(..), CASTC_Decls(..), CASTC_Def(..), CASTC_Expr, CASTC_Expr_(..), CASTC_FieldType(..), CASTC_FieldUpdate(..), CASTC_FreeVars, CASTC_Pattern, CASTC_PatternCtorArg(..), CASTC_Pattern_(..), CASTC_Type(..), CASTC_Union(..), CASTO_Choice(..), CASTO_Decider(..), CASTO_Def(..), CASTO_Destructor(..), CASTO_EffectsType(..), CASTO_Expr(..), CASTO_Global(..), CASTO_GlobalGraph(..), CASTO_LocalGraph(..), CASTO_Main(..), CASTO_Node(..), CASTO_Path(..), CASTS_Alias(..), CASTS_Comment(..), CASTS_Def(..), CASTS_Docs(..), CASTS_Effects(..), CASTS_Exposed(..), CASTS_Exposing(..), CASTS_Expr, CASTS_Expr_(..), CASTS_Import(..), CASTS_Infix(..), CASTS_Manager(..), CASTS_Module(..), CASTS_Pattern, CASTS_Pattern_(..), CASTS_Port(..), CASTS_Privacy(..), CASTS_Type, CASTS_Type_(..), CASTS_Union(..), CASTS_Value(..), CASTS_VarType(..), CASTUB_Associativity(..), CASTUB_Precedence, CASTUS_Source(..), CASTUS_Type(..), CASTUS_Types(..), CDI_ZeroBased(..), CDN_Name, CECT_Type(..), CED_Alias(..), CED_Binop(..), CED_Comment, CED_Module(..), CED_Union(..), CED_Value(..), CEI_Alias(..), CEI_Binop(..), CEI_Interface(..), CEI_Union(..), CEK_Chunk(..), CEMN_Canonical(..), CEMN_Raw, CEP_Author, CEP_Name, CEP_Project, CNPM_Context(..), CNPM_Error(..), CNPM_Literal(..), CNPM_Pattern(..), CODT_Path(..), CODT_Test(..), CPP_Col, CPP_Row, CPP_Snippet(..), CPS_BadOperator(..), CRA_Located(..), CRA_Position(..), CRA_Region(..), CREC_BadArityContext(..), CREC_DuplicatePatternContext(..), CREC_Error(..), CREC_InvalidPayload(..), CREC_PortProblem(..), CREC_PossibleNames, CREC_VarKind(..), CRED_DefProblem(..), CRED_Error(..), CRED_NameProblem(..), CRED_SyntaxProblem(..), CREI_Error(..), CREI_Problem(..), CREM_Error(..), CRES_Case(..), CRES_Char(..), CRES_CustomType(..), CRES_Decl(..), CRES_DeclDef(..), CRES_DeclType(..), CRES_Def(..), CRES_Destruct(..), CRES_Error(..), CRES_Escape(..), CRES_Exposing(..), CRES_Expr(..), CRES_Func(..), CRES_If(..), CRES_Let(..), CRES_List_(..), CRES_Module(..), CRES_Number(..), CRES_PList(..), CRES_PRecord(..), CRES_PTuple(..), CRES_Pattern(..), CRES_Port(..), CRES_Record(..), CRES_Space(..), CRES_String_(..), CRES_TRecord(..), CRES_TTuple(..), CRES_Tuple(..), CRES_Type(..), CRES_TypeAlias(..), CRET_Category(..), CRET_Context(..), CRET_Error(..), CRET_Expected(..), CRET_MaybeName(..), CRET_PCategory(..), CRET_PContext(..), CRET_PExpected(..), CRET_SubContext(..), CRE_Error(..), CRE_Module, CRRTL_Exposing(..), CRRTL_Import, CRRTL_Localizer(..), CTE_Extension(..), CTE_Super(..), CTE_Type(..), FilePath, MVar(..))
+module Types exposing (..)
 
 {-| -}
 
@@ -24,7 +24,7 @@ type alias FilePath =
 {-| FIXME Builder.Elm.Details
 -}
 type alias BED_StatusDict =
-    Dict String CEMN_Raw (MVar (Maybe BED_Status))
+    Dict String CEMN_Raw MVar_Maybe_BED_Status
 
 
 {-| FIXME Builder.Elm.Details
@@ -550,6 +550,72 @@ type MVar a
     = MVar Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_BED_Status
+    = MVar_Maybe_BED_Status Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_BED_DResult
+    = MVar_Maybe_BED_DResult Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_CASTO_LocalGraph
+    = MVar_Maybe_CASTO_LocalGraph Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_CASTO_GlobalGraph
+    = MVar_Maybe_CASTO_GlobalGraph Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_BResult
+    = MVar_BB_BResult Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_Status
+    = MVar_BB_Status Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_StatusDict
+    = MVar_BB_StatusDict Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ResultRegistryProblemEnv
+    = MVar_ResultRegistryProblemEnv Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_CED_Dep
+    = MVar_CED_Dep Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_CECTE_Types
+    = MVar_Maybe_CECTE_Types Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Maybe_BB_Dependencies
+    = MVar_Maybe_BB_Dependencies Int
+
+
 
 -- EXPRESSIONS
 
@@ -720,7 +786,7 @@ type CODT_Path
 {-| FIXME Builder.Build
 -}
 type alias BB_ResultDict =
-    Dict String CEMN_Raw (MVar BB_BResult)
+    Dict String CEMN_Raw MVar_BB_BResult
 
 
 {-| FIXME Builder.Build
@@ -742,6 +808,33 @@ type BB_CachedInterface
     = BB_Unneeded
     | BB_Loaded CEI_Interface
     | BB_Corrupted
+
+
+
+-- CRAWL
+
+
+{-| FIXME Builder.Build
+-}
+type alias BB_StatusDict =
+    Dict String CEMN_Raw MVar_BB_Status
+
+
+{-| FIXME Builder.Build
+-}
+type BB_Status
+    = BB_SCached BED_Local
+    | BB_SChanged BED_Local String CASTS_Module BB_DocsNeed
+    | BB_SBadImport CREI_Problem
+    | BB_SBadSyntax FilePath BF_Time String CRES_Error
+    | BB_SForeign CEP_Name
+    | BB_SKernel
+
+
+{-| FIXME Builder.Build
+-}
+type BB_DocsNeed
+    = BB_DocsNeed Bool
 
 
 
@@ -1884,3 +1977,226 @@ type CASTC_PatternCtorArg
         -- CACHE for type inference
         CASTC_Type
         CASTC_Pattern
+
+
+
+-- MANAGER
+
+
+{-| FIXME Builder.Http
+-}
+type BH_Manager
+    = BH_Manager
+
+
+
+-- EXCEPTIONS
+
+
+{-| FIXME Builder.Http
+-}
+type BH_Error
+    = BH_BadUrl String String
+    | BH_BadHttp String UM_HttpExceptionContent
+    | BH_BadMystery String UM_SomeException
+
+
+
+-- PACKAGE CACHES
+
+
+{-| FIXME Builder.Stuff
+-}
+type BS_PackageCache
+    = BS_PackageCache String
+
+
+
+-- REGISTRY
+
+
+{-| FIXME Builder.Deps.Registry
+-}
+type BDR_Registry
+    = BDR_Registry Int (Dict ( String, String ) CEP_Name BDR_KnownVersions)
+
+
+{-| FIXME Builder.Deps.Registry
+-}
+type BDR_KnownVersions
+    = BDR_KnownVersions CEV_Version (List CEV_Version)
+
+
+
+-- SOLVER
+
+
+{-| FIXME Builder.Deps.Solver
+-}
+type BDS_Connection
+    = BDS_Online BH_Manager
+    | BDS_Offline
+
+
+
+-- ENVIRONMENT
+
+
+{-| FIXME Builder.Deps.Solver
+-}
+type BDS_Env
+    = BDS_Env BS_PackageCache BH_Manager BDS_Connection BDR_Registry
+
+
+
+-- REGISTRY PROBLEM
+
+
+{-| FIXME Builder.Reporting.Exit
+-}
+type BRE_RegistryProblem
+    = BRE_RP_Http BH_Error
+    | BRE_RP_Data String String
+
+
+
+-- DEPENDENCY INTERFACE
+
+
+{-| FIXME Compiler.Elm.Interface
+-}
+type CEI_DependencyInterface
+    = CEI_Public CEI_Interface
+    | CEI_Private CEP_Name (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias)
+
+
+
+-- VERSION
+
+
+{-| FIXME Compiler.Elm.Version
+-}
+type CEV_Version
+    = CEV_Version Int Int Int
+
+
+
+-- Network.HTTP.Client
+
+
+{-| FIXME Utils.Main
+-}
+type UM_HttpExceptionContent
+    = UM_StatusCodeException (UM_HttpResponse ()) String
+    | UM_TooManyRedirects (List (UM_HttpResponse ()))
+    | UM_ConnectionFailure UM_SomeException
+
+
+{-| FIXME Utils.Main
+-}
+type UM_HttpResponse body
+    = UM_HttpResponse
+        { responseStatus : UM_HttpStatus
+        , responseHeaders : UM_HttpResponseHeaders
+        }
+
+
+{-| FIXME Utils.Main
+-}
+type alias UM_HttpResponseHeaders =
+    List ( String, String )
+
+
+{-| FIXME Utils.Main
+-}
+type UM_HttpStatus
+    = UM_HttpStatus Int String
+
+
+
+-- Control.Exception
+
+
+{-| FIXME Utils.Main
+-}
+type UM_SomeException
+    = UM_SomeException
+
+
+
+-- COMPILE
+
+
+{-| FIXME Builder.Elm.Details
+-}
+type BED_DResult
+    = BED_RLocal CEI_Interface CASTO_LocalGraph (Maybe CED_Module)
+    | BED_RForeign CEI_Interface
+    | BED_RKernelLocal (List CEK_Chunk)
+    | BED_RKernelForeign
+
+
+
+-- VERIFY DEPENDENCY
+
+
+{-| FIXME Builder.Elm.Details
+-}
+type CED_Artifacts
+    = CED_Artifacts (Dict String CEMN_Raw CEI_DependencyInterface) CASTO_GlobalGraph
+
+
+{-| FIXME Builder.Elm.Details
+-}
+type alias CED_Dep =
+    Result (Maybe BRE_DetailsBadDep) CED_Artifacts
+
+
+
+-- DETAILS
+
+
+{-| FIXME Builder.Reporting.Exit
+-}
+type BRE_DetailsBadDep
+    = BRE_BD_BadDownload CEP_Name CEV_Version BRE_PackageProblem
+    | BRE_BD_BadBuild CEP_Name CEV_Version (Dict ( String, String ) CEP_Name CEV_Version)
+
+
+
+-- PACKAGE PROBLEM
+
+
+{-| FIXME Builder.Reporting.Exit
+-}
+type BRE_PackageProblem
+    = BRE_PP_BadEndpointRequest BH_Error
+    | BRE_PP_BadEndpointContent String
+    | BRE_PP_BadArchiveRequest BH_Error
+    | BRE_PP_BadArchiveContent String
+    | BRE_PP_BadArchiveHash String String String
+
+
+
+-- FROM PATHS
+
+
+{-| FIXME Builder.Build
+-}
+type alias BB_Dependencies =
+    Dict (List String) CEMN_Canonical CEI_DependencyInterface
+
+
+
+-- TRANSITIVELY AVAILABLE TYPES
+
+
+type CECTE_Types
+    = -- PERF profile Opt.Global representation
+      -- current representation needs less allocation
+      -- but maybe the lookup is much worse
+      CECTE_Types (Dict (List String) CEMN_Canonical CECTE_Types_)
+
+
+type CECTE_Types_
+    = CECTE_Types_ (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias)

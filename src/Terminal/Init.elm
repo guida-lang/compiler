@@ -88,7 +88,7 @@ init =
                     Err problem ->
                         IO.pure (Err (Exit.InitRegistryProblem problem))
 
-                    Ok (Solver.Env cache _ connection registry) ->
+                    Ok (T.BDS_Env cache _ connection registry) ->
                         Solver.verify cache connection registry defaults
                             |> IO.bind
                                 (\result ->
@@ -104,15 +104,15 @@ init =
 
                                         Solver.SolverOk details ->
                                             let
-                                                solution : Dict ( String, String ) T.CEP_Name V.Version
+                                                solution : Dict ( String, String ) T.CEP_Name T.CEV_Version
                                                 solution =
                                                     Dict.map (\_ (Solver.Details vsn _) -> vsn) details
 
-                                                directs : Dict ( String, String ) T.CEP_Name V.Version
+                                                directs : Dict ( String, String ) T.CEP_Name T.CEV_Version
                                                 directs =
                                                     Dict.intersection compare solution defaults
 
-                                                indirects : Dict ( String, String ) T.CEP_Name V.Version
+                                                indirects : Dict ( String, String ) T.CEP_Name T.CEV_Version
                                                 indirects =
                                                     Dict.diff solution defaults
                                             in

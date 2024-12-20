@@ -1,8 +1,6 @@
 module Builder.Deps.Solver exposing
     ( AppSolution(..)
-    , Connection(..)
     , Details(..)
-    , Env(..)
     , Solver
     , SolverResult(..)
     , State
@@ -48,16 +46,11 @@ type InnerSolver a
 
 
 type State
-    = State Stuff.PackageCache Connection Registry.Registry (Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, V.Version ) Constraints)
+    = State T.BS_PackageCache T.BDS_Connection T.BDR_Registry (Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, T.CEV_Version ) Constraints)
 
 
 type Constraints
     = Constraints C.Constraint (Dict ( String, String ) T.CEP_Name C.Constraint)
-
-
-type Connection
-    = Online Http.Manager
-    | Offline
 
 
 
@@ -76,10 +69,10 @@ type SolverResult a
 
 
 type Details
-    = Details V.Version (Dict ( String, String ) T.CEP_Name C.Constraint)
+    = Details T.CEV_Version (Dict ( String, String ) T.CEP_Name C.Constraint)
 
 
-verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) T.CEP_Name C.Constraint -> IO (SolverResult (Dict ( String, String ) T.CEP_Name Details))
+verify : T.BS_PackageCache -> T.BDS_Connection -> T.BDR_Registry -> Dict ( String, String ) T.CEP_Name C.Constraint -> IO (SolverResult (Dict ( String, String ) T.CEP_Name Details))
 verify cache connection registry constraints =
     Stuff.withRegistryLock cache <|
         case try constraints of
@@ -99,7 +92,7 @@ verify cache connection registry constraints =
                         )
 
 
-addDeps : State -> T.CEP_Name -> V.Version -> Details
+addDeps : State -> T.CEP_Name -> T.CEV_Version -> Details
 addDeps (State _ _ _ constraints) name vsn =
     case Dict.get (Tuple.mapSecond V.toComparable) ( name, vsn ) constraints of
         Just (Constraints _ deps) ->
@@ -109,13 +102,13 @@ addDeps (State _ _ _ constraints) name vsn =
             crash "compiler bug manifesting in Deps.Solver.addDeps"
 
 
-noSolution : Connection -> SolverResult a
+noSolution : T.BDS_Connection -> SolverResult a
 noSolution connection =
     case connection of
-        Online _ ->
+        T.BDS_Online _ ->
             NoSolution
 
-        Offline ->
+        T.BDS_Offline ->
             NoOfflineSolution
 
 
@@ -124,26 +117,26 @@ noSolution connection =
 
 
 type AppSolution
-    = AppSolution (Dict ( String, String ) T.CEP_Name V.Version) (Dict ( String, String ) T.CEP_Name V.Version) Outline.AppOutline
+    = AppSolution (Dict ( String, String ) T.CEP_Name T.CEV_Version) (Dict ( String, String ) T.CEP_Name T.CEV_Version) Outline.AppOutline
 
 
-addToApp : Stuff.PackageCache -> Connection -> Registry.Registry -> T.CEP_Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
+addToApp : T.BS_PackageCache -> T.BDS_Connection -> T.BDR_Registry -> T.CEP_Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
 addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect testDirect testIndirect) as outline) =
     Stuff.withRegistryLock cache <|
         let
-            allIndirects : Dict ( String, String ) T.CEP_Name V.Version
+            allIndirects : Dict ( String, String ) T.CEP_Name T.CEV_Version
             allIndirects =
                 Dict.union indirect testIndirect
 
-            allDirects : Dict ( String, String ) T.CEP_Name V.Version
+            allDirects : Dict ( String, String ) T.CEP_Name T.CEV_Version
             allDirects =
                 Dict.union direct testDirect
 
-            allDeps : Dict ( String, String ) T.CEP_Name V.Version
+            allDeps : Dict ( String, String ) T.CEP_Name T.CEV_Version
             allDeps =
                 Dict.union allDirects allIndirects
 
-            attempt : (a -> C.Constraint) -> Dict ( String, String ) T.CEP_Name a -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
+            attempt : (a -> C.Constraint) -> Dict ( String, String ) T.CEP_Name a -> Solver (Dict ( String, String ) T.CEP_Name T.CEV_Version)
             attempt toConstraint deps =
                 try (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
         in
@@ -172,29 +165,29 @@ addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect 
                         )
 
 
-toApp : State -> T.CEP_Name -> Outline.AppOutline -> Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name V.Version -> AppSolution
+toApp : State -> T.CEP_Name -> Outline.AppOutline -> Dict ( String, String ) T.CEP_Name T.CEV_Version -> Dict ( String, String ) T.CEP_Name T.CEV_Version -> AppSolution
 toApp (State _ _ _ constraints) pkg (Outline.AppOutline elm srcDirs direct _ testDirect _) old new =
     let
-        d : Dict ( String, String ) T.CEP_Name V.Version
+        d : Dict ( String, String ) T.CEP_Name T.CEV_Version
         d =
             Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
 
-        i : Dict ( String, String ) T.CEP_Name V.Version
+        i : Dict ( String, String ) T.CEP_Name T.CEV_Version
         i =
             Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
 
-        td : Dict ( String, String ) T.CEP_Name V.Version
+        td : Dict ( String, String ) T.CEP_Name T.CEV_Version
         td =
             Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
 
-        ti : Dict ( String, String ) T.CEP_Name V.Version
+        ti : Dict ( String, String ) T.CEP_Name T.CEV_Version
         ti =
             Dict.diff new (Utils.mapUnions [ d, i, td ])
     in
     AppSolution old new (Outline.AppOutline elm srcDirs d i td ti)
 
 
-getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, V.Version ) Constraints -> Dict ( String, String ) T.CEP_Name V.Version -> List ( T.CEP_Name, V.Version ) -> Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name V.Version
+getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( T.CEP_Name, T.CEV_Version ) Constraints -> Dict ( String, String ) T.CEP_Name T.CEV_Version -> List ( T.CEP_Name, T.CEV_Version ) -> Dict ( String, String ) T.CEP_Name T.CEV_Version -> Dict ( String, String ) T.CEP_Name T.CEV_Version
 getTransitive constraints solution unvisited visited =
     case unvisited of
         [] ->
@@ -209,11 +202,11 @@ getTransitive constraints solution unvisited visited =
                     (Constraints _ newDeps) =
                         Utils.find (Tuple.mapSecond V.toComparable) info constraints
 
-                    newUnvisited : List ( T.CEP_Name, V.Version )
+                    newUnvisited : List ( T.CEP_Name, T.CEV_Version )
                     newUnvisited =
                         Dict.toList compare (Dict.intersection Pkg.compareName solution (Dict.diff newDeps visited))
 
-                    newVisited : Dict ( String, String ) T.CEP_Name V.Version
+                    newVisited : Dict ( String, String ) T.CEP_Name T.CEV_Version
                     newVisited =
                         Dict.insert identity pkg vsn visited
                 in
@@ -225,7 +218,7 @@ getTransitive constraints solution unvisited visited =
 -- TRY
 
 
-try : Dict ( String, String ) T.CEP_Name C.Constraint -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
+try : Dict ( String, String ) T.CEP_Name C.Constraint -> Solver (Dict ( String, String ) T.CEP_Name T.CEV_Version)
 try constraints =
     exploreGoals (Goals constraints Dict.empty)
 
@@ -235,10 +228,10 @@ try constraints =
 
 
 type Goals
-    = Goals (Dict ( String, String ) T.CEP_Name C.Constraint) (Dict ( String, String ) T.CEP_Name V.Version)
+    = Goals (Dict ( String, String ) T.CEP_Name C.Constraint) (Dict ( String, String ) T.CEP_Name T.CEV_Version)
 
 
-exploreGoals : Goals -> Solver (Dict ( String, String ) T.CEP_Name V.Version)
+exploreGoals : Goals -> Solver (Dict ( String, String ) T.CEP_Name T.CEV_Version)
 exploreGoals (Goals pending solved) =
     let
         compare : ( T.CEP_Name, C.Constraint ) -> T.CEP_Name
@@ -255,7 +248,7 @@ exploreGoals (Goals pending solved) =
                 goals1 =
                     Goals otherPending solved
 
-                addVsn : V.Version -> Solver Goals
+                addVsn : T.CEV_Version -> Solver Goals
                 addVsn =
                     addVersion goals1 name
             in
@@ -264,7 +257,7 @@ exploreGoals (Goals pending solved) =
                 |> bind (\goals2 -> exploreGoals goals2)
 
 
-addVersion : Goals -> T.CEP_Name -> V.Version -> Solver Goals
+addVersion : Goals -> T.CEP_Name -> T.CEV_Version -> Solver Goals
 addVersion (Goals pending solved) name version =
     getConstraints name version
         |> bind
@@ -281,7 +274,7 @@ addVersion (Goals pending solved) name version =
             )
 
 
-addConstraint : Dict ( String, String ) T.CEP_Name V.Version -> Dict ( String, String ) T.CEP_Name C.Constraint -> ( T.CEP_Name, C.Constraint ) -> Solver (Dict ( String, String ) T.CEP_Name C.Constraint)
+addConstraint : Dict ( String, String ) T.CEP_Name T.CEV_Version -> Dict ( String, String ) T.CEP_Name C.Constraint -> ( T.CEP_Name, C.Constraint ) -> Solver (Dict ( String, String ) T.CEP_Name C.Constraint)
 addConstraint solved unsolved ( name, newConstraint ) =
     case Dict.get identity name solved of
         Just version ->
@@ -313,12 +306,12 @@ addConstraint solved unsolved ( name, newConstraint ) =
 -- GET RELEVANT VERSIONS
 
 
-getRelevantVersions : T.CEP_Name -> C.Constraint -> Solver ( V.Version, List V.Version )
+getRelevantVersions : T.CEP_Name -> C.Constraint -> Solver ( T.CEV_Version, List T.CEV_Version )
 getRelevantVersions name constraint =
     Solver <|
         \((State _ _ registry _) as state) ->
             case Registry.getVersions name registry of
-                Just (Registry.KnownVersions newest previous) ->
+                Just (T.BDR_KnownVersions newest previous) ->
                     case List.filter (C.satisfies constraint) (newest :: previous) of
                         [] ->
                             IO.pure (ISBack state)
@@ -334,12 +327,12 @@ getRelevantVersions name constraint =
 -- GET CONSTRAINTS
 
 
-getConstraints : T.CEP_Name -> V.Version -> Solver Constraints
+getConstraints : T.CEP_Name -> T.CEV_Version -> Solver Constraints
 getConstraints pkg vsn =
     Solver <|
         \((State cache connection registry cDict) as state) ->
             let
-                key : ( T.CEP_Name, V.Version )
+                key : ( T.CEP_Name, T.CEV_Version )
                 key =
                     ( pkg, vsn )
             in
@@ -371,10 +364,10 @@ getConstraints pkg vsn =
                                                 case D.fromByteString constraintsDecoder bytes of
                                                     Ok cs ->
                                                         case connection of
-                                                            Online _ ->
+                                                            T.BDS_Online _ ->
                                                                 IO.pure (ISOk (toNewState cs) cs)
 
-                                                            Offline ->
+                                                            T.BDS_Offline ->
                                                                 Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
                                                                     |> IO.fmap
                                                                         (\srcExists ->
@@ -392,10 +385,10 @@ getConstraints pkg vsn =
 
                                 else
                                     case connection of
-                                        Offline ->
+                                        T.BDS_Offline ->
                                             IO.pure (ISBack state)
 
-                                        Online manager ->
+                                        T.BDS_Online manager ->
                                             let
                                                 url : String
                                                 url =
@@ -439,11 +432,7 @@ constraintsDecoder =
 -- ENVIRONMENT
 
 
-type Env
-    = Env Stuff.PackageCache Http.Manager Connection Registry.Registry
-
-
-initEnv : IO (Result Exit.RegistryProblem Env)
+initEnv : IO (Result T.BRE_RegistryProblem T.BDS_Env)
 initEnv =
     Utils.newEmptyMVar
         |> IO.bind
@@ -468,7 +457,7 @@ initEnv =
                                                                                     (\eitherRegistry ->
                                                                                         case eitherRegistry of
                                                                                             Ok latestRegistry ->
-                                                                                                Ok <| Env cache manager (Online manager) latestRegistry
+                                                                                                Ok <| T.BDS_Env cache manager (T.BDS_Online manager) latestRegistry
 
                                                                                             Err problem ->
                                                                                                 Err problem
@@ -480,10 +469,10 @@ initEnv =
                                                                                     (\eitherRegistry ->
                                                                                         case eitherRegistry of
                                                                                             Ok latestRegistry ->
-                                                                                                Ok <| Env cache manager (Online manager) latestRegistry
+                                                                                                Ok <| T.BDS_Env cache manager (T.BDS_Online manager) latestRegistry
 
                                                                                             Err _ ->
-                                                                                                Ok <| Env cache manager Offline cachedRegistry
+                                                                                                Ok <| T.BDS_Env cache manager T.BDS_Offline cachedRegistry
                                                                                     )
                                                                 )
                                                     )
@@ -586,8 +575,8 @@ foldM f b =
 -- ENCODERS and DECODERS
 
 
-envEncoder : Env -> Encode.Value
-envEncoder (Env cache manager connection registry) =
+envEncoder : T.BDS_Env -> Encode.Value
+envEncoder (T.BDS_Env cache manager connection registry) =
     Encode.object
         [ ( "cache", Stuff.packageCacheEncoder cache )
         , ( "manager", Http.managerEncoder manager )
@@ -596,41 +585,41 @@ envEncoder (Env cache manager connection registry) =
         ]
 
 
-envDecoder : Decode.Decoder Env
+envDecoder : Decode.Decoder T.BDS_Env
 envDecoder =
-    Decode.map4 Env
+    Decode.map4 T.BDS_Env
         (Decode.field "cache" Stuff.packageCacheDecoder)
         (Decode.field "manager" Http.managerDecoder)
         (Decode.field "connection" connectionDecoder)
         (Decode.field "registry" Registry.registryDecoder)
 
 
-connectionEncoder : Connection -> Encode.Value
+connectionEncoder : T.BDS_Connection -> Encode.Value
 connectionEncoder connection =
     case connection of
-        Online manager ->
+        T.BDS_Online manager ->
             Encode.object
                 [ ( "type", Encode.string "Online" )
                 , ( "manager", Http.managerEncoder manager )
                 ]
 
-        Offline ->
+        T.BDS_Offline ->
             Encode.object
                 [ ( "type", Encode.string "Offline" )
                 ]
 
 
-connectionDecoder : Decode.Decoder Connection
+connectionDecoder : Decode.Decoder T.BDS_Connection
 connectionDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Online" ->
-                        Decode.map Online (Decode.field "manager" Http.managerDecoder)
+                        Decode.map T.BDS_Online (Decode.field "manager" Http.managerDecoder)
 
                     "Offline" ->
-                        Decode.succeed Offline
+                        Decode.succeed T.BDS_Offline
 
                     _ ->
                         Decode.fail ("Failed to decode Connection's type: " ++ type_)

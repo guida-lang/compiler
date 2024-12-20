@@ -13,8 +13,16 @@ port module System.IO exposing
     , ReplState(..), initialReplState
     , MVarSubscriber(..)
     , MVarSubscriber_Maybe_BED_Status(..)
+    , MVarSubscriber_Maybe_BED_DResult(..)
     , MVarSubscriber_Maybe_CASTO_GlobalGraph(..)
     , MVarSubscriber_Maybe_CASTO_LocalGraph(..)
+    , MVarSubscriber_BB_BResult(..)
+    , MVarSubscriber_BB_Status(..)
+    , MVarSubscriber_BB_StatusDict(..)
+    , MVarSubscriber_ResultRegistryProblemEnv(..)
+    , MVarSubscriber_CED_Dep(..)
+    , MVarSubscriber_Maybe_CECTE_Types(..)
+    , MVarSubscriber_Maybe_BB_Dependencies(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -81,8 +89,16 @@ port module System.IO exposing
 
 @docs MVarSubscriber
 @docs MVarSubscriber_Maybe_BED_Status
+@docs MVarSubscriber_Maybe_BED_DResult
 @docs MVarSubscriber_Maybe_CASTO_GlobalGraph
 @docs MVarSubscriber_Maybe_CASTO_LocalGraph
+@docs MVarSubscriber_BB_BResult
+@docs MVarSubscriber_BB_Status
+@docs MVarSubscriber_BB_StatusDict
+@docs MVarSubscriber_ResultRegistryProblemEnv
+@docs MVarSubscriber_CED_Dep
+@docs MVarSubscriber_Maybe_CECTE_Types
+@docs MVarSubscriber_Maybe_BB_Dependencies
 
 -}
 
@@ -121,8 +137,16 @@ run app =
                     , state = initialReplState
                     , mVars = Array.empty
                     , mVars_Maybe_BED_Status = Array.empty
+                    , mVars_Maybe_BED_DResult = Array.empty
                     , mVars_Maybe_CASTO_LocalGraph = Array.empty
                     , mVars_Maybe_CASTO_GlobalGraph = Array.empty
+                    , mVars_BB_BResult = Array.empty
+                    , mVars_BB_Status = Array.empty
+                    , mVars_BB_StatusDict = Array.empty
+                    , mVars_ResultRegistryProblemEnv = Array.empty
+                    , mVars_CED_Dep = Array.empty
+                    , mVars_Maybe_CECTE_Types = Array.empty
+                    , mVars_Maybe_BB_Dependencies = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -204,6 +228,10 @@ type Next
     | NewEmptyMVarNext_Maybe_BED_Status (Int -> IO ())
     | ReadMVarNext_Maybe_BED_Status (Maybe T.BED_Status -> IO ())
     | PutMVarNext_Maybe_BED_Status (() -> IO ())
+      -- MVars (Maybe T.BED_DResult)
+    | NewEmptyMVarNext_Maybe_BED_DResult (Int -> IO ())
+    | ReadMVarNext_Maybe_BED_DResult (Maybe T.BED_DResult -> IO ())
+    | PutMVarNext_Maybe_BED_DResult (() -> IO ())
       -- MVars (Maybe T.CASTO_LocalGraph)
     | NewEmptyMVarNext_Maybe_CASTO_LocalGraph (Int -> IO ())
     | ReadMVarNext_Maybe_CASTO_LocalGraph (Maybe T.CASTO_LocalGraph -> IO ())
@@ -212,6 +240,39 @@ type Next
     | NewEmptyMVarNext_Maybe_CASTO_GlobalGraph (Int -> IO ())
     | ReadMVarNext_Maybe_CASTO_GlobalGraph (Maybe T.CASTO_GlobalGraph -> IO ())
     | PutMVarNext_Maybe_CASTO_GlobalGraph (() -> IO ())
+      -- MVars (T.BB_BResult)
+    | NewEmptyMVarNext_BB_BResult (Int -> IO ())
+    | ReadMVarNext_BB_BResult (T.BB_BResult -> IO ())
+    | PutMVarNext_BB_BResult (() -> IO ())
+      -- MVars (T.BB_Status)
+    | NewEmptyMVarNext_BB_Status (Int -> IO ())
+    | ReadMVarNext_BB_Status (T.BB_Status -> IO ())
+    | PutMVarNext_BB_Status (() -> IO ())
+      -- MVars (T.BB_StatusDict)
+    | NewEmptyMVarNext_BB_StatusDict (Int -> IO ())
+    | ReadMVarNext_BB_StatusDict (T.BB_StatusDict -> IO ())
+    | TakeMVarNext_BB_StatusDict (T.BB_StatusDict -> IO ())
+    | PutMVarNext_BB_StatusDict (() -> IO ())
+      -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+    | NewEmptyMVarNext_ResultRegistryProblemEnv (Int -> IO ())
+    | ReadMVarNext_ResultRegistryProblemEnv (Result T.BRE_RegistryProblem T.BDS_Env -> IO ())
+    | TakeMVarNext_ResultRegistryProblemEnv (Result T.BRE_RegistryProblem T.BDS_Env -> IO ())
+    | PutMVarNext_ResultRegistryProblemEnv (() -> IO ())
+      -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+    | NewEmptyMVarNext_CED_Dep (Int -> IO ())
+    | ReadMVarNext_CED_Dep (T.CED_Dep -> IO ())
+    | TakeMVarNext_CED_Dep (T.CED_Dep -> IO ())
+    | PutMVarNext_CED_Dep (() -> IO ())
+      -- MVars (Maybe T.CECTE_Types)
+    | NewEmptyMVarNext_Maybe_CECTE_Types (Int -> IO ())
+    | ReadMVarNext_Maybe_CECTE_Types (Maybe T.CECTE_Types -> IO ())
+    | TakeMVarNext_Maybe_CECTE_Types (Maybe T.CECTE_Types -> IO ())
+    | PutMVarNext_Maybe_CECTE_Types (() -> IO ())
+      -- MVars (Maybe T.BB_Dependencies)
+    | NewEmptyMVarNext_Maybe_BB_Dependencies (Int -> IO ())
+    | ReadMVarNext_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO ())
+    | TakeMVarNext_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO ())
+    | PutMVarNext_Maybe_BB_Dependencies (() -> IO ())
 
 
 type Msg
@@ -252,6 +313,10 @@ type Msg
     | NewEmptyMVarMsg_Maybe_BED_Status Int Int
     | ReadMVarMsg_Maybe_BED_Status Int (Maybe T.BED_Status)
     | PutMVarMsg_Maybe_BED_Status Int
+      -- MVars (Maybe T.BED_DResult)
+    | NewEmptyMVarMsg_Maybe_BED_DResult Int Int
+    | ReadMVarMsg_Maybe_BED_DResult Int (Maybe T.BED_DResult)
+    | PutMVarMsg_Maybe_BED_DResult Int
       -- MVars (Maybe T.CASTO_LocalGraph)
     | NewEmptyMVarMsg_Maybe_CASTO_LocalGraph Int Int
     | ReadMVarMsg_Maybe_CASTO_LocalGraph Int (Maybe T.CASTO_LocalGraph)
@@ -260,6 +325,34 @@ type Msg
     | NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph Int Int
     | ReadMVarMsg_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
     | PutMVarMsg_Maybe_CASTO_GlobalGraph Int
+      -- MVars (T.BB_BResult)
+    | NewEmptyMVarMsg_BB_BResult Int Int
+    | ReadMVarMsg_BB_BResult Int T.BB_BResult
+    | PutMVarMsg_BB_BResult Int
+      -- MVars (T.BB_Status)
+    | NewEmptyMVarMsg_BB_Status Int Int
+    | ReadMVarMsg_BB_Status Int T.BB_Status
+    | PutMVarMsg_BB_Status Int
+      -- MVars (T.BB_StatusDict)
+    | NewEmptyMVarMsg_BB_StatusDict Int Int
+    | ReadMVarMsg_BB_StatusDict Int T.BB_StatusDict
+    | PutMVarMsg_BB_StatusDict Int
+      -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+    | NewEmptyMVarMsg_ResultRegistryProblemEnv Int Int
+    | ReadMVarMsg_ResultRegistryProblemEnv Int (Result T.BRE_RegistryProblem T.BDS_Env)
+    | PutMVarMsg_ResultRegistryProblemEnv Int
+      -- MVars (T.CED_Dep)
+    | NewEmptyMVarMsg_CED_Dep Int Int
+    | ReadMVarMsg_CED_Dep Int T.CED_Dep
+    | PutMVarMsg_CED_Dep Int
+      -- MVars (Maybe T.CECTE_Types)
+    | NewEmptyMVarMsg_Maybe_CECTE_Types Int Int
+    | ReadMVarMsg_Maybe_CECTE_Types Int (Maybe T.CECTE_Types)
+    | PutMVarMsg_Maybe_CECTE_Types Int
+      -- MVars (Maybe T.BB_Dependencies)
+    | NewEmptyMVarMsg_Maybe_BB_Dependencies Int Int
+    | ReadMVarMsg_Maybe_BB_Dependencies Int (Maybe T.BB_Dependencies)
+    | PutMVarMsg_Maybe_BB_Dependencies Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -441,6 +534,28 @@ update msg model =
                 ( newRealWorld, PutMVar_Maybe_BED_Status next _ Nothing ) ->
                     update (PutMVarMsg_Maybe_BED_Status index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BED_Status next) model.next }
 
+                -- MVars (Maybe T.BED_DResult)
+                ( newRealWorld, NewEmptyMVar_Maybe_BED_DResult next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_BED_DResult index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_BED_DResult next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BED_DResult next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_BED_DResult index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BED_DResult next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BED_DResult next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BED_DResult next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_Maybe_BED_DResult next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_BED_DResult readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_BED_DResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BED_DResult next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_BED_DResult next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_BED_DResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BED_DResult next) model.next }
+
                 -- MVars (Maybe T.CASTO_LocalGraph)
                 ( newRealWorld, NewEmptyMVar_Maybe_CASTO_LocalGraph next value ) ->
                     update (NewEmptyMVarMsg_Maybe_CASTO_LocalGraph index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_CASTO_LocalGraph next) model.next }
@@ -484,6 +599,200 @@ update msg model =
 
                 ( newRealWorld, PutMVar_Maybe_CASTO_GlobalGraph next _ Nothing ) ->
                     update (PutMVarMsg_Maybe_CASTO_GlobalGraph index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
+
+                -- MVars (T.BB_BResult)
+                ( newRealWorld, NewEmptyMVar_BB_BResult next value ) ->
+                    update (NewEmptyMVarMsg_BB_BResult index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_BB_BResult next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_BResult next (Just value) ) ->
+                    update (ReadMVarMsg_BB_BResult index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_BResult next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_BResult next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_BResult next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_BB_BResult next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_BResult readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_BResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_BResult next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_BB_BResult next _ Nothing ) ->
+                    update (PutMVarMsg_BB_BResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_BResult next) model.next }
+
+                -- MVars (T.BB_Status)
+                ( newRealWorld, NewEmptyMVar_BB_Status next value ) ->
+                    update (NewEmptyMVarMsg_BB_Status index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_BB_Status next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_Status next (Just value) ) ->
+                    update (ReadMVarMsg_BB_Status index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_Status next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_Status next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_Status next) model.next }, Cmd.none )
+
+                ( newRealWorld, PutMVar_BB_Status next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_Status readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_Status index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_Status next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_BB_Status next _ Nothing ) ->
+                    update (PutMVarMsg_BB_Status index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_Status next) model.next }
+
+                -- MVars (T.BB_StatusDict)
+                ( newRealWorld, NewEmptyMVar_BB_StatusDict next value ) ->
+                    update (NewEmptyMVarMsg_BB_StatusDict index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_BB_StatusDict next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_StatusDict next (Just value) ) ->
+                    update (ReadMVarMsg_BB_StatusDict index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_StatusDict next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_StatusDict next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_StatusDict next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_BB_StatusDict next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_BB_StatusDict index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_BB_StatusDict next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_BB_StatusDict next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_BB_StatusDict next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_BB_StatusDict next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_StatusDict readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_StatusDict index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_StatusDict next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_BB_StatusDict next _ Nothing ) ->
+                    update (PutMVarMsg_BB_StatusDict index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_StatusDict next) model.next }
+
+                -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+                ( newRealWorld, NewEmptyMVar_ResultRegistryProblemEnv next value ) ->
+                    update (NewEmptyMVarMsg_ResultRegistryProblemEnv index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_ResultRegistryProblemEnv next) model.next }
+
+                ( newRealWorld, ReadMVar_ResultRegistryProblemEnv next (Just value) ) ->
+                    update (ReadMVarMsg_ResultRegistryProblemEnv index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_ResultRegistryProblemEnv next) model.next }
+
+                ( newRealWorld, ReadMVar_ResultRegistryProblemEnv next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_ResultRegistryProblemEnv next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_ResultRegistryProblemEnv next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_ResultRegistryProblemEnv index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_ResultRegistryProblemEnv next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_ResultRegistryProblemEnv next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_ResultRegistryProblemEnv next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_ResultRegistryProblemEnv next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_ResultRegistryProblemEnv readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_ResultRegistryProblemEnv index) { newRealWorld | next = Dict.insert index (PutMVarNext_ResultRegistryProblemEnv next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_ResultRegistryProblemEnv next _ Nothing ) ->
+                    update (PutMVarMsg_ResultRegistryProblemEnv index) { newRealWorld | next = Dict.insert index (PutMVarNext_ResultRegistryProblemEnv next) model.next }
+
+                -- MVars (T.CED_Dep)
+                ( newRealWorld, NewEmptyMVar_CED_Dep next value ) ->
+                    update (NewEmptyMVarMsg_CED_Dep index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_CED_Dep next) model.next }
+
+                ( newRealWorld, ReadMVar_CED_Dep next (Just value) ) ->
+                    update (ReadMVarMsg_CED_Dep index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_CED_Dep next) model.next }
+
+                ( newRealWorld, ReadMVar_CED_Dep next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_CED_Dep next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_CED_Dep next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_CED_Dep index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_CED_Dep next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_CED_Dep next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_CED_Dep next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_CED_Dep next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_CED_Dep readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_CED_Dep index) { newRealWorld | next = Dict.insert index (PutMVarNext_CED_Dep next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_CED_Dep next _ Nothing ) ->
+                    update (PutMVarMsg_CED_Dep index) { newRealWorld | next = Dict.insert index (PutMVarNext_CED_Dep next) model.next }
+
+                -- MVars (Maybe T.CECTE_Types)
+                ( newRealWorld, NewEmptyMVar_Maybe_CECTE_Types next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_CECTE_Types index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_CECTE_Types next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CECTE_Types next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_CECTE_Types index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CECTE_Types next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_CECTE_Types next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_CECTE_Types next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_Maybe_CECTE_Types next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_Maybe_CECTE_Types index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_Maybe_CECTE_Types next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_Maybe_CECTE_Types next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_Maybe_CECTE_Types next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_Maybe_CECTE_Types next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_CECTE_Types readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_CECTE_Types index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CECTE_Types next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_CECTE_Types next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_CECTE_Types index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_CECTE_Types next) model.next }
+
+                -- MVars (Maybe T.BB_Dependencies)
+                ( newRealWorld, NewEmptyMVar_Maybe_BB_Dependencies next value ) ->
+                    update (NewEmptyMVarMsg_Maybe_BB_Dependencies index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_Maybe_BB_Dependencies next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BB_Dependencies next (Just value) ) ->
+                    update (ReadMVarMsg_Maybe_BB_Dependencies index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BB_Dependencies next) model.next }
+
+                ( newRealWorld, ReadMVar_Maybe_BB_Dependencies next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_Maybe_BB_Dependencies next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_Maybe_BB_Dependencies next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_Maybe_BB_Dependencies index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_Maybe_BB_Dependencies next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_Maybe_BB_Dependencies next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_Maybe_BB_Dependencies next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_Maybe_BB_Dependencies next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Maybe_BB_Dependencies readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Maybe_BB_Dependencies index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BB_Dependencies next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_Maybe_BB_Dependencies next _ Nothing ) ->
+                    update (PutMVarMsg_Maybe_BB_Dependencies index) { newRealWorld | next = Dict.insert index (PutMVarNext_Maybe_BB_Dependencies next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -762,6 +1071,31 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_Maybe_BED_Status"
 
+        -- MVars (Maybe T.BED_DResult)
+        NewEmptyMVarMsg_Maybe_BED_DResult index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_BED_DResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_BED_DResult"
+
+        ReadMVarMsg_Maybe_BED_DResult index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_BED_DResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_BED_DResult"
+
+        PutMVarMsg_Maybe_BED_DResult index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_BED_DResult fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_BED_DResult"
+
         -- MVars (Maybe T.CASTO_LocalGraph)
         NewEmptyMVarMsg_Maybe_CASTO_LocalGraph index value ->
             case Dict.get index model.next of
@@ -811,6 +1145,196 @@ update msg model =
 
                 _ ->
                     crash "PutMVarMsg_Maybe_CASTO_GlobalGraph"
+
+        -- MVars (T.BB_BResult)
+        NewEmptyMVarMsg_BB_BResult index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_BB_BResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_BResult"
+
+        ReadMVarMsg_BB_BResult index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_BB_BResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_BResult"
+
+        PutMVarMsg_BB_BResult index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_BB_BResult fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_BResult"
+
+        -- MVars (T.BB_Status)
+        NewEmptyMVarMsg_BB_Status index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_BB_Status fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_Status"
+
+        ReadMVarMsg_BB_Status index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_BB_Status fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_Status"
+
+        PutMVarMsg_BB_Status index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_BB_Status fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_Status"
+
+        -- MVars (T.BB_StatusDict)
+        NewEmptyMVarMsg_BB_StatusDict index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_BB_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_StatusDict"
+
+        ReadMVarMsg_BB_StatusDict index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_BB_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_BB_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_StatusDict"
+
+        PutMVarMsg_BB_StatusDict index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_BB_StatusDict fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_StatusDict"
+
+        -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+        NewEmptyMVarMsg_ResultRegistryProblemEnv index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_ResultRegistryProblemEnv fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_ResultRegistryProblemEnv"
+
+        ReadMVarMsg_ResultRegistryProblemEnv index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_ResultRegistryProblemEnv fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_ResultRegistryProblemEnv fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_ResultRegistryProblemEnv"
+
+        PutMVarMsg_ResultRegistryProblemEnv index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_ResultRegistryProblemEnv fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_ResultRegistryProblemEnv"
+
+        -- MVars (T.CED_Dep)
+        NewEmptyMVarMsg_CED_Dep index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_CED_Dep fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_CED_Dep"
+
+        ReadMVarMsg_CED_Dep index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_CED_Dep fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_CED_Dep fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_CED_Dep"
+
+        PutMVarMsg_CED_Dep index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_CED_Dep fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_CED_Dep"
+
+        -- MVars (Maybe T.CECTE_Types)
+        NewEmptyMVarMsg_Maybe_CECTE_Types index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_CECTE_Types fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_CECTE_Types"
+
+        ReadMVarMsg_Maybe_CECTE_Types index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_CECTE_Types fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_Maybe_CECTE_Types fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_CECTE_Types"
+
+        PutMVarMsg_Maybe_CECTE_Types index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_CECTE_Types fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_CECTE_Types"
+
+        -- MVars (Maybe T.BB_Dependencies)
+        NewEmptyMVarMsg_Maybe_BB_Dependencies index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_Maybe_BB_Dependencies fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Maybe_BB_Dependencies"
+
+        ReadMVarMsg_Maybe_BB_Dependencies index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_Maybe_BB_Dependencies fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_Maybe_BB_Dependencies fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Maybe_BB_Dependencies"
+
+        PutMVarMsg_Maybe_BB_Dependencies index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_Maybe_BB_Dependencies fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Maybe_BB_Dependencies"
 
 
 updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
@@ -1044,6 +1568,10 @@ type ION a
     | NewEmptyMVar_Maybe_BED_Status (Int -> IO a) Int
     | ReadMVar_Maybe_BED_Status (Maybe T.BED_Status -> IO a) (Maybe (Maybe T.BED_Status))
     | PutMVar_Maybe_BED_Status (() -> IO a) (List Int) (Maybe (Maybe T.BED_Status))
+      -- MVars (Maybe T.BED_DResult)
+    | NewEmptyMVar_Maybe_BED_DResult (Int -> IO a) Int
+    | ReadMVar_Maybe_BED_DResult (Maybe T.BED_DResult -> IO a) (Maybe (Maybe T.BED_DResult))
+    | PutMVar_Maybe_BED_DResult (() -> IO a) (List Int) (Maybe (Maybe T.BED_DResult))
       -- MVars (Maybe T.CASTO_LocalGraph)
     | NewEmptyMVar_Maybe_CASTO_LocalGraph (Int -> IO a) Int
     | ReadMVar_Maybe_CASTO_LocalGraph (Maybe T.CASTO_LocalGraph -> IO a) (Maybe (Maybe T.CASTO_LocalGraph))
@@ -1052,6 +1580,39 @@ type ION a
     | NewEmptyMVar_Maybe_CASTO_GlobalGraph (Int -> IO a) Int
     | ReadMVar_Maybe_CASTO_GlobalGraph (Maybe T.CASTO_GlobalGraph -> IO a) (Maybe (Maybe T.CASTO_GlobalGraph))
     | PutMVar_Maybe_CASTO_GlobalGraph (() -> IO a) (List Int) (Maybe (Maybe T.CASTO_GlobalGraph))
+      -- MVars (T.BB_BResult)
+    | NewEmptyMVar_BB_BResult (Int -> IO a) Int
+    | ReadMVar_BB_BResult (T.BB_BResult -> IO a) (Maybe T.BB_BResult)
+    | PutMVar_BB_BResult (() -> IO a) (List Int) (Maybe T.BB_BResult)
+      -- MVars (T.BB_Status)
+    | NewEmptyMVar_BB_Status (Int -> IO a) Int
+    | ReadMVar_BB_Status (T.BB_Status -> IO a) (Maybe T.BB_Status)
+    | PutMVar_BB_Status (() -> IO a) (List Int) (Maybe T.BB_Status)
+      -- MVars (T.BB_StatusDict)
+    | NewEmptyMVar_BB_StatusDict (Int -> IO a) Int
+    | ReadMVar_BB_StatusDict (T.BB_StatusDict -> IO a) (Maybe T.BB_StatusDict)
+    | TakeMVar_BB_StatusDict (T.BB_StatusDict -> IO a) (Maybe T.BB_StatusDict) (Maybe Int)
+    | PutMVar_BB_StatusDict (() -> IO a) (List Int) (Maybe T.BB_StatusDict)
+      -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+    | NewEmptyMVar_ResultRegistryProblemEnv (Int -> IO a) Int
+    | ReadMVar_ResultRegistryProblemEnv (Result T.BRE_RegistryProblem T.BDS_Env -> IO a) (Maybe (Result T.BRE_RegistryProblem T.BDS_Env))
+    | TakeMVar_ResultRegistryProblemEnv (Result T.BRE_RegistryProblem T.BDS_Env -> IO a) (Maybe (Result T.BRE_RegistryProblem T.BDS_Env)) (Maybe Int)
+    | PutMVar_ResultRegistryProblemEnv (() -> IO a) (List Int) (Maybe (Result T.BRE_RegistryProblem T.BDS_Env))
+      -- MVars (T.CED_Dep)
+    | NewEmptyMVar_CED_Dep (Int -> IO a) Int
+    | ReadMVar_CED_Dep (T.CED_Dep -> IO a) (Maybe T.CED_Dep)
+    | TakeMVar_CED_Dep (T.CED_Dep -> IO a) (Maybe T.CED_Dep) (Maybe Int)
+    | PutMVar_CED_Dep (() -> IO a) (List Int) (Maybe T.CED_Dep)
+      -- MVars (Maybe T.CECTE_Types)
+    | NewEmptyMVar_Maybe_CECTE_Types (Int -> IO a) Int
+    | ReadMVar_Maybe_CECTE_Types (Maybe T.CECTE_Types -> IO a) (Maybe (Maybe T.CECTE_Types))
+    | TakeMVar_Maybe_CECTE_Types (Maybe T.CECTE_Types -> IO a) (Maybe (Maybe T.CECTE_Types)) (Maybe Int)
+    | PutMVar_Maybe_CECTE_Types (() -> IO a) (List Int) (Maybe (Maybe T.CECTE_Types))
+      -- MVars (Maybe T.BB_Dependencies)
+    | NewEmptyMVar_Maybe_BB_Dependencies (Int -> IO a) Int
+    | ReadMVar_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO a) (Maybe (Maybe T.BB_Dependencies))
+    | TakeMVar_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO a) (Maybe (Maybe T.BB_Dependencies)) (Maybe Int)
+    | PutMVar_Maybe_BB_Dependencies (() -> IO a) (List Int) (Maybe (Maybe T.BB_Dependencies))
 
 
 type alias RealWorld =
@@ -1063,8 +1624,16 @@ type alias RealWorld =
     , state : ReplState
     , mVars : Array { subscribers : List MVarSubscriber, value : Maybe Encode.Value }
     , mVars_Maybe_BED_Status : Array { subscribers : List MVarSubscriber_Maybe_BED_Status, value : Maybe (Maybe T.BED_Status) }
+    , mVars_Maybe_BED_DResult : Array { subscribers : List MVarSubscriber_Maybe_BED_DResult, value : Maybe (Maybe T.BED_DResult) }
     , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe T.CASTO_LocalGraph) }
     , mVars_Maybe_CASTO_GlobalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_GlobalGraph, value : Maybe (Maybe T.CASTO_GlobalGraph) }
+    , mVars_BB_BResult : Array { subscribers : List MVarSubscriber_BB_BResult, value : Maybe T.BB_BResult }
+    , mVars_BB_Status : Array { subscribers : List MVarSubscriber_BB_Status, value : Maybe T.BB_Status }
+    , mVars_BB_StatusDict : Array { subscribers : List MVarSubscriber_BB_StatusDict, value : Maybe T.BB_StatusDict }
+    , mVars_ResultRegistryProblemEnv : Array { subscribers : List MVarSubscriber_ResultRegistryProblemEnv, value : Maybe (Result T.BRE_RegistryProblem T.BDS_Env) }
+    , mVars_CED_Dep : Array { subscribers : List MVarSubscriber_CED_Dep, value : Maybe T.CED_Dep }
+    , mVars_Maybe_CECTE_Types : Array { subscribers : List MVarSubscriber_Maybe_CECTE_Types, value : Maybe (Maybe T.CECTE_Types) }
+    , mVars_Maybe_BB_Dependencies : Array { subscribers : List MVarSubscriber_Maybe_BB_Dependencies, value : Maybe (Maybe T.BB_Dependencies) }
     , next : Dict Int Next
     }
 
@@ -1081,6 +1650,12 @@ type MVarSubscriber_Maybe_BED_Status
     | PutMVarSubscriber_Maybe_BED_Status Int (Maybe T.BED_Status)
 
 
+type MVarSubscriber_Maybe_BED_DResult
+    = ReadMVarSubscriber_Maybe_BED_DResult Int
+    | TakeMVarSubscriber_Maybe_BED_DResult Int
+    | PutMVarSubscriber_Maybe_BED_DResult Int (Maybe T.BED_DResult)
+
+
 type MVarSubscriber_Maybe_CASTO_LocalGraph
     = ReadMVarSubscriber_Maybe_CASTO_LocalGraph Int
     | TakeMVarSubscriber_Maybe_CASTO_LocalGraph Int
@@ -1091,6 +1666,48 @@ type MVarSubscriber_Maybe_CASTO_GlobalGraph
     = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
+
+
+type MVarSubscriber_BB_BResult
+    = ReadMVarSubscriber_BB_BResult Int
+    | TakeMVarSubscriber_BB_BResult Int
+    | PutMVarSubscriber_BB_BResult Int T.BB_BResult
+
+
+type MVarSubscriber_BB_Status
+    = ReadMVarSubscriber_BB_Status Int
+    | TakeMVarSubscriber_BB_Status Int
+    | PutMVarSubscriber_BB_Status Int T.BB_Status
+
+
+type MVarSubscriber_BB_StatusDict
+    = ReadMVarSubscriber_BB_StatusDict Int
+    | TakeMVarSubscriber_BB_StatusDict Int
+    | PutMVarSubscriber_BB_StatusDict Int T.BB_StatusDict
+
+
+type MVarSubscriber_ResultRegistryProblemEnv
+    = ReadMVarSubscriber_ResultRegistryProblemEnv Int
+    | TakeMVarSubscriber_ResultRegistryProblemEnv Int
+    | PutMVarSubscriber_ResultRegistryProblemEnv Int (Result T.BRE_RegistryProblem T.BDS_Env)
+
+
+type MVarSubscriber_CED_Dep
+    = ReadMVarSubscriber_CED_Dep Int
+    | TakeMVarSubscriber_CED_Dep Int
+    | PutMVarSubscriber_CED_Dep Int T.CED_Dep
+
+
+type MVarSubscriber_Maybe_CECTE_Types
+    = ReadMVarSubscriber_Maybe_CECTE_Types Int
+    | TakeMVarSubscriber_Maybe_CECTE_Types Int
+    | PutMVarSubscriber_Maybe_CECTE_Types Int (Maybe T.CECTE_Types)
+
+
+type MVarSubscriber_Maybe_BB_Dependencies
+    = ReadMVarSubscriber_Maybe_BB_Dependencies Int
+    | TakeMVarSubscriber_Maybe_BB_Dependencies Int
+    | PutMVarSubscriber_Maybe_BB_Dependencies Int (Maybe T.BB_Dependencies)
 
 
 pure : a -> IO a
@@ -1229,6 +1846,16 @@ bind f (IO ma) =
                 ( s1, PutMVar_Maybe_BED_Status next readIndexes value ) ->
                     ( s1, PutMVar_Maybe_BED_Status (\() -> bind f (next ())) readIndexes value )
 
+                -- MVars (Maybe T.BED_DResult)
+                ( s1, NewEmptyMVar_Maybe_BED_DResult next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_BED_DResult (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_BED_DResult next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_BED_DResult (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_Maybe_BED_DResult next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_BED_DResult (\() -> bind f (next ())) readIndexes value )
+
                 -- MVars (Maybe T.CASTO_LocalGraph)
                 ( s1, NewEmptyMVar_Maybe_CASTO_LocalGraph next emptyMVarIndex ) ->
                     ( s1, NewEmptyMVar_Maybe_CASTO_LocalGraph (\value -> bind f (next value)) emptyMVarIndex )
@@ -1248,6 +1875,91 @@ bind f (IO ma) =
 
                 ( s1, PutMVar_Maybe_CASTO_GlobalGraph next readIndexes value ) ->
                     ( s1, PutMVar_Maybe_CASTO_GlobalGraph (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_BResult)
+                ( s1, NewEmptyMVar_BB_BResult next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_BB_BResult (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_BB_BResult next mVarValue ) ->
+                    ( s1, ReadMVar_BB_BResult (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_BB_BResult next readIndexes value ) ->
+                    ( s1, PutMVar_BB_BResult (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_Status)
+                ( s1, NewEmptyMVar_BB_Status next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_BB_Status (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_BB_Status next mVarValue ) ->
+                    ( s1, ReadMVar_BB_Status (\value -> bind f (next value)) mVarValue )
+
+                ( s1, PutMVar_BB_Status next readIndexes value ) ->
+                    ( s1, PutMVar_BB_Status (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_StatusDict)
+                ( s1, NewEmptyMVar_BB_StatusDict next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_BB_StatusDict (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_BB_StatusDict next mVarValue ) ->
+                    ( s1, ReadMVar_BB_StatusDict (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_BB_StatusDict next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_BB_StatusDict (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_BB_StatusDict next readIndexes value ) ->
+                    ( s1, PutMVar_BB_StatusDict (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Result T.BRE_RegistryProblem T.BDS_Env)
+                ( s1, NewEmptyMVar_ResultRegistryProblemEnv next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_ResultRegistryProblemEnv (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_ResultRegistryProblemEnv next mVarValue ) ->
+                    ( s1, ReadMVar_ResultRegistryProblemEnv (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_ResultRegistryProblemEnv next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_ResultRegistryProblemEnv (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_ResultRegistryProblemEnv next readIndexes value ) ->
+                    ( s1, PutMVar_ResultRegistryProblemEnv (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.CED_Dep)
+                ( s1, NewEmptyMVar_CED_Dep next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_CED_Dep (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_CED_Dep next mVarValue ) ->
+                    ( s1, ReadMVar_CED_Dep (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_CED_Dep next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_CED_Dep (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_CED_Dep next readIndexes value ) ->
+                    ( s1, PutMVar_CED_Dep (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.CECTE_Types)
+                ( s1, NewEmptyMVar_Maybe_CECTE_Types next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_CECTE_Types (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_CECTE_Types next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_CECTE_Types (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_Maybe_CECTE_Types next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_Maybe_CECTE_Types (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_Maybe_CECTE_Types next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_CECTE_Types (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.BB_Dependencies)
+                ( s1, NewEmptyMVar_Maybe_BB_Dependencies next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_Maybe_BB_Dependencies (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_Maybe_BB_Dependencies next mVarValue ) ->
+                    ( s1, ReadMVar_Maybe_BB_Dependencies (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_Maybe_BB_Dependencies next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_Maybe_BB_Dependencies (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_Maybe_BB_Dependencies next readIndexes value ) ->
+                    ( s1, PutMVar_Maybe_BB_Dependencies (\() -> bind f (next ())) readIndexes value )
         )
 
 

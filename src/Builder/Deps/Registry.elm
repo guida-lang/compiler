@@ -1,7 +1,5 @@
 module Builder.Deps.Registry exposing
-    ( KnownVersions(..)
-    , Registry(..)
-    , fetch
+    ( fetch
     , getVersions
     , getVersions_
     , latest
@@ -15,7 +13,6 @@ import Basics.Extra exposing (flip)
 import Builder.Deps.Website as Website
 import Builder.File as File
 import Builder.Http as Http
-import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
@@ -33,23 +30,15 @@ import Types as T
 -- REGISTRY
 
 
-type Registry
-    = Registry Int (Dict ( String, String ) T.CEP_Name KnownVersions)
-
-
-type KnownVersions
-    = KnownVersions V.Version (List V.Version)
-
-
-knownVersionsDecoder : Decode.Decoder KnownVersions
+knownVersionsDecoder : Decode.Decoder T.BDR_KnownVersions
 knownVersionsDecoder =
-    Decode.map2 KnownVersions
+    Decode.map2 T.BDR_KnownVersions
         (Decode.field "version" V.jsonDecoder)
         (Decode.field "versions" (Decode.list V.jsonDecoder))
 
 
-knownVersionsEncoder : KnownVersions -> Encode.Value
-knownVersionsEncoder (KnownVersions version versions) =
+knownVersionsEncoder : T.BDR_KnownVersions -> Encode.Value
+knownVersionsEncoder (T.BDR_KnownVersions version versions) =
     Encode.object
         [ ( "version", V.jsonEncoder version )
         , ( "versions", Encode.list V.jsonEncoder versions )
@@ -60,7 +49,7 @@ knownVersionsEncoder (KnownVersions version versions) =
 -- READ
 
 
-read : Stuff.PackageCache -> IO (Maybe Registry)
+read : T.BS_PackageCache -> IO (Maybe T.BDR_Registry)
 read cache =
     File.readBinary registryDecoder (Stuff.registry cache)
 
@@ -69,7 +58,7 @@ read cache =
 -- FETCH
 
 
-fetch : Http.Manager -> Stuff.PackageCache -> IO (Result Exit.RegistryProblem Registry)
+fetch : T.BH_Manager -> T.BS_PackageCache -> IO (Result T.BRE_RegistryProblem T.BDR_Registry)
 fetch manager cache =
     post manager "/all-packages" allPkgsDecoder <|
         \versions ->
@@ -78,9 +67,9 @@ fetch manager cache =
                 size =
                     Dict.foldr Pkg.compareName (\_ -> addEntry) 0 versions
 
-                registry : Registry
+                registry : T.BDR_Registry
                 registry =
-                    Registry size versions
+                    T.BDR_Registry size versions
 
                 path : String
                 path =
@@ -90,27 +79,27 @@ fetch manager cache =
                 |> IO.fmap (\_ -> registry)
 
 
-addEntry : KnownVersions -> Int -> Int
-addEntry (KnownVersions _ vs) count =
+addEntry : T.BDR_KnownVersions -> Int -> Int
+addEntry (T.BDR_KnownVersions _ vs) count =
     count + 1 + List.length vs
 
 
-allPkgsDecoder : D.Decoder () (Dict ( String, String ) T.CEP_Name KnownVersions)
+allPkgsDecoder : D.Decoder () (Dict ( String, String ) T.CEP_Name T.BDR_KnownVersions)
 allPkgsDecoder =
     let
         keyDecoder : D.KeyDecoder () T.CEP_Name
         keyDecoder =
             Pkg.keyDecoder bail
 
-        versionsDecoder : D.Decoder () (List V.Version)
+        versionsDecoder : D.Decoder () (List T.CEV_Version)
         versionsDecoder =
             D.list (D.mapError (\_ -> ()) V.decoder)
 
-        toKnownVersions : List V.Version -> D.Decoder () KnownVersions
+        toKnownVersions : List T.CEV_Version -> D.Decoder () T.BDR_KnownVersions
         toKnownVersions versions =
             case List.sortWith (flip V.compare) versions of
                 v :: vs ->
-                    D.pure (KnownVersions v vs)
+                    D.pure (T.BDR_KnownVersions v vs)
 
                 [] ->
                     D.failure ()
@@ -122,8 +111,8 @@ allPkgsDecoder =
 -- UPDATE
 
 
-update : Http.Manager -> Stuff.PackageCache -> Registry -> IO (Result Exit.RegistryProblem Registry)
-update manager cache ((Registry size packages) as oldRegistry) =
+update : T.BH_Manager -> T.BS_PackageCache -> T.BDR_Registry -> IO (Result T.BRE_RegistryProblem T.BDR_Registry)
+update manager cache ((T.BDR_Registry size packages) as oldRegistry) =
     post manager ("/all-packages/since/" ++ String.fromInt size) (D.list newPkgDecoder) <|
         \news ->
             case news of
@@ -136,29 +125,29 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         newSize =
                             size + List.length news
 
-                        newPkgs : Dict ( String, String ) T.CEP_Name KnownVersions
+                        newPkgs : Dict ( String, String ) T.CEP_Name T.BDR_KnownVersions
                         newPkgs =
                             List.foldr addNew packages news
 
-                        newRegistry : Registry
+                        newRegistry : T.BDR_Registry
                         newRegistry =
-                            Registry newSize newPkgs
+                            T.BDR_Registry newSize newPkgs
                     in
                     File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
                         |> IO.fmap (\_ -> newRegistry)
 
 
-addNew : ( T.CEP_Name, V.Version ) -> Dict ( String, String ) T.CEP_Name KnownVersions -> Dict ( String, String ) T.CEP_Name KnownVersions
+addNew : ( T.CEP_Name, T.CEV_Version ) -> Dict ( String, String ) T.CEP_Name T.BDR_KnownVersions -> Dict ( String, String ) T.CEP_Name T.BDR_KnownVersions
 addNew ( name, version ) versions =
     let
-        add : Maybe KnownVersions -> KnownVersions
+        add : Maybe T.BDR_KnownVersions -> T.BDR_KnownVersions
         add maybeKnowns =
             case maybeKnowns of
-                Just (KnownVersions v vs) ->
-                    KnownVersions version (v :: vs)
+                Just (T.BDR_KnownVersions v vs) ->
+                    T.BDR_KnownVersions version (v :: vs)
 
                 Nothing ->
-                    KnownVersions version []
+                    T.BDR_KnownVersions version []
     in
     Dict.update identity name (Just << add) versions
 
@@ -167,12 +156,12 @@ addNew ( name, version ) versions =
 -- NEW PACKAGE DECODER
 
 
-newPkgDecoder : D.Decoder () ( T.CEP_Name, V.Version )
+newPkgDecoder : D.Decoder () ( T.CEP_Name, T.CEV_Version )
 newPkgDecoder =
     D.customString newPkgParser bail
 
 
-newPkgParser : P.Parser () ( T.CEP_Name, V.Version )
+newPkgParser : P.Parser () ( T.CEP_Name, T.CEV_Version )
 newPkgParser =
     P.specialize (\_ _ _ -> ()) Pkg.parser
         |> P.bind
@@ -192,7 +181,7 @@ bail _ _ =
 -- LATEST
 
 
-latest : Http.Manager -> Stuff.PackageCache -> IO (Result Exit.RegistryProblem Registry)
+latest : T.BH_Manager -> T.BS_PackageCache -> IO (Result T.BRE_RegistryProblem T.BDR_Registry)
 latest manager cache =
     read cache
         |> IO.bind
@@ -210,13 +199,13 @@ latest manager cache =
 -- GET VERSIONS
 
 
-getVersions : T.CEP_Name -> Registry -> Maybe KnownVersions
-getVersions name (Registry _ versions) =
+getVersions : T.CEP_Name -> T.BDR_Registry -> Maybe T.BDR_KnownVersions
+getVersions name (T.BDR_Registry _ versions) =
     Dict.get identity name versions
 
 
-getVersions_ : T.CEP_Name -> Registry -> Result (List T.CEP_Name) KnownVersions
-getVersions_ name (Registry _ versions) =
+getVersions_ : T.CEP_Name -> T.BDR_Registry -> Result (List T.CEP_Name) T.BDR_KnownVersions
+getVersions_ name (T.BDR_Registry _ versions) =
     case Dict.get identity name versions of
         Just kvs ->
             Ok kvs
@@ -229,36 +218,36 @@ getVersions_ name (Registry _ versions) =
 -- POST
 
 
-post : Http.Manager -> String -> D.Decoder x a -> (a -> IO b) -> IO (Result Exit.RegistryProblem b)
+post : T.BH_Manager -> String -> D.Decoder x a -> (a -> IO b) -> IO (Result T.BRE_RegistryProblem b)
 post manager path decoder callback =
     let
         url : String
         url =
             Website.route path []
     in
-    Http.post manager url [] Exit.RP_Http <|
+    Http.post manager url [] T.BRE_RP_Http <|
         \body ->
             case D.fromByteString decoder body of
                 Ok a ->
                     IO.fmap Ok (callback a)
 
                 Err _ ->
-                    IO.pure <| Err <| Exit.RP_Data url body
+                    IO.pure <| Err <| T.BRE_RP_Data url body
 
 
 
 -- ENCODERS and DECODERS
 
 
-registryDecoder : Decode.Decoder Registry
+registryDecoder : Decode.Decoder T.BDR_Registry
 registryDecoder =
-    Decode.map2 Registry
+    Decode.map2 T.BDR_Registry
         (Decode.field "size" Decode.int)
         (Decode.field "packages" (D.assocListDict identity Pkg.nameDecoder knownVersionsDecoder))
 
 
-registryEncoder : Registry -> Encode.Value
-registryEncoder (Registry size versions) =
+registryEncoder : T.BDR_Registry -> Encode.Value
+registryEncoder (T.BDR_Registry size versions) =
     Encode.object
         [ ( "size", Encode.int size )
         , ( "packages", E.assocListDict Pkg.compareName Pkg.nameEncoder knownVersionsEncoder versions )

@@ -1,6 +1,5 @@
 module Compiler.Elm.Interface exposing
-    ( DependencyInterface(..)
-    , dependencyInterfaceDecoder
+    ( dependencyInterfaceDecoder
     , dependencyInterfaceEncoder
     , extractAlias
     , extractUnion
@@ -128,19 +127,14 @@ toPublicAlias iAlias =
 -- DEPENDENCY INTERFACE
 
 
-type DependencyInterface
-    = Public T.CEI_Interface
-    | Private T.CEP_Name (Dict String T.CDN_Name T.CASTC_Union) (Dict String T.CDN_Name T.CASTC_Alias)
-
-
-public : T.CEI_Interface -> DependencyInterface
+public : T.CEI_Interface -> T.CEI_DependencyInterface
 public =
-    Public
+    T.CEI_Public
 
 
-private : T.CEI_Interface -> DependencyInterface
+private : T.CEI_Interface -> T.CEI_DependencyInterface
 private (T.CEI_Interface pkg _ unions aliases _) =
-    Private pkg (Dict.map (\_ -> extractUnion) unions) (Dict.map (\_ -> extractAlias) aliases)
+    T.CEI_Private pkg (Dict.map (\_ -> extractUnion) unions) (Dict.map (\_ -> extractAlias) aliases)
 
 
 extractUnion : T.CEI_Union -> T.CASTC_Union
@@ -166,13 +160,13 @@ extractAlias iAlias =
             alias
 
 
-privatize : DependencyInterface -> DependencyInterface
+privatize : T.CEI_DependencyInterface -> T.CEI_DependencyInterface
 privatize di =
     case di of
-        Public i ->
+        T.CEI_Public i ->
             private i
 
-        Private _ _ _ ->
+        T.CEI_Private _ _ _ ->
             di
 
 
@@ -302,16 +296,16 @@ binopDecoder =
         (Decode.field "precedence" Binop.precedenceDecoder)
 
 
-dependencyInterfaceEncoder : DependencyInterface -> Encode.Value
+dependencyInterfaceEncoder : T.CEI_DependencyInterface -> Encode.Value
 dependencyInterfaceEncoder dependencyInterface =
     case dependencyInterface of
-        Public i ->
+        T.CEI_Public i ->
             Encode.object
                 [ ( "type", Encode.string "Public" )
                 , ( "i", interfaceEncoder i )
                 ]
 
-        Private pkg unions aliases ->
+        T.CEI_Private pkg unions aliases ->
             Encode.object
                 [ ( "type", Encode.string "Private" )
                 , ( "pkg", Pkg.nameEncoder pkg )
@@ -320,17 +314,17 @@ dependencyInterfaceEncoder dependencyInterface =
                 ]
 
 
-dependencyInterfaceDecoder : Decode.Decoder DependencyInterface
+dependencyInterfaceDecoder : Decode.Decoder T.CEI_DependencyInterface
 dependencyInterfaceDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "Public" ->
-                        Decode.map Public (Decode.field "i" interfaceDecoder)
+                        Decode.map T.CEI_Public (Decode.field "i" interfaceDecoder)
 
                     "Private" ->
-                        Decode.map3 Private
+                        Decode.map3 T.CEI_Private
                             (Decode.field "pkg" Pkg.nameDecoder)
                             (Decode.field "unions" (D.assocListDict identity Decode.string Can.unionDecoder))
                             (Decode.field "aliases" (D.assocListDict identity Decode.string Can.aliasDecoder))

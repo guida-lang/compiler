@@ -26,7 +26,7 @@ import Types as T
 
 
 type Constraint
-    = Range V.Version Op Op V.Version
+    = Range T.CEV_Version Op Op T.CEV_Version
 
 
 type Op
@@ -38,7 +38,7 @@ type Op
 -- COMMON CONSTRAINTS
 
 
-exactly : V.Version -> Constraint
+exactly : T.CEV_Version -> Constraint
 exactly version =
     Range version LessOrEqual LessOrEqual version
 
@@ -73,7 +73,7 @@ opToChars op =
 -- IS SATISFIED
 
 
-satisfies : Constraint -> V.Version -> Bool
+satisfies : Constraint -> T.CEV_Version -> Bool
 satisfies constraint version =
     case constraint of
         Range lower lowerOp upperOp upper ->
@@ -81,7 +81,7 @@ satisfies constraint version =
                 && isLess upperOp version upper
 
 
-isLess : Op -> (V.Version -> V.Version -> Bool)
+isLess : Op -> (T.CEV_Version -> T.CEV_Version -> Bool)
 isLess op =
     case op of
         Less ->
@@ -153,7 +153,7 @@ goodElm constraint =
 defaultElm : Constraint
 defaultElm =
     let
-        (V.Version major _ _) =
+        (T.CEV_Version major _ _) =
             V.compiler
     in
     if major > 0 then
@@ -167,12 +167,12 @@ defaultElm =
 -- CREATE CONSTRAINTS
 
 
-untilNextMajor : V.Version -> Constraint
+untilNextMajor : T.CEV_Version -> Constraint
 untilNextMajor version =
     Range version LessOrEqual Less (V.bumpMajor version)
 
 
-untilNextMinor : V.Version -> Constraint
+untilNextMinor : T.CEV_Version -> Constraint
 untilNextMinor version =
     Range version LessOrEqual Less (V.bumpMinor version)
 
@@ -197,7 +197,7 @@ decoder =
 
 type Error
     = BadFormat T.CPP_Row T.CPP_Col
-    | InvalidRange V.Version V.Version
+    | InvalidRange T.CEV_Version T.CEV_Version
 
 
 parser : P.Parser Error Constraint
@@ -247,7 +247,7 @@ parser =
             )
 
 
-parseVersion : P.Parser Error V.Version
+parseVersion : P.Parser Error T.CEV_Version
 parseVersion =
     P.specialize (\( r, c ) _ _ -> BadFormat r c) V.parser
 

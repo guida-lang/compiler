@@ -34,7 +34,7 @@ version =
         }
 
 
-parseVersion : String -> Maybe V.Version
+parseVersion : String -> Maybe T.CEV_Version
 parseVersion chars =
     case P.fromByteString V.parser Tuple.pair chars of
         Ok vsn ->
@@ -142,7 +142,7 @@ suggestPackages given =
                                 Nothing ->
                                     []
 
-                                Just (Registry.Registry _ versions) ->
+                                Just (T.BDR_Registry _ versions) ->
                                     List.filter (String.startsWith given) <|
                                         List.map Pkg.toChars (Dict.keys compare versions)
                         )
@@ -164,7 +164,7 @@ examplePackages given =
                                     , "elm/random"
                                     ]
 
-                                Just (Registry.Registry _ versions) ->
+                                Just (T.BDR_Registry _ versions) ->
                                     List.map Pkg.toChars <|
                                         List.take 4 <|
                                             Suggest.sort given Pkg.toChars (Dict.keys compare versions)

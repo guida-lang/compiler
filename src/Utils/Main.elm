@@ -2,16 +2,11 @@ module Utils.Main exposing
     ( AsyncException(..)
     , ChItem
     , Chan
-    , HttpExceptionContent(..)
-    , HttpResponse(..)
-    , HttpResponseHeaders
-    , HttpStatus(..)
     , LockSharedExclusive(..)
     , ReplCompletion(..)
     , ReplCompletionFunc
     , ReplInputT
     , ReplSettings(..)
-    , SomeException(..)
     , ThreadId
     , ZipArchive(..)
     , ZipEntry(..)
@@ -73,7 +68,17 @@ module Utils.Main exposing
     , listTraverse_
     , lockWithFileLock
     , mVarDecoder
+    , mVarDecoder_BB_BResult
+    , mVarDecoder_CED_Dep
+    , mVarDecoder_Maybe_BED_DResult
+    , mVarDecoder_Maybe_BED_Status
+    , mVarDecoder_Maybe_CECTE_Types
     , mVarEncoder
+    , mVarEncoder_BB_BResult
+    , mVarEncoder_CED_Dep
+    , mVarEncoder_Maybe_BED_DResult
+    , mVarEncoder_Maybe_BED_Status
+    , mVarEncoder_Maybe_CECTE_Types
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -96,22 +101,53 @@ module Utils.Main exposing
     , maybeTraverseTask
     , newChan
     , newEmptyMVar
+    , newEmptyMVar_BB_BResult
+    , newEmptyMVar_BB_Status
+    , newEmptyMVar_BB_StatusDict
+    , newEmptyMVar_CED_Dep
+    , newEmptyMVar_Maybe_BB_Dependencies
+    , newEmptyMVar_Maybe_BED_DResult
     , newEmptyMVar_Maybe_BED_Status
     , newEmptyMVar_Maybe_CASTO_GlobalGraph
     , newEmptyMVar_Maybe_CASTO_LocalGraph
+    , newEmptyMVar_Maybe_CECTE_Types
+    , newEmptyMVar_ResultRegistryProblemEnv
     , newMVar
+    , newMVar_BB_BResult
+    , newMVar_BB_Status
+    , newMVar_BB_StatusDict
+    , newMVar_CED_Dep
+    , newMVar_Maybe_BB_Dependencies
     , newMVar_Maybe_CASTO_GlobalGraph
     , newMVar_Maybe_CASTO_LocalGraph
+    , newMVar_Maybe_CECTE_Types
+    , newMVar_ResultRegistryProblemEnv
     , nonEmptyListTraverse
     , putMVar
+    , putMVar_BB_BResult
+    , putMVar_BB_Status
+    , putMVar_BB_StatusDict
+    , putMVar_CED_Dep
+    , putMVar_Maybe_BB_Dependencies
+    , putMVar_Maybe_BED_DResult
     , putMVar_Maybe_BED_Status
     , putMVar_Maybe_CASTO_GlobalGraph
     , putMVar_Maybe_CASTO_LocalGraph
+    , putMVar_Maybe_CECTE_Types
+    , putMVar_ResultRegistryProblemEnv
     , readChan
     , readMVar
+    , readMVar_BB_BResult
+    , readMVar_BB_Status
+    , readMVar_BB_StatusDict
+    , readMVar_CED_Dep
+    , readMVar_Maybe_BB_Dependencies
+    , readMVar_Maybe_BED_DResult
     , readMVar_Maybe_BED_Status
     , readMVar_Maybe_CASTO_GlobalGraph
     , readMVar_Maybe_CASTO_LocalGraph
+    , readMVar_Maybe_CECTE_Types
+    , readMVar_ResultRegistryProblemEnv
     , replCompleteWord
     , replGetInputLine
     , replGetInputLineWithInitial
@@ -126,6 +162,11 @@ module Utils.Main exposing
     , someExceptionDecoder
     , someExceptionEncoder
     , takeMVar
+    , takeMVar_BB_StatusDict
+    , takeMVar_CED_Dep
+    , takeMVar_Maybe_BB_Dependencies
+    , takeMVar_Maybe_CECTE_Types
+    , takeMVar_ResultRegistryProblemEnv
     , unlines
     , unzip3
     , writeChan
@@ -839,35 +880,18 @@ type ZipEntry
 -- Network.HTTP.Client
 
 
-type HttpExceptionContent
-    = StatusCodeException (HttpResponse ()) String
-    | TooManyRedirects (List (HttpResponse ()))
-    | ConnectionFailure SomeException
-
-
-type HttpResponse body
-    = HttpResponse
-        { responseStatus : HttpStatus
-        , responseHeaders : HttpResponseHeaders
-        }
-
-
-type alias HttpResponseHeaders =
-    List ( String, String )
-
-
-httpResponseStatus : HttpResponse body -> HttpStatus
-httpResponseStatus (HttpResponse { responseStatus }) =
+httpResponseStatus : T.UM_HttpResponse body -> T.UM_HttpStatus
+httpResponseStatus (T.UM_HttpResponse { responseStatus }) =
     responseStatus
 
 
-httpStatusCode : HttpStatus -> Int
-httpStatusCode (HttpStatus statusCode _) =
+httpStatusCode : T.UM_HttpStatus -> Int
+httpStatusCode (T.UM_HttpStatus statusCode _) =
     statusCode
 
 
-httpResponseHeaders : HttpResponse body -> HttpResponseHeaders
-httpResponseHeaders (HttpResponse { responseHeaders }) =
+httpResponseHeaders : T.UM_HttpResponse body -> T.UM_HttpResponseHeaders
+httpResponseHeaders (T.UM_HttpResponse { responseHeaders }) =
     responseHeaders
 
 
@@ -876,16 +900,8 @@ httpHLocation =
     "Location"
 
 
-type HttpStatus
-    = HttpStatus Int String
-
-
 
 -- Control.Exception
-
-
-type SomeException
-    = SomeException
 
 
 type AsyncException
@@ -1067,8 +1083,8 @@ newEmptyMVar =
 -- Control.Concurrent.MVar (Maybe T.BED_Status)
 
 
-readMVar_Maybe_BED_Status : T.MVar (Maybe T.BED_Status) -> IO (Maybe T.BED_Status)
-readMVar_Maybe_BED_Status (T.MVar ref) =
+readMVar_Maybe_BED_Status : T.MVar_Maybe_BED_Status -> IO (Maybe T.BED_Status)
+readMVar_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_BED_Status of
@@ -1087,8 +1103,8 @@ readMVar_Maybe_BED_Status (T.MVar ref) =
         )
 
 
-putMVar_Maybe_BED_Status : T.MVar (Maybe T.BED_Status) -> Maybe T.BED_Status -> IO ()
-putMVar_Maybe_BED_Status (T.MVar ref) value =
+putMVar_Maybe_BED_Status : T.MVar_Maybe_BED_Status -> Maybe T.BED_Status -> IO ()
+putMVar_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) value =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_BED_Status of
@@ -1123,7 +1139,7 @@ putMVar_Maybe_BED_Status (T.MVar ref) value =
         )
 
 
-newEmptyMVar_Maybe_BED_Status : IO (T.MVar (Maybe T.BED_Status))
+newEmptyMVar_Maybe_BED_Status : IO T.MVar_Maybe_BED_Status
 newEmptyMVar_Maybe_BED_Status =
     IO
         (\_ s ->
@@ -1131,14 +1147,85 @@ newEmptyMVar_Maybe_BED_Status =
             , IO.NewEmptyMVar_Maybe_BED_Status IO.pure (Array.length s.mVars_Maybe_BED_Status)
             )
         )
-        |> IO.fmap T.MVar
+        |> IO.fmap T.MVar_Maybe_BED_Status
+
+
+
+-- Control.Concurrent.MVar (Maybe T.BED_DResult)
+
+
+readMVar_Maybe_BED_DResult : T.MVar_Maybe_BED_DResult -> IO (Maybe T.BED_DResult)
+readMVar_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BED_DResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_BED_DResult IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BED_DResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_BED_DResult index ] } s.mVars_Maybe_BED_DResult }
+                            , IO.ReadMVar_Maybe_BED_DResult IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar: invalid ref"
+        )
+
+
+putMVar_Maybe_BED_DResult : T.MVar_Maybe_BED_DResult -> Maybe T.BED_DResult -> IO ()
+putMVar_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BED_DResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_BED_DResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_BED_DResult index value ] } s.mVars_Maybe_BED_DResult }
+                            , IO.PutMVar_Maybe_BED_DResult IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_BED_DResult readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_BED_DResult = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_BED_DResult }
+                            , IO.PutMVar_Maybe_BED_DResult IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_BED_DResult : IO T.MVar_Maybe_BED_DResult
+newEmptyMVar_Maybe_BED_DResult =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_BED_DResult = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_BED_DResult }
+            , IO.NewEmptyMVar_Maybe_BED_DResult IO.pure (Array.length s.mVars_Maybe_BED_DResult)
+            )
+        )
+        |> IO.fmap T.MVar_Maybe_BED_DResult
 
 
 
 -- Control.Concurrent.MVar (Maybe T.CASTO_LocalGraph)
 
 
-newMVar_Maybe_CASTO_LocalGraph : Maybe T.CASTO_LocalGraph -> IO (T.MVar (Maybe T.CASTO_LocalGraph))
+newMVar_Maybe_CASTO_LocalGraph : Maybe T.CASTO_LocalGraph -> IO T.MVar_Maybe_CASTO_LocalGraph
 newMVar_Maybe_CASTO_LocalGraph value =
     newEmptyMVar_Maybe_CASTO_LocalGraph
         |> IO.bind
@@ -1148,8 +1235,8 @@ newMVar_Maybe_CASTO_LocalGraph value =
             )
 
 
-readMVar_Maybe_CASTO_LocalGraph : T.MVar (Maybe T.CASTO_LocalGraph) -> IO (Maybe T.CASTO_LocalGraph)
-readMVar_Maybe_CASTO_LocalGraph (T.MVar ref) =
+readMVar_Maybe_CASTO_LocalGraph : T.MVar_Maybe_CASTO_LocalGraph -> IO (Maybe T.CASTO_LocalGraph)
+readMVar_Maybe_CASTO_LocalGraph (T.MVar_Maybe_CASTO_LocalGraph ref) =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_CASTO_LocalGraph of
@@ -1164,12 +1251,12 @@ readMVar_Maybe_CASTO_LocalGraph (T.MVar ref) =
                             )
 
                 Nothing ->
-                    crash "Utils.Main.readMVar: invalid ref"
+                    crash "Utils.Main.readMVar_Maybe_CASTO_LocalGraph: invalid ref"
         )
 
 
-putMVar_Maybe_CASTO_LocalGraph : T.MVar (Maybe T.CASTO_LocalGraph) -> Maybe T.CASTO_LocalGraph -> IO ()
-putMVar_Maybe_CASTO_LocalGraph (T.MVar ref) value =
+putMVar_Maybe_CASTO_LocalGraph : T.MVar_Maybe_CASTO_LocalGraph -> Maybe T.CASTO_LocalGraph -> IO ()
+putMVar_Maybe_CASTO_LocalGraph (T.MVar_Maybe_CASTO_LocalGraph ref) value =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_CASTO_LocalGraph of
@@ -1200,11 +1287,11 @@ putMVar_Maybe_CASTO_LocalGraph (T.MVar ref) value =
                             )
 
                 Nothing ->
-                    crash "Utils.Main.putMVar: invalid ref"
+                    crash "Utils.Main.putMVar_Maybe_CASTO_LocalGraph: invalid ref"
         )
 
 
-newEmptyMVar_Maybe_CASTO_LocalGraph : IO (T.MVar (Maybe T.CASTO_LocalGraph))
+newEmptyMVar_Maybe_CASTO_LocalGraph : IO T.MVar_Maybe_CASTO_LocalGraph
 newEmptyMVar_Maybe_CASTO_LocalGraph =
     IO
         (\_ s ->
@@ -1212,14 +1299,14 @@ newEmptyMVar_Maybe_CASTO_LocalGraph =
             , IO.NewEmptyMVar_Maybe_CASTO_LocalGraph IO.pure (Array.length s.mVars_Maybe_CASTO_LocalGraph)
             )
         )
-        |> IO.fmap T.MVar
+        |> IO.fmap T.MVar_Maybe_CASTO_LocalGraph
 
 
 
 -- Control.Concurrent.MVar (Maybe T.CASTO_GlobalGraph)
 
 
-newMVar_Maybe_CASTO_GlobalGraph : Maybe T.CASTO_GlobalGraph -> IO (T.MVar (Maybe T.CASTO_GlobalGraph))
+newMVar_Maybe_CASTO_GlobalGraph : Maybe T.CASTO_GlobalGraph -> IO T.MVar_Maybe_CASTO_GlobalGraph
 newMVar_Maybe_CASTO_GlobalGraph value =
     newEmptyMVar_Maybe_CASTO_GlobalGraph
         |> IO.bind
@@ -1229,8 +1316,8 @@ newMVar_Maybe_CASTO_GlobalGraph value =
             )
 
 
-readMVar_Maybe_CASTO_GlobalGraph : T.MVar (Maybe T.CASTO_GlobalGraph) -> IO (Maybe T.CASTO_GlobalGraph)
-readMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) =
+readMVar_Maybe_CASTO_GlobalGraph : T.MVar_Maybe_CASTO_GlobalGraph -> IO (Maybe T.CASTO_GlobalGraph)
+readMVar_Maybe_CASTO_GlobalGraph (T.MVar_Maybe_CASTO_GlobalGraph ref) =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_CASTO_GlobalGraph of
@@ -1245,12 +1332,12 @@ readMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) =
                             )
 
                 Nothing ->
-                    crash "Utils.Main.readMVar: invalid ref"
+                    crash "Utils.Main.readMVar_Maybe_CASTO_GlobalGraph: invalid ref"
         )
 
 
-putMVar_Maybe_CASTO_GlobalGraph : T.MVar (Maybe T.CASTO_GlobalGraph) -> Maybe T.CASTO_GlobalGraph -> IO ()
-putMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) value =
+putMVar_Maybe_CASTO_GlobalGraph : T.MVar_Maybe_CASTO_GlobalGraph -> Maybe T.CASTO_GlobalGraph -> IO ()
+putMVar_Maybe_CASTO_GlobalGraph (T.MVar_Maybe_CASTO_GlobalGraph ref) value =
     IO
         (\index s ->
             case Array.get ref s.mVars_Maybe_CASTO_GlobalGraph of
@@ -1281,11 +1368,11 @@ putMVar_Maybe_CASTO_GlobalGraph (T.MVar ref) value =
                             )
 
                 Nothing ->
-                    crash "Utils.Main.putMVar: invalid ref"
+                    crash "Utils.Main.putMVar_Maybe_CASTO_GlobalGraph: invalid ref"
         )
 
 
-newEmptyMVar_Maybe_CASTO_GlobalGraph : IO (T.MVar (Maybe T.CASTO_GlobalGraph))
+newEmptyMVar_Maybe_CASTO_GlobalGraph : IO T.MVar_Maybe_CASTO_GlobalGraph
 newEmptyMVar_Maybe_CASTO_GlobalGraph =
     IO
         (\_ s ->
@@ -1293,7 +1380,829 @@ newEmptyMVar_Maybe_CASTO_GlobalGraph =
             , IO.NewEmptyMVar_Maybe_CASTO_GlobalGraph IO.pure (Array.length s.mVars_Maybe_CASTO_GlobalGraph)
             )
         )
-        |> IO.fmap T.MVar
+        |> IO.fmap T.MVar_Maybe_CASTO_GlobalGraph
+
+
+
+-- Control.Concurrent.MVar (T.BB_BResult)
+
+
+newMVar_BB_BResult : T.BB_BResult -> IO T.MVar_BB_BResult
+newMVar_BB_BResult value =
+    newEmptyMVar_BB_BResult
+        |> IO.bind
+            (\mvar ->
+                putMVar_BB_BResult mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_BB_BResult : T.MVar_BB_BResult -> IO T.BB_BResult
+readMVar_BB_BResult (T.MVar_BB_BResult ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_BResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_BB_BResult IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_BResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_BB_BResult index ] } s.mVars_BB_BResult }
+                            , IO.ReadMVar_BB_BResult IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_BResult: invalid ref"
+        )
+
+
+putMVar_BB_BResult : T.MVar_BB_BResult -> T.BB_BResult -> IO ()
+putMVar_BB_BResult (T.MVar_BB_BResult ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_BResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_BResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_BB_BResult index value ] } s.mVars_BB_BResult }
+                            , IO.PutMVar_BB_BResult IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_BB_BResult readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_BResult = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_BResult }
+                            , IO.PutMVar_BB_BResult IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_BResult: invalid ref"
+        )
+
+
+newEmptyMVar_BB_BResult : IO T.MVar_BB_BResult
+newEmptyMVar_BB_BResult =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_BResult = Array.push { subscribers = [], value = Nothing } s.mVars_BB_BResult }
+            , IO.NewEmptyMVar_BB_BResult IO.pure (Array.length s.mVars_BB_BResult)
+            )
+        )
+        |> IO.fmap T.MVar_BB_BResult
+
+
+
+-- Control.Concurrent.MVar (T.BB_Status)
+
+
+newMVar_BB_Status : T.BB_Status -> IO T.MVar_BB_Status
+newMVar_BB_Status value =
+    newEmptyMVar_BB_Status
+        |> IO.bind
+            (\mvar ->
+                putMVar_BB_Status mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_BB_Status : T.MVar_BB_Status -> IO T.BB_Status
+readMVar_BB_Status (T.MVar_BB_Status ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_Status of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_BB_Status IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_BB_Status index ] } s.mVars_BB_Status }
+                            , IO.ReadMVar_BB_Status IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_Status: invalid ref"
+        )
+
+
+putMVar_BB_Status : T.MVar_BB_Status -> T.BB_Status -> IO ()
+putMVar_BB_Status (T.MVar_BB_Status ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_Status of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_BB_Status index value ] } s.mVars_BB_Status }
+                            , IO.PutMVar_BB_Status IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_BB_Status readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_Status = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_Status }
+                            , IO.PutMVar_BB_Status IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_Status: invalid ref"
+        )
+
+
+newEmptyMVar_BB_Status : IO T.MVar_BB_Status
+newEmptyMVar_BB_Status =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_Status = Array.push { subscribers = [], value = Nothing } s.mVars_BB_Status }
+            , IO.NewEmptyMVar_BB_Status IO.pure (Array.length s.mVars_BB_Status)
+            )
+        )
+        |> IO.fmap T.MVar_BB_Status
+
+
+
+-- Control.Concurrent.MVar (T.BB_StatusDict)
+
+
+newMVar_BB_StatusDict : T.BB_StatusDict -> IO T.MVar_BB_StatusDict
+newMVar_BB_StatusDict value =
+    newEmptyMVar_BB_StatusDict
+        |> IO.bind
+            (\mvar ->
+                putMVar_BB_StatusDict mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_BB_StatusDict : T.MVar_BB_StatusDict -> IO T.BB_StatusDict
+readMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_BB_StatusDict IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_BB_StatusDict index ] } s.mVars_BB_StatusDict }
+                            , IO.ReadMVar_BB_StatusDict IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_StatusDict: invalid ref"
+        )
+
+
+takeMVar_BB_StatusDict : T.MVar_BB_StatusDict -> IO T.BB_StatusDict
+takeMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_BB_StatusDict putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_BB_StatusDict }
+                                    , IO.TakeMVar_BB_StatusDict IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_BB_StatusDict = Array.set ref { mVar | value = Nothing } s.mVars_BB_StatusDict }
+                                    , IO.TakeMVar_BB_StatusDict IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_BB_StatusDict index ] } s.mVars_BB_StatusDict }
+                            , IO.TakeMVar_BB_StatusDict IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_BB_StatusDict: invalid ref"
+        )
+
+
+putMVar_BB_StatusDict : T.MVar_BB_StatusDict -> T.BB_StatusDict -> IO ()
+putMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_BB_StatusDict index value ] } s.mVars_BB_StatusDict }
+                            , IO.PutMVar_BB_StatusDict IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_BB_StatusDict readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_StatusDict }
+                            , IO.PutMVar_BB_StatusDict IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_StatusDict: invalid ref"
+        )
+
+
+newEmptyMVar_BB_StatusDict : IO T.MVar_BB_StatusDict
+newEmptyMVar_BB_StatusDict =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_StatusDict = Array.push { subscribers = [], value = Nothing } s.mVars_BB_StatusDict }
+            , IO.NewEmptyMVar_BB_StatusDict IO.pure (Array.length s.mVars_BB_StatusDict)
+            )
+        )
+        |> IO.fmap T.MVar_BB_StatusDict
+
+
+
+-- Control.Concurrent.MVar (Result T.BRE_RegistryProblem T.BDS_Env)
+
+
+newMVar_ResultRegistryProblemEnv : Result T.BRE_RegistryProblem T.BDS_Env -> IO T.MVar_ResultRegistryProblemEnv
+newMVar_ResultRegistryProblemEnv value =
+    newEmptyMVar_ResultRegistryProblemEnv
+        |> IO.bind
+            (\mvar ->
+                putMVar_ResultRegistryProblemEnv mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> IO (Result T.BRE_RegistryProblem T.BDS_Env)
+readMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ResultRegistryProblemEnv of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_ResultRegistryProblemEnv IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_ResultRegistryProblemEnv index ] } s.mVars_ResultRegistryProblemEnv }
+                            , IO.ReadMVar_ResultRegistryProblemEnv IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_ResultRegistryProblemEnv: invalid ref"
+        )
+
+
+takeMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> IO (Result T.BRE_RegistryProblem T.BDS_Env)
+takeMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ResultRegistryProblemEnv of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_ResultRegistryProblemEnv putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_ResultRegistryProblemEnv }
+                                    , IO.TakeMVar_ResultRegistryProblemEnv IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | value = Nothing } s.mVars_ResultRegistryProblemEnv }
+                                    , IO.TakeMVar_ResultRegistryProblemEnv IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_ResultRegistryProblemEnv index ] } s.mVars_ResultRegistryProblemEnv }
+                            , IO.TakeMVar_ResultRegistryProblemEnv IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_ResultRegistryProblemEnv: invalid ref"
+        )
+
+
+putMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> Result T.BRE_RegistryProblem T.BDS_Env -> IO ()
+putMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ResultRegistryProblemEnv of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_ResultRegistryProblemEnv index value ] } s.mVars_ResultRegistryProblemEnv }
+                            , IO.PutMVar_ResultRegistryProblemEnv IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_ResultRegistryProblemEnv readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_ResultRegistryProblemEnv }
+                            , IO.PutMVar_ResultRegistryProblemEnv IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_ResultRegistryProblemEnv: invalid ref"
+        )
+
+
+newEmptyMVar_ResultRegistryProblemEnv : IO T.MVar_ResultRegistryProblemEnv
+newEmptyMVar_ResultRegistryProblemEnv =
+    IO
+        (\_ s ->
+            ( { s | mVars_ResultRegistryProblemEnv = Array.push { subscribers = [], value = Nothing } s.mVars_ResultRegistryProblemEnv }
+            , IO.NewEmptyMVar_ResultRegistryProblemEnv IO.pure (Array.length s.mVars_ResultRegistryProblemEnv)
+            )
+        )
+        |> IO.fmap T.MVar_ResultRegistryProblemEnv
+
+
+
+-- Control.Concurrent.MVar (T.CED_Dep)
+
+
+newMVar_CED_Dep : T.CED_Dep -> IO T.MVar_CED_Dep
+newMVar_CED_Dep value =
+    newEmptyMVar_CED_Dep
+        |> IO.bind
+            (\mvar ->
+                putMVar_CED_Dep mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_CED_Dep : T.MVar_CED_Dep -> IO T.CED_Dep
+readMVar_CED_Dep (T.MVar_CED_Dep ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_CED_Dep of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_CED_Dep IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_CED_Dep index ] } s.mVars_CED_Dep }
+                            , IO.ReadMVar_CED_Dep IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_CED_Dep: invalid ref"
+        )
+
+
+takeMVar_CED_Dep : T.MVar_CED_Dep -> IO T.CED_Dep
+takeMVar_CED_Dep (T.MVar_CED_Dep ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_CED_Dep of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_CED_Dep putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_CED_Dep }
+                                    , IO.TakeMVar_CED_Dep IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_CED_Dep = Array.set ref { mVar | value = Nothing } s.mVars_CED_Dep }
+                                    , IO.TakeMVar_CED_Dep IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_CED_Dep index ] } s.mVars_CED_Dep }
+                            , IO.TakeMVar_CED_Dep IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_CED_Dep: invalid ref"
+        )
+
+
+putMVar_CED_Dep : T.MVar_CED_Dep -> T.CED_Dep -> IO ()
+putMVar_CED_Dep (T.MVar_CED_Dep ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_CED_Dep of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_CED_Dep index value ] } s.mVars_CED_Dep }
+                            , IO.PutMVar_CED_Dep IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_CED_Dep readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_CED_Dep }
+                            , IO.PutMVar_CED_Dep IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_CED_Dep: invalid ref"
+        )
+
+
+newEmptyMVar_CED_Dep : IO T.MVar_CED_Dep
+newEmptyMVar_CED_Dep =
+    IO
+        (\_ s ->
+            ( { s | mVars_CED_Dep = Array.push { subscribers = [], value = Nothing } s.mVars_CED_Dep }
+            , IO.NewEmptyMVar_CED_Dep IO.pure (Array.length s.mVars_CED_Dep)
+            )
+        )
+        |> IO.fmap T.MVar_CED_Dep
+
+
+
+-- Control.Concurrent.MVar (Maybe T.CECTE_Types)
+
+
+newMVar_Maybe_CECTE_Types : Maybe T.CECTE_Types -> IO T.MVar_Maybe_CECTE_Types
+newMVar_Maybe_CECTE_Types value =
+    newEmptyMVar_Maybe_CECTE_Types
+        |> IO.bind
+            (\mvar ->
+                putMVar_Maybe_CECTE_Types mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> IO (Maybe T.CECTE_Types)
+readMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CECTE_Types of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_CECTE_Types IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_CECTE_Types index ] } s.mVars_Maybe_CECTE_Types }
+                            , IO.ReadMVar_Maybe_CECTE_Types IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_Maybe_CECTE_Types: invalid ref"
+        )
+
+
+takeMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> IO (Maybe T.CECTE_Types)
+takeMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CECTE_Types of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_Maybe_CECTE_Types putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_CECTE_Types }
+                                    , IO.TakeMVar_Maybe_CECTE_Types IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_CECTE_Types }
+                                    , IO.TakeMVar_Maybe_CECTE_Types IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_Maybe_CECTE_Types index ] } s.mVars_Maybe_CECTE_Types }
+                            , IO.TakeMVar_Maybe_CECTE_Types IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_Maybe_CECTE_Types: invalid ref"
+        )
+
+
+putMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Maybe T.CECTE_Types -> IO ()
+putMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_CECTE_Types of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_CECTE_Types index value ] } s.mVars_Maybe_CECTE_Types }
+                            , IO.PutMVar_Maybe_CECTE_Types IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_CECTE_Types readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_CECTE_Types }
+                            , IO.PutMVar_Maybe_CECTE_Types IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Maybe_CECTE_Types: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_CECTE_Types : IO T.MVar_Maybe_CECTE_Types
+newEmptyMVar_Maybe_CECTE_Types =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_CECTE_Types = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_CECTE_Types }
+            , IO.NewEmptyMVar_Maybe_CECTE_Types IO.pure (Array.length s.mVars_Maybe_CECTE_Types)
+            )
+        )
+        |> IO.fmap T.MVar_Maybe_CECTE_Types
+
+
+
+-- Control.Concurrent.MVar (Maybe T.BB_Dependencies)
+
+
+newMVar_Maybe_BB_Dependencies : Maybe T.BB_Dependencies -> IO T.MVar_Maybe_BB_Dependencies
+newMVar_Maybe_BB_Dependencies value =
+    newEmptyMVar_Maybe_BB_Dependencies
+        |> IO.bind
+            (\mvar ->
+                putMVar_Maybe_BB_Dependencies mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
+readMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_BB_Dependencies IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.ReadMVar_Maybe_BB_Dependencies IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+takeMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
+takeMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_Maybe_BB_Dependencies putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_BB_Dependencies }
+                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_BB_Dependencies }
+                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.TakeMVar_Maybe_BB_Dependencies IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+putMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> Maybe T.BB_Dependencies -> IO ()
+putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_BB_Dependencies index value ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_BB_Dependencies readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_BB_Dependencies }
+                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_BB_Dependencies : IO T.MVar_Maybe_BB_Dependencies
+newEmptyMVar_Maybe_BB_Dependencies =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_BB_Dependencies = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_BB_Dependencies }
+            , IO.NewEmptyMVar_Maybe_BB_Dependencies IO.pure (Array.length s.mVars_Maybe_BB_Dependencies)
+            )
+        )
+        |> IO.fmap T.MVar_Maybe_BB_Dependencies
+
+
+
+-- Control.Concurrent.MVar (Maybe T.BB_Dependencies)
+
+
+newMVar_Maybe_BB_Dependencies : Maybe T.BB_Dependencies -> IO T.MVar_Maybe_BB_Dependencies
+newMVar_Maybe_BB_Dependencies value =
+    newEmptyMVar_Maybe_BB_Dependencies
+        |> IO.bind
+            (\mvar ->
+                putMVar_Maybe_BB_Dependencies mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
+readMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_Maybe_BB_Dependencies IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.ReadMVar_Maybe_BB_Dependencies IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+takeMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
+takeMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_Maybe_BB_Dependencies putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_BB_Dependencies }
+                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_BB_Dependencies }
+                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.TakeMVar_Maybe_BB_Dependencies IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+putMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> Maybe T.BB_Dependencies -> IO ()
+putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_BB_Dependencies index value ] } s.mVars_Maybe_BB_Dependencies }
+                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_Maybe_BB_Dependencies readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_BB_Dependencies }
+                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Maybe_BB_Dependencies: invalid ref"
+        )
+
+
+newEmptyMVar_Maybe_BB_Dependencies : IO T.MVar_Maybe_BB_Dependencies
+newEmptyMVar_Maybe_BB_Dependencies =
+    IO
+        (\_ s ->
+            ( { s | mVars_Maybe_BB_Dependencies = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_BB_Dependencies }
+            , IO.NewEmptyMVar_Maybe_BB_Dependencies IO.pure (Array.length s.mVars_Maybe_BB_Dependencies)
+            )
+        )
+        |> IO.fmap T.MVar_Maybe_BB_Dependencies
 
 
 
@@ -1442,8 +2351,58 @@ mVarDecoder =
     Decode.map T.MVar Decode.int
 
 
+mVarDecoder_Maybe_BED_Status : Decode.Decoder T.MVar_Maybe_BED_Status
+mVarDecoder_Maybe_BED_Status =
+    Decode.map T.MVar_Maybe_BED_Status Decode.int
+
+
+mVarDecoder_Maybe_BED_DResult : Decode.Decoder T.MVar_Maybe_BED_DResult
+mVarDecoder_Maybe_BED_DResult =
+    Decode.map T.MVar_Maybe_BED_DResult Decode.int
+
+
+mVarDecoder_BB_BResult : Decode.Decoder T.MVar_BB_BResult
+mVarDecoder_BB_BResult =
+    Decode.map T.MVar_BB_BResult Decode.int
+
+
+mVarDecoder_CED_Dep : Decode.Decoder T.MVar_CED_Dep
+mVarDecoder_CED_Dep =
+    Decode.map T.MVar_CED_Dep Decode.int
+
+
+mVarDecoder_Maybe_CECTE_Types : Decode.Decoder T.MVar_Maybe_CECTE_Types
+mVarDecoder_Maybe_CECTE_Types =
+    Decode.map T.MVar_Maybe_CECTE_Types Decode.int
+
+
 mVarEncoder : T.MVar a -> Encode.Value
 mVarEncoder (T.MVar ref) =
+    Encode.int ref
+
+
+mVarEncoder_Maybe_BED_Status : T.MVar_Maybe_BED_Status -> Encode.Value
+mVarEncoder_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) =
+    Encode.int ref
+
+
+mVarEncoder_Maybe_BED_DResult : T.MVar_Maybe_BED_DResult -> Encode.Value
+mVarEncoder_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) =
+    Encode.int ref
+
+
+mVarEncoder_BB_BResult : T.MVar_BB_BResult -> Encode.Value
+mVarEncoder_BB_BResult (T.MVar_BB_BResult ref) =
+    Encode.int ref
+
+
+mVarEncoder_CED_Dep : T.MVar_CED_Dep -> Encode.Value
+mVarEncoder_CED_Dep (T.MVar_CED_Dep ref) =
+    Encode.int ref
+
+
+mVarEncoder_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Encode.Value
+mVarEncoder_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
     Encode.int ref
 
 
@@ -1461,18 +2420,18 @@ chItemDecoder decoder =
     Decode.map2 ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
 
 
-someExceptionEncoder : SomeException -> Encode.Value
+someExceptionEncoder : T.UM_SomeException -> Encode.Value
 someExceptionEncoder _ =
     Encode.object [ ( "type", Encode.string "SomeException" ) ]
 
 
-someExceptionDecoder : Decode.Decoder SomeException
+someExceptionDecoder : Decode.Decoder T.UM_SomeException
 someExceptionDecoder =
-    Decode.succeed SomeException
+    Decode.succeed T.UM_SomeException
 
 
-httpResponseEncoder : HttpResponse body -> Encode.Value
-httpResponseEncoder (HttpResponse httpResponse) =
+httpResponseEncoder : T.UM_HttpResponse body -> Encode.Value
+httpResponseEncoder (T.UM_HttpResponse httpResponse) =
     Encode.object
         [ ( "type", Encode.string "HttpResponse" )
         , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
@@ -1480,11 +2439,11 @@ httpResponseEncoder (HttpResponse httpResponse) =
         ]
 
 
-httpResponseDecoder : Decode.Decoder (HttpResponse body)
+httpResponseDecoder : Decode.Decoder (T.UM_HttpResponse body)
 httpResponseDecoder =
     Decode.map2
         (\responseStatus responseHeaders ->
-            HttpResponse
+            T.UM_HttpResponse
                 { responseStatus = responseStatus
                 , responseHeaders = responseHeaders
                 }
@@ -1493,8 +2452,8 @@ httpResponseDecoder =
         (Decode.field "responseHeaders" httpResponseHeadersDecoder)
 
 
-httpStatusEncoder : HttpStatus -> Encode.Value
-httpStatusEncoder (HttpStatus statusCode statusMessage) =
+httpStatusEncoder : T.UM_HttpStatus -> Encode.Value
+httpStatusEncoder (T.UM_HttpStatus statusCode statusMessage) =
     Encode.object
         [ ( "type", Encode.string "HttpStatus" )
         , ( "statusCode", Encode.int statusCode )
@@ -1502,62 +2461,62 @@ httpStatusEncoder (HttpStatus statusCode statusMessage) =
         ]
 
 
-httpStatusDecoder : Decode.Decoder HttpStatus
+httpStatusDecoder : Decode.Decoder T.UM_HttpStatus
 httpStatusDecoder =
-    Decode.map2 HttpStatus
+    Decode.map2 T.UM_HttpStatus
         (Decode.field "statusCode" Decode.int)
         (Decode.field "statusMessage" Decode.string)
 
 
-httpResponseHeadersEncoder : HttpResponseHeaders -> Encode.Value
+httpResponseHeadersEncoder : T.UM_HttpResponseHeaders -> Encode.Value
 httpResponseHeadersEncoder =
     Encode.list (E.jsonPair Encode.string Encode.string)
 
 
-httpResponseHeadersDecoder : Decode.Decoder HttpResponseHeaders
+httpResponseHeadersDecoder : Decode.Decoder T.UM_HttpResponseHeaders
 httpResponseHeadersDecoder =
     Decode.list (D.jsonPair Decode.string Decode.string)
 
 
-httpExceptionContentEncoder : HttpExceptionContent -> Encode.Value
+httpExceptionContentEncoder : T.UM_HttpExceptionContent -> Encode.Value
 httpExceptionContentEncoder httpExceptionContent =
     case httpExceptionContent of
-        StatusCodeException response body ->
+        T.UM_StatusCodeException response body ->
             Encode.object
                 [ ( "type", Encode.string "StatusCodeException" )
                 , ( "response", httpResponseEncoder response )
                 , ( "body", Encode.string body )
                 ]
 
-        TooManyRedirects responses ->
+        T.UM_TooManyRedirects responses ->
             Encode.object
                 [ ( "type", Encode.string "TooManyRedirects" )
                 , ( "responses", Encode.list httpResponseEncoder responses )
                 ]
 
-        ConnectionFailure someException ->
+        T.UM_ConnectionFailure someException ->
             Encode.object
                 [ ( "type", Encode.string "ConnectionFailure" )
                 , ( "someException", someExceptionEncoder someException )
                 ]
 
 
-httpExceptionContentDecoder : Decode.Decoder HttpExceptionContent
+httpExceptionContentDecoder : Decode.Decoder T.UM_HttpExceptionContent
 httpExceptionContentDecoder =
     Decode.field "type" Decode.string
         |> Decode.andThen
             (\type_ ->
                 case type_ of
                     "StatusCodeException" ->
-                        Decode.map2 StatusCodeException
+                        Decode.map2 T.UM_StatusCodeException
                             (Decode.field "response" httpResponseDecoder)
                             (Decode.field "body" Decode.string)
 
                     "TooManyRedirects" ->
-                        Decode.map TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
+                        Decode.map T.UM_TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
 
                     "ConnectionFailure" ->
-                        Decode.map ConnectionFailure (Decode.field "someException" someExceptionDecoder)
+                        Decode.map T.UM_ConnectionFailure (Decode.field "someException" someExceptionDecoder)
 
                     _ ->
                         Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)

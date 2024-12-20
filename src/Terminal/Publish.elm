@@ -49,7 +49,7 @@ run () () =
 
 
 type Env
-    = Env T.FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.Outline
+    = Env T.FilePath T.BS_PackageCache T.BH_Manager T.BDR_Registry Outline.Outline
 
 
 getEnv : Task.Task Exit.Publish Env
@@ -89,7 +89,7 @@ publish ((Env root _ manager registry outline) as env) =
 
         Outline.Pkg (Outline.PkgOutline pkg summary _ vsn exposed _ _ _) ->
             let
-                maybeKnownVersions : Maybe Registry.KnownVersions
+                maybeKnownVersions : Maybe T.BDR_KnownVersions
                 maybeKnownVersions =
                     Registry.getVersions pkg registry
             in
@@ -291,7 +291,7 @@ getGit =
 -- VERIFY GITHUB TAG
 
 
-verifyTag : Git -> Http.Manager -> T.CEP_Name -> V.Version -> Task.Task Exit.Publish String
+verifyTag : Git -> T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> Task.Task Exit.Publish String
 verifyTag (Git run_) manager pkg vsn =
     reportTagCheck vsn
         -- https://stackoverflow.com/questions/1064499/how-to-list-all-git-tags
@@ -320,7 +320,7 @@ verifyTag (Git run_) manager pkg vsn =
         )
 
 
-toTagUrl : T.CEP_Name -> V.Version -> String
+toTagUrl : T.CEP_Name -> T.CEV_Version -> String
 toTagUrl pkg vsn =
     "https://api.github.com/repos/" ++ Pkg.toUrl pkg ++ "/git/refs/tags/" ++ V.toChars vsn
 
@@ -334,7 +334,7 @@ commitHashDecoder =
 -- VERIFY NO LOCAL CHANGES SINCE TAG
 
 
-verifyNoChanges : Git -> String -> V.Version -> Task.Task Exit.Publish ()
+verifyNoChanges : Git -> String -> T.CEV_Version -> Task.Task Exit.Publish ()
 verifyNoChanges (Git run_) commitHash vsn =
     reportLocalChangesCheck <|
         -- https://stackoverflow.com/questions/3878624/how-do-i-programmatically-determine-if-there-are-uncommited-changes
@@ -355,7 +355,7 @@ verifyNoChanges (Git run_) commitHash vsn =
 -- VERIFY THAT ZIP BUILDS / COMPUTE HASH
 
 
-verifyZip : Env -> T.CEP_Name -> V.Version -> Task.Task Exit.Publish Http.Sha
+verifyZip : Env -> T.CEP_Name -> T.CEV_Version -> Task.Task Exit.Publish Http.Sha
 verifyZip (Env root _ manager _ _) pkg vsn =
     withPrepublishDir root <|
         \prepublishDir ->
@@ -384,7 +384,7 @@ verifyZip (Env root _ manager _ _) pkg vsn =
                     )
 
 
-toZipUrl : T.CEP_Name -> V.Version -> String
+toZipUrl : T.CEP_Name -> T.CEV_Version -> String
 toZipUrl pkg vsn =
     "https://github.com/" ++ Pkg.toUrl pkg ++ "/zipball/" ++ V.toChars vsn ++ "/"
 
@@ -439,10 +439,10 @@ verifyZipBuild root =
 
 type GoodVersion
     = GoodStart
-    | GoodBump V.Version M.Magnitude
+    | GoodBump T.CEV_Version M.Magnitude
 
 
-verifyVersion : Env -> T.CEP_Name -> V.Version -> Docs.Documentation -> Maybe Registry.KnownVersions -> Task.Task Exit.Publish ()
+verifyVersion : Env -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> Maybe T.BDR_KnownVersions -> Task.Task Exit.Publish ()
 verifyVersion env pkg vsn newDocs publishedVersions =
     reportSemverCheck vsn <|
         case publishedVersions of
@@ -453,7 +453,7 @@ verifyVersion env pkg vsn newDocs publishedVersions =
                 else
                     IO.pure <| Err <| Exit.PublishNotInitialVersion vsn
 
-            Just ((Registry.KnownVersions latest previous) as knownVersions) ->
+            Just ((T.BDR_KnownVersions latest previous) as knownVersions) ->
                 if vsn == latest || List.member vsn previous then
                     IO.pure <| Err <| Exit.PublishAlreadyPublished vsn
 
@@ -461,8 +461,8 @@ verifyVersion env pkg vsn newDocs publishedVersions =
                     verifyBump env pkg vsn newDocs knownVersions
 
 
-verifyBump : Env -> T.CEP_Name -> V.Version -> Docs.Documentation -> Registry.KnownVersions -> IO (Result Exit.Publish GoodVersion)
-verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
+verifyBump : Env -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> T.BDR_KnownVersions -> IO (Result Exit.Publish GoodVersion)
+verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((T.BDR_KnownVersions latest _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
             IO.pure <|
@@ -483,7 +483,7 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
                                     changes =
                                         Diff.diff oldDocs newDocs
 
-                                    realNew : V.Version
+                                    realNew : T.CEV_Version
                                     realNew =
                                         Diff.bump changes old
                                 in
@@ -500,7 +500,7 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
 -- REGISTER PACKAGES
 
 
-register : Http.Manager -> T.CEP_Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
+register : T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
 register manager pkg vsn docs commitHash sha =
     let
         url : String
@@ -525,7 +525,7 @@ register manager pkg vsn docs commitHash sha =
 -- REPORTING
 
 
-reportPublishStart : T.CEP_Name -> V.Version -> Maybe Registry.KnownVersions -> Task.Task x ()
+reportPublishStart : T.CEP_Name -> T.CEV_Version -> Maybe T.BDR_KnownVersions -> Task.Task x ()
 reportPublishStart pkg vsn maybeKnownVersions =
     Task.io <|
         case maybeKnownVersions of
@@ -564,7 +564,7 @@ reportBuildCheck =
         "Problem with documentation"
 
 
-reportSemverCheck : V.Version -> IO (Result x GoodVersion) -> Task.Task x ()
+reportSemverCheck : T.CEV_Version -> IO (Result x GoodVersion) -> Task.Task x ()
 reportSemverCheck version work =
     let
         vsn : String
@@ -599,7 +599,7 @@ reportSemverCheck version work =
     Task.void <| reportCustomCheck waiting success failure work
 
 
-reportTagCheck : V.Version -> IO (Result x a) -> Task.Task x a
+reportTagCheck : T.CEV_Version -> IO (Result x a) -> Task.Task x a
 reportTagCheck vsn =
     reportCheck
         ("Is version " ++ V.toChars vsn ++ " tagged on GitHub?")

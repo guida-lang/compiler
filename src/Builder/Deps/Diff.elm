@@ -17,7 +17,7 @@ import Builder.Stuff as Stuff
 import Compiler.Data.Name as Name
 import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
-import Compiler.Elm.Version as V exposing (Version)
+import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
@@ -328,7 +328,7 @@ categorizeVar name =
 -- MAGNITUDE
 
 
-bump : PackageChanges -> Version -> Version
+bump : PackageChanges -> T.CEV_Version -> T.CEV_Version
 bump changes version =
     case toMagnitude changes of
         M.PATCH ->
@@ -393,7 +393,7 @@ changeMagnitude (Changes added changed removed) =
 -- GET DOCS
 
 
-getDocs : Stuff.PackageCache -> Http.Manager -> T.CEP_Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
+getDocs : T.BS_PackageCache -> T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> IO (Result Exit.DocsProblem Docs.Documentation)
 getDocs cache manager name version =
     let
         home : String

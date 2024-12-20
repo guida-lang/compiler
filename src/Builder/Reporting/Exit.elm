@@ -3,7 +3,6 @@ module Builder.Reporting.Exit exposing
     , BuildProjectProblem(..)
     , Bump(..)
     , Details(..)
-    , DetailsBadDep(..)
     , Diff(..)
     , DocsProblem(..)
     , Generate(..)
@@ -12,9 +11,7 @@ module Builder.Reporting.Exit exposing
     , Make(..)
     , Outline(..)
     , OutlineProblem(..)
-    , PackageProblem(..)
     , Publish(..)
-    , RegistryProblem(..)
     , Repl(..)
     , Solver(..)
     , buildProblemDecoder
@@ -54,7 +51,7 @@ import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Dict
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
 import System.IO exposing (IO)
@@ -85,7 +82,7 @@ type Init
     | InitNoOfflineSolution (List T.CEP_Name)
     | InitSolverProblem Solver
     | InitAlreadyExists
-    | InitRegistryProblem RegistryProblem
+    | InitRegistryProblem T.BRE_RegistryProblem
 
 
 initToReport : Init -> Help.Report
@@ -149,9 +146,9 @@ type Diff
     | DiffNoExposed
     | DiffUnpublished
     | DiffUnknownPackage T.CEP_Name (List T.CEP_Name)
-    | DiffUnknownVersion V.Version (List V.Version)
-    | DiffDocsProblem V.Version DocsProblem
-    | DiffMustHaveLatestRegistry RegistryProblem
+    | DiffUnknownVersion T.CEV_Version (List T.CEV_Version)
+    | DiffDocsProblem T.CEV_Version DocsProblem
+    | DiffMustHaveLatestRegistry T.BRE_RegistryProblem
     | DiffBadDetails Details
     | DiffBadBuild BuildProblem
 
@@ -225,11 +222,11 @@ diffToReport diff =
                     D.dullyellow <|
                         D.vcat <|
                             let
-                                sameMajor : V.Version -> V.Version -> Bool
+                                sameMajor : T.CEV_Version -> T.CEV_Version -> Bool
                                 sameMajor v1 v2 =
                                     V.major v1 == V.major v2
 
-                                mkRow : List V.Version -> D.Doc
+                                mkRow : List T.CEV_Version -> D.Doc
                                 mkRow vsns =
                                     D.hsep <| List.map D.fromVersion vsns
                             in
@@ -262,9 +259,9 @@ type Bump
     = BumpNoOutline
     | BumpBadOutline Outline
     | BumpApplication
-    | BumpUnexpectedVersion V.Version (List V.Version)
-    | BumpMustHaveLatestRegistry RegistryProblem
-    | BumpCannotFindDocs V.Version DocsProblem
+    | BumpUnexpectedVersion T.CEV_Version (List T.CEV_Version)
+    | BumpMustHaveLatestRegistry T.BRE_RegistryProblem
+    | BumpCannotFindDocs T.CEV_Version DocsProblem
     | BumpBadDetails Details
     | BumpNoExposed
     | BumpBadBuild BuildProblem
@@ -436,27 +433,27 @@ type Publish
     = PublishNoOutline
     | PublishBadOutline Outline
     | PublishBadDetails Details
-    | PublishMustHaveLatestRegistry RegistryProblem
+    | PublishMustHaveLatestRegistry T.BRE_RegistryProblem
     | PublishApplication
-    | PublishNotInitialVersion V.Version
-    | PublishAlreadyPublished V.Version
-    | PublishInvalidBump V.Version V.Version
-    | PublishBadBump V.Version V.Version M.Magnitude V.Version M.Magnitude
+    | PublishNotInitialVersion T.CEV_Version
+    | PublishAlreadyPublished T.CEV_Version
+    | PublishInvalidBump T.CEV_Version T.CEV_Version
+    | PublishBadBump T.CEV_Version T.CEV_Version M.Magnitude T.CEV_Version M.Magnitude
     | PublishNoSummary
     | PublishNoExposed
     | PublishNoReadme
     | PublishShortReadme
     | PublishNoLicense
     | PublishBuildProblem BuildProblem
-    | PublishMissingTag V.Version
-    | PublishCannotGetTag V.Version Http.Error
-    | PublishCannotGetTagData V.Version String String
-    | PublishCannotGetZip Http.Error
+    | PublishMissingTag T.CEV_Version
+    | PublishCannotGetTag T.CEV_Version T.BH_Error
+    | PublishCannotGetTagData T.CEV_Version String String
+    | PublishCannotGetZip T.BH_Error
     | PublishCannotDecodeZip String
-    | PublishCannotGetDocs V.Version V.Version DocsProblem
-    | PublishCannotRegister Http.Error
+    | PublishCannotGetDocs T.CEV_Version T.CEV_Version DocsProblem
+    | PublishCannotRegister T.BH_Error
     | PublishNoGit
-    | PublishLocalChanges V.Version
+    | PublishLocalChanges T.CEV_Version
       --
     | PublishZipBadDetails Details
     | PublishZipApplication
@@ -783,7 +780,7 @@ publishToReport publish =
 
         PublishCannotGetTag version httpError ->
             case httpError of
-                Http.BadHttp _ (Utils.StatusCodeException response _) ->
+                T.BH_BadHttp _ (T.UM_StatusCodeException response _) ->
                     if Utils.httpStatusCode (Utils.httpResponseStatus response) == 404 then
                         let
                             vsn : String
@@ -970,7 +967,7 @@ badZipReport =
 
 
 type DocsProblem
-    = DP_Http Http.Error
+    = DP_Http T.BH_Error
     | DP_Data String String
     | DP_Cache
 
@@ -1024,7 +1021,7 @@ toDocsProblemReport problem context =
 type Install
     = InstallNoOutline
     | InstallBadOutline Outline
-    | InstallBadRegistry RegistryProblem
+    | InstallBadRegistry T.BRE_RegistryProblem
     | InstallNoArgs T.FilePath
     | InstallNoOnlineAppSolution T.CEP_Name
     | InstallNoOfflineAppSolution T.CEP_Name
@@ -1250,9 +1247,9 @@ installToReport exit =
 
 
 type Solver
-    = SolverBadCacheData T.CEP_Name V.Version
-    | SolverBadHttpData T.CEP_Name V.Version String
-    | SolverBadHttp T.CEP_Name V.Version Http.Error
+    = SolverBadCacheData T.CEP_Name T.CEV_Version
+    | SolverBadHttpData T.CEP_Name T.CEV_Version String
+    | SolverBadHttp T.CEP_Name T.CEV_Version T.BH_Error
 
 
 toSolverReport : Solver -> Help.Report
@@ -1834,16 +1831,11 @@ type Details
     | DetailsNoOfflineSolution
     | DetailsSolverProblem Solver
     | DetailsBadElmInPkg C.Constraint
-    | DetailsBadElmInAppOutline V.Version
+    | DetailsBadElmInAppOutline T.CEV_Version
     | DetailsHandEditedDependencies
     | DetailsBadOutline Outline
-    | DetailsCannotGetRegistry RegistryProblem
-    | DetailsBadDeps T.FilePath (List DetailsBadDep)
-
-
-type DetailsBadDep
-    = BD_BadDownload T.CEP_Name V.Version PackageProblem
-    | BD_BadBuild T.CEP_Name V.Version (Dict ( String, String ) T.CEP_Name V.Version)
+    | DetailsCannotGetRegistry T.BRE_RegistryProblem
+    | DetailsBadDeps T.FilePath (List T.BRE_DetailsBadDep)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2007,10 +1999,10 @@ toDetailsReport details =
 
                 d :: _ ->
                     case d of
-                        BD_BadDownload pkg vsn packageProblem ->
+                        T.BRE_BD_BadDownload pkg vsn packageProblem ->
                             toPackageProblemReport pkg vsn packageProblem
 
-                        BD_BadBuild pkg vsn fingerprint ->
+                        T.BRE_BD_BadBuild pkg vsn fingerprint ->
                             Help.report "PROBLEM BUILDING DEPENDENCIES"
                                 Nothing
                                 "I ran into a compilation error when trying to build the following package:"
@@ -2029,14 +2021,14 @@ toDetailsReport details =
 
 
 toBadDepRank :
-    DetailsBadDep
+    T.BRE_DetailsBadDep
     -> Int -- lower is better
 toBadDepRank badDep =
     case badDep of
-        BD_BadDownload _ _ _ ->
+        T.BRE_BD_BadDownload _ _ _ ->
             0
 
-        BD_BadBuild _ _ _ ->
+        T.BRE_BD_BadBuild _ _ _ ->
             1
 
 
@@ -2044,15 +2036,7 @@ toBadDepRank badDep =
 -- PACKAGE PROBLEM
 
 
-type PackageProblem
-    = PP_BadEndpointRequest Http.Error
-    | PP_BadEndpointContent String
-    | PP_BadArchiveRequest Http.Error
-    | PP_BadArchiveContent String
-    | PP_BadArchiveHash String String String
-
-
-toPackageProblemReport : T.CEP_Name -> V.Version -> PackageProblem -> Help.Report
+toPackageProblemReport : T.CEP_Name -> T.CEV_Version -> T.BRE_PackageProblem -> Help.Report
 toPackageProblemReport pkg vsn problem =
     let
         thePackage : String
@@ -2060,12 +2044,12 @@ toPackageProblemReport pkg vsn problem =
             Pkg.toChars pkg ++ " " ++ V.toChars vsn
     in
     case problem of
-        PP_BadEndpointRequest httpError ->
+        T.BRE_PP_BadEndpointRequest httpError ->
             toHttpErrorReport "PROBLEM DOWNLOADING PACKAGE" httpError <|
                 "I need to find the latest download link for "
                     ++ thePackage
 
-        PP_BadEndpointContent url ->
+        T.BRE_PP_BadEndpointContent url ->
             Help.report "PROBLEM DOWNLOADING PACKAGE"
                 Nothing
                 ("I need to find the latest download link for " ++ thePackage ++ ", but I ran into corrupted information from:")
@@ -2074,12 +2058,12 @@ toPackageProblemReport pkg vsn problem =
                     "Is something weird with your internet connection. We have gotten reports that schools, businesses, airports, etc. sometimes intercept requests and add things to the body or change its contents entirely. Could that be the problem?"
                 ]
 
-        PP_BadArchiveRequest httpError ->
+        T.BRE_PP_BadArchiveRequest httpError ->
             toHttpErrorReport "PROBLEM DOWNLOADING PACKAGE" httpError <|
                 "I was trying to download the source code for "
                     ++ thePackage
 
-        PP_BadArchiveContent url ->
+        T.BRE_PP_BadArchiveContent url ->
             Help.report "PROBLEM DOWNLOADING PACKAGE"
                 Nothing
                 ("I downloaded the source code for " ++ thePackage ++ " from:")
@@ -2088,7 +2072,7 @@ toPackageProblemReport pkg vsn problem =
                     "But I was unable to unzip the data. Maybe there is something weird with your internet connection. We have gotten reports that schools, businesses, airports, etc. sometimes intercept requests and add things to the body or change its contents entirely. Could that be the problem?"
                 ]
 
-        PP_BadArchiveHash url expectedHash actualHash ->
+        T.BRE_PP_BadArchiveHash url expectedHash actualHash ->
             Help.report "CORRUPT PACKAGE DATA"
                 Nothing
                 ("I downloaded the source code for " ++ thePackage ++ " from:")
@@ -2108,18 +2092,13 @@ toPackageProblemReport pkg vsn problem =
 -- REGISTRY PROBLEM
 
 
-type RegistryProblem
-    = RP_Http Http.Error
-    | RP_Data String String
-
-
-toRegistryProblemReport : String -> RegistryProblem -> String -> Help.Report
+toRegistryProblemReport : String -> T.BRE_RegistryProblem -> String -> Help.Report
 toRegistryProblemReport title problem context =
     case problem of
-        RP_Http err ->
+        T.BRE_RP_Http err ->
             toHttpErrorReport title err context
 
-        RP_Data url body ->
+        T.BRE_RP_Data url body ->
             Help.report title
                 Nothing
                 (context ++ ", so I fetched:")
@@ -2147,7 +2126,7 @@ toRegistryProblemReport title problem context =
                 ]
 
 
-toHttpErrorReport : String -> Http.Error -> String -> Help.Report
+toHttpErrorReport : String -> T.BH_Error -> String -> Help.Report
 toHttpErrorReport title err context =
     let
         toHttpReport : String -> String -> List D.Doc -> Help.Report
@@ -2157,7 +2136,7 @@ toHttpErrorReport title err context =
                     :: details
     in
     case err of
-        Http.BadUrl url reason ->
+        T.BH_BadUrl url reason ->
             toHttpReport (context ++ ", so I wanted to fetch:")
                 url
                 [ D.reflow <| "But my HTTP library is saying this is not a valid URL. It is saying:"
@@ -2166,11 +2145,11 @@ toHttpErrorReport title err context =
                     "This may indicate that there is some problem in the compiler, so please open an issue at https://github.com/elm/compiler/issues listing your operating system, Elm version, the command you ran, the terminal output, and any additional information that might help others reproduce the error."
                 ]
 
-        Http.BadHttp url httpExceptionContent ->
+        T.BH_BadHttp url httpExceptionContent ->
             case httpExceptionContent of
-                Utils.StatusCodeException response body ->
+                T.UM_StatusCodeException response body ->
                     let
-                        (Utils.HttpStatus code message) =
+                        (T.UM_HttpStatus code message) =
                             Utils.httpResponseStatus response
                     in
                     toHttpReport (context ++ ", so I tried to fetch:")
@@ -2189,7 +2168,7 @@ toHttpErrorReport title err context =
                             "This may mean some online endpoint changed in an unexpected way, so if does not seem like something on your side is causing this (e.g. firewall) please report this to https://github.com/elm/compiler/issues with your operating system, Elm version, the command you ran, the terminal output, and any additional information that can help others reproduce the error!"
                         ]
 
-                Utils.TooManyRedirects responses ->
+                T.UM_TooManyRedirects responses ->
                     toHttpReport (context ++ ", so I tried to fetch:")
                         url
                         [ D.reflow <|
@@ -2210,7 +2189,7 @@ toHttpErrorReport title err context =
                             "Are you somewhere with a slow internet connection? Or no internet? Does the link I am trying to fetch work in your browser? Maybe the site is down? Does your internet connection have a firewall that blocks certain domains? It is usually something like that!"
                         ]
 
-        Http.BadMystery url Utils.SomeException ->
+        T.BH_BadMystery url T.UM_SomeException ->
             toHttpReport (context ++ ", so I tried to fetch:")
                 url
                 [ D.reflow <| "But I ran into something weird! I was able to extract this error message:"
@@ -2220,10 +2199,10 @@ toHttpErrorReport title err context =
                 ]
 
 
-toRedirectDoc : Utils.HttpResponse body -> D.Doc
+toRedirectDoc : T.UM_HttpResponse body -> D.Doc
 toRedirectDoc response =
     let
-        (Utils.HttpStatus code message) =
+        (T.UM_HttpStatus code message) =
             Utils.httpResponseStatus response
     in
     case Utils.listLookup Utils.httpHLocation (Utils.httpResponseHeaders response) of
@@ -2823,10 +2802,10 @@ replToReport problem =
 -- ENCODERS and DECODERS
 
 
-detailsBadDepEncoder : DetailsBadDep -> CoreEncode.Value
+detailsBadDepEncoder : T.BRE_DetailsBadDep -> CoreEncode.Value
 detailsBadDepEncoder detailsBadDep =
     case detailsBadDep of
-        BD_BadDownload pkg vsn packageProblem ->
+        T.BRE_BD_BadDownload pkg vsn packageProblem ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BD_BadDownload" )
                 , ( "pkg", Pkg.nameEncoder pkg )
@@ -2834,7 +2813,7 @@ detailsBadDepEncoder detailsBadDep =
                 , ( "packageProblem", packageProblemEncoder packageProblem )
                 ]
 
-        BD_BadBuild pkg vsn fingerprint ->
+        T.BRE_BD_BadBuild pkg vsn fingerprint ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BD_BadBuild" )
                 , ( "pkg", Pkg.nameEncoder pkg )
@@ -2843,20 +2822,20 @@ detailsBadDepEncoder detailsBadDep =
                 ]
 
 
-detailsBadDepDecoder : CoreDecode.Decoder DetailsBadDep
+detailsBadDepDecoder : CoreDecode.Decoder T.BRE_DetailsBadDep
 detailsBadDepDecoder =
     CoreDecode.field "type" CoreDecode.string
         |> CoreDecode.andThen
             (\type_ ->
                 case type_ of
                     "BD_BadDownload" ->
-                        CoreDecode.map3 BD_BadDownload
+                        CoreDecode.map3 T.BRE_BD_BadDownload
                             (CoreDecode.field "pkg" Pkg.nameDecoder)
                             (CoreDecode.field "vsn" V.versionDecoder)
                             (CoreDecode.field "packageProblem" packageProblemDecoder)
 
                     "BD_BadBuild" ->
-                        CoreDecode.map3 BD_BadBuild
+                        CoreDecode.map3 T.BRE_BD_BadBuild
                             (CoreDecode.field "pkg" Pkg.nameDecoder)
                             (CoreDecode.field "vsn" V.versionDecoder)
                             (CoreDecode.field "fingerprint" (Decode.assocListDict identity Pkg.nameDecoder V.versionDecoder))
@@ -3025,16 +3004,16 @@ buildProjectProblemDecoder =
             )
 
 
-registryProblemEncoder : RegistryProblem -> CoreEncode.Value
+registryProblemEncoder : T.BRE_RegistryProblem -> CoreEncode.Value
 registryProblemEncoder registryProblem =
     case registryProblem of
-        RP_Http err ->
+        T.BRE_RP_Http err ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "RP_Http" )
                 , ( "err", Http.errorEncoder err )
                 ]
 
-        RP_Data url body ->
+        T.BRE_RP_Data url body ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "RP_Data" )
                 , ( "url", CoreEncode.string url )
@@ -3042,17 +3021,17 @@ registryProblemEncoder registryProblem =
                 ]
 
 
-registryProblemDecoder : CoreDecode.Decoder RegistryProblem
+registryProblemDecoder : CoreDecode.Decoder T.BRE_RegistryProblem
 registryProblemDecoder =
     CoreDecode.field "type" CoreDecode.string
         |> CoreDecode.andThen
             (\type_ ->
                 case type_ of
                     "RP_Http" ->
-                        CoreDecode.map RP_Http (CoreDecode.field "err" Http.errorDecoder)
+                        CoreDecode.map T.BRE_RP_Http (CoreDecode.field "err" Http.errorDecoder)
 
                     "RP_Data" ->
-                        CoreDecode.map2 RP_Data
+                        CoreDecode.map2 T.BRE_RP_Data
                             (CoreDecode.field "url" CoreDecode.string)
                             (CoreDecode.field "body" CoreDecode.string)
 
@@ -3061,34 +3040,34 @@ registryProblemDecoder =
             )
 
 
-packageProblemEncoder : PackageProblem -> CoreEncode.Value
+packageProblemEncoder : T.BRE_PackageProblem -> CoreEncode.Value
 packageProblemEncoder packageProblem =
     case packageProblem of
-        PP_BadEndpointRequest httpError ->
+        T.BRE_PP_BadEndpointRequest httpError ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "PP_BadEndpointRequest" )
                 , ( "httpError", Http.errorEncoder httpError )
                 ]
 
-        PP_BadEndpointContent url ->
+        T.BRE_PP_BadEndpointContent url ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "PP_BadEndpointContent" )
                 , ( "url", CoreEncode.string url )
                 ]
 
-        PP_BadArchiveRequest httpError ->
+        T.BRE_PP_BadArchiveRequest httpError ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "PP_BadArchiveRequest" )
                 , ( "httpError", Http.errorEncoder httpError )
                 ]
 
-        PP_BadArchiveContent url ->
+        T.BRE_PP_BadArchiveContent url ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "PP_BadArchiveContent" )
                 , ( "url", CoreEncode.string url )
                 ]
 
-        PP_BadArchiveHash url expectedHash actualHash ->
+        T.BRE_PP_BadArchiveHash url expectedHash actualHash ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "PP_BadArchiveHash" )
                 , ( "url", CoreEncode.string url )
@@ -3097,26 +3076,26 @@ packageProblemEncoder packageProblem =
                 ]
 
 
-packageProblemDecoder : CoreDecode.Decoder PackageProblem
+packageProblemDecoder : CoreDecode.Decoder T.BRE_PackageProblem
 packageProblemDecoder =
     CoreDecode.field "type" CoreDecode.string
         |> CoreDecode.andThen
             (\type_ ->
                 case type_ of
                     "PP_BadEndpointRequest" ->
-                        CoreDecode.map PP_BadEndpointRequest (CoreDecode.field "httpError" Http.errorDecoder)
+                        CoreDecode.map T.BRE_PP_BadEndpointRequest (CoreDecode.field "httpError" Http.errorDecoder)
 
                     "PP_BadEndpointContent" ->
-                        CoreDecode.map PP_BadEndpointContent (CoreDecode.field "url" CoreDecode.string)
+                        CoreDecode.map T.BRE_PP_BadEndpointContent (CoreDecode.field "url" CoreDecode.string)
 
                     "PP_BadArchiveRequest" ->
-                        CoreDecode.map PP_BadArchiveRequest (CoreDecode.field "httpError" Http.errorDecoder)
+                        CoreDecode.map T.BRE_PP_BadArchiveRequest (CoreDecode.field "httpError" Http.errorDecoder)
 
                     "PP_BadArchiveContent" ->
-                        CoreDecode.map PP_BadArchiveContent (CoreDecode.field "url" CoreDecode.string)
+                        CoreDecode.map T.BRE_PP_BadArchiveContent (CoreDecode.field "url" CoreDecode.string)
 
                     "PP_BadArchiveHash" ->
-                        CoreDecode.map3 PP_BadArchiveHash
+                        CoreDecode.map3 T.BRE_PP_BadArchiveHash
                             (CoreDecode.field "url" CoreDecode.string)
                             (CoreDecode.field "expectedHash" CoreDecode.string)
                             (CoreDecode.field "actualHash" CoreDecode.string)

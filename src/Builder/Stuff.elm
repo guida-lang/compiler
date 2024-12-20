@@ -1,6 +1,5 @@
 module Builder.Stuff exposing
-    ( PackageCache
-    , details
+    ( details
     , elmi
     , elmo
     , findRoot
@@ -131,8 +130,8 @@ withRootLock root work =
             )
 
 
-withRegistryLock : PackageCache -> IO a -> IO a
-withRegistryLock (PackageCache dir) work =
+withRegistryLock : T.BS_PackageCache -> IO a -> IO a
+withRegistryLock (T.BS_PackageCache dir) work =
     Utils.lockWithFileLock (dir ++ "/lock") Utils.LockExclusive (\_ -> work)
 
 
@@ -140,22 +139,18 @@ withRegistryLock (PackageCache dir) work =
 -- PACKAGE CACHES
 
 
-type PackageCache
-    = PackageCache String
-
-
-getPackageCache : IO PackageCache
+getPackageCache : IO T.BS_PackageCache
 getPackageCache =
-    IO.fmap PackageCache (getCacheDir "packages")
+    IO.fmap T.BS_PackageCache (getCacheDir "packages")
 
 
-registry : PackageCache -> String
-registry (PackageCache dir) =
+registry : T.BS_PackageCache -> String
+registry (T.BS_PackageCache dir) =
     Utils.fpForwardSlash dir "registry.json"
 
 
-package : PackageCache -> T.CEP_Name -> V.Version -> String
-package (PackageCache dir) name version =
+package : T.BS_PackageCache -> T.CEP_Name -> T.CEV_Version -> String
+package (T.BS_PackageCache dir) name version =
     Utils.fpForwardSlash dir (Utils.fpForwardSlash (Pkg.toString name) (V.toChars version))
 
 
@@ -201,14 +196,14 @@ getElmHome =
 -- ENCODERS and DECODERS
 
 
-packageCacheEncoder : PackageCache -> Encode.Value
-packageCacheEncoder (PackageCache dir) =
+packageCacheEncoder : T.BS_PackageCache -> Encode.Value
+packageCacheEncoder (T.BS_PackageCache dir) =
     Encode.object
         [ ( "type", Encode.string "PackageCache" )
         , ( "dir", Encode.string dir )
         ]
 
 
-packageCacheDecoder : Decode.Decoder PackageCache
+packageCacheDecoder : Decode.Decoder T.BS_PackageCache
 packageCacheDecoder =
-    Decode.map PackageCache (Decode.field "dir" Decode.string)
+    Decode.map T.BS_PackageCache (Decode.field "dir" Decode.string)

@@ -60,7 +60,7 @@ fromName =
     P.text
 
 
-fromVersion : V.Version -> Doc
+fromVersion : T.CEV_Version -> Doc
 fromVersion vsn =
     P.text (V.toChars vsn)
 

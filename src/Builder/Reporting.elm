@@ -264,8 +264,8 @@ type DMsg
     = DStart Int
     | DCached
     | DRequested
-    | DReceived T.CEP_Name V.Version
-    | DFailed T.CEP_Name V.Version
+    | DReceived T.CEP_Name T.CEV_Version
+    | DFailed T.CEP_Name T.CEV_Version
     | DBuilt
     | DBroken
 
@@ -303,7 +303,7 @@ detailsStep msg (DState total cached rqst rcvd failed built broken) =
             putBuilt (DState total cached rqst rcvd failed built (broken + 1))
 
 
-putDownload : D.Doc -> T.CEP_Name -> V.Version -> IO ()
+putDownload : D.Doc -> T.CEP_Name -> T.CEV_Version -> IO ()
 putDownload mark pkg vsn =
     Help.toStdout
         (D.indent 2
