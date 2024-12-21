@@ -616,6 +616,12 @@ type MVar_Maybe_BB_Dependencies
     = MVar_Maybe_BB_Dependencies Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_DictNameMVarDep
+    = MVar_DictNameMVarDep Int
+
+
 
 -- EXPRESSIONS
 

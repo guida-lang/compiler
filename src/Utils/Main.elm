@@ -105,6 +105,7 @@ module Utils.Main exposing
     , newEmptyMVar_BB_Status
     , newEmptyMVar_BB_StatusDict
     , newEmptyMVar_CED_Dep
+    , newEmptyMVar_DictNameMVarDep
     , newEmptyMVar_Maybe_BB_Dependencies
     , newEmptyMVar_Maybe_BED_DResult
     , newEmptyMVar_Maybe_BED_Status
@@ -117,6 +118,7 @@ module Utils.Main exposing
     , newMVar_BB_Status
     , newMVar_BB_StatusDict
     , newMVar_CED_Dep
+    , newMVar_DictNameMVarDep
     , newMVar_Maybe_BB_Dependencies
     , newMVar_Maybe_CASTO_GlobalGraph
     , newMVar_Maybe_CASTO_LocalGraph
@@ -128,6 +130,7 @@ module Utils.Main exposing
     , putMVar_BB_Status
     , putMVar_BB_StatusDict
     , putMVar_CED_Dep
+    , putMVar_DictNameMVarDep
     , putMVar_Maybe_BB_Dependencies
     , putMVar_Maybe_BED_DResult
     , putMVar_Maybe_BED_Status
@@ -141,6 +144,7 @@ module Utils.Main exposing
     , readMVar_BB_Status
     , readMVar_BB_StatusDict
     , readMVar_CED_Dep
+    , readMVar_DictNameMVarDep
     , readMVar_Maybe_BB_Dependencies
     , readMVar_Maybe_BED_DResult
     , readMVar_Maybe_BED_Status
@@ -164,6 +168,7 @@ module Utils.Main exposing
     , takeMVar
     , takeMVar_BB_StatusDict
     , takeMVar_CED_Dep
+    , takeMVar_DictNameMVarDep
     , takeMVar_Maybe_BB_Dependencies
     , takeMVar_Maybe_CECTE_Types
     , takeMVar_ResultRegistryProblemEnv
@@ -2096,78 +2101,78 @@ newEmptyMVar_Maybe_BB_Dependencies =
 
 
 
--- Control.Concurrent.MVar (Maybe T.BB_Dependencies)
+-- Control.Concurrent.MVar (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
 
 
-newMVar_Maybe_BB_Dependencies : Maybe T.BB_Dependencies -> IO T.MVar_Maybe_BB_Dependencies
-newMVar_Maybe_BB_Dependencies value =
-    newEmptyMVar_Maybe_BB_Dependencies
+newMVar_DictNameMVarDep : Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO T.MVar_DictNameMVarDep
+newMVar_DictNameMVarDep value =
+    newEmptyMVar_DictNameMVarDep
         |> IO.bind
             (\mvar ->
-                putMVar_Maybe_BB_Dependencies mvar value
+                putMVar_DictNameMVarDep mvar value
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-readMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
-readMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+readMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> IO (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
+readMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
     IO
         (\index s ->
-            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+            case Array.get ref s.mVars_DictNameMVarDep of
                 Just mVar ->
                     case mVar.value of
                         Just value ->
-                            ( s, IO.ReadMVar_Maybe_BB_Dependencies IO.pure (Just value) )
+                            ( s, IO.ReadMVar_DictNameMVarDep IO.pure (Just value) )
 
                         Nothing ->
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
-                            , IO.ReadMVar_Maybe_BB_Dependencies IO.pure Nothing
+                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_DictNameMVarDep index ] } s.mVars_DictNameMVarDep }
+                            , IO.ReadMVar_DictNameMVarDep IO.pure Nothing
                             )
 
                 Nothing ->
-                    crash "Utils.Main.readMVar_Maybe_BB_Dependencies: invalid ref"
+                    crash "Utils.Main.readMVar_DictNameMVarDep: invalid ref"
         )
 
 
-takeMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
-takeMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
+takeMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> IO (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
+takeMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
     IO
         (\index s ->
-            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+            case Array.get ref s.mVars_DictNameMVarDep of
                 Just mVar ->
                     case mVar.value of
                         Just value ->
                             case mVar.subscribers of
-                                (IO.PutMVarSubscriber_Maybe_BB_Dependencies putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_BB_Dependencies }
-                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) (Just putIndex)
+                                (IO.PutMVarSubscriber_DictNameMVarDep putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_DictNameMVarDep }
+                                    , IO.TakeMVar_DictNameMVarDep IO.pure (Just value) (Just putIndex)
                                     )
 
                                 _ ->
-                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_BB_Dependencies }
-                                    , IO.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) Nothing
+                                    ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | value = Nothing } s.mVars_DictNameMVarDep }
+                                    , IO.TakeMVar_DictNameMVarDep IO.pure (Just value) Nothing
                                     )
 
                         Nothing ->
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
-                            , IO.TakeMVar_Maybe_BB_Dependencies IO.pure Nothing Nothing
+                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_DictNameMVarDep index ] } s.mVars_DictNameMVarDep }
+                            , IO.TakeMVar_DictNameMVarDep IO.pure Nothing Nothing
                             )
 
                 Nothing ->
-                    crash "Utils.Main.takeMVar_Maybe_BB_Dependencies: invalid ref"
+                    crash "Utils.Main.takeMVar_DictNameMVarDep: invalid ref"
         )
 
 
-putMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> Maybe T.BB_Dependencies -> IO ()
-putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
+putMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO ()
+putMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) value =
     IO
         (\index s ->
-            case Array.get ref s.mVars_Maybe_BB_Dependencies of
+            case Array.get ref s.mVars_DictNameMVarDep of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_Maybe_BB_Dependencies index value ] } s.mVars_Maybe_BB_Dependencies }
-                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure [] Nothing
+                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_DictNameMVarDep index value ] } s.mVars_DictNameMVarDep }
+                            , IO.PutMVar_DictNameMVarDep IO.pure [] Nothing
                             )
 
                         Nothing ->
@@ -2176,7 +2181,7 @@ putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
                                             case subscriber of
-                                                IO.ReadMVarSubscriber_Maybe_BB_Dependencies readIndex ->
+                                                IO.ReadMVarSubscriber_DictNameMVarDep readIndex ->
                                                     ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
 
                                                 _ ->
@@ -2185,24 +2190,24 @@ putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
                                         ( [], [] )
                                         mVar.subscribers
                             in
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Maybe_BB_Dependencies }
-                            , IO.PutMVar_Maybe_BB_Dependencies IO.pure readIndexes (Just value)
+                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_DictNameMVarDep }
+                            , IO.PutMVar_DictNameMVarDep IO.pure readIndexes (Just value)
                             )
 
                 Nothing ->
-                    crash "Utils.Main.putMVar_Maybe_BB_Dependencies: invalid ref"
+                    crash "Utils.Main.putMVar_DictNameMVarDep: invalid ref"
         )
 
 
-newEmptyMVar_Maybe_BB_Dependencies : IO T.MVar_Maybe_BB_Dependencies
-newEmptyMVar_Maybe_BB_Dependencies =
+newEmptyMVar_DictNameMVarDep : IO T.MVar_DictNameMVarDep
+newEmptyMVar_DictNameMVarDep =
     IO
         (\_ s ->
-            ( { s | mVars_Maybe_BB_Dependencies = Array.push { subscribers = [], value = Nothing } s.mVars_Maybe_BB_Dependencies }
-            , IO.NewEmptyMVar_Maybe_BB_Dependencies IO.pure (Array.length s.mVars_Maybe_BB_Dependencies)
+            ( { s | mVars_DictNameMVarDep = Array.push { subscribers = [], value = Nothing } s.mVars_DictNameMVarDep }
+            , IO.NewEmptyMVar_DictNameMVarDep IO.pure (Array.length s.mVars_DictNameMVarDep)
             )
         )
-        |> IO.fmap T.MVar_Maybe_BB_Dependencies
+        |> IO.fmap T.MVar_DictNameMVarDep
 
 
 

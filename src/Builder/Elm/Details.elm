@@ -406,14 +406,14 @@ verifyDependencies : Env -> T.BF_Time -> ValidOutline -> Dict ( String, String )
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
-            |> IO.bind (\_ -> Utils.newEmptyMVar)
+            |> IO.bind (\_ -> Utils.newEmptyMVar_DictNameMVarDep)
             |> IO.bind
                 (\mvar ->
                     Stuff.withRegistryLock cache
                         (Utils.mapTraverseWithKey identity Pkg.compareName (\k v -> fork_CED_Dep (verifyDep env mvar solution k v)) solution)
                         |> IO.bind
                             (\mvars ->
-                                Utils.putMVar dictNameMVarDepEncoder mvar mvars
+                                Utils.putMVar_DictNameMVarDep mvar mvars
                                     |> IO.bind
                                         (\_ ->
                                             Utils.mapTraverse identity Pkg.compareName Utils.readMVar_CED_Dep mvars
@@ -501,7 +501,7 @@ gatherForeigns pkg (T.CED_Artifacts ifaces _) foreigns =
 -- VERIFY DEPENDENCY
 
 
-verifyDep : Env -> T.MVar (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep) -> Dict ( String, String ) T.CEP_Name Solver.Details -> T.CEP_Name -> Solver.Details -> IO T.CED_Dep
+verifyDep : Env -> T.MVar_DictNameMVarDep -> Dict ( String, String ) T.CEP_Name Solver.Details -> T.CEP_Name -> Solver.Details -> IO T.CED_Dep
 verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
         fingerprint : Dict ( String, String ) T.CEP_Name T.CEV_Version
@@ -573,7 +573,7 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
-build : Reporting.DKey -> T.BS_PackageCache -> T.MVar (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep) -> T.CEP_Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO T.CED_Dep
+build : Reporting.DKey -> T.BS_PackageCache -> T.MVar_DictNameMVarDep -> T.CEP_Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO T.CED_Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Outline.read (Stuff.package cache pkg vsn)
         |> IO.bind
@@ -588,7 +588,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                             |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
-                        Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
+                        Utils.readMVar_DictNameMVarDep depsMVar
                             |> IO.bind
                                 (\allDeps ->
                                     Utils.mapTraverse identity Pkg.compareName Utils.readMVar_CED_Dep (Dict.intersection compare allDeps deps)
@@ -1129,11 +1129,6 @@ artifactsDecoder =
         (Decode.field "objects" Opt.globalGraphDecoder)
 
 
-dictNameMVarDepEncoder : Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> Encode.Value
-dictNameMVarDepEncoder =
-    E.assocListDict compare Pkg.nameEncoder Utils.mVarEncoder_CED_Dep
-
-
 artifactCacheEncoder : ArtifactCache -> Encode.Value
 artifactCacheEncoder (ArtifactCache fingerprints artifacts) =
     Encode.object
@@ -1148,11 +1143,6 @@ artifactCacheDecoder =
     Decode.map2 ArtifactCache
         (Decode.field "fingerprints" (D.everySet toComparableFingerprint fingerprintDecoder))
         (Decode.field "artifacts" artifactsDecoder)
-
-
-dictPkgNameMVarDepDecoder : Decode.Decoder (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
-dictPkgNameMVarDepDecoder =
-    D.assocListDict identity Pkg.nameDecoder Utils.mVarDecoder_CED_Dep
 
 
 dictRawMVarMaybeDResultEncoder : Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> Encode.Value
