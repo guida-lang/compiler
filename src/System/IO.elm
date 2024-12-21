@@ -24,6 +24,8 @@ port module System.IO exposing
     , MVarSubscriber_Maybe_CECTE_Types(..)
     , MVarSubscriber_Maybe_BB_Dependencies(..)
     , MVarSubscriber_DictNameMVarDep(..)
+    , MVarSubscriber_DictRawMVarMaybeDResult(..)
+    , MVarSubscriber_ListMVar(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -101,6 +103,8 @@ port module System.IO exposing
 @docs MVarSubscriber_Maybe_CECTE_Types
 @docs MVarSubscriber_Maybe_BB_Dependencies
 @docs MVarSubscriber_DictNameMVarDep
+@docs MVarSubscriber_DictRawMVarMaybeDResult
+@docs MVarSubscriber_ListMVar
 
 -}
 
@@ -151,6 +155,8 @@ run app =
                     , mVars_Maybe_CECTE_Types = Array.empty
                     , mVars_Maybe_BB_Dependencies = Array.empty
                     , mVars_DictNameMVarDep = Array.empty
+                    , mVars_DictRawMVarMaybeDResult = Array.empty
+                    , mVars_ListMVar = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -282,6 +288,16 @@ type Next
     | ReadMVarNext_DictNameMVarDep (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO ())
     | TakeMVarNext_DictNameMVarDep (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO ())
     | PutMVarNext_DictNameMVarDep (() -> IO ())
+      -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+    | NewEmptyMVarNext_DictRawMVarMaybeDResult (Int -> IO ())
+    | ReadMVarNext_DictRawMVarMaybeDResult (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO ())
+    | TakeMVarNext_DictRawMVarMaybeDResult (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO ())
+    | PutMVarNext_DictRawMVarMaybeDResult (() -> IO ())
+      -- MVars (List (T.MVar ()))
+    | NewEmptyMVarNext_ListMVar (Int -> IO ())
+    | ReadMVarNext_ListMVar (List (T.MVar ()) -> IO ())
+    | TakeMVarNext_ListMVar (List (T.MVar ()) -> IO ())
+    | PutMVarNext_ListMVar (() -> IO ())
 
 
 type Msg
@@ -366,6 +382,14 @@ type Msg
     | NewEmptyMVarMsg_DictNameMVarDep Int Int
     | ReadMVarMsg_DictNameMVarDep Int (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
     | PutMVarMsg_DictNameMVarDep Int
+      -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+    | NewEmptyMVarMsg_DictRawMVarMaybeDResult Int Int
+    | ReadMVarMsg_DictRawMVarMaybeDResult Int (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+    | PutMVarMsg_DictRawMVarMaybeDResult Int
+      -- MVars (List (T.MVar ()))
+    | NewEmptyMVarMsg_ListMVar Int Int
+    | ReadMVarMsg_ListMVar Int (List (T.MVar ()))
+    | PutMVarMsg_ListMVar Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -836,6 +860,66 @@ update msg model =
 
                 ( newRealWorld, PutMVar_DictNameMVarDep next _ Nothing ) ->
                     update (PutMVarMsg_DictNameMVarDep index) { newRealWorld | next = Dict.insert index (PutMVarNext_DictNameMVarDep next) model.next }
+
+                -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+                ( newRealWorld, NewEmptyMVar_DictRawMVarMaybeDResult next value ) ->
+                    update (NewEmptyMVarMsg_DictRawMVarMaybeDResult index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_DictRawMVarMaybeDResult next) model.next }
+
+                ( newRealWorld, ReadMVar_DictRawMVarMaybeDResult next (Just value) ) ->
+                    update (ReadMVarMsg_DictRawMVarMaybeDResult index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_DictRawMVarMaybeDResult next) model.next }
+
+                ( newRealWorld, ReadMVar_DictRawMVarMaybeDResult next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_DictRawMVarMaybeDResult next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_DictRawMVarMaybeDResult next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_DictRawMVarMaybeDResult index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_DictRawMVarMaybeDResult next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_DictRawMVarMaybeDResult next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_DictRawMVarMaybeDResult next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_DictRawMVarMaybeDResult next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_DictRawMVarMaybeDResult readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_DictRawMVarMaybeDResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_DictRawMVarMaybeDResult next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_DictRawMVarMaybeDResult next _ Nothing ) ->
+                    update (PutMVarMsg_DictRawMVarMaybeDResult index) { newRealWorld | next = Dict.insert index (PutMVarNext_DictRawMVarMaybeDResult next) model.next }
+
+                -- MVars (List (T.MVar ()))
+                ( newRealWorld, NewEmptyMVar_ListMVar next value ) ->
+                    update (NewEmptyMVarMsg_ListMVar index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_ListMVar next) model.next }
+
+                ( newRealWorld, ReadMVar_ListMVar next (Just value) ) ->
+                    update (ReadMVarMsg_ListMVar index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_ListMVar next) model.next }
+
+                ( newRealWorld, ReadMVar_ListMVar next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_ListMVar next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_ListMVar next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_ListMVar index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_ListMVar next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_ListMVar next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_ListMVar next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_ListMVar next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_ListMVar readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_ListMVar index) { newRealWorld | next = Dict.insert index (PutMVarNext_ListMVar next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_ListMVar next _ Nothing ) ->
+                    update (PutMVarMsg_ListMVar index) { newRealWorld | next = Dict.insert index (PutMVarNext_ListMVar next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -1407,6 +1491,62 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_DictNameMVarDep"
 
+        -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+        NewEmptyMVarMsg_DictRawMVarMaybeDResult index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_DictRawMVarMaybeDResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_DictRawMVarMaybeDResult"
+
+        ReadMVarMsg_DictRawMVarMaybeDResult index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_DictRawMVarMaybeDResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_DictRawMVarMaybeDResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_DictRawMVarMaybeDResult"
+
+        PutMVarMsg_DictRawMVarMaybeDResult index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_DictRawMVarMaybeDResult fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_DictRawMVarMaybeDResult"
+
+        -- MVars (List (T.MVar ()))
+        NewEmptyMVarMsg_ListMVar index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_ListMVar fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_ListMVar"
+
+        ReadMVarMsg_ListMVar index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_ListMVar fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_ListMVar fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_ListMVar"
+
+        PutMVarMsg_ListMVar index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_ListMVar fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_ListMVar"
+
 
 updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 updatePutIndex maybePutIndex ( model, cmd ) =
@@ -1684,11 +1824,21 @@ type ION a
     | ReadMVar_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO a) (Maybe (Maybe T.BB_Dependencies))
     | TakeMVar_Maybe_BB_Dependencies (Maybe T.BB_Dependencies -> IO a) (Maybe (Maybe T.BB_Dependencies)) (Maybe Int)
     | PutMVar_Maybe_BB_Dependencies (() -> IO a) (List Int) (Maybe (Maybe T.BB_Dependencies))
-      -- MVars (Maybe T.BB_Dependencies)
+      -- MVars (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
     | NewEmptyMVar_DictNameMVarDep (Int -> IO a) Int
     | ReadMVar_DictNameMVarDep (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep))
     | TakeMVar_DictNameMVarDep (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)) (Maybe Int)
     | PutMVar_DictNameMVarDep (() -> IO a) (List Int) (Maybe (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep))
+      -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+    | NewEmptyMVar_DictRawMVarMaybeDResult (Int -> IO a) Int
+    | ReadMVar_DictRawMVarMaybeDResult (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult))
+    | TakeMVar_DictRawMVarMaybeDResult (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)) (Maybe Int)
+    | PutMVar_DictRawMVarMaybeDResult (() -> IO a) (List Int) (Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult))
+      -- MVars (List (T.MVar ()))
+    | NewEmptyMVar_ListMVar (Int -> IO a) Int
+    | ReadMVar_ListMVar (List (T.MVar ()) -> IO a) (Maybe (List (T.MVar ())))
+    | TakeMVar_ListMVar (List (T.MVar ()) -> IO a) (Maybe (List (T.MVar ()))) (Maybe Int)
+    | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List (T.MVar ())))
 
 
 type alias RealWorld =
@@ -1711,6 +1861,8 @@ type alias RealWorld =
     , mVars_Maybe_CECTE_Types : Array { subscribers : List MVarSubscriber_Maybe_CECTE_Types, value : Maybe (Maybe T.CECTE_Types) }
     , mVars_Maybe_BB_Dependencies : Array { subscribers : List MVarSubscriber_Maybe_BB_Dependencies, value : Maybe (Maybe T.BB_Dependencies) }
     , mVars_DictNameMVarDep : Array { subscribers : List MVarSubscriber_DictNameMVarDep, value : Maybe (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep) }
+    , mVars_DictRawMVarMaybeDResult : Array { subscribers : List MVarSubscriber_DictRawMVarMaybeDResult, value : Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult) }
+    , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List (T.MVar ())) }
     , next : Dict Int Next
     }
 
@@ -1791,6 +1943,18 @@ type MVarSubscriber_DictNameMVarDep
     = ReadMVarSubscriber_DictNameMVarDep Int
     | TakeMVarSubscriber_DictNameMVarDep Int
     | PutMVarSubscriber_DictNameMVarDep Int (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
+
+
+type MVarSubscriber_DictRawMVarMaybeDResult
+    = ReadMVarSubscriber_DictRawMVarMaybeDResult Int
+    | TakeMVarSubscriber_DictRawMVarMaybeDResult Int
+    | PutMVarSubscriber_DictRawMVarMaybeDResult Int (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+
+
+type MVarSubscriber_ListMVar
+    = ReadMVarSubscriber_ListMVar Int
+    | TakeMVarSubscriber_ListMVar Int
+    | PutMVarSubscriber_ListMVar Int (List (T.MVar ()))
 
 
 pure : a -> IO a
@@ -2056,6 +2220,32 @@ bind f (IO ma) =
 
                 ( s1, PutMVar_DictNameMVarDep next readIndexes value ) ->
                     ( s1, PutMVar_DictNameMVarDep (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
+                ( s1, NewEmptyMVar_DictRawMVarMaybeDResult next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_DictRawMVarMaybeDResult (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_DictRawMVarMaybeDResult next mVarValue ) ->
+                    ( s1, ReadMVar_DictRawMVarMaybeDResult (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_DictRawMVarMaybeDResult next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_DictRawMVarMaybeDResult (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_DictRawMVarMaybeDResult next readIndexes value ) ->
+                    ( s1, PutMVar_DictRawMVarMaybeDResult (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (List (T.MVar ()))
+                ( s1, NewEmptyMVar_ListMVar next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_ListMVar (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_ListMVar next mVarValue ) ->
+                    ( s1, ReadMVar_ListMVar (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_ListMVar next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_ListMVar (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_ListMVar next readIndexes value ) ->
+                    ( s1, PutMVar_ListMVar (\() -> bind f (next ())) readIndexes value )
         )
 
 

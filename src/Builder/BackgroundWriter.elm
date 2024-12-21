@@ -1,6 +1,5 @@
 module Builder.BackgroundWriter exposing
-    ( Scope
-    , withScope
+    ( withScope
     , writeBinary
     )
 
@@ -16,19 +15,15 @@ import Utils.Main as Utils
 -- BACKGROUND WRITER
 
 
-type Scope
-    = Scope (T.MVar (List (T.MVar ())))
-
-
-withScope : (Scope -> IO a) -> IO a
+withScope : (T.BBW_Scope -> IO a) -> IO a
 withScope callback =
-    Utils.newMVar (Encode.list (\_ -> Encode.null)) []
+    Utils.newMVar_ListMVar []
         |> IO.bind
             (\workList ->
-                callback (Scope workList)
+                callback (T.BBW_Scope workList)
                     |> IO.bind
                         (\result ->
-                            Utils.takeMVar (Decode.list Utils.mVarDecoder) workList
+                            Utils.takeMVar_ListMVar workList
                                 |> IO.bind
                                     (\mvars ->
                                         Utils.listTraverse_ (Utils.takeMVar (Decode.succeed ())) mvars
@@ -38,15 +33,15 @@ withScope callback =
             )
 
 
-writeBinary : (a -> Encode.Value) -> Scope -> String -> a -> IO ()
-writeBinary encoder (Scope workList) path value =
+writeBinary : (a -> Encode.Value) -> T.BBW_Scope -> String -> a -> IO ()
+writeBinary encoder (T.BBW_Scope workList) path value =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
                 Utils.forkIO (File.writeBinary encoder path value |> IO.bind (\_ -> Utils.putMVar (\_ -> Encode.object []) mvar ()))
                     |> IO.bind
                         (\_ ->
-                            Utils.takeMVar (Decode.list Utils.mVarDecoder) workList
+                            Utils.takeMVar_ListMVar workList
                                 |> IO.bind
                                     (\oldWork ->
                                         let
@@ -54,7 +49,7 @@ writeBinary encoder (Scope workList) path value =
                                             newWork =
                                                 mvar :: oldWork
                                         in
-                                        Utils.putMVar (Encode.list Utils.mVarEncoder) workList newWork
+                                        Utils.putMVar_ListMVar workList newWork
                                     )
                         )
             )

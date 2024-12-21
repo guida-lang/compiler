@@ -104,7 +104,7 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 -- VERIFY INSTALL -- used by Install
 
 
-verifyInstall : BW.Scope -> T.FilePath -> T.BDS_Env -> Outline.Outline -> IO (Result Exit.Details ())
+verifyInstall : T.BBW_Scope -> T.FilePath -> T.BDS_Env -> Outline.Outline -> IO (Result Exit.Details ())
 verifyInstall scope root (T.BDS_Env cache manager connection registry) outline =
     File.getTime (root ++ "/elm.json")
         |> IO.bind
@@ -131,7 +131,7 @@ verifyInstall scope root (T.BDS_Env cache manager connection registry) outline =
 -- LOAD -- used by Make, Repl, Reactor
 
 
-load : Reporting.Style -> BW.Scope -> T.FilePath -> IO (Result Exit.Details Details)
+load : Reporting.Style -> T.BBW_Scope -> T.FilePath -> IO (Result Exit.Details Details)
 load style scope root =
     File.getTime (root ++ "/elm.json")
         |> IO.bind
@@ -157,7 +157,7 @@ load style scope root =
 -- GENERATE
 
 
-generate : Reporting.Style -> BW.Scope -> T.FilePath -> T.BF_Time -> IO (Result Exit.Details Details)
+generate : Reporting.Style -> T.BBW_Scope -> T.FilePath -> T.BF_Time -> IO (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
         (\key ->
@@ -184,10 +184,10 @@ generate style scope root time =
 
 
 type Env
-    = Env Reporting.DKey BW.Scope T.FilePath T.BS_PackageCache T.BH_Manager T.BDS_Connection T.BDR_Registry
+    = Env Reporting.DKey T.BBW_Scope T.FilePath T.BS_PackageCache T.BH_Manager T.BDS_Connection T.BDR_Registry
 
 
-initEnv : Reporting.DKey -> BW.Scope -> T.FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
+initEnv : Reporting.DKey -> T.BBW_Scope -> T.FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork_ResultRegistryProblemEnv Solver.initEnv
         |> IO.bind
@@ -633,13 +633,13 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                     |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                                                                                                             Just statuses ->
-                                                                                                                Utils.newEmptyMVar
+                                                                                                                Utils.newEmptyMVar_DictRawMVarMaybeDResult
                                                                                                                     |> IO.bind
                                                                                                                         (\rmvar ->
                                                                                                                             Utils.mapTraverse identity compare (fork_Maybe_BED_DResult << compile pkg rmvar) statuses
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvars ->
-                                                                                                                                        Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
+                                                                                                                                        Utils.putMVar_DictRawMVarMaybeDResult rmvar rmvars
                                                                                                                                             |> IO.bind (\_ -> Utils.mapTraverse identity compare Utils.readMVar_Maybe_BED_DResult rmvars)
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\maybeResults ->
@@ -909,11 +909,11 @@ getDepHome fi =
 -- COMPILE
 
 
-compile : T.CEP_Name -> T.MVar (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult) -> T.BED_Status -> IO (Maybe T.BED_DResult)
+compile : T.CEP_Name -> T.MVar_DictRawMVarMaybeDResult -> T.BED_Status -> IO (Maybe T.BED_DResult)
 compile pkg mvar status =
     case status of
         T.BED_SLocal docsStatus deps modul ->
-            Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
+            Utils.readMVar_DictRawMVarMaybeDResult mvar
                 |> IO.bind
                     (\resultsDict ->
                         Utils.mapTraverse identity compare Utils.readMVar_Maybe_BED_DResult (Dict.intersection compare resultsDict deps)
@@ -1143,16 +1143,6 @@ artifactCacheDecoder =
     Decode.map2 ArtifactCache
         (Decode.field "fingerprints" (D.everySet toComparableFingerprint fingerprintDecoder))
         (Decode.field "artifacts" artifactsDecoder)
-
-
-dictRawMVarMaybeDResultEncoder : Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> Encode.Value
-dictRawMVarMaybeDResultEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder_Maybe_BED_DResult
-
-
-moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
-moduleNameRawMVarMaybeDResultDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder_Maybe_BED_DResult
 
 
 statusDictEncoder : T.BED_StatusDict -> Encode.Value

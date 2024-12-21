@@ -622,6 +622,18 @@ type MVar_DictNameMVarDep
     = MVar_DictNameMVarDep Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_DictRawMVarMaybeDResult
+    = MVar_DictRawMVarMaybeDResult Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ListMVar
+    = MVar_ListMVar Int
+
+
 
 -- EXPRESSIONS
 
@@ -2206,3 +2218,11 @@ type CECTE_Types
 
 type CECTE_Types_
     = CECTE_Types_ (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias)
+
+
+
+-- BACKGROUND WRITER
+
+
+type BBW_Scope
+    = BBW_Scope MVar_ListMVar
