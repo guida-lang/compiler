@@ -616,15 +616,15 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                         getDocsStatus cache pkg vsn
                                                             |> IO.bind
                                                                 (\docsStatus ->
-                                                                    Utils.newEmptyMVar
+                                                                    Utils.newEmptyMVar_BED_StatusDict
                                                                         |> IO.bind
                                                                             (\mvar ->
                                                                                 Utils.mapTraverseWithKey identity compare (always << fork_Maybe_BED_Status << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                     |> IO.bind
                                                                                         (\mvars ->
-                                                                                            Utils.putMVar statusDictEncoder mvar mvars
+                                                                                            Utils.putMVar_BED_StatusDict mvar mvars
                                                                                                 |> IO.bind (\_ -> Utils.dictMapM_ compare Utils.readMVar_Maybe_BED_Status mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare Utils.readMVar_Maybe_BED_Status) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare Utils.readMVar_Maybe_BED_Status) (Utils.readMVar_BED_StatusDict mvar))
                                                                                                 |> IO.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
@@ -791,7 +791,7 @@ gatherForeignInterfaces directArtifacts =
 -- CRAWL
 
 
-crawlModule : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
+crawlModule : Dict String T.CEMN_Raw ForeignInterface -> T.MVar_BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
         path : T.FilePath
@@ -824,7 +824,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> T.FilePath -> IO (Maybe T.BED_Status)
+crawlFile : Dict String T.CEMN_Raw ForeignInterface -> T.MVar_BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.BED_DocsStatus -> T.CEMN_Raw -> T.FilePath -> IO (Maybe T.BED_Status)
 crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> IO.bind
@@ -843,9 +843,9 @@ crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
             )
 
 
-crawlImports : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> List T.CASTS_Import -> IO (Dict String T.CEMN_Raw ())
+crawlImports : Dict String T.CEMN_Raw ForeignInterface -> T.MVar_BED_StatusDict -> T.CEP_Name -> T.FilePath -> List T.CASTS_Import -> IO (Dict String T.CEMN_Raw ())
 crawlImports foreignDeps mvar pkg src imports =
-    Utils.takeMVar statusDictDecoder mvar
+    Utils.takeMVar_BED_StatusDict mvar
         |> IO.bind
             (\statusDict ->
                 let
@@ -860,14 +860,14 @@ crawlImports foreignDeps mvar pkg src imports =
                 Utils.mapTraverseWithKey identity compare (always << fork_Maybe_BED_Status << crawlModule foreignDeps mvar pkg src T.BED_DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
-                            Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
+                            Utils.putMVar_BED_StatusDict mvar (Dict.union mvars statusDict)
                                 |> IO.bind (\_ -> Utils.dictMapM_ compare Utils.readMVar_Maybe_BED_Status mvars)
                                 |> IO.fmap (\_ -> deps)
                         )
             )
 
 
-crawlKernel : Dict String T.CEMN_Raw ForeignInterface -> T.MVar T.BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
+crawlKernel : Dict String T.CEMN_Raw ForeignInterface -> T.MVar_BED_StatusDict -> T.CEP_Name -> T.FilePath -> T.CEMN_Raw -> IO (Maybe T.BED_Status)
 crawlKernel foreignDeps mvar pkg src name =
     let
         path : T.FilePath
@@ -1143,16 +1143,6 @@ artifactCacheDecoder =
     Decode.map2 ArtifactCache
         (Decode.field "fingerprints" (D.everySet toComparableFingerprint fingerprintDecoder))
         (Decode.field "artifacts" artifactsDecoder)
-
-
-statusDictEncoder : T.BED_StatusDict -> Encode.Value
-statusDictEncoder statusDict =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder_Maybe_BED_Status statusDict
-
-
-statusDictDecoder : Decode.Decoder T.BED_StatusDict
-statusDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder_Maybe_BED_Status
 
 
 localEncoder : T.BED_Local -> Encode.Value

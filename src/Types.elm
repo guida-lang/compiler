@@ -640,6 +640,12 @@ type MVar_BB_CachedInterface
     = MVar_BB_CachedInterface Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_BED_StatusDict
+    = MVar_BED_StatusDict Int
+
+
 
 -- EXPRESSIONS
 

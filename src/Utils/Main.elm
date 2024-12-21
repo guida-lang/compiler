@@ -107,6 +107,7 @@ module Utils.Main exposing
     , newEmptyMVar_BB_CachedInterface
     , newEmptyMVar_BB_Status
     , newEmptyMVar_BB_StatusDict
+    , newEmptyMVar_BED_StatusDict
     , newEmptyMVar_CED_Dep
     , newEmptyMVar_DictNameMVarDep
     , newEmptyMVar_DictRawMVarMaybeDResult
@@ -123,6 +124,7 @@ module Utils.Main exposing
     , newMVar_BB_CachedInterface
     , newMVar_BB_Status
     , newMVar_BB_StatusDict
+    , newMVar_BED_StatusDict
     , newMVar_CED_Dep
     , newMVar_DictNameMVarDep
     , newMVar_DictRawMVarMaybeDResult
@@ -138,6 +140,7 @@ module Utils.Main exposing
     , putMVar_BB_CachedInterface
     , putMVar_BB_Status
     , putMVar_BB_StatusDict
+    , putMVar_BED_StatusDict
     , putMVar_CED_Dep
     , putMVar_DictNameMVarDep
     , putMVar_DictRawMVarMaybeDResult
@@ -155,6 +158,7 @@ module Utils.Main exposing
     , readMVar_BB_CachedInterface
     , readMVar_BB_Status
     , readMVar_BB_StatusDict
+    , readMVar_BED_StatusDict
     , readMVar_CED_Dep
     , readMVar_DictNameMVarDep
     , readMVar_DictRawMVarMaybeDResult
@@ -182,6 +186,7 @@ module Utils.Main exposing
     , takeMVar
     , takeMVar_BB_CachedInterface
     , takeMVar_BB_StatusDict
+    , takeMVar_BED_StatusDict
     , takeMVar_CED_Dep
     , takeMVar_DictNameMVarDep
     , takeMVar_DictRawMVarMaybeDResult
@@ -2555,6 +2560,116 @@ newEmptyMVar_BB_CachedInterface =
             )
         )
         |> IO.fmap T.MVar_BB_CachedInterface
+
+
+
+-- Control.Concurrent.MVar (T.BED_StatusDict)
+
+
+newMVar_BED_StatusDict : T.BED_StatusDict -> IO T.MVar_BED_StatusDict
+newMVar_BED_StatusDict value =
+    newEmptyMVar_BED_StatusDict
+        |> IO.bind
+            (\mvar ->
+                putMVar_BED_StatusDict mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_BED_StatusDict : T.MVar_BED_StatusDict -> IO T.BED_StatusDict
+readMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BED_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_BED_StatusDict IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_BED_StatusDict index ] } s.mVars_BED_StatusDict }
+                            , IO.ReadMVar_BED_StatusDict IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BED_StatusDict: invalid ref"
+        )
+
+
+takeMVar_BED_StatusDict : T.MVar_BED_StatusDict -> IO T.BED_StatusDict
+takeMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BED_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_BED_StatusDict putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_BED_StatusDict }
+                                    , IO.TakeMVar_BED_StatusDict IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_BED_StatusDict = Array.set ref { mVar | value = Nothing } s.mVars_BED_StatusDict }
+                                    , IO.TakeMVar_BED_StatusDict IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_BED_StatusDict index ] } s.mVars_BED_StatusDict }
+                            , IO.TakeMVar_BED_StatusDict IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_BED_StatusDict: invalid ref"
+        )
+
+
+putMVar_BED_StatusDict : T.MVar_BED_StatusDict -> T.BED_StatusDict -> IO ()
+putMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BED_StatusDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_BED_StatusDict index value ] } s.mVars_BED_StatusDict }
+                            , IO.PutMVar_BED_StatusDict IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_BED_StatusDict readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BED_StatusDict }
+                            , IO.PutMVar_BED_StatusDict IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BED_StatusDict: invalid ref"
+        )
+
+
+newEmptyMVar_BED_StatusDict : IO T.MVar_BED_StatusDict
+newEmptyMVar_BED_StatusDict =
+    IO
+        (\_ s ->
+            ( { s | mVars_BED_StatusDict = Array.push { subscribers = [], value = Nothing } s.mVars_BED_StatusDict }
+            , IO.NewEmptyMVar_BED_StatusDict IO.pure (Array.length s.mVars_BED_StatusDict)
+            )
+        )
+        |> IO.fmap T.MVar_BED_StatusDict
 
 
 

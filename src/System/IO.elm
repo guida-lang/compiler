@@ -27,6 +27,7 @@ port module System.IO exposing
     , MVarSubscriber_DictRawMVarMaybeDResult(..)
     , MVarSubscriber_ListMVar(..)
     , MVarSubscriber_BB_CachedInterface(..)
+    , MVarSubscriber_BED_StatusDict(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -107,6 +108,7 @@ port module System.IO exposing
 @docs MVarSubscriber_DictRawMVarMaybeDResult
 @docs MVarSubscriber_ListMVar
 @docs MVarSubscriber_BB_CachedInterface
+@docs MVarSubscriber_BED_StatusDict
 
 -}
 
@@ -160,6 +162,7 @@ run app =
                     , mVars_DictRawMVarMaybeDResult = Array.empty
                     , mVars_ListMVar = Array.empty
                     , mVars_BB_CachedInterface = Array.empty
+                    , mVars_BED_StatusDict = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -306,6 +309,11 @@ type Next
     | ReadMVarNext_BB_CachedInterface (T.BB_CachedInterface -> IO ())
     | TakeMVarNext_BB_CachedInterface (T.BB_CachedInterface -> IO ())
     | PutMVarNext_BB_CachedInterface (() -> IO ())
+      -- MVars (T.BED_StatusDict)
+    | NewEmptyMVarNext_BED_StatusDict (Int -> IO ())
+    | ReadMVarNext_BED_StatusDict (T.BED_StatusDict -> IO ())
+    | TakeMVarNext_BED_StatusDict (T.BED_StatusDict -> IO ())
+    | PutMVarNext_BED_StatusDict (() -> IO ())
 
 
 type Msg
@@ -402,6 +410,10 @@ type Msg
     | NewEmptyMVarMsg_BB_CachedInterface Int Int
     | ReadMVarMsg_BB_CachedInterface Int T.BB_CachedInterface
     | PutMVarMsg_BB_CachedInterface Int
+      -- MVars (T.BED_StatusDict)
+    | NewEmptyMVarMsg_BED_StatusDict Int Int
+    | ReadMVarMsg_BED_StatusDict Int T.BED_StatusDict
+    | PutMVarMsg_BED_StatusDict Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -962,6 +974,36 @@ update msg model =
 
                 ( newRealWorld, PutMVar_BB_CachedInterface next _ Nothing ) ->
                     update (PutMVarMsg_BB_CachedInterface index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_CachedInterface next) model.next }
+
+                -- MVars (T.BED_StatusDict)
+                ( newRealWorld, NewEmptyMVar_BED_StatusDict next value ) ->
+                    update (NewEmptyMVarMsg_BED_StatusDict index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_BED_StatusDict next) model.next }
+
+                ( newRealWorld, ReadMVar_BED_StatusDict next (Just value) ) ->
+                    update (ReadMVarMsg_BED_StatusDict index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_BED_StatusDict next) model.next }
+
+                ( newRealWorld, ReadMVar_BED_StatusDict next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_BED_StatusDict next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_BED_StatusDict next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_BED_StatusDict index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_BED_StatusDict next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_BED_StatusDict next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_BED_StatusDict next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_BED_StatusDict next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BED_StatusDict readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BED_StatusDict index) { newRealWorld | next = Dict.insert index (PutMVarNext_BED_StatusDict next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_BED_StatusDict next _ Nothing ) ->
+                    update (PutMVarMsg_BED_StatusDict index) { newRealWorld | next = Dict.insert index (PutMVarNext_BED_StatusDict next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -1617,6 +1659,34 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_BB_CachedInterface"
 
+        -- MVars (T.BED_StatusDict)
+        NewEmptyMVarMsg_BED_StatusDict index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_BED_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BED_StatusDict"
+
+        ReadMVarMsg_BED_StatusDict index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_BED_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_BED_StatusDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BED_StatusDict"
+
+        PutMVarMsg_BED_StatusDict index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_BED_StatusDict fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BED_StatusDict"
+
 
 updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 updatePutIndex maybePutIndex ( model, cmd ) =
@@ -1914,6 +1984,11 @@ type ION a
     | ReadMVar_BB_CachedInterface (T.BB_CachedInterface -> IO a) (Maybe T.BB_CachedInterface)
     | TakeMVar_BB_CachedInterface (T.BB_CachedInterface -> IO a) (Maybe T.BB_CachedInterface) (Maybe Int)
     | PutMVar_BB_CachedInterface (() -> IO a) (List Int) (Maybe T.BB_CachedInterface)
+      -- MVars (T.BED_StatusDict)
+    | NewEmptyMVar_BED_StatusDict (Int -> IO a) Int
+    | ReadMVar_BED_StatusDict (T.BED_StatusDict -> IO a) (Maybe T.BED_StatusDict)
+    | TakeMVar_BED_StatusDict (T.BED_StatusDict -> IO a) (Maybe T.BED_StatusDict) (Maybe Int)
+    | PutMVar_BED_StatusDict (() -> IO a) (List Int) (Maybe T.BED_StatusDict)
 
 
 type alias RealWorld =
@@ -1939,6 +2014,7 @@ type alias RealWorld =
     , mVars_DictRawMVarMaybeDResult : Array { subscribers : List MVarSubscriber_DictRawMVarMaybeDResult, value : Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult) }
     , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List (T.MVar ())) }
     , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe T.BB_CachedInterface }
+    , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe T.BED_StatusDict }
     , next : Dict Int Next
     }
 
@@ -2037,6 +2113,12 @@ type MVarSubscriber_BB_CachedInterface
     = ReadMVarSubscriber_BB_CachedInterface Int
     | TakeMVarSubscriber_BB_CachedInterface Int
     | PutMVarSubscriber_BB_CachedInterface Int T.BB_CachedInterface
+
+
+type MVarSubscriber_BED_StatusDict
+    = ReadMVarSubscriber_BED_StatusDict Int
+    | TakeMVarSubscriber_BED_StatusDict Int
+    | PutMVarSubscriber_BED_StatusDict Int T.BED_StatusDict
 
 
 pure : a -> IO a
@@ -2341,6 +2423,19 @@ bind f (IO ma) =
 
                 ( s1, PutMVar_BB_CachedInterface next readIndexes value ) ->
                     ( s1, PutMVar_BB_CachedInterface (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BED_StatusDict)
+                ( s1, NewEmptyMVar_BED_StatusDict next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_BED_StatusDict (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_BED_StatusDict next mVarValue ) ->
+                    ( s1, ReadMVar_BED_StatusDict (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_BED_StatusDict next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_BED_StatusDict (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_BED_StatusDict next readIndexes value ) ->
+                    ( s1, PutMVar_BED_StatusDict (\() -> bind f (next ())) readIndexes value )
         )
 
 
