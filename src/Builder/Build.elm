@@ -224,7 +224,7 @@ type Artifacts
 
 type Module
     = Fresh T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
-    | Cached T.CEMN_Raw Bool (T.MVar T.BB_CachedInterface)
+    | Cached T.CEMN_Raw Bool T.MVar_BB_CachedInterface
 
 
 fromPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> IO (Result Exit.BuildProblem Artifacts)
@@ -486,7 +486,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                     )
 
                                         DepsSame _ _ ->
-                                            Utils.newMVar cachedInterfaceEncoder T.BB_Unneeded
+                                            Utils.newMVar_BB_CachedInterface T.BB_Unneeded
                                                 |> IO.fmap
                                                     (\mvar ->
                                                         T.BB_RCached hasMain lastChange mvar
@@ -588,7 +588,7 @@ type alias Dep =
 
 
 type alias CDep =
-    ( T.CEMN_Raw, T.MVar T.BB_CachedInterface )
+    ( T.CEMN_Raw, T.MVar_BB_CachedInterface )
 
 
 checkDepsHelp : T.FilePath -> T.BB_ResultDict -> List T.CEMN_Raw -> List Dep -> List Dep -> List CDep -> List ( T.CEMN_Raw, T.CREI_Problem ) -> Bool -> T.BED_BuildID -> T.BED_BuildID -> IO DepsStatus
@@ -705,16 +705,16 @@ loadInterfaces root same cached =
 
 loadInterface : T.FilePath -> CDep -> IO (Maybe Dep)
 loadInterface root ( name, ciMvar ) =
-    Utils.takeMVar cachedInterfaceDecoder ciMvar
+    Utils.takeMVar_BB_CachedInterface ciMvar
         |> IO.bind
             (\cachedInterface ->
                 case cachedInterface of
                     T.BB_Corrupted ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        Utils.putMVar_BB_CachedInterface ciMvar cachedInterface
                             |> IO.fmap (\_ -> Nothing)
 
                     T.BB_Loaded iface ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        Utils.putMVar_BB_CachedInterface ciMvar cachedInterface
                             |> IO.fmap (\_ -> Just ( name, iface ))
 
                     T.BB_Unneeded ->
@@ -723,11 +723,11 @@ loadInterface root ( name, ciMvar ) =
                                 (\maybeIface ->
                                     case maybeIface of
                                         Nothing ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar T.BB_Corrupted
+                                            Utils.putMVar_BB_CachedInterface ciMvar T.BB_Corrupted
                                                 |> IO.fmap (\_ -> Nothing)
 
                                         Just iface ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar (T.BB_Loaded iface)
+                                            Utils.putMVar_BB_CachedInterface ciMvar (T.BB_Loaded iface)
                                                 |> IO.fmap (\_ -> Just ( name, iface ))
                                 )
             )
@@ -1952,26 +1952,6 @@ resultBuildProjectProblemRootInfoDecoder =
     D.result Exit.buildProjectProblemDecoder rootInfoDecoder
 
 
-cachedInterfaceEncoder : T.BB_CachedInterface -> Encode.Value
-cachedInterfaceEncoder cachedInterface =
-    case cachedInterface of
-        T.BB_Unneeded ->
-            Encode.object
-                [ ( "type", Encode.string "Unneeded" )
-                ]
-
-        T.BB_Loaded iface ->
-            Encode.object
-                [ ( "type", Encode.string "Loaded" )
-                , ( "iface", I.interfaceEncoder iface )
-                ]
-
-        T.BB_Corrupted ->
-            Encode.object
-                [ ( "type", Encode.string "Corrupted" )
-                ]
-
-
 cachedInterfaceDecoder : Decode.Decoder T.BB_CachedInterface
 cachedInterfaceDecoder =
     Decode.field "type" Decode.string
@@ -2076,7 +2056,7 @@ moduleEncoder modul =
                 [ ( "type", Encode.string "Cached" )
                 , ( "name", ModuleName.rawEncoder name )
                 , ( "main", Encode.bool main )
-                , ( "mvar", Utils.mVarEncoder mvar )
+                , ( "mvar", Utils.mVarEncoder_BB_CachedInterface mvar )
                 ]
 
 
@@ -2096,7 +2076,7 @@ moduleDecoder =
                         Decode.map3 Cached
                             (Decode.field "name" ModuleName.rawDecoder)
                             (Decode.field "main" Decode.bool)
-                            (Decode.field "mvar" Utils.mVarDecoder)
+                            (Decode.field "mvar" Utils.mVarDecoder_BB_CachedInterface)
 
                     _ ->
                         Decode.fail ("Failed to decode Module's type: " ++ type_)

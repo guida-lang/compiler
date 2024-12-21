@@ -26,6 +26,7 @@ port module System.IO exposing
     , MVarSubscriber_DictNameMVarDep(..)
     , MVarSubscriber_DictRawMVarMaybeDResult(..)
     , MVarSubscriber_ListMVar(..)
+    , MVarSubscriber_BB_CachedInterface(..)
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -105,6 +106,7 @@ port module System.IO exposing
 @docs MVarSubscriber_DictNameMVarDep
 @docs MVarSubscriber_DictRawMVarMaybeDResult
 @docs MVarSubscriber_ListMVar
+@docs MVarSubscriber_BB_CachedInterface
 
 -}
 
@@ -157,6 +159,7 @@ run app =
                     , mVars_DictNameMVarDep = Array.empty
                     , mVars_DictRawMVarMaybeDResult = Array.empty
                     , mVars_ListMVar = Array.empty
+                    , mVars_BB_CachedInterface = Array.empty
                     , next = Dict.empty
                     }
         , update = update
@@ -298,6 +301,11 @@ type Next
     | ReadMVarNext_ListMVar (List (T.MVar ()) -> IO ())
     | TakeMVarNext_ListMVar (List (T.MVar ()) -> IO ())
     | PutMVarNext_ListMVar (() -> IO ())
+      -- MVars (T.BB_CachedInterface)
+    | NewEmptyMVarNext_BB_CachedInterface (Int -> IO ())
+    | ReadMVarNext_BB_CachedInterface (T.BB_CachedInterface -> IO ())
+    | TakeMVarNext_BB_CachedInterface (T.BB_CachedInterface -> IO ())
+    | PutMVarNext_BB_CachedInterface (() -> IO ())
 
 
 type Msg
@@ -390,6 +398,10 @@ type Msg
     | NewEmptyMVarMsg_ListMVar Int Int
     | ReadMVarMsg_ListMVar Int (List (T.MVar ()))
     | PutMVarMsg_ListMVar Int
+      -- MVars (T.BB_CachedInterface)
+    | NewEmptyMVarMsg_BB_CachedInterface Int Int
+    | ReadMVarMsg_BB_CachedInterface Int T.BB_CachedInterface
+    | PutMVarMsg_BB_CachedInterface Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -920,6 +932,36 @@ update msg model =
 
                 ( newRealWorld, PutMVar_ListMVar next _ Nothing ) ->
                     update (PutMVarMsg_ListMVar index) { newRealWorld | next = Dict.insert index (PutMVarNext_ListMVar next) model.next }
+
+                -- MVars (T.BB_CachedInterface)
+                ( newRealWorld, NewEmptyMVar_BB_CachedInterface next value ) ->
+                    update (NewEmptyMVarMsg_BB_CachedInterface index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext_BB_CachedInterface next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_CachedInterface next (Just value) ) ->
+                    update (ReadMVarMsg_BB_CachedInterface index value) { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_CachedInterface next) model.next }
+
+                ( newRealWorld, ReadMVar_BB_CachedInterface next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext_BB_CachedInterface next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar_BB_CachedInterface next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_BB_CachedInterface index value) { newRealWorld | next = Dict.insert index (TakeMVarNext_BB_CachedInterface next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar_BB_CachedInterface next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext_BB_CachedInterface next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, PutMVar_BB_CachedInterface next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_CachedInterface readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_CachedInterface index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_CachedInterface next) model.next })
+                        readIndexes
+
+                ( newRealWorld, PutMVar_BB_CachedInterface next _ Nothing ) ->
+                    update (PutMVarMsg_BB_CachedInterface index) { newRealWorld | next = Dict.insert index (PutMVarNext_BB_CachedInterface next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -1547,6 +1589,34 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_ListMVar"
 
+        -- MVars (T.BB_CachedInterface)
+        NewEmptyMVarMsg_BB_CachedInterface index value ->
+            case Dict.get index model.next of
+                Just (NewEmptyMVarNext_BB_CachedInterface fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_CachedInterface"
+
+        ReadMVarMsg_BB_CachedInterface index value ->
+            case Dict.get index model.next of
+                Just (ReadMVarNext_BB_CachedInterface fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (TakeMVarNext_BB_CachedInterface fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_CachedInterface"
+
+        PutMVarMsg_BB_CachedInterface index ->
+            case Dict.get index model.next of
+                Just (PutMVarNext_BB_CachedInterface fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_CachedInterface"
+
 
 updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 updatePutIndex maybePutIndex ( model, cmd ) =
@@ -1839,6 +1909,11 @@ type ION a
     | ReadMVar_ListMVar (List (T.MVar ()) -> IO a) (Maybe (List (T.MVar ())))
     | TakeMVar_ListMVar (List (T.MVar ()) -> IO a) (Maybe (List (T.MVar ()))) (Maybe Int)
     | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List (T.MVar ())))
+      -- MVars (T.BB_CachedInterface)
+    | NewEmptyMVar_BB_CachedInterface (Int -> IO a) Int
+    | ReadMVar_BB_CachedInterface (T.BB_CachedInterface -> IO a) (Maybe T.BB_CachedInterface)
+    | TakeMVar_BB_CachedInterface (T.BB_CachedInterface -> IO a) (Maybe T.BB_CachedInterface) (Maybe Int)
+    | PutMVar_BB_CachedInterface (() -> IO a) (List Int) (Maybe T.BB_CachedInterface)
 
 
 type alias RealWorld =
@@ -1863,6 +1938,7 @@ type alias RealWorld =
     , mVars_DictNameMVarDep : Array { subscribers : List MVarSubscriber_DictNameMVarDep, value : Maybe (Map.Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep) }
     , mVars_DictRawMVarMaybeDResult : Array { subscribers : List MVarSubscriber_DictRawMVarMaybeDResult, value : Maybe (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult) }
     , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List (T.MVar ())) }
+    , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe T.BB_CachedInterface }
     , next : Dict Int Next
     }
 
@@ -1955,6 +2031,12 @@ type MVarSubscriber_ListMVar
     = ReadMVarSubscriber_ListMVar Int
     | TakeMVarSubscriber_ListMVar Int
     | PutMVarSubscriber_ListMVar Int (List (T.MVar ()))
+
+
+type MVarSubscriber_BB_CachedInterface
+    = ReadMVarSubscriber_BB_CachedInterface Int
+    | TakeMVarSubscriber_BB_CachedInterface Int
+    | PutMVarSubscriber_BB_CachedInterface Int T.BB_CachedInterface
 
 
 pure : a -> IO a
@@ -2246,6 +2328,19 @@ bind f (IO ma) =
 
                 ( s1, PutMVar_ListMVar next readIndexes value ) ->
                     ( s1, PutMVar_ListMVar (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_CachedInterface)
+                ( s1, NewEmptyMVar_BB_CachedInterface next emptyMVarIndex ) ->
+                    ( s1, NewEmptyMVar_BB_CachedInterface (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, ReadMVar_BB_CachedInterface next mVarValue ) ->
+                    ( s1, ReadMVar_BB_CachedInterface (\value -> bind f (next value)) mVarValue )
+
+                ( s1, TakeMVar_BB_CachedInterface next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar_BB_CachedInterface (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, PutMVar_BB_CachedInterface next readIndexes value ) ->
+                    ( s1, PutMVar_BB_CachedInterface (\() -> bind f (next ())) readIndexes value )
         )
 
 

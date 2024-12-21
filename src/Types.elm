@@ -634,6 +634,12 @@ type MVar_ListMVar
     = MVar_ListMVar Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_BB_CachedInterface
+    = MVar_BB_CachedInterface Int
+
+
 
 -- EXPRESSIONS
 
@@ -812,7 +818,7 @@ type alias BB_ResultDict =
 type BB_BResult
     = BB_RNew BED_Local CEI_Interface CASTO_LocalGraph (Maybe CED_Module)
     | BB_RSame BED_Local CEI_Interface CASTO_LocalGraph (Maybe CED_Module)
-    | BB_RCached Bool BED_BuildID (MVar BB_CachedInterface)
+    | BB_RCached Bool BED_BuildID MVar_BB_CachedInterface
     | BB_RNotFound CREI_Problem
     | BB_RProblem CRE_Module
     | BB_RBlocked

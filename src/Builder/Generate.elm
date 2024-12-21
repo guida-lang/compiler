@@ -275,7 +275,7 @@ loadTypesHelp root modul =
             Utils.newMVar_Maybe_CECTE_Types (Just (Extract.fromInterface name iface))
 
         Build.Cached name _ ciMVar ->
-            Utils.readMVar Build.cachedInterfaceDecoder ciMVar
+            Utils.readMVar_BB_CachedInterface ciMVar
                 |> IO.bind
                     (\cachedInterface ->
                         case cachedInterface of

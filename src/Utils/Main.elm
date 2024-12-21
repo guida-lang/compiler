@@ -69,12 +69,14 @@ module Utils.Main exposing
     , lockWithFileLock
     , mVarDecoder
     , mVarDecoder_BB_BResult
+    , mVarDecoder_BB_CachedInterface
     , mVarDecoder_CED_Dep
     , mVarDecoder_Maybe_BED_DResult
     , mVarDecoder_Maybe_BED_Status
     , mVarDecoder_Maybe_CECTE_Types
     , mVarEncoder
     , mVarEncoder_BB_BResult
+    , mVarEncoder_BB_CachedInterface
     , mVarEncoder_CED_Dep
     , mVarEncoder_Maybe_BED_DResult
     , mVarEncoder_Maybe_BED_Status
@@ -102,6 +104,7 @@ module Utils.Main exposing
     , newChan
     , newEmptyMVar
     , newEmptyMVar_BB_BResult
+    , newEmptyMVar_BB_CachedInterface
     , newEmptyMVar_BB_Status
     , newEmptyMVar_BB_StatusDict
     , newEmptyMVar_CED_Dep
@@ -117,6 +120,7 @@ module Utils.Main exposing
     , newEmptyMVar_ResultRegistryProblemEnv
     , newMVar
     , newMVar_BB_BResult
+    , newMVar_BB_CachedInterface
     , newMVar_BB_Status
     , newMVar_BB_StatusDict
     , newMVar_CED_Dep
@@ -131,6 +135,7 @@ module Utils.Main exposing
     , nonEmptyListTraverse
     , putMVar
     , putMVar_BB_BResult
+    , putMVar_BB_CachedInterface
     , putMVar_BB_Status
     , putMVar_BB_StatusDict
     , putMVar_CED_Dep
@@ -147,6 +152,7 @@ module Utils.Main exposing
     , readChan
     , readMVar
     , readMVar_BB_BResult
+    , readMVar_BB_CachedInterface
     , readMVar_BB_Status
     , readMVar_BB_StatusDict
     , readMVar_CED_Dep
@@ -174,6 +180,7 @@ module Utils.Main exposing
     , someExceptionDecoder
     , someExceptionEncoder
     , takeMVar
+    , takeMVar_BB_CachedInterface
     , takeMVar_BB_StatusDict
     , takeMVar_CED_Dep
     , takeMVar_DictNameMVarDep
@@ -2441,6 +2448,116 @@ newEmptyMVar_ListMVar =
 
 
 
+-- Control.Concurrent.MVar (T.BB_CachedInterface)
+
+
+newMVar_BB_CachedInterface : T.BB_CachedInterface -> IO T.MVar_BB_CachedInterface
+newMVar_BB_CachedInterface value =
+    newEmptyMVar_BB_CachedInterface
+        |> IO.bind
+            (\mvar ->
+                putMVar_BB_CachedInterface mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
+readMVar_BB_CachedInterface : T.MVar_BB_CachedInterface -> IO T.BB_CachedInterface
+readMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_CachedInterface of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar_BB_CachedInterface IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadMVarSubscriber_BB_CachedInterface index ] } s.mVars_BB_CachedInterface }
+                            , IO.ReadMVar_BB_CachedInterface IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_CachedInterface: invalid ref"
+        )
+
+
+takeMVar_BB_CachedInterface : T.MVar_BB_CachedInterface -> IO T.BB_CachedInterface
+takeMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_CachedInterface of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutMVarSubscriber_BB_CachedInterface putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_BB_CachedInterface }
+                                    , IO.TakeMVar_BB_CachedInterface IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | value = Nothing } s.mVars_BB_CachedInterface }
+                                    , IO.TakeMVar_BB_CachedInterface IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeMVarSubscriber_BB_CachedInterface index ] } s.mVars_BB_CachedInterface }
+                            , IO.TakeMVar_BB_CachedInterface IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_BB_CachedInterface: invalid ref"
+        )
+
+
+putMVar_BB_CachedInterface : T.MVar_BB_CachedInterface -> T.BB_CachedInterface -> IO ()
+putMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_CachedInterface of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutMVarSubscriber_BB_CachedInterface index value ] } s.mVars_BB_CachedInterface }
+                            , IO.PutMVar_BB_CachedInterface IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadMVarSubscriber_BB_CachedInterface readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_CachedInterface }
+                            , IO.PutMVar_BB_CachedInterface IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_CachedInterface: invalid ref"
+        )
+
+
+newEmptyMVar_BB_CachedInterface : IO T.MVar_BB_CachedInterface
+newEmptyMVar_BB_CachedInterface =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_CachedInterface = Array.push { subscribers = [], value = Nothing } s.mVars_BB_CachedInterface }
+            , IO.NewEmptyMVar_BB_CachedInterface IO.pure (Array.length s.mVars_BB_CachedInterface)
+            )
+        )
+        |> IO.fmap T.MVar_BB_CachedInterface
+
+
+
 -- Control.Concurrent.Chan
 
 
@@ -2611,6 +2728,11 @@ mVarDecoder_Maybe_CECTE_Types =
     Decode.map T.MVar_Maybe_CECTE_Types Decode.int
 
 
+mVarDecoder_BB_CachedInterface : Decode.Decoder T.MVar_BB_CachedInterface
+mVarDecoder_BB_CachedInterface =
+    Decode.map T.MVar_BB_CachedInterface Decode.int
+
+
 mVarEncoder : T.MVar a -> Encode.Value
 mVarEncoder (T.MVar ref) =
     Encode.int ref
@@ -2638,6 +2760,11 @@ mVarEncoder_CED_Dep (T.MVar_CED_Dep ref) =
 
 mVarEncoder_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Encode.Value
 mVarEncoder_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
+    Encode.int ref
+
+
+mVarEncoder_BB_CachedInterface : T.MVar_BB_CachedInterface -> Encode.Value
+mVarEncoder_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
     Encode.int ref
 
 
