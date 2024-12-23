@@ -646,6 +646,12 @@ type MVar_BED_StatusDict
     = MVar_BED_StatusDict Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_Unit
+    = MVar_Unit Int
+
+
 
 -- EXPRESSIONS
 

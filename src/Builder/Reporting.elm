@@ -42,7 +42,7 @@ import Utils.Main as Utils exposing (Chan)
 type Style
     = Silent
     | Json
-    | Terminal (T.MVar ())
+    | Terminal T.MVar_Unit
 
 
 silent : Style
@@ -57,7 +57,7 @@ json =
 
 terminal : IO Style
 terminal =
-    IO.fmap Terminal (Utils.newMVar (\_ -> CoreEncode.bool True) ())
+    IO.fmap Terminal (Utils.newMVar_Unit ())
 
 
 
@@ -100,7 +100,7 @@ attemptWithStyle style toReport work =
                                     |> IO.bind (\_ -> Exit.exitFailure)
 
                             Terminal mvar ->
-                                Utils.readMVar (Decode.map (\_ -> ()) Decode.bool) mvar
+                                Utils.readMVar_Unit mvar
                                     |> IO.bind (\_ -> Exit.toStderr (toReport x))
                                     |> IO.bind (\_ -> Exit.exitFailure)
             )
@@ -213,9 +213,9 @@ trackDetails style callback =
                 |> IO.bind
                     (\chan ->
                         Utils.forkIO
-                            (Utils.takeMVar (Decode.succeed ()) mvar
+                            (Utils.takeMVar_Unit mvar
                                 |> IO.bind (\_ -> detailsLoop chan (DState 0 0 0 0 0 0 0))
-                                |> IO.bind (\_ -> Utils.putMVar (\_ -> CoreEncode.bool True) mvar ())
+                                |> IO.bind (\_ -> Utils.putMVar_Unit mvar ())
                             )
                             |> IO.bind
                                 (\_ ->
@@ -389,10 +389,10 @@ trackBuild decoder encoder style callback =
                                 Encode.result bMsgEncoder (bResultEncoder encoder)
                         in
                         Utils.forkIO
-                            (Utils.takeMVar (Decode.succeed ()) mvar
+                            (Utils.takeMVar_Unit mvar
                                 |> IO.bind (\_ -> putStrFlush "Compiling ...")
                                 |> IO.bind (\_ -> buildLoop decoder chan 0)
-                                |> IO.bind (\_ -> Utils.putMVar (\_ -> CoreEncode.bool True) mvar ())
+                                |> IO.bind (\_ -> Utils.putMVar_Unit mvar ())
                             )
                             |> IO.bind (\_ -> callback (Key (Utils.writeChan chanEncoder chan << Err)))
                             |> IO.bind
@@ -483,7 +483,7 @@ reportGenerate style names output =
             IO.pure ()
 
         Terminal mvar ->
-            Utils.readMVar (Decode.map (\_ -> ()) Decode.bool) mvar
+            Utils.readMVar_Unit mvar
                 |> IO.bind
                     (\_ ->
                         let
