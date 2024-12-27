@@ -12,7 +12,8 @@ module Builder.Reporting.Task exposing
     , void
     )
 
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Types exposing (IO)
 
 
 

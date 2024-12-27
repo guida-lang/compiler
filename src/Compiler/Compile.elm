@@ -12,9 +12,9 @@ import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import System.TypeCheck.IO as TypeCheck
-import Types as T
+import Types as T exposing (IO)
 
 
 

@@ -16,9 +16,9 @@ module Builder.File exposing
 import Codec.Archive.Zip as Zip
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO
 import Time
-import Types as T
+import Types as T exposing (IO(..))
 import Utils.Main as Utils
 
 
@@ -91,7 +91,7 @@ readBinary decoder path =
 
 writeUtf8 : T.FilePath -> String -> IO ()
 writeUtf8 path content =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path content ))
+    IO (\_ s -> ( s, T.WriteString IO.pure path content ))
 
 
 
@@ -100,7 +100,7 @@ writeUtf8 path content =
 
 readUtf8 : T.FilePath -> IO String
 readUtf8 path =
-    IO (\_ s -> ( s, IO.Read IO.pure path ))
+    IO (\_ s -> ( s, T.Read IO.pure path ))
 
 
 
@@ -109,14 +109,14 @@ readUtf8 path =
 
 writeBuilder : T.FilePath -> String -> IO ()
 writeBuilder path builder =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path builder ))
+    IO (\_ s -> ( s, T.WriteString IO.pure path builder ))
 
 
 
 -- WRITE PACKAGE
 
 
-writePackage : T.FilePath -> Zip.Archive -> IO ()
+writePackage : T.FilePath -> T.CAZ_Archive -> IO ()
 writePackage destination archive =
     case Zip.zEntries archive of
         [] ->
@@ -131,7 +131,7 @@ writePackage destination archive =
             Utils.mapM_ (writeEntry destination root) entries
 
 
-writeEntry : T.FilePath -> Int -> Zip.Entry -> IO ()
+writeEntry : T.FilePath -> Int -> T.CAZ_Entry -> IO ()
 writeEntry destination root entry =
     let
         path : String

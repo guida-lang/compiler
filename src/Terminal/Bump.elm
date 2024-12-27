@@ -19,8 +19,8 @@ import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Prelude
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 

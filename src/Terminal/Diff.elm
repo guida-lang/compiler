@@ -25,8 +25,7 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
-import System.IO exposing (IO)
-import Types as T
+import Types as T exposing (IO)
 
 
 

@@ -1,9 +1,6 @@
 module Builder.Build exposing
-    ( Artifacts(..)
-    , DocsGoal(..)
-    , Module(..)
+    ( DocsGoal(..)
     , ReplArtifacts(..)
-    , Root(..)
     , cachedInterfaceDecoder
     , fromExposed
     , fromPaths
@@ -43,8 +40,8 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -54,10 +51,10 @@ import Utils.Main as Utils
 
 
 type Env
-    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) T.BED_BuildID (Dict String T.CEMN_Raw T.BED_Local) (Dict String T.CEMN_Raw Details.Foreign)
+    = Env T.BR_BKey String Parse.ProjectType (List AbsoluteSrcDir) T.BED_BuildID (Dict String T.CEMN_Raw T.BED_Local) (Dict String T.CEMN_Raw Details.Foreign)
 
 
-makeEnv : Reporting.BKey -> T.FilePath -> Details.Details -> IO Env
+makeEnv : T.BR_BKey -> T.FilePath -> Details.Details -> IO Env
 makeEnv key root (Details.Details _ validOutline buildID locals foreigns _) =
     case validOutline of
         Details.ValidApp givenSrcDirs ->
@@ -143,7 +140,7 @@ forkWithKey_BB_BResult toComparable keyComparison func dict =
 -- FROM EXPOSED
 
 
-fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> IO (Result Exit.BuildProblem docs)
+fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> IO (Result T.BRE_BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style <|
         \key ->
@@ -180,7 +177,7 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                                                                         (\midpoint ->
                                                                                                             case midpoint of
                                                                                                                 Err problem ->
-                                                                                                                    IO.pure (Err (Exit.BuildProjectProblem problem))
+                                                                                                                    IO.pure (Err (T.BRE_BuildProjectProblem problem))
 
                                                                                                                 Ok foreigns ->
                                                                                                                     Utils.newEmptyMVar
@@ -218,18 +215,9 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
 -- FROM PATHS
 
 
-type Artifacts
-    = Artifacts T.CEP_Name T.BB_Dependencies (NE.Nonempty Root) (List Module)
-
-
-type Module
-    = Fresh T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
-    | Cached T.CEMN_Raw Bool T.MVar_BB_CachedInterface
-
-
-fromPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> IO (Result Exit.BuildProblem Artifacts)
+fromPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> IO (Result T.BRE_BuildProblem T.BB_Artifacts)
 fromPaths style root details paths =
-    Reporting.trackBuild artifactsDecoder artifactsEncoder style <|
+    Reporting.trackBuild_BB_Artifacts style <|
         \key ->
             makeEnv key root details
                 |> IO.bind
@@ -239,7 +227,7 @@ fromPaths style root details paths =
                                 (\elroots ->
                                     case elroots of
                                         Err problem ->
-                                            IO.pure (Err (Exit.BuildProjectProblem problem))
+                                            IO.pure (Err (T.BRE_BuildProjectProblem problem))
 
                                         Ok lroots ->
                                             -- crawl
@@ -263,7 +251,7 @@ fromPaths style root details paths =
                                                                                                                 (\midpoint ->
                                                                                                                     case midpoint of
                                                                                                                         Err problem ->
-                                                                                                                            IO.pure (Err (Exit.BuildProjectProblem problem))
+                                                                                                                            IO.pure (Err (T.BRE_BuildProjectProblem problem))
 
                                                                                                                         Ok foreigns ->
                                                                                                                             -- compile
@@ -306,18 +294,18 @@ fromPaths style root details paths =
 -- GET ROOT NAMES
 
 
-getRootNames : Artifacts -> NE.Nonempty T.CEMN_Raw
-getRootNames (Artifacts _ _ roots _) =
+getRootNames : T.BB_Artifacts -> NE.Nonempty T.CEMN_Raw
+getRootNames (T.BB_Artifacts _ _ roots _) =
     NE.map getRootName roots
 
 
-getRootName : Root -> T.CEMN_Raw
+getRootName : T.BB_Root -> T.CEMN_Raw
 getRootName root =
     case root of
-        Inside name ->
+        T.BB_Inside name ->
             name
 
-        Outside name _ _ ->
+        T.BB_Outside name _ _ ->
             name
 
 
@@ -737,7 +725,7 @@ loadInterface root ( name, ciMvar ) =
 -- CHECK PROJECT
 
 
-checkMidpoint : T.MVar_Maybe_BB_Dependencies -> Dict String T.CEMN_Raw T.BB_Status -> IO (Result Exit.BuildProjectProblem T.BB_Dependencies)
+checkMidpoint : T.MVar_Maybe_BB_Dependencies -> Dict String T.CEMN_Raw T.BB_Status -> IO (Result T.BRE_BuildProjectProblem T.BB_Dependencies)
 checkMidpoint dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
@@ -746,7 +734,7 @@ checkMidpoint dmvar statuses =
                     (\maybeForeigns ->
                         case maybeForeigns of
                             Nothing ->
-                                Err Exit.BP_CannotLoadDependencies
+                                Err T.BRE_BP_CannotLoadDependencies
 
                             Just fs ->
                                 Ok fs
@@ -754,10 +742,10 @@ checkMidpoint dmvar statuses =
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar_Maybe_BB_Dependencies dmvar
-                |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> IO.fmap (\_ -> Err (T.BRE_BP_Cycle name names))
 
 
-checkMidpointAndRoots : T.MVar_Maybe_BB_Dependencies -> Dict String T.CEMN_Raw T.BB_Status -> NE.Nonempty RootStatus -> IO (Result Exit.BuildProjectProblem T.BB_Dependencies)
+checkMidpointAndRoots : T.MVar_Maybe_BB_Dependencies -> Dict String T.CEMN_Raw T.BB_Status -> NE.Nonempty RootStatus -> IO (Result T.BRE_BuildProjectProblem T.BB_Dependencies)
 checkMidpointAndRoots dmvar statuses sroots =
     case checkForCycles statuses of
         Nothing ->
@@ -768,7 +756,7 @@ checkMidpointAndRoots dmvar statuses sroots =
                             (\maybeForeigns ->
                                 case maybeForeigns of
                                     Nothing ->
-                                        IO.pure (Err Exit.BP_CannotLoadDependencies)
+                                        IO.pure (Err T.BRE_BP_CannotLoadDependencies)
 
                                     Just fs ->
                                         IO.pure (Ok fs)
@@ -780,7 +768,7 @@ checkMidpointAndRoots dmvar statuses sroots =
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar_Maybe_BB_Dependencies dmvar
-                |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> IO.fmap (\_ -> Err (T.BRE_BP_Cycle name names))
 
 
 
@@ -854,7 +842,7 @@ addToGraph name status graph =
 -- CHECK UNIQUE ROOTS
 
 
-checkUniqueRoots : Dict String T.CEMN_Raw T.BB_Status -> NE.Nonempty RootStatus -> Maybe Exit.BuildProjectProblem
+checkUniqueRoots : Dict String T.CEMN_Raw T.BB_Status -> NE.Nonempty RootStatus -> Maybe T.BRE_BuildProjectProblem
 checkUniqueRoots insides sroots =
     let
         outsidesDict : Dict String T.CEMN_Raw (OneOrMore.OneOrMore T.FilePath)
@@ -887,24 +875,24 @@ rootStatusToNamePathPair sroot =
             Nothing
 
 
-checkOutside : T.CEMN_Raw -> OneOrMore.OneOrMore T.FilePath -> Result Exit.BuildProjectProblem T.FilePath
+checkOutside : T.CEMN_Raw -> OneOrMore.OneOrMore T.FilePath -> Result T.BRE_BuildProjectProblem T.FilePath
 checkOutside name paths =
     case OneOrMore.destruct NE.Nonempty paths of
         NE.Nonempty p [] ->
             Ok p
 
         NE.Nonempty p1 (p2 :: _) ->
-            Err (Exit.BP_RootNameDuplicate name p1 p2)
+            Err (T.BRE_BP_RootNameDuplicate name p1 p2)
 
 
-checkInside : T.CEMN_Raw -> T.FilePath -> T.BB_Status -> Result Exit.BuildProjectProblem ()
+checkInside : T.CEMN_Raw -> T.FilePath -> T.BB_Status -> Result T.BRE_BuildProjectProblem ()
 checkInside name p1 status =
     case status of
         T.BB_SCached (T.BED_Local p2 _ _ _ _ _) ->
-            Err (Exit.BP_RootNameDuplicate name p1 p2)
+            Err (T.BRE_BP_RootNameDuplicate name p1 p2)
 
         T.BB_SChanged (T.BED_Local p2 _ _ _ _ _) _ _ _ ->
-            Err (Exit.BP_RootNameDuplicate name p1 p2)
+            Err (T.BRE_BP_RootNameDuplicate name p1 p2)
 
         T.BB_SBadImport _ ->
             Ok ()
@@ -965,7 +953,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (T.BED_Local path time
                                                             Just oldi ->
                                                                 if oldi == iface then
                                                                     -- iface should be fully forced by equality check
-                                                                    Reporting.report key Reporting.BDone
+                                                                    Reporting.report key T.BR_BDone
                                                                         |> IO.fmap
                                                                             (\_ ->
                                                                                 let
@@ -980,7 +968,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (T.BED_Local path time
                                                                     File.writeBinary I.interfaceEncoder elmi iface
                                                                         |> IO.bind
                                                                             (\_ ->
-                                                                                Reporting.report key Reporting.BDone
+                                                                                Reporting.report key T.BR_BDone
                                                                                     |> IO.fmap
                                                                                         (\_ ->
                                                                                             let
@@ -997,7 +985,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (T.BED_Local path time
                                                                 File.writeBinary I.interfaceEncoder elmi iface
                                                                     |> IO.bind
                                                                         (\_ ->
-                                                                            Reporting.report key Reporting.BDone
+                                                                            Reporting.report key T.BR_BDone
                                                                                 |> IO.fmap
                                                                                     (\_ ->
                                                                                         let
@@ -1070,11 +1058,11 @@ addNewLocal name result locals =
 -- FINALIZE EXPOSED
 
 
-finalizeExposed : T.FilePath -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> Dict String T.CEMN_Raw T.BB_BResult -> IO (Result Exit.BuildProblem docs)
+finalizeExposed : T.FilePath -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> Dict String T.CEMN_Raw T.BB_BResult -> IO (Result T.BRE_BuildProblem docs)
 finalizeExposed root docsGoal exposed results =
     case List.foldr (addImportProblems results) [] (NE.toList exposed) of
         p :: ps ->
-            IO.pure <| Err <| Exit.BuildProjectProblem (Exit.BP_MissingExposed (NE.Nonempty p ps))
+            IO.pure <| Err <| T.BRE_BuildProjectProblem (T.BRE_BP_MissingExposed (NE.Nonempty p ps))
 
         [] ->
             case Dict.foldr compare (\_ -> addErrors) [] results of
@@ -1082,7 +1070,7 @@ finalizeExposed root docsGoal exposed results =
                     IO.fmap Ok (finalizeDocs docsGoal results)
 
                 e :: es ->
-                    IO.pure <| Err <| Exit.BuildBadModules root e es
+                    IO.pure <| Err <| T.BRE_BuildBadModules root e es
 
 
 addErrors : T.BB_BResult -> List T.CRE_Module -> List T.CRE_Module
@@ -1242,7 +1230,7 @@ toDocs result =
 
 
 type ReplArtifacts
-    = ReplArtifacts T.CEMN_Canonical (List Module) T.CRRTL_Localizer (Dict String T.CDN_Name T.CASTC_Annotation)
+    = ReplArtifacts T.CEMN_Canonical (List T.BB_Module) T.CRRTL_Localizer (Dict String T.CDN_Name T.CASTC_Annotation)
 
 
 fromRepl : T.FilePath -> Details.Details -> String -> IO (Result Exit.Repl ReplArtifacts)
@@ -1332,11 +1320,11 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((T.CASTS
                                     h =
                                         name
 
-                                    m : Module
+                                    m : T.BB_Module
                                     m =
-                                        Fresh (Src.getName modul) (I.fromModule pkg canonical annotations) objects
+                                        T.BB_Fresh (Src.getName modul) (I.fromModule pkg canonical annotations) objects
 
-                                    ms : List Module
+                                    ms : List T.BB_Module
                                     ms =
                                         Dict.foldr compare addInside [] results
                                 in
@@ -1392,7 +1380,7 @@ type RootLocation
     | LOutside T.FilePath
 
 
-findRoots : Env -> NE.Nonempty T.FilePath -> IO (Result Exit.BuildProjectProblem (NE.Nonempty RootLocation))
+findRoots : Env -> NE.Nonempty T.FilePath -> IO (Result T.BRE_BuildProjectProblem (NE.Nonempty RootLocation))
 findRoots env paths =
     Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
         |> IO.bind
@@ -1405,21 +1393,21 @@ findRoots env paths =
             )
 
 
-checkRoots : NE.Nonempty RootInfo -> Result Exit.BuildProjectProblem (NE.Nonempty RootLocation)
+checkRoots : NE.Nonempty RootInfo -> Result T.BRE_BuildProjectProblem (NE.Nonempty RootLocation)
 checkRoots infos =
     let
         toOneOrMore : RootInfo -> ( T.FilePath, OneOrMore.OneOrMore RootInfo )
         toOneOrMore ((RootInfo absolute _ _) as loc) =
             ( absolute, OneOrMore.one loc )
 
-        fromOneOrMore : RootInfo -> List RootInfo -> Result Exit.BuildProjectProblem ()
+        fromOneOrMore : RootInfo -> List RootInfo -> Result T.BRE_BuildProjectProblem ()
         fromOneOrMore (RootInfo _ relative _) locs =
             case locs of
                 [] ->
                     Ok ()
 
                 (RootInfo _ relative2 _) :: _ ->
-                    Err (Exit.BP_MainPathDuplicate relative relative2)
+                    Err (T.BRE_BP_MainPathDuplicate relative relative2)
     in
     Result.map (\_ -> NE.map (\(RootInfo _ _ location) -> location) infos) <|
         Utils.mapTraverseResult identity compare (OneOrMore.destruct fromOneOrMore) <|
@@ -1435,7 +1423,7 @@ type RootInfo
     = RootInfo T.FilePath T.FilePath RootLocation
 
 
-getRootInfo : Env -> T.FilePath -> IO (Result Exit.BuildProjectProblem RootInfo)
+getRootInfo : Env -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem RootInfo)
 getRootInfo env path =
     File.exists path
         |> IO.bind
@@ -1444,11 +1432,11 @@ getRootInfo env path =
                     IO.bind (getRootInfoHelp env path) (Utils.dirCanonicalizePath path)
 
                 else
-                    IO.pure (Err (Exit.BP_PathUnknown path))
+                    IO.pure (Err (T.BRE_BP_PathUnknown path))
             )
 
 
-getRootInfoHelp : Env -> T.FilePath -> T.FilePath -> IO (Result Exit.BuildProjectProblem RootInfo)
+getRootInfoHelp : Env -> T.FilePath -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem RootInfo)
 getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
     let
         ( dirs, file ) =
@@ -1458,7 +1446,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
             Utils.fpSplitExtension file
     in
     if ext /= ".elm" then
-        IO.pure <| Err <| Exit.BP_WithBadExtension path
+        IO.pure <| Err <| T.BRE_BP_WithBadExtension path
 
     else
         let
@@ -1490,17 +1478,17 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                                         p2 =
                                             addRelative d2 (Utils.fpJoinPath names ++ ".elm")
                                     in
-                                    IO.pure <| Err <| Exit.BP_RootNameDuplicate name p1 p2
+                                    IO.pure <| Err <| T.BRE_BP_RootNameDuplicate name p1 p2
 
                                 _ ->
                                     IO.pure <| Ok <| RootInfo absolutePath path (LInside name)
                         )
 
             [ ( s, Err names ) ] ->
-                IO.pure <| Err <| Exit.BP_RootNameInvalid path s names
+                IO.pure <| Err <| T.BRE_BP_RootNameInvalid path s names
 
             ( s1, _ ) :: ( s2, _ ) :: _ ->
-                IO.pure <| Err <| Exit.BP_WithAmbiguousSrcDir path s1 s2
+                IO.pure <| Err <| T.BRE_BP_WithAmbiguousSrcDir path s1 s2
 
 
 isInsideSrcDirByName : List String -> AbsoluteSrcDir -> IO Bool
@@ -1678,7 +1666,7 @@ compileOutside (Env key _ projectType _ _ _ _) (T.BED_Local path time _ _ _ _) s
             (\result ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
-                        Reporting.report key Reporting.BDone
+                        Reporting.report key T.BR_BDone
                             |> IO.fmap (\_ -> ROutsideOk name (I.fromModule pkg canonical annotations) objects)
 
                     Err errors ->
@@ -1690,34 +1678,29 @@ compileOutside (Env key _ projectType _ _ _ _) (T.BED_Local path time _ _ _ _) s
 -- TO ARTIFACTS
 
 
-type Root
-    = Inside T.CEMN_Raw
-    | Outside T.CEMN_Raw T.CEI_Interface T.CASTO_LocalGraph
-
-
-toArtifacts : Env -> T.BB_Dependencies -> Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
+toArtifacts : Env -> T.BB_Dependencies -> Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result T.BRE_BuildProblem T.BB_Artifacts
 toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
     case gatherProblemsOrMains results rootResults of
         Err (NE.Nonempty e es) ->
-            Err (Exit.BuildBadModules root e es)
+            Err (T.BRE_BuildBadModules root e es)
 
         Ok roots ->
             Ok <|
-                Artifacts (projectTypeToPkg projectType) foreigns roots <|
+                T.BB_Artifacts (projectTypeToPkg projectType) foreigns roots <|
                     Dict.foldr compare addInside (NE.foldr addOutside [] rootResults) results
 
 
-gatherProblemsOrMains : Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty T.CRE_Module) (NE.Nonempty Root)
+gatherProblemsOrMains : Dict String T.CEMN_Raw T.BB_BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty T.CRE_Module) (NE.Nonempty T.BB_Root)
 gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
     let
-        addResult : RootResult -> ( List T.CRE_Module, List Root ) -> ( List T.CRE_Module, List Root )
+        addResult : RootResult -> ( List T.CRE_Module, List T.BB_Root ) -> ( List T.CRE_Module, List T.BB_Root )
         addResult result ( es, roots ) =
             case result of
                 RInside n ->
-                    ( es, Inside n :: roots )
+                    ( es, T.BB_Inside n :: roots )
 
                 ROutsideOk n i o ->
-                    ( es, Outside n i o :: roots )
+                    ( es, T.BB_Outside n i o :: roots )
 
                 ROutsideErr e ->
                     ( e :: es, roots )
@@ -1731,13 +1714,13 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
     in
     case ( rootResult, List.foldr addResult ( errors, [] ) rootResults ) of
         ( RInside n, ( [], ms ) ) ->
-            Ok (NE.Nonempty (Inside n) ms)
+            Ok (NE.Nonempty (T.BB_Inside n) ms)
 
         ( RInside _, ( e :: es, _ ) ) ->
             Err (NE.Nonempty e es)
 
         ( ROutsideOk n i o, ( [], ms ) ) ->
-            Ok (NE.Nonempty (Outside n i o) ms)
+            Ok (NE.Nonempty (T.BB_Outside n i o) ms)
 
         ( ROutsideOk _ _ _, ( e :: es, _ ) ) ->
             Err (NE.Nonempty e es)
@@ -1752,17 +1735,17 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
             Err (NE.Nonempty e es)
 
 
-addInside : T.CEMN_Raw -> T.BB_BResult -> List Module -> List Module
+addInside : T.CEMN_Raw -> T.BB_BResult -> List T.BB_Module -> List T.BB_Module
 addInside name result modules =
     case result of
         T.BB_RNew _ iface objs _ ->
-            Fresh name iface objs :: modules
+            T.BB_Fresh name iface objs :: modules
 
         T.BB_RSame _ iface objs _ ->
-            Fresh name iface objs :: modules
+            T.BB_Fresh name iface objs :: modules
 
         T.BB_RCached main _ mvar ->
-            Cached name main mvar :: modules
+            T.BB_Cached name main mvar :: modules
 
         T.BB_RNotFound _ ->
             crash (badInside name)
@@ -1785,14 +1768,14 @@ badInside name =
     "Error from `" ++ name ++ "` should have been reported already."
 
 
-addOutside : RootResult -> List Module -> List Module
+addOutside : RootResult -> List T.BB_Module -> List T.BB_Module
 addOutside root modules =
     case root of
         RInside _ ->
             modules
 
         ROutsideOk name iface objs ->
-            Fresh name iface objs :: modules
+            T.BB_Fresh name iface objs :: modules
 
         ROutsideErr _ ->
             modules
@@ -1942,12 +1925,12 @@ depDecoder =
     D.jsonPair ModuleName.rawDecoder I.interfaceDecoder
 
 
-resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> Encode.Value
+resultBuildProjectProblemRootInfoEncoder : Result T.BRE_BuildProjectProblem RootInfo -> Encode.Value
 resultBuildProjectProblemRootInfoEncoder =
     E.result Exit.buildProjectProblemEncoder rootInfoEncoder
 
 
-resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result Exit.BuildProjectProblem RootInfo)
+resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result T.BRE_BuildProjectProblem RootInfo)
 resultBuildProjectProblemRootInfoDecoder =
     D.result Exit.buildProjectProblemDecoder rootInfoDecoder
 
@@ -1969,117 +1952,6 @@ cachedInterfaceDecoder =
 
                     _ ->
                         Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)
-            )
-
-
-artifactsEncoder : Artifacts -> Encode.Value
-artifactsEncoder (Artifacts pkg ifaces roots modules) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "pkg", Pkg.nameEncoder pkg )
-        , ( "ifaces", dependenciesEncoder ifaces )
-        , ( "roots", E.nonempty rootEncoder roots )
-        , ( "modules", Encode.list moduleEncoder modules )
-        ]
-
-
-artifactsDecoder : Decode.Decoder Artifacts
-artifactsDecoder =
-    Decode.map4 Artifacts
-        (Decode.field "pkg" Pkg.nameDecoder)
-        (Decode.field "ifaces" dependenciesDecoder)
-        (Decode.field "roots" (D.nonempty rootDecoder))
-        (Decode.field "modules" (Decode.list moduleDecoder))
-
-
-dependenciesEncoder : T.BB_Dependencies -> Encode.Value
-dependenciesEncoder =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
-
-
-dependenciesDecoder : Decode.Decoder T.BB_Dependencies
-dependenciesDecoder =
-    D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
-
-
-rootEncoder : Root -> Encode.Value
-rootEncoder root =
-    case root of
-        Inside name ->
-            Encode.object
-                [ ( "type", Encode.string "Inside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        Outside name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Outside" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", I.interfaceEncoder main )
-                , ( "mvar", Opt.localGraphEncoder mvar )
-                ]
-
-
-rootDecoder : Decode.Decoder Root
-rootDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Inside" ->
-                        Decode.map Inside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "Outside" ->
-                        Decode.map3 Outside
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" I.interfaceDecoder)
-                            (Decode.field "mvar" Opt.localGraphDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Root's type: " ++ type_)
-            )
-
-
-moduleEncoder : Module -> Encode.Value
-moduleEncoder modul =
-    case modul of
-        Fresh name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "Fresh" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
-                ]
-
-        Cached name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Cached" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", Encode.bool main )
-                , ( "mvar", Utils.mVarEncoder_BB_CachedInterface mvar )
-                ]
-
-
-moduleDecoder : Decode.Decoder Module
-moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Fresh" ->
-                        Decode.map3 Fresh
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
-
-                    "Cached" ->
-                        Decode.map3 Cached
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "mvar" Utils.mVarDecoder_BB_CachedInterface)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
             )
 
 

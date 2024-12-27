@@ -14,9 +14,9 @@ import Compiler.Elm.Version as V
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import Terminal.Terminal.Internal exposing (Parser(..))
-import Types as T
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 

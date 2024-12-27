@@ -22,8 +22,8 @@ import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 
 
 

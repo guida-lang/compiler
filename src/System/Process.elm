@@ -10,7 +10,8 @@ module System.Process exposing
 
 import Json.Encode as Encode
 import System.Exit as Exit
-import System.IO as IO exposing (IO(..))
+import System.IO as IO
+import Types as T exposing (IO(..))
 
 
 type CmdSpec
@@ -27,7 +28,7 @@ type alias CreateProcess =
 
 type StdStream
     = Inherit
-    | UseHandle IO.Handle
+    | UseHandle T.Handle
     | CreatePipe
     | NoStream
 
@@ -45,12 +46,12 @@ proc cmd args =
     }
 
 
-withCreateProcess : CreateProcess -> (Maybe IO.Handle -> Maybe IO.Handle -> Maybe IO.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
+withCreateProcess : CreateProcess -> (Maybe T.Handle -> Maybe T.Handle -> Maybe T.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
 withCreateProcess createProcess f =
     IO
         (\_ s ->
             ( s
-            , IO.ProcWithCreateProcess IO.pure
+            , T.ProcWithCreateProcess IO.pure
                 (Encode.object
                     [ ( "cmdspec"
                       , case createProcess.cmdspec of
@@ -66,7 +67,7 @@ withCreateProcess createProcess f =
                             Inherit ->
                                 Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
+                            UseHandle (T.Handle handle) ->
                                 Encode.int handle
 
                             CreatePipe ->
@@ -80,7 +81,7 @@ withCreateProcess createProcess f =
                             Inherit ->
                                 Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
+                            UseHandle (T.Handle handle) ->
                                 Encode.int handle
 
                             CreatePipe ->
@@ -94,7 +95,7 @@ withCreateProcess createProcess f =
                             Inherit ->
                                 Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
+                            UseHandle (T.Handle handle) ->
                                 Encode.int handle
 
                             CreatePipe ->
@@ -109,13 +110,13 @@ withCreateProcess createProcess f =
         )
         |> IO.bind
             (\{ stdinHandle, ph } ->
-                f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
+                f (Maybe.map T.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
             )
 
 
 waitForProcess : ProcessHandle -> IO Exit.ExitCode
 waitForProcess (ProcessHandle ph) =
-    IO (\_ s -> ( s, IO.ProcWaitForProcess IO.pure ph ))
+    IO (\_ s -> ( s, T.ProcWaitForProcess IO.pure ph ))
         |> IO.fmap
             (\exitCode ->
                 case exitCode of

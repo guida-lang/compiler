@@ -20,12 +20,11 @@ module Builder.Http exposing
     )
 
 import Basics.Extra exposing (uncurry)
-import Codec.Archive.Zip as Zip
 import Compiler.Elm.Version as V
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO(..))
 import Url.Builder
 import Utils.Main as Utils
 
@@ -107,7 +106,7 @@ fetch methodVerb _ url headers _ onSuccess =
     IO
         (\_ s ->
             ( s
-            , IO.HttpFetch IO.pure
+            , T.HttpFetch IO.pure
                 (case methodVerb of
                     MethodGet ->
                         "GET"
@@ -154,9 +153,9 @@ shaToChars =
 -- FETCH ARCHIVE
 
 
-getArchive : T.BH_Manager -> String -> (T.BH_Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
+getArchive : T.BH_Manager -> String -> (T.BH_Error -> e) -> e -> (( Sha, T.CAZ_Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO (\_ s -> ( s, IO.GetArchive IO.pure "GET" url ))
+    IO (\_ s -> ( s, T.GetArchive IO.pure "GET" url ))
         |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
 
 
@@ -175,7 +174,7 @@ upload _ url parts =
     IO
         (\_ s ->
             ( s
-            , IO.HttpUpload IO.pure
+            , T.HttpUpload IO.pure
                 url
                 (addDefaultHeaders [])
                 (List.map

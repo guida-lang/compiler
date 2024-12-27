@@ -1,7 +1,5 @@
 module Builder.Reporting.Exit exposing
-    ( BuildProblem(..)
-    , BuildProjectProblem(..)
-    , Bump(..)
+    ( Bump(..)
     , Details(..)
     , Diff(..)
     , DocsProblem(..)
@@ -54,8 +52,7 @@ import Compiler.Reporting.Render.Code as Code
 import Data.Map as Dict
 import Json.Decode as CoreDecode
 import Json.Encode as CoreEncode
-import System.IO exposing (IO)
-import Types as T
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 
@@ -150,7 +147,7 @@ type Diff
     | DiffDocsProblem T.CEV_Version DocsProblem
     | DiffMustHaveLatestRegistry T.BRE_RegistryProblem
     | DiffBadDetails Details
-    | DiffBadBuild BuildProblem
+    | DiffBadBuild T.BRE_BuildProblem
 
 
 diffToReport : Diff -> Help.Report
@@ -264,7 +261,7 @@ type Bump
     | BumpCannotFindDocs T.CEV_Version DocsProblem
     | BumpBadDetails Details
     | BumpNoExposed
-    | BumpBadBuild BuildProblem
+    | BumpBadBuild T.BRE_BuildProblem
 
 
 bumpToReport : Bump -> Help.Report
@@ -444,7 +441,7 @@ type Publish
     | PublishNoReadme
     | PublishShortReadme
     | PublishNoLicense
-    | PublishBuildProblem BuildProblem
+    | PublishBuildProblem T.BRE_BuildProblem
     | PublishMissingTag T.CEV_Version
     | PublishCannotGetTag T.CEV_Version T.BH_Error
     | PublishCannotGetTagData T.CEV_Version String String
@@ -458,7 +455,7 @@ type Publish
     | PublishZipBadDetails Details
     | PublishZipApplication
     | PublishZipNoExposed
-    | PublishZipBuildProblem BuildProblem
+    | PublishZipBuildProblem T.BRE_BuildProblem
 
 
 publishToReport : Publish -> Help.Report
@@ -2226,7 +2223,7 @@ type Make
     | MakeMultipleFilesIntoHtml
     | MakeNoMain
     | MakeNonMainFilesIntoJavaScript T.CEMN_Raw (List T.CEMN_Raw)
-    | MakeCannotBuild BuildProblem
+    | MakeCannotBuild T.BRE_BuildProblem
     | MakeBadGenerate Generate
 
 
@@ -2482,37 +2479,20 @@ makeToReport make =
 -- BUILD PROBLEM
 
 
-type BuildProblem
-    = BuildBadModules T.FilePath T.CRE_Module (List T.CRE_Module)
-    | BuildProjectProblem BuildProjectProblem
-
-
-type BuildProjectProblem
-    = BP_PathUnknown T.FilePath
-    | BP_WithBadExtension T.FilePath
-    | BP_WithAmbiguousSrcDir T.FilePath T.FilePath T.FilePath
-    | BP_MainPathDuplicate T.FilePath T.FilePath
-    | BP_RootNameDuplicate T.CEMN_Raw T.FilePath T.FilePath
-    | BP_RootNameInvalid T.FilePath T.FilePath (List String)
-    | BP_CannotLoadDependencies
-    | BP_Cycle T.CEMN_Raw (List T.CEMN_Raw)
-    | BP_MissingExposed (NE.Nonempty ( T.CEMN_Raw, T.CREI_Problem ))
-
-
-toBuildProblemReport : BuildProblem -> Help.Report
+toBuildProblemReport : T.BRE_BuildProblem -> Help.Report
 toBuildProblemReport problem =
     case problem of
-        BuildBadModules root e es ->
+        T.BRE_BuildBadModules root e es ->
             Help.compilerReport root e es
 
-        BuildProjectProblem projectProblem ->
+        T.BRE_BuildProjectProblem projectProblem ->
             toProjectProblemReport projectProblem
 
 
-toProjectProblemReport : BuildProjectProblem -> Help.Report
+toProjectProblemReport : T.BRE_BuildProjectProblem -> Help.Report
 toProjectProblemReport projectProblem =
     case projectProblem of
-        BP_PathUnknown path ->
+        T.BRE_BP_PathUnknown path ->
             Help.report "FILE NOT FOUND"
                 Nothing
                 "I cannot find this file:"
@@ -2522,7 +2502,7 @@ toProjectProblemReport projectProblem =
                     "If you are just getting started, try working through the examples in the official guide https://guide.elm-lang.org to get an idea of the kinds of things that typically go in a src/Main.elm file."
                 ]
 
-        BP_WithBadExtension path ->
+        T.BRE_BP_WithBadExtension path ->
             Help.report "UNEXPECTED FILE EXTENSION"
                 Nothing
                 "I can only compile Elm files (with a .elm extension) but you want me to compile:"
@@ -2530,7 +2510,7 @@ toProjectProblemReport projectProblem =
                 , D.reflow <| "Is there a typo? Can the file extension be changed?"
                 ]
 
-        BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
+        T.BRE_BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
             Help.report "CONFUSING FILE"
                 Nothing
                 "I am getting confused when I try to compile this file:"
@@ -2542,7 +2522,7 @@ toProjectProblemReport projectProblem =
                     "Try to make it so no source directory contains another source directory!"
                 ]
 
-        BP_MainPathDuplicate path1 path2 ->
+        T.BRE_BP_MainPathDuplicate path1 path2 ->
             Help.report "CONFUSING FILES"
                 Nothing
                 "You are telling me to compile these two files:"
@@ -2555,7 +2535,7 @@ toProjectProblemReport projectProblem =
                         "But seem to be the same file though... It makes me think something tricky is going on with symlinks in your project, so I figured I would let you know about it just in case. Remove one of these files from your command to get unstuck!"
                 ]
 
-        BP_RootNameDuplicate name outsidePath otherPath ->
+        T.BRE_BP_RootNameDuplicate name outsidePath otherPath ->
             Help.report "MODULE NAME CLASH"
                 Nothing
                 "These two files are causing a module name clash:"
@@ -2568,7 +2548,7 @@ toProjectProblemReport projectProblem =
                     "Try changing to a different module name in one of them!"
                 ]
 
-        BP_RootNameInvalid givenPath srcDir _ ->
+        T.BRE_BP_RootNameInvalid givenPath srcDir _ ->
             Help.report "UNEXPECTED FILE NAME"
                 Nothing
                 "I am having trouble with this file name:"
@@ -2584,10 +2564,10 @@ toProjectProblemReport projectProblem =
                     "Having a strict naming convention like this makes it a lot easier to find things in large projects. If you see a module imported, you know where to look for the corresponding file every time!"
                 ]
 
-        BP_CannotLoadDependencies ->
+        T.BRE_BP_CannotLoadDependencies ->
             corruptCacheReport
 
-        BP_Cycle name names ->
+        T.BRE_BP_Cycle name names ->
             Help.report "IMPORT CYCLE"
                 Nothing
                 "Your module imports form a cycle:"
@@ -2597,7 +2577,7 @@ toProjectProblemReport projectProblem =
                         ++ D.makeLink "import-cycles"
                 ]
 
-        BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
+        T.BRE_BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
             case problem of
                 T.CREI_NotFound ->
                     Help.report "MISSING MODULE"
@@ -2767,7 +2747,7 @@ type Repl
     = ReplBadDetails Details
     | ReplBadInput String T.CRE_Error
     | ReplBadLocalDeps T.FilePath T.CRE_Module (List T.CRE_Module)
-    | ReplProjectProblem BuildProjectProblem
+    | ReplProjectProblem T.BRE_BuildProjectProblem
     | ReplBadGenerate Generate
     | ReplBadCache
     | ReplBlocked
@@ -2845,10 +2825,10 @@ detailsBadDepDecoder =
             )
 
 
-buildProblemEncoder : BuildProblem -> CoreEncode.Value
+buildProblemEncoder : T.BRE_BuildProblem -> CoreEncode.Value
 buildProblemEncoder buildProblem =
     case buildProblem of
-        BuildBadModules root e es ->
+        T.BRE_BuildBadModules root e es ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BuildBadModules" )
                 , ( "root", CoreEncode.string root )
@@ -2856,49 +2836,49 @@ buildProblemEncoder buildProblem =
                 , ( "es", CoreEncode.list Error.jsonToJson es )
                 ]
 
-        BuildProjectProblem problem ->
+        T.BRE_BuildProjectProblem problem ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BuildProjectProblem" )
                 , ( "problem", buildProjectProblemEncoder problem )
                 ]
 
 
-buildProblemDecoder : CoreDecode.Decoder BuildProblem
+buildProblemDecoder : CoreDecode.Decoder T.BRE_BuildProblem
 buildProblemDecoder =
     CoreDecode.field "type" CoreDecode.string
         |> CoreDecode.andThen
             (\type_ ->
                 case type_ of
                     "BuildBadModules" ->
-                        CoreDecode.map3 BuildBadModules
+                        CoreDecode.map3 T.BRE_BuildBadModules
                             (CoreDecode.field "root" CoreDecode.string)
                             (CoreDecode.field "e" Error.moduleDecoder)
                             (CoreDecode.field "es" (CoreDecode.list Error.moduleDecoder))
 
                     "BuildProjectProblem" ->
-                        CoreDecode.map BuildProjectProblem (CoreDecode.field "problem" buildProjectProblemDecoder)
+                        CoreDecode.map T.BRE_BuildProjectProblem (CoreDecode.field "problem" buildProjectProblemDecoder)
 
                     _ ->
                         CoreDecode.fail ("Failed to decode BuildProblem's type: " ++ type_)
             )
 
 
-buildProjectProblemEncoder : BuildProjectProblem -> CoreEncode.Value
+buildProjectProblemEncoder : T.BRE_BuildProjectProblem -> CoreEncode.Value
 buildProjectProblemEncoder buildProjectProblem =
     case buildProjectProblem of
-        BP_PathUnknown path ->
+        T.BRE_BP_PathUnknown path ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_PathUnknown" )
                 , ( "path", CoreEncode.string path )
                 ]
 
-        BP_WithBadExtension path ->
+        T.BRE_BP_WithBadExtension path ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_WithBadExtension" )
                 , ( "path", CoreEncode.string path )
                 ]
 
-        BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
+        T.BRE_BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_WithAmbiguousSrcDir" )
                 , ( "path", CoreEncode.string path )
@@ -2906,14 +2886,14 @@ buildProjectProblemEncoder buildProjectProblem =
                 , ( "srcDir2", CoreEncode.string srcDir2 )
                 ]
 
-        BP_MainPathDuplicate path1 path2 ->
+        T.BRE_BP_MainPathDuplicate path1 path2 ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_MainPathDuplicate" )
                 , ( "path1", CoreEncode.string path1 )
                 , ( "path2", CoreEncode.string path2 )
                 ]
 
-        BP_RootNameDuplicate name outsidePath otherPath ->
+        T.BRE_BP_RootNameDuplicate name outsidePath otherPath ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_RootNameDuplicate" )
                 , ( "name", ModuleName.rawEncoder name )
@@ -2921,7 +2901,7 @@ buildProjectProblemEncoder buildProjectProblem =
                 , ( "otherPath", CoreEncode.string otherPath )
                 ]
 
-        BP_RootNameInvalid givenPath srcDir names ->
+        T.BRE_BP_RootNameInvalid givenPath srcDir names ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_RootNameInvalid" )
                 , ( "givenPath", CoreEncode.string givenPath )
@@ -2929,70 +2909,70 @@ buildProjectProblemEncoder buildProjectProblem =
                 , ( "names", CoreEncode.list CoreEncode.string names )
                 ]
 
-        BP_CannotLoadDependencies ->
+        T.BRE_BP_CannotLoadDependencies ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_CannotLoadDependencies" )
                 ]
 
-        BP_Cycle name names ->
+        T.BRE_BP_Cycle name names ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_Cycle" )
                 , ( "name", ModuleName.rawEncoder name )
                 , ( "names", CoreEncode.list ModuleName.rawEncoder names )
                 ]
 
-        BP_MissingExposed problems ->
+        T.BRE_BP_MissingExposed problems ->
             CoreEncode.object
                 [ ( "type", CoreEncode.string "BP_MissingExposed" )
                 , ( "problems", Encode.nonempty (Encode.jsonPair ModuleName.rawEncoder Import.problemEncoder) problems )
                 ]
 
 
-buildProjectProblemDecoder : CoreDecode.Decoder BuildProjectProblem
+buildProjectProblemDecoder : CoreDecode.Decoder T.BRE_BuildProjectProblem
 buildProjectProblemDecoder =
     CoreDecode.field "type" CoreDecode.string
         |> CoreDecode.andThen
             (\type_ ->
                 case type_ of
                     "BP_PathUnknown" ->
-                        CoreDecode.map BP_PathUnknown (CoreDecode.field "path" CoreDecode.string)
+                        CoreDecode.map T.BRE_BP_PathUnknown (CoreDecode.field "path" CoreDecode.string)
 
                     "BP_WithBadExtension" ->
-                        CoreDecode.map BP_WithBadExtension (CoreDecode.field "path" CoreDecode.string)
+                        CoreDecode.map T.BRE_BP_WithBadExtension (CoreDecode.field "path" CoreDecode.string)
 
                     "BP_WithAmbiguousSrcDir" ->
-                        CoreDecode.map3 BP_WithAmbiguousSrcDir
+                        CoreDecode.map3 T.BRE_BP_WithAmbiguousSrcDir
                             (CoreDecode.field "path" CoreDecode.string)
                             (CoreDecode.field "srcDir1" CoreDecode.string)
                             (CoreDecode.field "srcDir2" CoreDecode.string)
 
                     "BP_MainPathDuplicate" ->
-                        CoreDecode.map2 BP_MainPathDuplicate
+                        CoreDecode.map2 T.BRE_BP_MainPathDuplicate
                             (CoreDecode.field "path1" CoreDecode.string)
                             (CoreDecode.field "path2" CoreDecode.string)
 
                     "BP_RootNameDuplicate" ->
-                        CoreDecode.map3 BP_RootNameDuplicate
+                        CoreDecode.map3 T.BRE_BP_RootNameDuplicate
                             (CoreDecode.field "name" ModuleName.rawDecoder)
                             (CoreDecode.field "outsidePath" CoreDecode.string)
                             (CoreDecode.field "otherPath" CoreDecode.string)
 
                     "BP_RootNameInvalid" ->
-                        CoreDecode.map3 BP_RootNameInvalid
+                        CoreDecode.map3 T.BRE_BP_RootNameInvalid
                             (CoreDecode.field "givenPath" CoreDecode.string)
                             (CoreDecode.field "srcDir" CoreDecode.string)
                             (CoreDecode.field "names" (CoreDecode.list CoreDecode.string))
 
                     "BP_CannotLoadDependencies" ->
-                        CoreDecode.succeed BP_CannotLoadDependencies
+                        CoreDecode.succeed T.BRE_BP_CannotLoadDependencies
 
                     "BP_Cycle" ->
-                        CoreDecode.map2 BP_Cycle
+                        CoreDecode.map2 T.BRE_BP_Cycle
                             (CoreDecode.field "name" ModuleName.rawDecoder)
                             (CoreDecode.field "names" (CoreDecode.list ModuleName.rawDecoder))
 
                     "BP_MissingExposed" ->
-                        CoreDecode.map BP_MissingExposed
+                        CoreDecode.map T.BRE_BP_MissingExposed
                             (CoreDecode.field "problems"
                                 (Decode.nonempty
                                     (Decode.jsonPair ModuleName.rawDecoder Import.problemDecoder)

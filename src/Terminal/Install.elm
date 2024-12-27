@@ -17,8 +17,8 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 

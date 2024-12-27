@@ -25,9 +25,9 @@ import Compiler.Generate.Html as Html
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import Terminal.Terminal.Internal exposing (Parser(..))
-import Types as T
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 
@@ -209,7 +209,7 @@ buildExposed style root details maybeDocs exposed =
         Build.fromExposed (Decode.succeed ()) (\_ -> Encode.object []) style root details docsGoal exposed
 
 
-buildPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> Task Build.Artifacts
+buildPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> Task T.BB_Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths
@@ -219,33 +219,33 @@ buildPaths style root details paths =
 -- GET MAINS
 
 
-getMains : Build.Artifacts -> List T.CEMN_Raw
-getMains (Build.Artifacts _ _ roots modules) =
+getMains : T.BB_Artifacts -> List T.CEMN_Raw
+getMains (T.BB_Artifacts _ _ roots modules) =
     List.filterMap (getMain modules) (NE.toList roots)
 
 
-getMain : List Build.Module -> Build.Root -> Maybe T.CEMN_Raw
+getMain : List T.BB_Module -> T.BB_Root -> Maybe T.CEMN_Raw
 getMain modules root =
     case root of
-        Build.Inside name ->
+        T.BB_Inside name ->
             if List.any (isMain name) modules then
                 Just name
 
             else
                 Nothing
 
-        Build.Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
+        T.BB_Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             maybeMain
                 |> Maybe.map (\_ -> name)
 
 
-isMain : T.CEMN_Raw -> Build.Module -> Bool
+isMain : T.CEMN_Raw -> T.BB_Module -> Bool
 isMain targetName modul =
     case modul of
-        Build.Fresh name _ (T.CASTO_LocalGraph maybeMain _ _) ->
+        T.BB_Fresh name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             Maybe.isJust maybeMain && name == targetName
 
-        Build.Cached name mainIsDefined _ ->
+        T.BB_Cached name mainIsDefined _ ->
             mainIsDefined && name == targetName
 
 
@@ -253,8 +253,8 @@ isMain targetName modul =
 -- HAS ONE MAIN
 
 
-hasOneMain : Build.Artifacts -> Task T.CEMN_Raw
-hasOneMain (Build.Artifacts _ _ roots modules) =
+hasOneMain : T.BB_Artifacts -> Task T.CEMN_Raw
+hasOneMain (T.BB_Artifacts _ _ roots modules) =
     case roots of
         NE.Nonempty root [] ->
             Task.mio Exit.MakeNoMain (IO.pure <| getMain modules root)
@@ -267,22 +267,22 @@ hasOneMain (Build.Artifacts _ _ roots modules) =
 -- GET MAINLESS
 
 
-getNoMains : Build.Artifacts -> List T.CEMN_Raw
-getNoMains (Build.Artifacts _ _ roots modules) =
+getNoMains : T.BB_Artifacts -> List T.CEMN_Raw
+getNoMains (T.BB_Artifacts _ _ roots modules) =
     List.filterMap (getNoMain modules) (NE.toList roots)
 
 
-getNoMain : List Build.Module -> Build.Root -> Maybe T.CEMN_Raw
+getNoMain : List T.BB_Module -> T.BB_Root -> Maybe T.CEMN_Raw
 getNoMain modules root =
     case root of
-        Build.Inside name ->
+        T.BB_Inside name ->
             if List.any (isMain name) modules then
                 Nothing
 
             else
                 Just name
 
-        Build.Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
+        T.BB_Outside name _ (T.CASTO_LocalGraph maybeMain _ _) ->
             case maybeMain of
                 Just _ ->
                     Nothing
@@ -314,7 +314,7 @@ type DesiredMode
     | Prod
 
 
-toBuilder : T.FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
+toBuilder : T.FilePath -> Details.Details -> DesiredMode -> T.BB_Artifacts -> Task String
 toBuilder root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of

@@ -5,7 +5,8 @@ module System.Exit exposing
     , exitWith
     )
 
-import System.IO as IO exposing (IO(..))
+import System.IO as IO
+import Types as T exposing (IO(..))
 
 
 type ExitCode
@@ -27,7 +28,7 @@ exitWith exitCode =
                         ExitFailure int ->
                             int
             in
-            ( s, IO.ExitWith IO.pure code )
+            ( s, T.ExitWith IO.pure code )
         )
 
 

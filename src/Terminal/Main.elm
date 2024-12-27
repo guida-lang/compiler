@@ -2,7 +2,7 @@ module Terminal.Main exposing (main)
 
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import Terminal.Bump as Bump
 import Terminal.Diff as Diff
 import Terminal.Init as Init
@@ -14,6 +14,7 @@ import Terminal.Terminal as Terminal
 import Terminal.Terminal.Chomp as Chomp
 import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
+import Types exposing (IO)
 
 
 main : IO.Program

@@ -2,19 +2,473 @@ module Types exposing (..)
 
 {-| -}
 
+import Array exposing (Array)
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore exposing (OneOrMore)
-import Data.Map exposing (Dict)
+import Data.Map as Map
 import Data.Set exposing (EverySet)
+import Dict exposing (Dict)
+import Json.Encode as Encode
 import Time
 
 
 
--- GHC.IO
+-- The IO monad
 
 
+type IO a
+    = IO (Int -> RealWorld -> ( RealWorld, ION a ))
+
+
+type ION a
+    = Pure a
+    | ForkIO (() -> IO a) (IO ())
+    | HPutStr (() -> IO a) Handle String
+    | GetLine (String -> IO a)
+    | WriteString (() -> IO a) FilePath String
+    | Read (String -> IO a) FilePath
+    | HttpFetch (String -> IO a) String String (List ( String, String ))
+    | GetArchive (( String, CAZ_Archive ) -> IO a) String String
+    | HttpUpload (() -> IO a) String (List ( String, String )) (List Encode.Value)
+    | HFlush (() -> IO a) Handle
+    | WithFile (Int -> IO a) String IOMode
+    | HFileSize (Int -> IO a) Handle
+    | ProcWithCreateProcess ({ stdinHandle : Maybe Int, ph : Int } -> IO a) Encode.Value
+    | HClose (() -> IO a) Handle
+    | ProcWaitForProcess (Int -> IO a) Int
+    | ExitWith (a -> IO a) Int
+    | DirFindExecutable (Maybe FilePath -> IO a) FilePath
+    | ReplGetInputLine (Maybe String -> IO a) String
+    | DirDoesFileExist (Bool -> IO a) FilePath
+    | DirCreateDirectoryIfMissing (() -> IO a) Bool FilePath
+    | LockFile (() -> IO a) FilePath
+    | UnlockFile (() -> IO a) FilePath
+    | DirGetModificationTime (Int -> IO a) FilePath
+    | DirDoesDirectoryExist (Bool -> IO a) FilePath
+    | DirCanonicalizePath (String -> IO a) FilePath
+    | BinaryDecodeFileOrFail (Encode.Value -> IO a) FilePath
+    | Write (() -> IO a) FilePath Encode.Value
+    | DirRemoveFile (() -> IO a) FilePath
+    | DirRemoveDirectoryRecursive (() -> IO a) FilePath
+    | DirWithCurrentDirectory (() -> IO a) FilePath
+    | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
+      -- MVars
+    | NewEmptyMVar (Int -> IO a) Int
+    | ReadMVar (Encode.Value -> IO a) (Maybe Encode.Value)
+    | TakeMVar (Encode.Value -> IO a) (Maybe Encode.Value) (Maybe Int)
+    | PutMVar (() -> IO a) (List Int) (Maybe Encode.Value)
+      -- MVars (Maybe BED_Status)
+    | NewEmptyMVar_Maybe_BED_Status (Int -> IO a) Int
+    | ReadMVar_Maybe_BED_Status (Maybe BED_Status -> IO a) (Maybe (Maybe BED_Status))
+    | PutMVar_Maybe_BED_Status (() -> IO a) (List Int) (Maybe (Maybe BED_Status))
+      -- MVars (Maybe BED_DResult)
+    | NewEmptyMVar_Maybe_BED_DResult (Int -> IO a) Int
+    | ReadMVar_Maybe_BED_DResult (Maybe BED_DResult -> IO a) (Maybe (Maybe BED_DResult))
+    | PutMVar_Maybe_BED_DResult (() -> IO a) (List Int) (Maybe (Maybe BED_DResult))
+      -- MVars (Maybe CASTO_LocalGraph)
+    | NewEmptyMVar_Maybe_CASTO_LocalGraph (Int -> IO a) Int
+    | ReadMVar_Maybe_CASTO_LocalGraph (Maybe CASTO_LocalGraph -> IO a) (Maybe (Maybe CASTO_LocalGraph))
+    | PutMVar_Maybe_CASTO_LocalGraph (() -> IO a) (List Int) (Maybe (Maybe CASTO_LocalGraph))
+      -- MVars (Maybe CASTO_GlobalGraph)
+    | NewEmptyMVar_Maybe_CASTO_GlobalGraph (Int -> IO a) Int
+    | ReadMVar_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO a) (Maybe (Maybe CASTO_GlobalGraph))
+    | PutMVar_Maybe_CASTO_GlobalGraph (() -> IO a) (List Int) (Maybe (Maybe CASTO_GlobalGraph))
+      -- MVars (BB_BResult)
+    | NewEmptyMVar_BB_BResult (Int -> IO a) Int
+    | ReadMVar_BB_BResult (BB_BResult -> IO a) (Maybe BB_BResult)
+    | PutMVar_BB_BResult (() -> IO a) (List Int) (Maybe BB_BResult)
+      -- MVars (BB_Status)
+    | NewEmptyMVar_BB_Status (Int -> IO a) Int
+    | ReadMVar_BB_Status (BB_Status -> IO a) (Maybe BB_Status)
+    | PutMVar_BB_Status (() -> IO a) (List Int) (Maybe BB_Status)
+      -- MVars (BB_StatusDict)
+    | NewEmptyMVar_BB_StatusDict (Int -> IO a) Int
+    | ReadMVar_BB_StatusDict (BB_StatusDict -> IO a) (Maybe BB_StatusDict)
+    | TakeMVar_BB_StatusDict (BB_StatusDict -> IO a) (Maybe BB_StatusDict) (Maybe Int)
+    | PutMVar_BB_StatusDict (() -> IO a) (List Int) (Maybe BB_StatusDict)
+      -- MVars (Result BRE_RegistryProblem BDS_Env)
+    | NewEmptyMVar_ResultRegistryProblemEnv (Int -> IO a) Int
+    | ReadMVar_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO a) (Maybe (Result BRE_RegistryProblem BDS_Env))
+    | TakeMVar_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO a) (Maybe (Result BRE_RegistryProblem BDS_Env)) (Maybe Int)
+    | PutMVar_ResultRegistryProblemEnv (() -> IO a) (List Int) (Maybe (Result BRE_RegistryProblem BDS_Env))
+      -- MVars (CED_Dep)
+    | NewEmptyMVar_CED_Dep (Int -> IO a) Int
+    | ReadMVar_CED_Dep (CED_Dep -> IO a) (Maybe CED_Dep)
+    | TakeMVar_CED_Dep (CED_Dep -> IO a) (Maybe CED_Dep) (Maybe Int)
+    | PutMVar_CED_Dep (() -> IO a) (List Int) (Maybe CED_Dep)
+      -- MVars (Maybe CECTE_Types)
+    | NewEmptyMVar_Maybe_CECTE_Types (Int -> IO a) Int
+    | ReadMVar_Maybe_CECTE_Types (Maybe CECTE_Types -> IO a) (Maybe (Maybe CECTE_Types))
+    | TakeMVar_Maybe_CECTE_Types (Maybe CECTE_Types -> IO a) (Maybe (Maybe CECTE_Types)) (Maybe Int)
+    | PutMVar_Maybe_CECTE_Types (() -> IO a) (List Int) (Maybe (Maybe CECTE_Types))
+      -- MVars (Maybe BB_Dependencies)
+    | NewEmptyMVar_Maybe_BB_Dependencies (Int -> IO a) Int
+    | ReadMVar_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO a) (Maybe (Maybe BB_Dependencies))
+    | TakeMVar_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO a) (Maybe (Maybe BB_Dependencies)) (Maybe Int)
+    | PutMVar_Maybe_BB_Dependencies (() -> IO a) (List Int) (Maybe (Maybe BB_Dependencies))
+      -- MVars (Dict ( String, String ) CEP_Name MVar_CED_Dep)
+    | NewEmptyMVar_DictNameMVarDep (Int -> IO a) Int
+    | ReadMVar_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep))
+    | TakeMVar_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep)) (Maybe Int)
+    | PutMVar_DictNameMVarDep (() -> IO a) (List Int) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep))
+      -- MVars (Dict String CEMN_Raw MVar_Maybe_BED_DResult)
+    | NewEmptyMVar_DictRawMVarMaybeDResult (Int -> IO a) Int
+    | ReadMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
+    | TakeMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)) (Maybe Int)
+    | PutMVar_DictRawMVarMaybeDResult (() -> IO a) (List Int) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
+      -- MVars (List (MVar ()))
+    | NewEmptyMVar_ListMVar (Int -> IO a) Int
+    | ReadMVar_ListMVar (List (MVar ()) -> IO a) (Maybe (List (MVar ())))
+    | TakeMVar_ListMVar (List (MVar ()) -> IO a) (Maybe (List (MVar ()))) (Maybe Int)
+    | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List (MVar ())))
+      -- MVars (BB_CachedInterface)
+    | NewEmptyMVar_BB_CachedInterface (Int -> IO a) Int
+    | ReadMVar_BB_CachedInterface (BB_CachedInterface -> IO a) (Maybe BB_CachedInterface)
+    | TakeMVar_BB_CachedInterface (BB_CachedInterface -> IO a) (Maybe BB_CachedInterface) (Maybe Int)
+    | PutMVar_BB_CachedInterface (() -> IO a) (List Int) (Maybe BB_CachedInterface)
+      -- MVars (BED_StatusDict)
+    | NewEmptyMVar_BED_StatusDict (Int -> IO a) Int
+    | ReadMVar_BED_StatusDict (BED_StatusDict -> IO a) (Maybe BED_StatusDict)
+    | TakeMVar_BED_StatusDict (BED_StatusDict -> IO a) (Maybe BED_StatusDict) (Maybe Int)
+    | PutMVar_BED_StatusDict (() -> IO a) (List Int) (Maybe BED_StatusDict)
+      -- MVars (Unit)
+    | NewEmptyMVar_Unit (Int -> IO a) Int
+    | ReadMVar_Unit (() -> IO a) (Maybe ())
+    | TakeMVar_Unit (() -> IO a) (Maybe ()) (Maybe Int)
+    | PutMVar_Unit (() -> IO a) (List Int) (Maybe ())
+      -- MVars (MVar_ChItemResultBMsgBResultArtifacts)
+    | NewEmptyMVar_StreamResultBMsgBResultArtifacts (Int -> IO a) Int
+    | ReadMVar_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO a) (Maybe MVar_ChItemResultBMsgBResultArtifacts)
+    | TakeMVar_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO a) (Maybe MVar_ChItemResultBMsgBResultArtifacts) (Maybe Int)
+    | PutMVar_StreamResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe MVar_ChItemResultBMsgBResultArtifacts)
+      -- MVars (ChItem_ResultBMsgBResultArtifacts)
+    | NewEmptyMVar_ChItemResultBMsgBResultArtifacts (Int -> IO a) Int
+    | ReadMVar_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO a) (Maybe ChItem_ResultBMsgBResultArtifacts)
+    | TakeMVar_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO a) (Maybe ChItem_ResultBMsgBResultArtifacts) (Maybe Int)
+    | PutMVar_ChItemResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe ChItem_ResultBMsgBResultArtifacts)
+      -- MVars (Result BR_BMsg (BR_BResult BB_Artifacts))
+    | NewEmptyMVar_ResultBMsgBResultArtifacts (Int -> IO a) Int
+    | ReadMVar_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO a) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)))
+    | TakeMVar_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO a) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts))) (Maybe Int)
+    | PutMVar_ResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)))
+
+
+type alias RealWorld =
+    { args : List String
+    , currentDirectory : String
+    , envVars : Dict String String
+    , homedir : FilePath
+    , progName : String
+    , state : ReplState
+    , mVars : Array { subscribers : List MVarSubscriber, value : Maybe Encode.Value }
+    , mVars_Maybe_BED_Status : Array { subscribers : List MVarSubscriber_Maybe_BED_Status, value : Maybe (Maybe BED_Status) }
+    , mVars_Maybe_BED_DResult : Array { subscribers : List MVarSubscriber_Maybe_BED_DResult, value : Maybe (Maybe BED_DResult) }
+    , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe CASTO_LocalGraph) }
+    , mVars_Maybe_CASTO_GlobalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_GlobalGraph, value : Maybe (Maybe CASTO_GlobalGraph) }
+    , mVars_BB_BResult : Array { subscribers : List MVarSubscriber_BB_BResult, value : Maybe BB_BResult }
+    , mVars_BB_Status : Array { subscribers : List MVarSubscriber_BB_Status, value : Maybe BB_Status }
+    , mVars_BB_StatusDict : Array { subscribers : List MVarSubscriber_BB_StatusDict, value : Maybe BB_StatusDict }
+    , mVars_ResultRegistryProblemEnv : Array { subscribers : List MVarSubscriber_ResultRegistryProblemEnv, value : Maybe (Result BRE_RegistryProblem BDS_Env) }
+    , mVars_CED_Dep : Array { subscribers : List MVarSubscriber_CED_Dep, value : Maybe CED_Dep }
+    , mVars_Maybe_CECTE_Types : Array { subscribers : List MVarSubscriber_Maybe_CECTE_Types, value : Maybe (Maybe CECTE_Types) }
+    , mVars_Maybe_BB_Dependencies : Array { subscribers : List MVarSubscriber_Maybe_BB_Dependencies, value : Maybe (Maybe BB_Dependencies) }
+    , mVars_DictNameMVarDep : Array { subscribers : List MVarSubscriber_DictNameMVarDep, value : Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep) }
+    , mVars_DictRawMVarMaybeDResult : Array { subscribers : List MVarSubscriber_DictRawMVarMaybeDResult, value : Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult) }
+    , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List (MVar ())) }
+    , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe BB_CachedInterface }
+    , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe BED_StatusDict }
+    , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
+    , mVars_StreamResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultArtifacts, value : Maybe MVar_ChItemResultBMsgBResultArtifacts }
+    , mVars_ChItemResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultArtifacts, value : Maybe ChItem_ResultBMsgBResultArtifacts }
+    , mVars_ResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_ResultBMsgBResultArtifacts, value : Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)) }
+    , next : Dict Int Next
+    }
+
+
+type MVarSubscriber
+    = ReadMVarSubscriber Int
+    | TakeMVarSubscriber Int
+    | PutMVarSubscriber Int Encode.Value
+
+
+type MVarSubscriber_Maybe_BED_Status
+    = ReadMVarSubscriber_Maybe_BED_Status Int
+    | TakeMVarSubscriber_Maybe_BED_Status Int
+    | PutMVarSubscriber_Maybe_BED_Status Int (Maybe BED_Status)
+
+
+type MVarSubscriber_Maybe_BED_DResult
+    = ReadMVarSubscriber_Maybe_BED_DResult Int
+    | TakeMVarSubscriber_Maybe_BED_DResult Int
+    | PutMVarSubscriber_Maybe_BED_DResult Int (Maybe BED_DResult)
+
+
+type MVarSubscriber_Maybe_CASTO_LocalGraph
+    = ReadMVarSubscriber_Maybe_CASTO_LocalGraph Int
+    | TakeMVarSubscriber_Maybe_CASTO_LocalGraph Int
+    | PutMVarSubscriber_Maybe_CASTO_LocalGraph Int (Maybe CASTO_LocalGraph)
+
+
+type MVarSubscriber_Maybe_CASTO_GlobalGraph
+    = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
+    | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
+    | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe CASTO_GlobalGraph)
+
+
+type MVarSubscriber_BB_BResult
+    = ReadMVarSubscriber_BB_BResult Int
+    | TakeMVarSubscriber_BB_BResult Int
+    | PutMVarSubscriber_BB_BResult Int BB_BResult
+
+
+type MVarSubscriber_BB_Status
+    = ReadMVarSubscriber_BB_Status Int
+    | TakeMVarSubscriber_BB_Status Int
+    | PutMVarSubscriber_BB_Status Int BB_Status
+
+
+type MVarSubscriber_BB_StatusDict
+    = ReadMVarSubscriber_BB_StatusDict Int
+    | TakeMVarSubscriber_BB_StatusDict Int
+    | PutMVarSubscriber_BB_StatusDict Int BB_StatusDict
+
+
+type MVarSubscriber_ResultRegistryProblemEnv
+    = ReadMVarSubscriber_ResultRegistryProblemEnv Int
+    | TakeMVarSubscriber_ResultRegistryProblemEnv Int
+    | PutMVarSubscriber_ResultRegistryProblemEnv Int (Result BRE_RegistryProblem BDS_Env)
+
+
+type MVarSubscriber_CED_Dep
+    = ReadMVarSubscriber_CED_Dep Int
+    | TakeMVarSubscriber_CED_Dep Int
+    | PutMVarSubscriber_CED_Dep Int CED_Dep
+
+
+type MVarSubscriber_Maybe_CECTE_Types
+    = ReadMVarSubscriber_Maybe_CECTE_Types Int
+    | TakeMVarSubscriber_Maybe_CECTE_Types Int
+    | PutMVarSubscriber_Maybe_CECTE_Types Int (Maybe CECTE_Types)
+
+
+type MVarSubscriber_Maybe_BB_Dependencies
+    = ReadMVarSubscriber_Maybe_BB_Dependencies Int
+    | TakeMVarSubscriber_Maybe_BB_Dependencies Int
+    | PutMVarSubscriber_Maybe_BB_Dependencies Int (Maybe BB_Dependencies)
+
+
+type MVarSubscriber_DictNameMVarDep
+    = ReadMVarSubscriber_DictNameMVarDep Int
+    | TakeMVarSubscriber_DictNameMVarDep Int
+    | PutMVarSubscriber_DictNameMVarDep Int (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep)
+
+
+type MVarSubscriber_DictRawMVarMaybeDResult
+    = ReadMVarSubscriber_DictRawMVarMaybeDResult Int
+    | TakeMVarSubscriber_DictRawMVarMaybeDResult Int
+    | PutMVarSubscriber_DictRawMVarMaybeDResult Int (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)
+
+
+type MVarSubscriber_ListMVar
+    = ReadMVarSubscriber_ListMVar Int
+    | TakeMVarSubscriber_ListMVar Int
+    | PutMVarSubscriber_ListMVar Int (List (MVar ()))
+
+
+type MVarSubscriber_BB_CachedInterface
+    = ReadMVarSubscriber_BB_CachedInterface Int
+    | TakeMVarSubscriber_BB_CachedInterface Int
+    | PutMVarSubscriber_BB_CachedInterface Int BB_CachedInterface
+
+
+type MVarSubscriber_BED_StatusDict
+    = ReadMVarSubscriber_BED_StatusDict Int
+    | TakeMVarSubscriber_BED_StatusDict Int
+    | PutMVarSubscriber_BED_StatusDict Int BED_StatusDict
+
+
+type MVarSubscriber_Unit
+    = ReadMVarSubscriber_Unit Int
+    | TakeMVarSubscriber_Unit Int
+    | PutMVarSubscriber_Unit Int ()
+
+
+type MVarSubscriber_StreamResultBMsgBResultArtifacts
+    = ReadMVarSubscriber_StreamResultBMsgBResultArtifacts Int
+    | TakeMVarSubscriber_StreamResultBMsgBResultArtifacts Int
+    | PutMVarSubscriber_StreamResultBMsgBResultArtifacts Int MVar_ChItemResultBMsgBResultArtifacts
+
+
+type MVarSubscriber_ChItemResultBMsgBResultArtifacts
+    = ReadMVarSubscriber_ChItemResultBMsgBResultArtifacts Int
+    | TakeMVarSubscriber_ChItemResultBMsgBResultArtifacts Int
+    | PutMVarSubscriber_ChItemResultBMsgBResultArtifacts Int ChItem_ResultBMsgBResultArtifacts
+
+
+type MVarSubscriber_ResultBMsgBResultArtifacts
+    = ReadMVarSubscriber_ResultBMsgBResultArtifacts Int
+    | TakeMVarSubscriber_ResultBMsgBResultArtifacts Int
+    | PutMVarSubscriber_ResultBMsgBResultArtifacts Int (Result BR_BMsg (BR_BResult BB_Artifacts))
+
+
+type Next
+    = GetLineNext (String -> IO ())
+    | HPutLineNext (() -> IO ())
+    | WriteStringNext (() -> IO ())
+    | ReadNext (String -> IO ())
+    | HttpFetchNext (String -> IO ())
+    | GetArchiveNext (( String, CAZ_Archive ) -> IO ())
+    | HttpUploadNext (() -> IO ())
+    | HFlushNext (() -> IO ())
+    | WithFileNext (Int -> IO ())
+    | HFileSizeNext (Int -> IO ())
+    | ProcWithCreateProcessNext ({ stdinHandle : Maybe Int, ph : Int } -> IO ())
+    | HCloseNext (() -> IO ())
+    | ProcWaitForProcessNext (Int -> IO ())
+    | ExitWithNext (() -> IO ())
+    | DirFindExecutableNext (Maybe FilePath -> IO ())
+    | ReplGetInputLineNext (Maybe String -> IO ())
+    | DirDoesFileExistNext (Bool -> IO ())
+    | DirCreateDirectoryIfMissingNext (() -> IO ())
+    | LockFileNext (() -> IO ())
+    | UnlockFileNext (() -> IO ())
+    | DirGetModificationTimeNext (Int -> IO ())
+    | DirDoesDirectoryExistNext (Bool -> IO ())
+    | DirCanonicalizePathNext (String -> IO ())
+    | BinaryDecodeFileOrFailNext (Encode.Value -> IO ())
+    | WriteNext (() -> IO ())
+    | DirRemoveFileNext (() -> IO ())
+    | DirRemoveDirectoryRecursiveNext (() -> IO ())
+    | DirWithCurrentDirectoryNext (() -> IO ())
+    | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
+      -- MVars
+    | NewEmptyMVarNext (Int -> IO ())
+    | ReadMVarNext (Encode.Value -> IO ())
+    | TakeMVarNext (Encode.Value -> IO ())
+    | PutMVarNext (() -> IO ())
+      -- MVars (Maybe BED_Status)
+    | NewEmptyMVarNext_Maybe_BED_Status (Int -> IO ())
+    | ReadMVarNext_Maybe_BED_Status (Maybe BED_Status -> IO ())
+    | PutMVarNext_Maybe_BED_Status (() -> IO ())
+      -- MVars (Maybe BED_DResult)
+    | NewEmptyMVarNext_Maybe_BED_DResult (Int -> IO ())
+    | ReadMVarNext_Maybe_BED_DResult (Maybe BED_DResult -> IO ())
+    | PutMVarNext_Maybe_BED_DResult (() -> IO ())
+      -- MVars (Maybe CASTO_LocalGraph)
+    | NewEmptyMVarNext_Maybe_CASTO_LocalGraph (Int -> IO ())
+    | ReadMVarNext_Maybe_CASTO_LocalGraph (Maybe CASTO_LocalGraph -> IO ())
+    | PutMVarNext_Maybe_CASTO_LocalGraph (() -> IO ())
+      -- MVars (Maybe CASTO_GlobalGraph)
+    | NewEmptyMVarNext_Maybe_CASTO_GlobalGraph (Int -> IO ())
+    | ReadMVarNext_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO ())
+    | PutMVarNext_Maybe_CASTO_GlobalGraph (() -> IO ())
+      -- MVars (BB_BResult)
+    | NewEmptyMVarNext_BB_BResult (Int -> IO ())
+    | ReadMVarNext_BB_BResult (BB_BResult -> IO ())
+    | PutMVarNext_BB_BResult (() -> IO ())
+      -- MVars (BB_Status)
+    | NewEmptyMVarNext_BB_Status (Int -> IO ())
+    | ReadMVarNext_BB_Status (BB_Status -> IO ())
+    | PutMVarNext_BB_Status (() -> IO ())
+      -- MVars (BB_StatusDict)
+    | NewEmptyMVarNext_BB_StatusDict (Int -> IO ())
+    | ReadMVarNext_BB_StatusDict (BB_StatusDict -> IO ())
+    | TakeMVarNext_BB_StatusDict (BB_StatusDict -> IO ())
+    | PutMVarNext_BB_StatusDict (() -> IO ())
+      -- MVars (Result BRE_RegistryProblem BDS_Env)
+    | NewEmptyMVarNext_ResultRegistryProblemEnv (Int -> IO ())
+    | ReadMVarNext_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO ())
+    | TakeMVarNext_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO ())
+    | PutMVarNext_ResultRegistryProblemEnv (() -> IO ())
+      -- MVars (Result BRE_RegistryProblem BDS_Env)
+    | NewEmptyMVarNext_CED_Dep (Int -> IO ())
+    | ReadMVarNext_CED_Dep (CED_Dep -> IO ())
+    | TakeMVarNext_CED_Dep (CED_Dep -> IO ())
+    | PutMVarNext_CED_Dep (() -> IO ())
+      -- MVars (Maybe CECTE_Types)
+    | NewEmptyMVarNext_Maybe_CECTE_Types (Int -> IO ())
+    | ReadMVarNext_Maybe_CECTE_Types (Maybe CECTE_Types -> IO ())
+    | TakeMVarNext_Maybe_CECTE_Types (Maybe CECTE_Types -> IO ())
+    | PutMVarNext_Maybe_CECTE_Types (() -> IO ())
+      -- MVars (Maybe BB_Dependencies)
+    | NewEmptyMVarNext_Maybe_BB_Dependencies (Int -> IO ())
+    | ReadMVarNext_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO ())
+    | TakeMVarNext_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO ())
+    | PutMVarNext_Maybe_BB_Dependencies (() -> IO ())
+      -- MVars (Dict ( String, String ) CEP_Name MVar_CED_Dep)
+    | NewEmptyMVarNext_DictNameMVarDep (Int -> IO ())
+    | ReadMVarNext_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO ())
+    | TakeMVarNext_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO ())
+    | PutMVarNext_DictNameMVarDep (() -> IO ())
+      -- MVars (Dict String CEMN_Raw MVar_Maybe_BED_DResult)
+    | NewEmptyMVarNext_DictRawMVarMaybeDResult (Int -> IO ())
+    | ReadMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
+    | TakeMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
+    | PutMVarNext_DictRawMVarMaybeDResult (() -> IO ())
+      -- MVars (List (MVar ()))
+    | NewEmptyMVarNext_ListMVar (Int -> IO ())
+    | ReadMVarNext_ListMVar (List (MVar ()) -> IO ())
+    | TakeMVarNext_ListMVar (List (MVar ()) -> IO ())
+    | PutMVarNext_ListMVar (() -> IO ())
+      -- MVars (BB_CachedInterface)
+    | NewEmptyMVarNext_BB_CachedInterface (Int -> IO ())
+    | ReadMVarNext_BB_CachedInterface (BB_CachedInterface -> IO ())
+    | TakeMVarNext_BB_CachedInterface (BB_CachedInterface -> IO ())
+    | PutMVarNext_BB_CachedInterface (() -> IO ())
+      -- MVars (BED_StatusDict)
+    | NewEmptyMVarNext_BED_StatusDict (Int -> IO ())
+    | ReadMVarNext_BED_StatusDict (BED_StatusDict -> IO ())
+    | TakeMVarNext_BED_StatusDict (BED_StatusDict -> IO ())
+    | PutMVarNext_BED_StatusDict (() -> IO ())
+      -- MVars (Unit)
+    | NewEmptyMVarNext_Unit (Int -> IO ())
+    | ReadMVarNext_Unit (() -> IO ())
+    | TakeMVarNext_Unit (() -> IO ())
+    | PutMVarNext_Unit (() -> IO ())
+      -- MVars (MVar_ChItemResultBMsgBResultArtifacts)
+    | NewEmptyMVarNext_StreamResultBMsgBResultArtifacts (Int -> IO ())
+    | ReadMVarNext_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO ())
+    | TakeMVarNext_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO ())
+    | PutMVarNext_StreamResultBMsgBResultArtifacts (() -> IO ())
+      -- MVars (ChItem_ResultBMsgBResultArtifacts)
+    | NewEmptyMVarNext_ChItemResultBMsgBResultArtifacts (Int -> IO ())
+    | ReadMVarNext_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO ())
+    | TakeMVarNext_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO ())
+    | PutMVarNext_ChItemResultBMsgBResultArtifacts (() -> IO ())
+      -- MVars (Result BR_BMsg (BR_BResult BB_Artifacts))
+    | NewEmptyMVarNext_ResultBMsgBResultArtifacts (Int -> IO ())
+    | ReadMVarNext_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO ())
+    | TakeMVarNext_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO ())
+    | PutMVarNext_ResultBMsgBResultArtifacts (() -> IO ())
+
+
+type IOMode
+    = ReadMode
+    | WriteMode
+    | AppendMode
+    | ReadWriteMode
+
+
+
+-- Repl State (Terminal.Repl)
+
+
+type ReplState
+    = ReplState (Dict String String) (Dict String String) (Dict String String)
+
+
+
+-- Files and handles
+
+
+{-| GHC.IO
+-}
 type alias FilePath =
     String
+
+
+type Handle
+    = Handle Int
 
 
 
@@ -24,13 +478,13 @@ type alias FilePath =
 {-| FIXME Builder.Elm.Details
 -}
 type alias BED_StatusDict =
-    Dict String CEMN_Raw MVar_Maybe_BED_Status
+    Map.Dict String CEMN_Raw MVar_Maybe_BED_Status
 
 
 {-| FIXME Builder.Elm.Details
 -}
 type BED_Status
-    = BED_SLocal BED_DocsStatus (Dict String CEMN_Raw ()) CASTS_Module
+    = BED_SLocal BED_DocsStatus (Map.Dict String CEMN_Raw ()) CASTS_Module
     | BED_SForeign CEI_Interface
     | BED_SKernelLocal (List CEK_Chunk)
     | BED_SKernelForeign
@@ -60,7 +514,7 @@ type CASTC_Annotation
 {-| FIXME Compiler.AST.Canonical
 -}
 type alias CASTC_FreeVars =
-    Dict String CDN_Name ()
+    Map.Dict String CDN_Name ()
 
 
 {-| FIXME Compiler.AST.Canonical
@@ -69,7 +523,7 @@ type CASTC_Type
     = CASTC_TLambda CASTC_Type CASTC_Type
     | CASTC_TVar CDN_Name
     | CASTC_TType CEMN_Canonical CDN_Name (List CASTC_Type)
-    | CASTC_TRecord (Dict String CDN_Name CASTC_FieldType) (Maybe CDN_Name)
+    | CASTC_TRecord (Map.Dict String CDN_Name CASTC_FieldType) (Maybe CDN_Name)
     | CASTC_TUnit
     | CASTC_TTuple CASTC_Type CASTC_Type (Maybe CASTC_Type)
     | CASTC_TAlias CEMN_Canonical CDN_Name (List ( CDN_Name, CASTC_Type )) CASTC_AliasType
@@ -349,7 +803,7 @@ type alias CDN_Name =
 {-| FIXME Compiler.Elm.Interface
 -}
 type CEI_Interface
-    = CEI_Interface CEP_Name (Dict String CDN_Name CASTC_Annotation) (Dict String CDN_Name CEI_Union) (Dict String CDN_Name CEI_Alias) (Dict String CDN_Name CEI_Binop)
+    = CEI_Interface CEP_Name (Map.Dict String CDN_Name CASTC_Annotation) (Map.Dict String CDN_Name CEI_Union) (Map.Dict String CDN_Name CEI_Alias) (Map.Dict String CDN_Name CEI_Binop)
 
 
 {-| FIXME Compiler.Elm.Interface
@@ -493,7 +947,7 @@ type CASTUS_Source
 {-| FIXME Compiler.AST.Utils.Shader
 -}
 type CASTUS_Types
-    = CASTUS_Types (Dict String CDN_Name CASTUS_Type) (Dict String CDN_Name CASTUS_Type) (Dict String CDN_Name CASTUS_Type)
+    = CASTUS_Types (Map.Dict String CDN_Name CASTUS_Type) (Map.Dict String CDN_Name CASTUS_Type) (Map.Dict String CDN_Name CASTUS_Type)
 
 
 {-| FIXME Compiler.AST.Utils.Shader
@@ -652,6 +1106,46 @@ type MVar_Unit
     = MVar_Unit Int
 
 
+{-| FIXME Utils.Main
+-}
+type MVar_StreamResultBMsgBResultArtifacts
+    = MVar_StreamResultBMsgBResultArtifacts Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ChItemResultBMsgBResultArtifacts
+    = MVar_ChItemResultBMsgBResultArtifacts Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ResultBMsgBResultArtifacts
+    = MVar_ResultBMsgBResultArtifacts Int
+
+
+
+-- Control.Concurrent.Chan
+
+
+{-| FIXME Utils.Main
+-}
+type alias Stream a =
+    MVar (ChItem a)
+
+
+{-| FIXME Utils.Main
+-}
+type ChItem a
+    = ChItem a (Stream a)
+
+
+{-| FIXME Utils.Main
+-}
+type ChItem_ResultBMsgBResultArtifacts
+    = ChItem_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts)) MVar_ChItemResultBMsgBResultArtifacts
+
+
 
 -- EXPRESSIONS
 
@@ -681,8 +1175,8 @@ type CASTO_Expr
     | CASTO_Case CDN_Name CDN_Name (CASTO_Decider CASTO_Choice) (List ( Int, CASTO_Expr ))
     | CASTO_Accessor CDN_Name
     | CASTO_Access CASTO_Expr CDN_Name
-    | CASTO_Update CASTO_Expr (Dict String CDN_Name CASTO_Expr)
-    | CASTO_Record (Dict String CDN_Name CASTO_Expr)
+    | CASTO_Update CASTO_Expr (Map.Dict String CDN_Name CASTO_Expr)
+    | CASTO_Record (Map.Dict String CDN_Name CASTO_Expr)
     | CASTO_Unit
     | CASTO_Tuple CASTO_Expr CASTO_Expr (Maybe CASTO_Expr)
     | CASTO_Shader CASTUS_Source (EverySet String CDN_Name) (EverySet String CDN_Name)
@@ -746,7 +1240,7 @@ type CASTO_Choice
 {-| FIXME Compiler.AST.Optimized
 -}
 type CASTO_GlobalGraph
-    = CASTO_GlobalGraph (Dict (List String) CASTO_Global CASTO_Node) (Dict String CDN_Name Int)
+    = CASTO_GlobalGraph (Map.Dict (List String) CASTO_Global CASTO_Node) (Map.Dict String CDN_Name Int)
 
 
 {-| FIXME Compiler.AST.Optimized
@@ -755,8 +1249,8 @@ type CASTO_LocalGraph
     = CASTO_LocalGraph
         (Maybe CASTO_Main)
         -- PERF profile switching Global to Name
-        (Dict (List String) CASTO_Global CASTO_Node)
-        (Dict String CDN_Name Int)
+        (Map.Dict (List String) CASTO_Global CASTO_Node)
+        (Map.Dict String CDN_Name Int)
 
 
 {-| FIXME Compiler.AST.Optimized
@@ -822,7 +1316,7 @@ type CODT_Path
 {-| FIXME Builder.Build
 -}
 type alias BB_ResultDict =
-    Dict String CEMN_Raw MVar_BB_BResult
+    Map.Dict String CEMN_Raw MVar_BB_BResult
 
 
 {-| FIXME Builder.Build
@@ -853,7 +1347,7 @@ type BB_CachedInterface
 {-| FIXME Builder.Build
 -}
 type alias BB_StatusDict =
-    Dict String CEMN_Raw MVar_BB_Status
+    Map.Dict String CEMN_Raw MVar_BB_Status
 
 
 {-| FIXME Builder.Build
@@ -922,7 +1416,7 @@ type BED_Local
 {-| FIXME Compiler.Elm.Docs
 -}
 type CED_Module
-    = CED_Module CDN_Name CED_Comment (Dict String CDN_Name CED_Union) (Dict String CDN_Name CED_Alias) (Dict String CDN_Name CED_Value) (Dict String CDN_Name CED_Binop)
+    = CED_Module CDN_Name CED_Comment (Map.Dict String CDN_Name CED_Union) (Map.Dict String CDN_Name CED_Alias) (Map.Dict String CDN_Name CED_Value) (Map.Dict String CDN_Name CED_Binop)
 
 
 {-| FIXME Compiler.Elm.Docs
@@ -1141,7 +1635,7 @@ type CREC_PortProblem
 -}
 type alias CREC_PossibleNames =
     { locals : EverySet String CDN_Name
-    , quals : Dict String CDN_Name (EverySet String CDN_Name)
+    , quals : Map.Dict String CDN_Name (EverySet String CDN_Name)
     }
 
 
@@ -1744,7 +2238,7 @@ type CRET_Context
     | CRET_CallArity CRET_MaybeName Int
     | CRET_CallArg CRET_MaybeName CDI_ZeroBased
     | CRET_RecordAccess CRA_Region (Maybe CDN_Name) CRA_Region CDN_Name
-    | CRET_RecordUpdateKeys CDN_Name (Dict String CDN_Name CASTC_FieldUpdate)
+    | CRET_RecordUpdateKeys CDN_Name (Map.Dict String CDN_Name CASTC_FieldUpdate)
     | CRET_RecordUpdateValue CDN_Name
     | CRET_Destructure
 
@@ -1831,7 +2325,7 @@ type CRET_PCategory
 {-| FIXME Compiler.Reporting.Render.Type.Localizer
 -}
 type CRRTL_Localizer
-    = CRRTL_Localizer (Dict String CDN_Name CRRTL_Import)
+    = CRRTL_Localizer (Map.Dict String CDN_Name CRRTL_Import)
 
 
 {-| FIXME Compiler.Reporting.Render.Type.Localizer
@@ -1864,7 +2358,7 @@ type CTE_Type
     | CTE_RigidVar CDN_Name
     | CTE_RigidSuper CTE_Super CDN_Name
     | CTE_Type CEMN_Canonical CDN_Name (List CTE_Type)
-    | CTE_Record (Dict String CDN_Name CTE_Type) CTE_Extension
+    | CTE_Record (Map.Dict String CDN_Name CTE_Type) CTE_Extension
     | CTE_Unit
     | CTE_Tuple CTE_Type CTE_Type (Maybe CTE_Type)
     | CTE_Alias CEMN_Canonical CDN_Name (List ( CDN_Name, CTE_Type )) CTE_Type
@@ -1927,8 +2421,8 @@ type CASTC_Expr_
     | CASTC_Case CASTC_Expr (List CASTC_CaseBranch)
     | CASTC_Accessor CDN_Name
     | CASTC_Access CASTC_Expr (CRA_Located CDN_Name)
-    | CASTC_Update CDN_Name CASTC_Expr (Dict String CDN_Name CASTC_FieldUpdate)
-    | CASTC_Record (Dict String CDN_Name CASTC_Expr)
+    | CASTC_Update CDN_Name CASTC_Expr (Map.Dict String CDN_Name CASTC_FieldUpdate)
+    | CASTC_Record (Map.Dict String CDN_Name CASTC_Expr)
     | CASTC_Unit
     | CASTC_Tuple CASTC_Expr CASTC_Expr (Maybe CASTC_Expr)
     | CASTC_Shader CASTUS_Source CASTUS_Types
@@ -2054,7 +2548,7 @@ type BS_PackageCache
 {-| FIXME Builder.Deps.Registry
 -}
 type BDR_Registry
-    = BDR_Registry Int (Dict ( String, String ) CEP_Name BDR_KnownVersions)
+    = BDR_Registry Int (Map.Dict ( String, String ) CEP_Name BDR_KnownVersions)
 
 
 {-| FIXME Builder.Deps.Registry
@@ -2103,7 +2597,7 @@ type BRE_RegistryProblem
 -}
 type CEI_DependencyInterface
     = CEI_Public CEI_Interface
-    | CEI_Private CEP_Name (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias)
+    | CEI_Private CEP_Name (Map.Dict String CDN_Name CASTC_Union) (Map.Dict String CDN_Name CASTC_Alias)
 
 
 
@@ -2179,7 +2673,7 @@ type BED_DResult
 {-| FIXME Builder.Elm.Details
 -}
 type CED_Artifacts
-    = CED_Artifacts (Dict String CEMN_Raw CEI_DependencyInterface) CASTO_GlobalGraph
+    = CED_Artifacts (Map.Dict String CEMN_Raw CEI_DependencyInterface) CASTO_GlobalGraph
 
 
 {-| FIXME Builder.Elm.Details
@@ -2196,7 +2690,7 @@ type alias CED_Dep =
 -}
 type BRE_DetailsBadDep
     = BRE_BD_BadDownload CEP_Name CEV_Version BRE_PackageProblem
-    | BRE_BD_BadBuild CEP_Name CEV_Version (Dict ( String, String ) CEP_Name CEV_Version)
+    | BRE_BD_BadBuild CEP_Name CEV_Version (Map.Dict ( String, String ) CEP_Name CEV_Version)
 
 
 
@@ -2220,27 +2714,132 @@ type BRE_PackageProblem
 {-| FIXME Builder.Build
 -}
 type alias BB_Dependencies =
-    Dict (List String) CEMN_Canonical CEI_DependencyInterface
+    Map.Dict (List String) CEMN_Canonical CEI_DependencyInterface
 
 
 
 -- TRANSITIVELY AVAILABLE TYPES
 
 
+{-| FIXME Compiler.Elm.Compiler.Type.Extract
+-}
 type CECTE_Types
     = -- PERF profile Opt.Global representation
       -- current representation needs less allocation
       -- but maybe the lookup is much worse
-      CECTE_Types (Dict (List String) CEMN_Canonical CECTE_Types_)
+      CECTE_Types (Map.Dict (List String) CEMN_Canonical CECTE_Types_)
 
 
+{-| FIXME Compiler.Elm.Compiler.Type.Extract
+-}
 type CECTE_Types_
-    = CECTE_Types_ (Dict String CDN_Name CASTC_Union) (Dict String CDN_Name CASTC_Alias)
+    = CECTE_Types_ (Map.Dict String CDN_Name CASTC_Union) (Map.Dict String CDN_Name CASTC_Alias)
 
 
 
 -- BACKGROUND WRITER
 
 
+{-| FIXME Builder.BackgroundWriter
+-}
 type BBW_Scope
     = BBW_Scope MVar_ListMVar
+
+
+
+-- FROM PATHS
+
+
+{-| FIXME Builder.Build
+-}
+type BB_Artifacts
+    = BB_Artifacts CEP_Name BB_Dependencies (NE.Nonempty BB_Root) (List BB_Module)
+
+
+{-| FIXME Builder.Build
+-}
+type BB_Module
+    = BB_Fresh CEMN_Raw CEI_Interface CASTO_LocalGraph
+    | BB_Cached CEMN_Raw Bool MVar_BB_CachedInterface
+
+
+
+-- TO ARTIFACTS
+
+
+{-| FIXME Builder.Build
+-}
+type BB_Root
+    = BB_Inside CEMN_Raw
+    | BB_Outside CEMN_Raw CEI_Interface CASTO_LocalGraph
+
+
+
+-- KEY
+
+
+{-| FIXME Builder.Reporting
+-}
+type BR_Key msg
+    = BR_Key (msg -> IO ())
+
+
+
+-- BUILD
+
+
+{-| FIXME Builder.Reporting
+-}
+type alias BR_BKey =
+    BR_Key BR_BMsg
+
+
+{-| FIXME Builder.Reporting
+-}
+type BR_BMsg
+    = BR_BDone
+
+
+{-| FIXME Builder.Reporting
+-}
+type alias BR_BResult a =
+    Result BRE_BuildProblem a
+
+
+
+-- BUILD PROBLEM
+
+
+{-| FIXME Builder.Reporting.Exit
+-}
+type BRE_BuildProblem
+    = BRE_BuildBadModules FilePath CRE_Module (List CRE_Module)
+    | BRE_BuildProjectProblem BRE_BuildProjectProblem
+
+
+{-| FIXME Builder.Reporting.Exit
+-}
+type BRE_BuildProjectProblem
+    = BRE_BP_PathUnknown FilePath
+    | BRE_BP_WithBadExtension FilePath
+    | BRE_BP_WithAmbiguousSrcDir FilePath FilePath FilePath
+    | BRE_BP_MainPathDuplicate FilePath FilePath
+    | BRE_BP_RootNameDuplicate CEMN_Raw FilePath FilePath
+    | BRE_BP_RootNameInvalid FilePath FilePath (List String)
+    | BRE_BP_CannotLoadDependencies
+    | BRE_BP_Cycle CEMN_Raw (List CEMN_Raw)
+    | BRE_BP_MissingExposed (NE.Nonempty ( CEMN_Raw, CREI_Problem ))
+
+
+{-| FIXME Codec.Archive.Zip
+-}
+type alias CAZ_Archive =
+    List CAZ_Entry
+
+
+{-| FIXME Codec.Archive.Zip
+-}
+type alias CAZ_Entry =
+    { eRelativePath : FilePath
+    , eData : String
+    }

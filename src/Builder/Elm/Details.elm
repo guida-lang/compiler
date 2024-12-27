@@ -44,8 +44,8 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -110,7 +110,7 @@ verifyInstall scope root (T.BDS_Env cache manager connection registry) outline =
         |> IO.bind
             (\time ->
                 let
-                    key : Reporting.Key msg
+                    key : T.BR_Key msg
                     key =
                         Reporting.ignorer
 

@@ -17,8 +17,9 @@ module Terminal.Terminal.Chomp exposing
 
 import Basics.Extra exposing (flip)
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import Terminal.Terminal.Internal exposing (ArgError(..), Error(..), Expectation(..), Flag(..), FlagError(..), Flags(..), Parser(..))
+import Types exposing (IO)
 
 
 

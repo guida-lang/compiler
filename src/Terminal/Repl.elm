@@ -40,9 +40,9 @@ import List.Extra as List
 import Maybe.Extra as Maybe
 import Prelude
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import System.Process as Process
-import Types as T
+import Types as T exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -133,15 +133,15 @@ initEnv (Flags maybeAlternateInterpreter noColors) =
 
 
 type Outcome
-    = Loop IO.ReplState
+    = Loop T.ReplState
     | End Exit.ExitCode
 
 
 type alias M a =
-    State.StateT IO.ReplState a
+    State.StateT T.ReplState a
 
 
-loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
+loop : Env -> T.ReplState -> Utils.ReplInputT Exit.ExitCode
 loop env state =
     read
         |> IO.bind
@@ -522,8 +522,8 @@ annotation =
 -- EVAL
 
 
-eval : Env -> IO.ReplState -> Input -> IO Outcome
-eval env ((IO.ReplState imports types decls) as state) input =
+eval : Env -> T.ReplState -> Input -> IO Outcome
+eval env ((T.ReplState imports types decls) as state) input =
     case input of
         Skip ->
             IO.pure (Loop state)
@@ -541,17 +541,17 @@ eval env ((IO.ReplState imports types decls) as state) input =
 
         Import name src ->
             let
-                newState : IO.ReplState
+                newState : T.ReplState
                 newState =
-                    IO.ReplState (Dict.insert name src imports) types decls
+                    T.ReplState (Dict.insert name src imports) types decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
         Type name src ->
             let
-                newState : IO.ReplState
+                newState : T.ReplState
                 newState =
-                    IO.ReplState imports (Dict.insert name src types) decls
+                    T.ReplState imports (Dict.insert name src types) decls
             in
             IO.fmap Loop (attemptEval env state newState OutputNothing)
 
@@ -561,9 +561,9 @@ eval env ((IO.ReplState imports types decls) as state) input =
 
         Decl name src ->
             let
-                newState : IO.ReplState
+                newState : T.ReplState
                 newState =
-                    IO.ReplState imports types (Dict.insert name src decls)
+                    T.ReplState imports types (Dict.insert name src decls)
             in
             IO.fmap Loop (attemptEval env state newState (OutputDecl name))
 
@@ -581,7 +581,7 @@ type Output
     | OutputExpr String
 
 
-attemptEval : Env -> IO.ReplState -> IO.ReplState -> Output -> IO IO.ReplState
+attemptEval : Env -> T.ReplState -> T.ReplState -> Output -> IO T.ReplState
 attemptEval (Env root interpreter ansi) oldState newState output =
     BW.withScope
         (\scope ->
@@ -649,8 +649,8 @@ interpret interpreter javascript =
 -- TO BYTESTRING
 
 
-toByteString : IO.ReplState -> Output -> String
-toByteString (IO.ReplState imports types decls) output =
+toByteString : T.ReplState -> Output -> String
+toByteString (T.ReplState imports types decls) output =
     String.concat
         [ "module "
         , N.replModule
@@ -832,7 +832,7 @@ lookupCompletions : String -> M (List Utils.ReplCompletion)
 lookupCompletions string =
     State.get
         |> State.fmap
-            (\(IO.ReplState imports types decls) ->
+            (\(T.ReplState imports types decls) ->
                 addMatches string False decls <|
                     addMatches string False types <|
                         addMatches string True imports <|

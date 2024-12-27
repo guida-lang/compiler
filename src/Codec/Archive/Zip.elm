@@ -1,7 +1,5 @@
 module Codec.Archive.Zip exposing
-    ( Archive
-    , Entry
-    , eRelativePath
+    ( eRelativePath
     , fromEntry
     , zEntries
     )
@@ -16,26 +14,16 @@ Ref.: <https://hackage.haskell.org/package/zip-2.1.0/docs/Codec-Archive-Zip.html
 import Types as T
 
 
-type alias Archive =
-    List Entry
-
-
-type alias Entry =
-    { eRelativePath : T.FilePath
-    , eData : String
-    }
-
-
-zEntries : Archive -> List Entry
+zEntries : T.CAZ_Archive -> List T.CAZ_Entry
 zEntries =
     identity
 
 
-eRelativePath : Entry -> T.FilePath
+eRelativePath : T.CAZ_Entry -> T.FilePath
 eRelativePath zipEntry =
     zipEntry.eRelativePath
 
 
-fromEntry : Entry -> String
+fromEntry : T.CAZ_Entry -> String
 fromEntry zipEntry =
     zipEntry.eData

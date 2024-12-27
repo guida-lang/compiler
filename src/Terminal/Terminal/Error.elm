@@ -9,7 +9,7 @@ import Compiler.Reporting.Suggest as Suggest
 import List.Extra as List
 import Prelude
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import Terminal.Terminal.Internal
     exposing
         ( ArgError(..)
@@ -27,6 +27,7 @@ import Terminal.Terminal.Internal
         , toName
         )
 import Text.PrettyPrint.ANSI.Leijen as P
+import Types exposing (IO)
 import Utils.Main as Utils
 
 

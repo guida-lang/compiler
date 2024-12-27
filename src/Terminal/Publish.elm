@@ -25,9 +25,9 @@ import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
 import List.Extra as List
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import System.Process as Process
-import Types as T
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 
@@ -173,7 +173,7 @@ verifyReadme root =
             |> IO.bind
                 (\exists ->
                     if exists then
-                        IO.withFile readmePath IO.ReadMode IO.hFileSize
+                        IO.withFile readmePath T.ReadMode IO.hFileSize
                             |> IO.fmap
                                 (\size ->
                                     if size < 300 then

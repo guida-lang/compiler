@@ -14,8 +14,8 @@ import Compiler.Json.Encode as E
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 
 
 
@@ -126,7 +126,7 @@ toStderr doc =
     toHandle IO.stderr doc
 
 
-toHandle : IO.Handle -> D.Doc -> IO ()
+toHandle : T.Handle -> D.Doc -> IO ()
 toHandle handle doc =
     IO.hIsTerminalDevice handle
         |> IO.bind

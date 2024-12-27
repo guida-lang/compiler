@@ -21,8 +21,8 @@ import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 
@@ -37,8 +37,8 @@ type alias Task a =
     Task.Task Exit.Generate a
 
 
-debug : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
-debug root details (Build.Artifacts pkg ifaces roots modules) =
+debug : T.FilePath -> Details.Details -> T.BB_Artifacts -> Task String
+debug root details (T.BB_Artifacts pkg ifaces roots modules) =
     loadObjects root details modules
         |> Task.bind
             (\loading ->
@@ -67,8 +67,8 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
             )
 
 
-dev : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
-dev root details (Build.Artifacts pkg _ roots modules) =
+dev : T.FilePath -> Details.Details -> T.BB_Artifacts -> Task String
+dev root details (T.BB_Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.fmap
             (\objects ->
@@ -89,8 +89,8 @@ dev root details (Build.Artifacts pkg _ roots modules) =
             )
 
 
-prod : T.FilePath -> Details.Details -> Build.Artifacts -> Task String
-prod root details (Build.Artifacts pkg _ roots modules) =
+prod : T.FilePath -> Details.Details -> T.BB_Artifacts -> Task String
+prod root details (T.BB_Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.bind
             (\objects ->
@@ -147,12 +147,12 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
-gatherMains : T.CEP_Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) T.CEMN_Canonical T.CASTO_Main
+gatherMains : T.CEP_Name -> Objects -> NE.Nonempty T.BB_Root -> Dict (List String) T.CEMN_Canonical T.CASTO_Main
 gatherMains pkg (Objects _ locals) roots =
     Dict.fromList ModuleName.toComparableCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
-lookupMain : T.CEP_Name -> Dict String T.CEMN_Raw T.CASTO_LocalGraph -> Build.Root -> Maybe ( T.CEMN_Canonical, T.CASTO_Main )
+lookupMain : T.CEP_Name -> Dict String T.CEMN_Raw T.CASTO_LocalGraph -> T.BB_Root -> Maybe ( T.CEMN_Canonical, T.CASTO_Main )
 lookupMain pkg locals root =
     let
         toPair : T.CDN_Name -> T.CASTO_LocalGraph -> Maybe ( T.CEMN_Canonical, T.CASTO_Main )
@@ -160,10 +160,10 @@ lookupMain pkg locals root =
             Maybe.map (Tuple.pair (T.CEMN_Canonical pkg name)) maybeMain
     in
     case root of
-        Build.Inside name ->
+        T.BB_Inside name ->
             Maybe.andThen (toPair name) (Dict.get identity name locals)
 
-        Build.Outside name _ g ->
+        T.BB_Outside name _ g ->
             toPair name g
 
 
@@ -175,7 +175,7 @@ type LoadingObjects
     = LoadingObjects T.MVar_Maybe_CASTO_GlobalGraph (Dict String T.CEMN_Raw T.MVar_Maybe_CASTO_LocalGraph)
 
 
-loadObjects : T.FilePath -> Details.Details -> List Build.Module -> Task LoadingObjects
+loadObjects : T.FilePath -> Details.Details -> List T.BB_Module -> Task LoadingObjects
 loadObjects root details modules =
     Task.io
         (Details.loadObjects root details
@@ -190,14 +190,14 @@ loadObjects root details modules =
         )
 
 
-loadObject : T.FilePath -> Build.Module -> IO ( T.CEMN_Raw, T.MVar_Maybe_CASTO_LocalGraph )
+loadObject : T.FilePath -> T.BB_Module -> IO ( T.CEMN_Raw, T.MVar_Maybe_CASTO_LocalGraph )
 loadObject root modul =
     case modul of
-        Build.Fresh name _ graph ->
+        T.BB_Fresh name _ graph ->
             Utils.newMVar_Maybe_CASTO_LocalGraph (Just graph)
                 |> IO.fmap (\mvar -> ( name, mvar ))
 
-        Build.Cached name _ _ ->
+        T.BB_Cached name _ _ ->
             Utils.newEmptyMVar_Maybe_CASTO_LocalGraph
                 |> IO.bind
                     (\mvar ->
@@ -243,7 +243,7 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
-loadTypes : T.FilePath -> Dict (List String) T.CEMN_Canonical T.CEI_DependencyInterface -> List Build.Module -> Task T.CECTE_Types
+loadTypes : T.FilePath -> Dict (List String) T.CEMN_Canonical T.CEI_DependencyInterface -> List T.BB_Module -> Task T.CECTE_Types
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules
@@ -268,13 +268,13 @@ loadTypes root ifaces modules =
         )
 
 
-loadTypesHelp : T.FilePath -> Build.Module -> IO T.MVar_Maybe_CECTE_Types
+loadTypesHelp : T.FilePath -> T.BB_Module -> IO T.MVar_Maybe_CECTE_Types
 loadTypesHelp root modul =
     case modul of
-        Build.Fresh name iface _ ->
+        T.BB_Fresh name iface _ ->
             Utils.newMVar_Maybe_CECTE_Types (Just (Extract.fromInterface name iface))
 
-        Build.Cached name _ ciMVar ->
+        T.BB_Cached name _ ciMVar ->
             Utils.readMVar_BB_CachedInterface ciMVar
                 |> IO.bind
                     (\cachedInterface ->

@@ -22,8 +22,8 @@ import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import List
-import System.IO as IO exposing (IO)
-import Types as T
+import System.IO as IO
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 

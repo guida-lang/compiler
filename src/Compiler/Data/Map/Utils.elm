@@ -5,7 +5,8 @@ module Compiler.Data.Map.Utils exposing
     )
 
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Types exposing (IO)
 import Utils.Main as Utils
 
 

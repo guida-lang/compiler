@@ -41,9 +41,8 @@ import Compiler.Json.Encode as E
 import Maybe.Extra as Maybe
 import Prelude
 import System.Console.Ansi as Ansi
-import System.IO exposing (Handle, IO)
 import Text.PrettyPrint.ANSI.Leijen as P
-import Types as T
+import Types as T exposing (Handle, IO)
 
 
 
