@@ -254,9 +254,9 @@ type Msg
     | NewEmptyMVarMsg_DictRawMVarMaybeDResult Int Int
     | ReadMVarMsg_DictRawMVarMaybeDResult Int (Map.Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
     | PutMVarMsg_DictRawMVarMaybeDResult Int
-      -- MVars (List (T.MVar ()))
+      -- MVars (List T.MVar_Unit)
     | NewEmptyMVarMsg_ListMVar Int Int
-    | ReadMVarMsg_ListMVar Int (List (T.MVar ()))
+    | ReadMVarMsg_ListMVar Int (List T.MVar_Unit)
     | PutMVarMsg_ListMVar Int
       -- MVars (T.BB_CachedInterface)
     | NewEmptyMVarMsg_BB_CachedInterface Int Int
@@ -799,7 +799,7 @@ update msg model =
                 ( newRealWorld, T.PutMVar_DictRawMVarMaybeDResult next _ Nothing ) ->
                     update (PutMVarMsg_DictRawMVarMaybeDResult index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_DictRawMVarMaybeDResult next) model.next }
 
-                -- MVars (List (T.MVar ()))
+                -- MVars (List T.MVar_Unit)
                 ( newRealWorld, T.NewEmptyMVar_ListMVar next value ) ->
                     update (NewEmptyMVarMsg_ListMVar index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_ListMVar next) model.next }
 
@@ -1727,7 +1727,7 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_DictRawMVarMaybeDResult"
 
-        -- MVars (List (T.MVar ()))
+        -- MVars (List T.MVar_Unit)
         NewEmptyMVarMsg_ListMVar index value ->
             case Dict.get index model.next of
                 Just (T.NewEmptyMVarNext_ListMVar fn) ->
@@ -2499,7 +2499,7 @@ bind f (T.IO ma) =
                 ( s1, T.PutMVar_DictRawMVarMaybeDResult next readIndexes value ) ->
                     ( s1, T.PutMVar_DictRawMVarMaybeDResult (\() -> bind f (next ())) readIndexes value )
 
-                -- MVars (List (T.MVar ()))
+                -- MVars (List T.MVar_Unit)
                 ( s1, T.NewEmptyMVar_ListMVar next emptyMVarIndex ) ->
                     ( s1, T.NewEmptyMVar_ListMVar (\value -> bind f (next value)) emptyMVarIndex )
 

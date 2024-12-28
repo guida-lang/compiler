@@ -4,7 +4,6 @@ module Builder.BackgroundWriter exposing
     )
 
 import Builder.File as File
-import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
 import Types as T exposing (IO)
@@ -26,7 +25,7 @@ withScope callback =
                             Utils.takeMVar_ListMVar workList
                                 |> IO.bind
                                     (\mvars ->
-                                        Utils.listTraverse_ (Utils.takeMVar (Decode.succeed ())) mvars
+                                        Utils.listTraverse_ Utils.takeMVar_Unit mvars
                                             |> IO.fmap (\_ -> result)
                                     )
                         )
@@ -35,17 +34,17 @@ withScope callback =
 
 writeBinary : (a -> Encode.Value) -> T.BBW_Scope -> String -> a -> IO ()
 writeBinary encoder (T.BBW_Scope workList) path value =
-    Utils.newEmptyMVar
+    Utils.newEmptyMVar_Unit
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (File.writeBinary encoder path value |> IO.bind (\_ -> Utils.putMVar (\_ -> Encode.object []) mvar ()))
+                Utils.forkIO (File.writeBinary encoder path value |> IO.bind (\_ -> Utils.putMVar_Unit mvar ()))
                     |> IO.bind
                         (\_ ->
                             Utils.takeMVar_ListMVar workList
                                 |> IO.bind
                                     (\oldWork ->
                                         let
-                                            newWork : List (T.MVar ())
+                                            newWork : List T.MVar_Unit
                                             newWork =
                                                 mvar :: oldWork
                                         in

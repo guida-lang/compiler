@@ -2876,10 +2876,10 @@ newEmptyMVar_DictRawMVarMaybeDResult =
 
 
 
--- Control.Concurrent.MVar (List (T.MVar ()))
+-- Control.Concurrent.MVar (List T.MVar_Unit)
 
 
-newMVar_ListMVar : List (T.MVar ()) -> IO T.MVar_ListMVar
+newMVar_ListMVar : List T.MVar_Unit -> IO T.MVar_ListMVar
 newMVar_ListMVar value =
     newEmptyMVar_ListMVar
         |> IO.bind
@@ -2889,7 +2889,7 @@ newMVar_ListMVar value =
             )
 
 
-readMVar_ListMVar : T.MVar_ListMVar -> IO (List (T.MVar ()))
+readMVar_ListMVar : T.MVar_ListMVar -> IO (List T.MVar_Unit)
 readMVar_ListMVar (T.MVar_ListMVar ref) =
     IO
         (\index s ->
@@ -2909,7 +2909,7 @@ readMVar_ListMVar (T.MVar_ListMVar ref) =
         )
 
 
-takeMVar_ListMVar : T.MVar_ListMVar -> IO (List (T.MVar ()))
+takeMVar_ListMVar : T.MVar_ListMVar -> IO (List T.MVar_Unit)
 takeMVar_ListMVar (T.MVar_ListMVar ref) =
     IO
         (\index s ->
@@ -2938,7 +2938,7 @@ takeMVar_ListMVar (T.MVar_ListMVar ref) =
         )
 
 
-putMVar_ListMVar : T.MVar_ListMVar -> List (T.MVar ()) -> IO ()
+putMVar_ListMVar : T.MVar_ListMVar -> List T.MVar_Unit -> IO ()
 putMVar_ListMVar (T.MVar_ListMVar ref) value =
     IO
         (\index s ->

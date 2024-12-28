@@ -116,11 +116,11 @@ type ION a
     | ReadMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
     | TakeMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)) (Maybe Int)
     | PutMVar_DictRawMVarMaybeDResult (() -> IO a) (List Int) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
-      -- MVars (List (MVar ()))
+      -- MVars (List (MVar_Unit))
     | NewEmptyMVar_ListMVar (Int -> IO a) Int
-    | ReadMVar_ListMVar (List (MVar ()) -> IO a) (Maybe (List (MVar ())))
-    | TakeMVar_ListMVar (List (MVar ()) -> IO a) (Maybe (List (MVar ()))) (Maybe Int)
-    | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List (MVar ())))
+    | ReadMVar_ListMVar (List MVar_Unit -> IO a) (Maybe (List MVar_Unit))
+    | TakeMVar_ListMVar (List MVar_Unit -> IO a) (Maybe (List MVar_Unit)) (Maybe Int)
+    | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List MVar_Unit))
       -- MVars (BB_CachedInterface)
     | NewEmptyMVar_BB_CachedInterface (Int -> IO a) Int
     | ReadMVar_BB_CachedInterface (BB_CachedInterface -> IO a) (Maybe BB_CachedInterface)
@@ -194,7 +194,7 @@ type alias RealWorld =
     , mVars_Maybe_BB_Dependencies : Array { subscribers : List MVarSubscriber_Maybe_BB_Dependencies, value : Maybe (Maybe BB_Dependencies) }
     , mVars_DictNameMVarDep : Array { subscribers : List MVarSubscriber_DictNameMVarDep, value : Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep) }
     , mVars_DictRawMVarMaybeDResult : Array { subscribers : List MVarSubscriber_DictRawMVarMaybeDResult, value : Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult) }
-    , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List (MVar ())) }
+    , mVars_ListMVar : Array { subscribers : List MVarSubscriber_ListMVar, value : Maybe (List MVar_Unit) }
     , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe BB_CachedInterface }
     , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe BED_StatusDict }
     , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
@@ -296,7 +296,7 @@ type MVarSubscriber_DictRawMVarMaybeDResult
 type MVarSubscriber_ListMVar
     = ReadMVarSubscriber_ListMVar Int
     | TakeMVarSubscriber_ListMVar Int
-    | PutMVarSubscriber_ListMVar Int (List (MVar ()))
+    | PutMVarSubscriber_ListMVar Int (List MVar_Unit)
 
 
 type MVarSubscriber_BB_CachedInterface
@@ -453,10 +453,10 @@ type Next
     | ReadMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
     | TakeMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
     | PutMVarNext_DictRawMVarMaybeDResult (() -> IO ())
-      -- MVars (List (MVar ()))
+      -- MVars (List (MVar_Unit))
     | NewEmptyMVarNext_ListMVar (Int -> IO ())
-    | ReadMVarNext_ListMVar (List (MVar ()) -> IO ())
-    | TakeMVarNext_ListMVar (List (MVar ()) -> IO ())
+    | ReadMVarNext_ListMVar (List MVar_Unit -> IO ())
+    | TakeMVarNext_ListMVar (List MVar_Unit -> IO ())
     | PutMVarNext_ListMVar (() -> IO ())
       -- MVars (BB_CachedInterface)
     | NewEmptyMVarNext_BB_CachedInterface (Int -> IO ())
