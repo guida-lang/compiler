@@ -3,6 +3,7 @@ module Builder.Build exposing
     , ReplArtifacts(..)
     , cachedInterfaceDecoder
     , fromExposed
+    , fromExposed_Unit
     , fromPaths
     , fromRepl
     , getRootNames
@@ -143,6 +144,77 @@ forkWithKey_BB_BResult toComparable keyComparison func dict =
 fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> IO (Result T.BRE_BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style <|
+        \key ->
+            makeEnv key root details
+                |> IO.bind
+                    (\env ->
+                        Details.loadInterfaces root details
+                            |> IO.bind
+                                (\dmvar ->
+                                    -- crawl
+                                    Utils.newEmptyMVar_BB_StatusDict
+                                        |> IO.bind
+                                            (\mvar ->
+                                                let
+                                                    docsNeed : T.BB_DocsNeed
+                                                    docsNeed =
+                                                        toDocsNeed docsGoal
+                                                in
+                                                Map.fromKeysA identity (fork_BB_Status << crawlModule env mvar docsNeed) (e :: es)
+                                                    |> IO.bind
+                                                        (\roots ->
+                                                            Utils.putMVar_BB_StatusDict mvar roots
+                                                                |> IO.bind
+                                                                    (\_ ->
+                                                                        Utils.dictMapM_ compare Utils.readMVar_BB_Status roots
+                                                                            |> IO.bind
+                                                                                (\_ ->
+                                                                                    IO.bind (Utils.mapTraverse identity compare Utils.readMVar_BB_Status) (Utils.readMVar_BB_StatusDict mvar)
+                                                                                        |> IO.bind
+                                                                                            (\statuses ->
+                                                                                                -- compile
+                                                                                                checkMidpoint dmvar statuses
+                                                                                                    |> IO.bind
+                                                                                                        (\midpoint ->
+                                                                                                            case midpoint of
+                                                                                                                Err problem ->
+                                                                                                                    IO.pure (Err (T.BRE_BuildProjectProblem problem))
+
+                                                                                                                Ok foreigns ->
+                                                                                                                    Utils.newEmptyMVar
+                                                                                                                        |> IO.bind
+                                                                                                                            (\rmvar ->
+                                                                                                                                forkWithKey_BB_BResult identity compare (checkModule env foreigns rmvar) statuses
+                                                                                                                                    |> IO.bind
+                                                                                                                                        (\resultMVars ->
+                                                                                                                                            Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
+                                                                                                                                                |> IO.bind
+                                                                                                                                                    (\_ ->
+                                                                                                                                                        Utils.mapTraverse identity compare Utils.readMVar_BB_BResult resultMVars
+                                                                                                                                                            |> IO.bind
+                                                                                                                                                                (\results ->
+                                                                                                                                                                    writeDetails root details results
+                                                                                                                                                                        |> IO.bind
+                                                                                                                                                                            (\_ ->
+                                                                                                                                                                                finalizeExposed root docsGoal exposed results
+                                                                                                                                                                            )
+                                                                                                                                                                )
+                                                                                                                                                    )
+                                                                                                                                        )
+                                                                                                                            )
+                                                                                                        )
+                                                                                            )
+                                                                                )
+                                                                    )
+                                                        )
+                                            )
+                                )
+                    )
+
+
+fromExposed_Unit : Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal () -> NE.Nonempty T.CEMN_Raw -> IO (Result T.BRE_BuildProblem ())
+fromExposed_Unit style root details docsGoal ((NE.Nonempty e es) as exposed) =
+    Reporting.trackBuild_Unit style <|
         \key ->
             makeEnv key root details
                 |> IO.bind

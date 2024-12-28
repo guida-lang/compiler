@@ -2,6 +2,7 @@ module Utils.Main exposing
     ( AsyncException(..)
     , Chan
     , Chan_ResultBMsgBResultArtifacts
+    , Chan_ResultBMsgBResultUnit
     , LockSharedExclusive(..)
     , ReplCompletion(..)
     , ReplCompletionFunc
@@ -103,6 +104,7 @@ module Utils.Main exposing
     , maybeTraverseTask
     , newChan
     , newChan_ResultBMsgBResultArtifacts
+    , newChan_ResultBMsgBResultUnit
     , newEmptyMVar
     , newEmptyMVar_BB_BResult
     , newEmptyMVar_BB_CachedInterface
@@ -147,6 +149,7 @@ module Utils.Main exposing
     , putMVar_BB_StatusDict
     , putMVar_BED_StatusDict
     , putMVar_CED_Dep
+    , putMVar_ChItemResultBMsgBResultUnit
     , putMVar_DictNameMVarDep
     , putMVar_DictRawMVarMaybeDResult
     , putMVar_ListMVar
@@ -157,9 +160,11 @@ module Utils.Main exposing
     , putMVar_Maybe_CASTO_LocalGraph
     , putMVar_Maybe_CECTE_Types
     , putMVar_ResultRegistryProblemEnv
+    , putMVar_StreamResultBMsgBResultUnit
     , putMVar_Unit
     , readChan
     , readChan_ResultBMsgBResultArtifacts
+    , readChan_ResultBMsgBResultUnit
     , readMVar
     , readMVar_BB_BResult
     , readMVar_BB_CachedInterface
@@ -207,6 +212,7 @@ module Utils.Main exposing
     , unzip3
     , writeChan
     , writeChan_ResultBMsgBResultArtifacts
+    , writeChan_ResultBMsgBResultUnit
     , zipWithM
     )
 
@@ -991,6 +997,16 @@ newMVar encoder value =
             )
 
 
+newMVar_StreamResultBMsgBResultUnit : T.MVar_ChItemResultBMsgBResultUnit -> IO T.MVar_StreamResultBMsgBResultUnit
+newMVar_StreamResultBMsgBResultUnit value =
+    newEmptyMVar_StreamResultBMsgBResultUnit
+        |> IO.bind
+            (\mvar ->
+                putMVar_StreamResultBMsgBResultUnit mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
 newMVar_StreamResultBMsgBResultArtifacts : T.MVar_ChItemResultBMsgBResultArtifacts -> IO T.MVar_StreamResultBMsgBResultArtifacts
 newMVar_StreamResultBMsgBResultArtifacts value =
     newEmptyMVar_StreamResultBMsgBResultArtifacts
@@ -1030,6 +1046,26 @@ readMVar decoder (T.MVar ref) =
             )
 
 
+readMVar_ChItemResultBMsgBResultUnit : T.MVar_ChItemResultBMsgBResultUnit -> IO T.ChItem_ResultBMsgBResultUnit
+readMVar_ChItemResultBMsgBResultUnit (T.MVar_ChItemResultBMsgBResultUnit ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ChItemResultBMsgBResultUnit of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_ChItemResultBMsgBResultUnit IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_ChItemResultBMsgBResultUnit index ] } s.mVars_ChItemResultBMsgBResultUnit }
+                            , T.ReadMVar_ChItemResultBMsgBResultUnit IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_ChItemResultBMsgBResultUnit: invalid ref"
+        )
+
+
 readMVar_ChItemResultBMsgBResultArtifacts : T.MVar_ChItemResultBMsgBResultArtifacts -> IO T.ChItem_ResultBMsgBResultArtifacts
 readMVar_ChItemResultBMsgBResultArtifacts (T.MVar_ChItemResultBMsgBResultArtifacts ref) =
     IO
@@ -1057,6 +1093,20 @@ modifyMVar decoder encoder m io =
         |> IO.bind
             (\( a, b ) ->
                 putMVar encoder m a
+                    |> IO.fmap (\_ -> b)
+            )
+
+
+modifyMVar_StreamResultBMsgBResultUnit_ResultBMsgBResultUnit :
+    T.MVar_StreamResultBMsgBResultUnit
+    -> (T.MVar_ChItemResultBMsgBResultUnit -> IO ( T.MVar_ChItemResultBMsgBResultUnit, Result T.BR_BMsg (T.BR_BResult ()) ))
+    -> IO (Result T.BR_BMsg (T.BR_BResult ()))
+modifyMVar_StreamResultBMsgBResultUnit_ResultBMsgBResultUnit m io =
+    takeMVar_StreamResultBMsgBResultUnit m
+        |> IO.bind io
+        |> IO.bind
+            (\( a, b ) ->
+                putMVar_StreamResultBMsgBResultUnit m a
                     |> IO.fmap (\_ -> b)
             )
 
@@ -1111,6 +1161,35 @@ takeMVar decoder (T.MVar ref) =
                     Err _ ->
                         crash "Utils.Main.takeMVar: invalid value"
             )
+
+
+takeMVar_StreamResultBMsgBResultUnit : T.MVar_StreamResultBMsgBResultUnit -> IO T.MVar_ChItemResultBMsgBResultUnit
+takeMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_StreamResultBMsgBResultUnit of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (T.PutMVarSubscriber_StreamResultBMsgBResultUnit putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_StreamResultBMsgBResultUnit }
+                                    , T.TakeMVar_StreamResultBMsgBResultUnit IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | value = Nothing } s.mVars_StreamResultBMsgBResultUnit }
+                                    , T.TakeMVar_StreamResultBMsgBResultUnit IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultUnit index ] } s.mVars_StreamResultBMsgBResultUnit }
+                            , T.TakeMVar_StreamResultBMsgBResultUnit IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_StreamResultBMsgBResultUnit: invalid ref"
+        )
 
 
 takeMVar_StreamResultBMsgBResultArtifacts : T.MVar_StreamResultBMsgBResultArtifacts -> IO T.MVar_ChItemResultBMsgBResultArtifacts
@@ -1175,6 +1254,78 @@ putMVar encoder (T.MVar ref) value =
 
                 Nothing ->
                     crash "Utils.Main.putMVar: invalid ref"
+        )
+
+
+putMVar_StreamResultBMsgBResultUnit : T.MVar_StreamResultBMsgBResultUnit -> T.MVar_ChItemResultBMsgBResultUnit -> IO ()
+putMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_StreamResultBMsgBResultUnit of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_StreamResultBMsgBResultUnit index value ] } s.mVars_StreamResultBMsgBResultUnit }
+                            , T.PutMVar_StreamResultBMsgBResultUnit IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_StreamResultBMsgBResultUnit readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_StreamResultBMsgBResultUnit }
+                            , T.PutMVar_StreamResultBMsgBResultUnit IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_StreamResultBMsgBResultUnit: invalid ref"
+        )
+
+
+putMVar_ChItemResultBMsgBResultUnit : T.MVar_ChItemResultBMsgBResultUnit -> T.ChItem_ResultBMsgBResultUnit -> IO ()
+putMVar_ChItemResultBMsgBResultUnit (T.MVar_ChItemResultBMsgBResultUnit ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ChItemResultBMsgBResultUnit of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultUnit index value ] } s.mVars_ChItemResultBMsgBResultUnit }
+                            , T.PutMVar_ChItemResultBMsgBResultUnit IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_ChItemResultBMsgBResultUnit readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_ChItemResultBMsgBResultUnit }
+                            , T.PutMVar_ChItemResultBMsgBResultUnit IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_ChItemResultBMsgBResultUnit: invalid ref"
         )
 
 
@@ -1259,6 +1410,28 @@ newEmptyMVar =
             )
         )
         |> IO.fmap T.MVar
+
+
+newEmptyMVar_StreamResultBMsgBResultUnit : IO T.MVar_StreamResultBMsgBResultUnit
+newEmptyMVar_StreamResultBMsgBResultUnit =
+    IO
+        (\_ s ->
+            ( { s | mVars_StreamResultBMsgBResultUnit = Array.push { subscribers = [], value = Nothing } s.mVars_StreamResultBMsgBResultUnit }
+            , T.NewEmptyMVar_StreamResultBMsgBResultUnit IO.pure (Array.length s.mVars_StreamResultBMsgBResultUnit)
+            )
+        )
+        |> IO.fmap T.MVar_StreamResultBMsgBResultUnit
+
+
+newEmptyMVar_ChItemResultBMsgBResultUnit : IO T.MVar_ChItemResultBMsgBResultUnit
+newEmptyMVar_ChItemResultBMsgBResultUnit =
+    IO
+        (\_ s ->
+            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.push { subscribers = [], value = Nothing } s.mVars_ChItemResultBMsgBResultUnit }
+            , T.NewEmptyMVar_ChItemResultBMsgBResultUnit IO.pure (Array.length s.mVars_ChItemResultBMsgBResultUnit)
+            )
+        )
+        |> IO.fmap T.MVar_ChItemResultBMsgBResultUnit
 
 
 newEmptyMVar_StreamResultBMsgBResultArtifacts : IO T.MVar_StreamResultBMsgBResultArtifacts
@@ -2978,6 +3151,10 @@ type Chan a
     = Chan (T.MVar (T.Stream a)) (T.MVar (T.Stream a))
 
 
+type Chan_ResultBMsgBResultUnit
+    = Chan_ResultBMsgBResultUnit T.MVar_StreamResultBMsgBResultUnit T.MVar_StreamResultBMsgBResultUnit
+
+
 type Chan_ResultBMsgBResultArtifacts
     = Chan_ResultBMsgBResultArtifacts T.MVar_StreamResultBMsgBResultArtifacts T.MVar_StreamResultBMsgBResultArtifacts
 
@@ -2994,6 +3171,23 @@ newChan encoder =
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
+                                    )
+                        )
+            )
+
+
+newChan_ResultBMsgBResultUnit : IO Chan_ResultBMsgBResultUnit
+newChan_ResultBMsgBResultUnit =
+    newEmptyMVar_ChItemResultBMsgBResultUnit
+        |> IO.bind
+            (\hole ->
+                newMVar_StreamResultBMsgBResultUnit hole
+                    |> IO.bind
+                        (\readVar ->
+                            newMVar_StreamResultBMsgBResultUnit hole
+                                |> IO.fmap
+                                    (\writeVar ->
+                                        Chan_ResultBMsgBResultUnit readVar writeVar
                                     )
                         )
             )
@@ -3029,6 +3223,19 @@ readChan decoder (Chan readVar _) =
                     )
 
 
+readChan_ResultBMsgBResultUnit : Chan_ResultBMsgBResultUnit -> IO (Result T.BR_BMsg (T.BR_BResult ()))
+readChan_ResultBMsgBResultUnit (Chan_ResultBMsgBResultUnit readVar _) =
+    modifyMVar_StreamResultBMsgBResultUnit_ResultBMsgBResultUnit readVar <|
+        \read_end ->
+            readMVar_ChItemResultBMsgBResultUnit read_end
+                |> IO.fmap
+                    (\(T.ChItem_ResultBMsgBResultUnit val new_read_end) ->
+                        -- Use readMVar here, not takeMVar,
+                        -- else dupChan doesn't work
+                        ( new_read_end, val )
+                    )
+
+
 readChan_ResultBMsgBResultArtifacts : Chan_ResultBMsgBResultArtifacts -> IO (Result T.BR_BMsg (T.BR_BResult T.BB_Artifacts))
 readChan_ResultBMsgBResultArtifacts (Chan_ResultBMsgBResultArtifacts readVar _) =
     modifyMVar_StreamResultBMsgBResultArtifacts_ResultBMsgBResultArtifacts readVar <|
@@ -3052,6 +3259,20 @@ writeChan encoder (Chan _ writeVar) val =
                         (\old_hole ->
                             putMVar (chItemEncoder encoder) old_hole (T.ChItem val new_hole)
                                 |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                        )
+            )
+
+
+writeChan_ResultBMsgBResultUnit : Chan_ResultBMsgBResultUnit -> Result T.BR_BMsg (T.BR_BResult ()) -> IO ()
+writeChan_ResultBMsgBResultUnit (Chan_ResultBMsgBResultUnit _ writeVar) val =
+    newEmptyMVar_ChItemResultBMsgBResultUnit
+        |> IO.bind
+            (\new_hole ->
+                takeMVar_StreamResultBMsgBResultUnit writeVar
+                    |> IO.bind
+                        (\old_hole ->
+                            putMVar_ChItemResultBMsgBResultUnit old_hole (T.ChItem_ResultBMsgBResultUnit val new_hole)
+                                |> IO.bind (\_ -> putMVar_StreamResultBMsgBResultUnit writeVar new_hole)
                         )
             )
 

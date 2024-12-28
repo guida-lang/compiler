@@ -13,6 +13,7 @@ module Builder.Reporting exposing
     , terminal
     , trackBuild
     , trackBuild_BB_Artifacts
+    , trackBuild_Unit
     , trackDetails
     )
 
@@ -30,7 +31,7 @@ import Json.Encode as CoreEncode
 import System.Exit as Exit
 import System.IO as IO
 import Types as T
-import Utils.Main as Utils exposing (Chan, Chan_ResultBMsgBResultArtifacts)
+import Utils.Main as Utils exposing (Chan, Chan_ResultBMsgBResultArtifacts, Chan_ResultBMsgBResultUnit)
 
 
 
@@ -389,6 +390,34 @@ trackBuild decoder encoder style callback =
                     )
 
 
+trackBuild_Unit : Style -> (T.BR_BKey -> T.IO (T.BR_BResult ())) -> T.IO (T.BR_BResult ())
+trackBuild_Unit style callback =
+    case style of
+        Silent ->
+            callback (T.BR_Key (\_ -> IO.pure ()))
+
+        Json ->
+            callback (T.BR_Key (\_ -> IO.pure ()))
+
+        Terminal mvar ->
+            Utils.newChan_ResultBMsgBResultUnit
+                |> IO.bind
+                    (\chan ->
+                        Utils.forkIO
+                            (Utils.takeMVar_Unit mvar
+                                |> IO.bind (\_ -> putStrFlush "Compiling ...")
+                                |> IO.bind (\_ -> buildLoop_ResultBMsgBResultUnit chan 0)
+                                |> IO.bind (\_ -> Utils.putMVar_Unit mvar ())
+                            )
+                            |> IO.bind (\_ -> callback (T.BR_Key (Utils.writeChan_ResultBMsgBResultUnit chan << Err)))
+                            |> IO.bind
+                                (\result ->
+                                    Utils.writeChan_ResultBMsgBResultUnit chan (Ok result)
+                                        |> IO.fmap (\_ -> result)
+                                )
+                    )
+
+
 trackBuild_BB_Artifacts : Style -> (T.BR_BKey -> T.IO (T.BR_BResult T.BB_Artifacts)) -> T.IO (T.BR_BResult T.BB_Artifacts)
 trackBuild_BB_Artifacts style callback =
     case style of
@@ -431,6 +460,42 @@ buildLoop decoder chan done =
                         in
                         putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
                             |> IO.bind (\_ -> buildLoop decoder chan done1)
+
+                    Ok result ->
+                        let
+                            message : String
+                            message =
+                                toFinalMessage done result
+
+                            width : Int
+                            width =
+                                12 + String.length (String.fromInt done)
+                        in
+                        IO.putStrLn
+                            (if String.length message < width then
+                                String.cons '\u{000D}' (String.repeat width " ")
+                                    ++ String.cons '\u{000D}' message
+
+                             else
+                                String.cons '\u{000D}' message
+                            )
+            )
+
+
+buildLoop_ResultBMsgBResultUnit : Chan_ResultBMsgBResultUnit -> Int -> T.IO ()
+buildLoop_ResultBMsgBResultUnit chan done =
+    Utils.readChan_ResultBMsgBResultUnit chan
+        |> IO.bind
+            (\msg ->
+                case msg of
+                    Err T.BR_BDone ->
+                        let
+                            done1 : Int
+                            done1 =
+                                done + 1
+                        in
+                        putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
+                            |> IO.bind (\_ -> buildLoop_ResultBMsgBResultUnit chan done1)
 
                     Ok result ->
                         let

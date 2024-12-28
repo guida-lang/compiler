@@ -206,7 +206,7 @@ buildExposed style root details maybeDocs exposed =
             Maybe.unwrap Build.ignoreDocs Build.writeDocs maybeDocs
     in
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromExposed (Decode.succeed ()) (\_ -> Encode.object []) style root details docsGoal exposed
+        Build.fromExposed_Unit style root details docsGoal exposed
 
 
 buildPaths : Reporting.Style -> T.FilePath -> Details.Details -> NE.Nonempty T.FilePath -> Task T.BB_Artifacts
