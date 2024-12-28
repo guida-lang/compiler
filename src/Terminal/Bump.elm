@@ -14,7 +14,6 @@ import Builder.Reporting.Exit.Help as Help
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
@@ -177,7 +176,7 @@ suggestVersion (Env root cache manager _ ((Outline.PkgOutline pkg _ _ vsn _ _ _ 
             )
 
 
-generateDocs : T.FilePath -> Outline.PkgOutline -> Task.Task Exit.Bump Docs.Documentation
+generateDocs : T.FilePath -> Outline.PkgOutline -> Task.Task Exit.Bump T.CED_Documentation
 generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
     Task.eio Exit.BumpBadDetails
         (BW.withScope (\scope -> Details.load Reporting.silent scope root))
@@ -189,7 +188,7 @@ generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
 
                     e :: es ->
                         Task.eio Exit.BumpBadBuild <|
-                            Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
+                            Build.fromExposed_Documentation Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
             )
 
 

@@ -18,7 +18,6 @@ import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Compiler.Type as Type
-import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
@@ -140,7 +139,7 @@ diff ((Env _ _ _ registry) as env) args =
 -- GET DOCS
 
 
-getDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> T.CEV_Version -> Task Docs.Documentation
+getDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> T.CEV_Version -> Task T.CED_Documentation
 getDocs (Env _ cache manager _) name (T.BDR_KnownVersions latest previous) version =
     if latest == version || List.member version previous then
         Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
@@ -149,7 +148,7 @@ getDocs (Env _ cache manager _) name (T.BDR_KnownVersions latest previous) versi
         Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
 
 
-getLatestDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> Task Docs.Documentation
+getLatestDocs : Env -> T.CEP_Name -> T.BDR_KnownVersions -> Task T.CED_Documentation
 getLatestDocs (Env _ cache manager _) name (T.BDR_KnownVersions latest _) =
     Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
@@ -191,7 +190,7 @@ readOutline (Env maybeRoot _ _ registry) =
 -- GENERATE DOCS
 
 
-generateDocs : Env -> Task Docs.Documentation
+generateDocs : Env -> Task T.CED_Documentation
 generateDocs (Env maybeRoot _ _ _) =
     case maybeRoot of
         Nothing ->
@@ -213,7 +212,7 @@ generateDocs (Env maybeRoot _ _ _) =
 
                                     e :: es ->
                                         Task.eio Exit.DiffBadBuild <|
-                                            Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
+                                            Build.fromExposed_Documentation Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
                     )
 
 
@@ -221,7 +220,7 @@ generateDocs (Env maybeRoot _ _ _) =
 -- WRITE DIFF
 
 
-writeDiff : Docs.Documentation -> Docs.Documentation -> Task ()
+writeDiff : T.CED_Documentation -> T.CED_Documentation -> Task ()
 writeDiff oldDocs newDocs =
     let
         changes : PackageChanges

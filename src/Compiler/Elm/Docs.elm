@@ -1,6 +1,5 @@
 module Compiler.Elm.Docs exposing
-    ( Documentation
-    , Error(..)
+    ( Error(..)
     , decoder
     , encode
     , fromModule
@@ -35,18 +34,10 @@ import Utils.Main as Utils
 
 
 
--- DOCUMENTATION
-
-
-type alias Documentation =
-    Dict String T.CDN_Name T.CED_Module
-
-
-
 -- JSON
 
 
-encode : Documentation -> E.Value
+encode : T.CED_Documentation -> E.Value
 encode docs =
     E.list encodeModule (Dict.values compare docs)
 
@@ -69,12 +60,12 @@ type Error
     | BadType
 
 
-decoder : D.Decoder Error Documentation
+decoder : D.Decoder Error T.CED_Documentation
 decoder =
     D.fmap toDict (D.list moduleDecoder)
 
 
-toDict : List T.CED_Module -> Documentation
+toDict : List T.CED_Module -> T.CED_Documentation
 toDict modules =
     Dict.fromList identity (List.map toDictHelp modules)
 
@@ -738,12 +729,12 @@ addDef types def =
 -- ENCODERS and DECODERS
 
 
-jsonEncoder : Documentation -> Encode.Value
+jsonEncoder : T.CED_Documentation -> Encode.Value
 jsonEncoder =
     E.toJsonValue << encode
 
 
-jsonDecoder : Decode.Decoder Documentation
+jsonDecoder : Decode.Decoder T.CED_Documentation
 jsonDecoder =
     Decode.map toDict (Decode.list jsonModuleDecoder)
 

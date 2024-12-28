@@ -22,8 +22,6 @@ import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import System.IO as IO
 import Terminal.Terminal.Internal exposing (Parser(..))

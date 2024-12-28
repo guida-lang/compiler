@@ -60,7 +60,7 @@ getChanges toComparable keyComparison isEquivalent old new =
 -- DIFF
 
 
-diff : Docs.Documentation -> Docs.Documentation -> PackageChanges
+diff : T.CED_Documentation -> T.CED_Documentation -> PackageChanges
 diff oldDocs newDocs =
     let
         filterOutPatches : Dict comparable a ModuleChanges -> Dict comparable a ModuleChanges
@@ -393,7 +393,7 @@ changeMagnitude (Changes added changed removed) =
 -- GET DOCS
 
 
-getDocs : T.BS_PackageCache -> T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> IO (Result Exit.DocsProblem Docs.Documentation)
+getDocs : T.BS_PackageCache -> T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> IO (Result Exit.DocsProblem T.CED_Documentation)
 getDocs cache manager name version =
     let
         home : String

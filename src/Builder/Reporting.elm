@@ -11,8 +11,8 @@ module Builder.Reporting exposing
     , reportGenerate
     , silent
     , terminal
-    , trackBuild
     , trackBuild_BB_Artifacts
+    , trackBuild_Documentation
     , trackBuild_Unit
     , trackDetails
     )
@@ -23,7 +23,6 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
 import Json.Decode as Decode
@@ -31,7 +30,7 @@ import Json.Encode as CoreEncode
 import System.Exit as Exit
 import System.IO as IO
 import Types as T
-import Utils.Main as Utils exposing (Chan, Chan_ResultBMsgBResultArtifacts, Chan_ResultBMsgBResultUnit)
+import Utils.Main as Utils exposing (Chan, Chan_ResultBMsgBResultArtifacts, Chan_ResultBMsgBResultDocumentation, Chan_ResultBMsgBResultUnit)
 
 
 
@@ -357,8 +356,8 @@ clear before after =
 -- BUILD
 
 
-trackBuild : Decode.Decoder a -> (a -> CoreEncode.Value) -> Style -> (T.BR_BKey -> T.IO (T.BR_BResult a)) -> T.IO (T.BR_BResult a)
-trackBuild decoder encoder style callback =
+trackBuild_Documentation : Style -> (T.BR_BKey -> T.IO (T.BR_BResult T.CED_Documentation)) -> T.IO (T.BR_BResult T.CED_Documentation)
+trackBuild_Documentation style callback =
     case style of
         Silent ->
             callback (T.BR_Key (\_ -> IO.pure ()))
@@ -367,24 +366,19 @@ trackBuild decoder encoder style callback =
             callback (T.BR_Key (\_ -> IO.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan_ResultBMsgBResultDocumentation
                 |> IO.bind
                     (\chan ->
-                        let
-                            chanEncoder : Result T.BR_BMsg (T.BR_BResult a) -> CoreEncode.Value
-                            chanEncoder =
-                                Encode.result bMsgEncoder (bResultEncoder encoder)
-                        in
                         Utils.forkIO
                             (Utils.takeMVar_Unit mvar
                                 |> IO.bind (\_ -> putStrFlush "Compiling ...")
-                                |> IO.bind (\_ -> buildLoop decoder chan 0)
+                                |> IO.bind (\_ -> buildLoop_ResultBMsgBResultDocumentation chan 0)
                                 |> IO.bind (\_ -> Utils.putMVar_Unit mvar ())
                             )
-                            |> IO.bind (\_ -> callback (T.BR_Key (Utils.writeChan chanEncoder chan << Err)))
+                            |> IO.bind (\_ -> callback (T.BR_Key (Utils.writeChan_ResultBMsgBResultDocumentation chan << Err)))
                             |> IO.bind
                                 (\result ->
-                                    Utils.writeChan chanEncoder chan (Ok result)
+                                    Utils.writeChan_ResultBMsgBResultDocumentation chan (Ok result)
                                         |> IO.fmap (\_ -> result)
                                 )
                     )
@@ -446,9 +440,9 @@ trackBuild_BB_Artifacts style callback =
                     )
 
 
-buildLoop : Decode.Decoder a -> Chan (Result T.BR_BMsg (T.BR_BResult a)) -> Int -> T.IO ()
-buildLoop decoder chan done =
-    Utils.readChan (DecodeX.result bMsgDecoder (bResultDecoder decoder)) chan
+buildLoop_ResultBMsgBResultDocumentation : Chan_ResultBMsgBResultDocumentation -> Int -> T.IO ()
+buildLoop_ResultBMsgBResultDocumentation chan done =
+    Utils.readChan_ResultBMsgBResultDocumentation chan
         |> IO.bind
             (\msg ->
                 case msg of
@@ -459,7 +453,7 @@ buildLoop decoder chan done =
                                 done + 1
                         in
                         putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
-                            |> IO.bind (\_ -> buildLoop decoder chan done1)
+                            |> IO.bind (\_ -> buildLoop_ResultBMsgBResultDocumentation chan done1)
 
                     Ok result ->
                         let
@@ -760,34 +754,3 @@ dMsgDecoder =
                     _ ->
                         Decode.fail ("Failed to decode DMsg's type: " ++ type_)
             )
-
-
-bMsgEncoder : T.BR_BMsg -> CoreEncode.Value
-bMsgEncoder _ =
-    CoreEncode.object
-        [ ( "type", CoreEncode.string "BDone" )
-        ]
-
-
-bMsgDecoder : Decode.Decoder T.BR_BMsg
-bMsgDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BDone" ->
-                        Decode.succeed T.BR_BDone
-
-                    _ ->
-                        Decode.fail ("Failed to decode BDone's type: " ++ type_)
-            )
-
-
-bResultEncoder : (a -> CoreEncode.Value) -> T.BR_BResult a -> CoreEncode.Value
-bResultEncoder encoder bResult =
-    Encode.result Exit.buildProblemEncoder encoder bResult
-
-
-bResultDecoder : Decode.Decoder a -> Decode.Decoder (T.BR_BResult a)
-bResultDecoder decoder =
-    DecodeX.result Exit.buildProblemDecoder decoder

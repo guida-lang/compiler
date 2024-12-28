@@ -217,7 +217,7 @@ verifyLicense root =
 -- VERIFY BUILD
 
 
-verifyBuild : String -> Task.Task Exit.Publish Docs.Documentation
+verifyBuild : String -> Task.Task Exit.Publish T.CED_Documentation
 verifyBuild root =
     reportBuildCheck <|
         BW.withScope <|
@@ -240,7 +240,7 @@ verifyBuild root =
                                     |> Task.bind
                                         (\exposed ->
                                             Task.eio Exit.PublishBuildProblem <|
-                                                Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed
+                                                Build.fromExposed_Documentation Reporting.silent root details Build.keepDocs exposed
                                         )
                             )
                     )
@@ -425,7 +425,7 @@ verifyZipBuild root =
                                 |> Task.bind
                                     (\exposed ->
                                         Task.eio Exit.PublishZipBuildProblem
-                                            (Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed)
+                                            (Build.fromExposed_Documentation Reporting.silent root details Build.keepDocs exposed)
                                             |> Task.fmap (\_ -> ())
                                     )
                         )
@@ -442,7 +442,7 @@ type GoodVersion
     | GoodBump T.CEV_Version M.Magnitude
 
 
-verifyVersion : Env -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> Maybe T.BDR_KnownVersions -> Task.Task Exit.Publish ()
+verifyVersion : Env -> T.CEP_Name -> T.CEV_Version -> T.CED_Documentation -> Maybe T.BDR_KnownVersions -> Task.Task Exit.Publish ()
 verifyVersion env pkg vsn newDocs publishedVersions =
     reportSemverCheck vsn <|
         case publishedVersions of
@@ -461,7 +461,7 @@ verifyVersion env pkg vsn newDocs publishedVersions =
                     verifyBump env pkg vsn newDocs knownVersions
 
 
-verifyBump : Env -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> T.BDR_KnownVersions -> IO (Result Exit.Publish GoodVersion)
+verifyBump : Env -> T.CEP_Name -> T.CEV_Version -> T.CED_Documentation -> T.BDR_KnownVersions -> IO (Result Exit.Publish GoodVersion)
 verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((T.BDR_KnownVersions latest _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
@@ -500,7 +500,7 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((T.BDR_KnownVersions lates
 -- REGISTER PACKAGES
 
 
-register : T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
+register : T.BH_Manager -> T.CEP_Name -> T.CEV_Version -> T.CED_Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
 register manager pkg vsn docs commitHash sha =
     let
         url : String

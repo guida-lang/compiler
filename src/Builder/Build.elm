@@ -2,7 +2,7 @@ module Builder.Build exposing
     ( DocsGoal(..)
     , ReplArtifacts(..)
     , cachedInterfaceDecoder
-    , fromExposed
+    , fromExposed_Documentation
     , fromExposed_Unit
     , fromPaths
     , fromRepl
@@ -141,9 +141,9 @@ forkWithKey_BB_BResult toComparable keyComparison func dict =
 -- FROM EXPOSED
 
 
-fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty T.CEMN_Raw -> IO (Result T.BRE_BuildProblem docs)
-fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
-    Reporting.trackBuild docsDecoder docsEncoder style <|
+fromExposed_Documentation : Reporting.Style -> T.FilePath -> Details.Details -> DocsGoal T.CED_Documentation -> NE.Nonempty T.CEMN_Raw -> IO (Result T.BRE_BuildProblem T.CED_Documentation)
+fromExposed_Documentation style root details docsGoal ((NE.Nonempty e es) as exposed) =
+    Reporting.trackBuild_Documentation style <|
         \key ->
             makeEnv key root details
                 |> IO.bind

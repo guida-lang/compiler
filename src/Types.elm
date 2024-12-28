@@ -136,6 +136,16 @@ type ION a
     | ReadMVar_Unit (() -> IO a) (Maybe ())
     | TakeMVar_Unit (() -> IO a) (Maybe ()) (Maybe Int)
     | PutMVar_Unit (() -> IO a) (List Int) (Maybe ())
+      -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
+    | NewEmptyMVar_StreamResultBMsgBResultDocumentation (Int -> IO a) Int
+    | ReadMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
+    | TakeMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation) (Maybe Int)
+    | PutMVar_StreamResultBMsgBResultDocumentation (() -> IO a) (List Int) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
+      -- MVars (ChItem_ResultBMsgBResultDocumentation)
+    | NewEmptyMVar_ChItemResultBMsgBResultDocumentation (Int -> IO a) Int
+    | ReadMVar_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO a) (Maybe ChItem_ResultBMsgBResultDocumentation)
+    | TakeMVar_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO a) (Maybe ChItem_ResultBMsgBResultDocumentation) (Maybe Int)
+    | PutMVar_ChItemResultBMsgBResultDocumentation (() -> IO a) (List Int) (Maybe ChItem_ResultBMsgBResultDocumentation)
       -- MVars (MVar_ChItemResultBMsgBResultUnit)
     | NewEmptyMVar_StreamResultBMsgBResultUnit (Int -> IO a) Int
     | ReadMVar_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO a) (Maybe MVar_ChItemResultBMsgBResultUnit)
@@ -188,6 +198,8 @@ type alias RealWorld =
     , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe BB_CachedInterface }
     , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe BED_StatusDict }
     , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
+    , mVars_StreamResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultDocumentation, value : Maybe MVar_ChItemResultBMsgBResultDocumentation }
+    , mVars_ChItemResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultDocumentation, value : Maybe ChItem_ResultBMsgBResultDocumentation }
     , mVars_StreamResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultUnit, value : Maybe MVar_ChItemResultBMsgBResultUnit }
     , mVars_ChItemResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultUnit, value : Maybe ChItem_ResultBMsgBResultUnit }
     , mVars_StreamResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultArtifacts, value : Maybe MVar_ChItemResultBMsgBResultArtifacts }
@@ -303,6 +315,18 @@ type MVarSubscriber_Unit
     = ReadMVarSubscriber_Unit Int
     | TakeMVarSubscriber_Unit Int
     | PutMVarSubscriber_Unit Int ()
+
+
+type MVarSubscriber_StreamResultBMsgBResultDocumentation
+    = ReadMVarSubscriber_StreamResultBMsgBResultDocumentation Int
+    | TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
+    | PutMVarSubscriber_StreamResultBMsgBResultDocumentation Int MVar_ChItemResultBMsgBResultDocumentation
+
+
+type MVarSubscriber_ChItemResultBMsgBResultDocumentation
+    = ReadMVarSubscriber_ChItemResultBMsgBResultDocumentation Int
+    | TakeMVarSubscriber_ChItemResultBMsgBResultDocumentation Int
+    | PutMVarSubscriber_ChItemResultBMsgBResultDocumentation Int ChItem_ResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_StreamResultBMsgBResultUnit
@@ -449,6 +473,16 @@ type Next
     | ReadMVarNext_Unit (() -> IO ())
     | TakeMVarNext_Unit (() -> IO ())
     | PutMVarNext_Unit (() -> IO ())
+      -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
+    | NewEmptyMVarNext_StreamResultBMsgBResultDocumentation (Int -> IO ())
+    | ReadMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
+    | TakeMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
+    | PutMVarNext_StreamResultBMsgBResultDocumentation (() -> IO ())
+      -- MVars (ChItem_ResultBMsgBResultDocumentation)
+    | NewEmptyMVarNext_ChItemResultBMsgBResultDocumentation (Int -> IO ())
+    | ReadMVarNext_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO ())
+    | TakeMVarNext_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO ())
+    | PutMVarNext_ChItemResultBMsgBResultDocumentation (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultUnit)
     | NewEmptyMVarNext_StreamResultBMsgBResultUnit (Int -> IO ())
     | ReadMVarNext_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO ())
@@ -1142,6 +1176,18 @@ type MVar_Unit
 
 {-| FIXME Utils.Main
 -}
+type MVar_StreamResultBMsgBResultDocumentation
+    = MVar_StreamResultBMsgBResultDocumentation Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ChItemResultBMsgBResultDocumentation
+    = MVar_ChItemResultBMsgBResultDocumentation Int
+
+
+{-| FIXME Utils.Main
+-}
 type MVar_StreamResultBMsgBResultUnit
     = MVar_StreamResultBMsgBResultUnit Int
 
@@ -1184,6 +1230,12 @@ type alias Stream a =
 -}
 type ChItem a
     = ChItem a (Stream a)
+
+
+{-| FIXME Utils.Main
+-}
+type ChItem_ResultBMsgBResultDocumentation
+    = ChItem_ResultBMsgBResultDocumentation (Result BR_BMsg (BR_BResult CED_Documentation)) MVar_ChItemResultBMsgBResultDocumentation
 
 
 {-| FIXME Utils.Main
@@ -1463,6 +1515,12 @@ type BED_Local
 
 
 -- DOCUMENTATION
+
+
+{-| FIXME Compiler.Elm.Docs
+-}
+type alias CED_Documentation =
+    Map.Dict String CDN_Name CED_Module
 
 
 {-| FIXME Compiler.Elm.Docs
