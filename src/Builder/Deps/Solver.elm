@@ -434,10 +434,10 @@ constraintsDecoder =
 
 initEnv : IO (Result T.BRE_RegistryProblem T.BDS_Env)
 initEnv =
-    Utils.newEmptyMVar
+    Utils.newEmptyMVar_Manager
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar Http.managerEncoder mvar) Http.getManager)
+                Utils.forkIO (IO.bind (Utils.putMVar_Manager mvar) Http.getManager)
                     |> IO.bind
                         (\_ ->
                             Stuff.getPackageCache
@@ -447,7 +447,7 @@ initEnv =
                                             (Registry.read cache
                                                 |> IO.bind
                                                     (\maybeRegistry ->
-                                                        Utils.readMVar Http.managerDecoder mvar
+                                                        Utils.readMVar_Manager mvar
                                                             |> IO.bind
                                                                 (\manager ->
                                                                     case maybeRegistry of

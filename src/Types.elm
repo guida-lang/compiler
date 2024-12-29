@@ -136,6 +136,11 @@ type ION a
     | ReadMVar_Unit (() -> IO a) (Maybe ())
     | TakeMVar_Unit (() -> IO a) (Maybe ()) (Maybe Int)
     | PutMVar_Unit (() -> IO a) (List Int) (Maybe ())
+      -- MVars (BH_Manager)
+    | NewEmptyMVar_Manager (Int -> IO a) Int
+    | ReadMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager)
+    | TakeMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager) (Maybe Int)
+    | PutMVar_Manager (() -> IO a) (List Int) (Maybe BH_Manager)
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVar_StreamResultBMsgBResultDocumentation (Int -> IO a) Int
     | ReadMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
@@ -198,6 +203,7 @@ type alias RealWorld =
     , mVars_BB_CachedInterface : Array { subscribers : List MVarSubscriber_BB_CachedInterface, value : Maybe BB_CachedInterface }
     , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe BED_StatusDict }
     , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
+    , mVars_Manager : Array { subscribers : List MVarSubscriber_Manager, value : Maybe BH_Manager }
     , mVars_StreamResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultDocumentation, value : Maybe MVar_ChItemResultBMsgBResultDocumentation }
     , mVars_ChItemResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultDocumentation, value : Maybe ChItem_ResultBMsgBResultDocumentation }
     , mVars_StreamResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultUnit, value : Maybe MVar_ChItemResultBMsgBResultUnit }
@@ -309,6 +315,12 @@ type MVarSubscriber_BED_StatusDict
     = ReadMVarSubscriber_BED_StatusDict Int
     | TakeMVarSubscriber_BED_StatusDict Int
     | PutMVarSubscriber_BED_StatusDict Int BED_StatusDict
+
+
+type MVarSubscriber_Manager
+    = ReadMVarSubscriber_Manager Int
+    | TakeMVarSubscriber_Manager Int
+    | PutMVarSubscriber_Manager Int BH_Manager
 
 
 type MVarSubscriber_Unit
@@ -473,6 +485,11 @@ type Next
     | ReadMVarNext_Unit (() -> IO ())
     | TakeMVarNext_Unit (() -> IO ())
     | PutMVarNext_Unit (() -> IO ())
+      -- MVars (BH_Manager)
+    | NewEmptyMVarNext_Manager (Int -> IO ())
+    | ReadMVarNext_Manager (BH_Manager -> IO ())
+    | TakeMVarNext_Manager (BH_Manager -> IO ())
+    | PutMVarNext_Manager (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarNext_StreamResultBMsgBResultDocumentation (Int -> IO ())
     | ReadMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
@@ -1172,6 +1189,12 @@ type MVar_BED_StatusDict
 -}
 type MVar_Unit
     = MVar_Unit Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_Manager
+    = MVar_Manager Int
 
 
 {-| FIXME Utils.Main

@@ -117,6 +117,7 @@ module Utils.Main exposing
     , newEmptyMVar_DictNameMVarDep
     , newEmptyMVar_DictRawMVarMaybeDResult
     , newEmptyMVar_ListMVar
+    , newEmptyMVar_Manager
     , newEmptyMVar_Maybe_BB_Dependencies
     , newEmptyMVar_Maybe_BED_DResult
     , newEmptyMVar_Maybe_BED_Status
@@ -156,6 +157,7 @@ module Utils.Main exposing
     , putMVar_DictNameMVarDep
     , putMVar_DictRawMVarMaybeDResult
     , putMVar_ListMVar
+    , putMVar_Manager
     , putMVar_Maybe_BB_Dependencies
     , putMVar_Maybe_BED_DResult
     , putMVar_Maybe_BED_Status
@@ -179,6 +181,7 @@ module Utils.Main exposing
     , readMVar_DictNameMVarDep
     , readMVar_DictRawMVarMaybeDResult
     , readMVar_ListMVar
+    , readMVar_Manager
     , readMVar_Maybe_BB_Dependencies
     , readMVar_Maybe_BED_DResult
     , readMVar_Maybe_BED_Status
@@ -1061,6 +1064,26 @@ readMVar decoder (T.MVar ref) =
             )
 
 
+readMVar_Manager : T.MVar_Manager -> IO T.BH_Manager
+readMVar_Manager (T.MVar_Manager ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Manager of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_Manager IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Manager = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_Manager index ] } s.mVars_Manager }
+                            , T.ReadMVar_Manager IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_Manager: invalid ref"
+        )
+
+
 readMVar_ChItemResultBMsgBResultDocumentation : T.MVar_ChItemResultBMsgBResultDocumentation -> IO T.ChItem_ResultBMsgBResultDocumentation
 readMVar_ChItemResultBMsgBResultDocumentation (T.MVar_ChItemResultBMsgBResultDocumentation ref) =
     IO
@@ -1335,6 +1358,42 @@ putMVar encoder (T.MVar ref) value =
         )
 
 
+putMVar_Manager : T.MVar_Manager -> T.BH_Manager -> IO ()
+putMVar_Manager (T.MVar_Manager ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Manager of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Manager = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Manager index value ] } s.mVars_Manager }
+                            , T.PutMVar_Manager IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_Manager readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Manager = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Manager }
+                            , T.PutMVar_Manager IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Manager: invalid ref"
+        )
+
+
 putMVar_StreamResultBMsgBResultDocumentation : T.MVar_StreamResultBMsgBResultDocumentation -> T.MVar_ChItemResultBMsgBResultDocumentation -> IO ()
 putMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDocumentation ref) value =
     IO
@@ -1560,6 +1619,17 @@ newEmptyMVar =
             )
         )
         |> IO.fmap T.MVar
+
+
+newEmptyMVar_Manager : IO T.MVar_Manager
+newEmptyMVar_Manager =
+    IO
+        (\_ s ->
+            ( { s | mVars_Manager = Array.push { subscribers = [], value = Nothing } s.mVars_Manager }
+            , T.NewEmptyMVar_Manager IO.pure (Array.length s.mVars_Manager)
+            )
+        )
+        |> IO.fmap T.MVar_Manager
 
 
 newEmptyMVar_StreamResultBMsgBResultDocumentation : IO T.MVar_StreamResultBMsgBResultDocumentation
