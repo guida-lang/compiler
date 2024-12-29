@@ -5,8 +5,6 @@ module Builder.Deps.Solver exposing
     , SolverResult(..)
     , State
     , addToApp
-    , envDecoder
-    , envEncoder
     , initEnv
     , verify
     )
@@ -23,8 +21,6 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO
 import Types as T exposing (IO)
 import Utils.Crash exposing (crash)
@@ -569,58 +565,3 @@ backtrack =
 foldM : (b -> a -> Solver b) -> b -> List a -> Solver b
 foldM f b =
     List.foldl (\a -> bind (\acc -> f acc a)) (pure b)
-
-
-
--- ENCODERS and DECODERS
-
-
-envEncoder : T.BDS_Env -> Encode.Value
-envEncoder (T.BDS_Env cache manager connection registry) =
-    Encode.object
-        [ ( "cache", Stuff.packageCacheEncoder cache )
-        , ( "manager", Http.managerEncoder manager )
-        , ( "connection", connectionEncoder connection )
-        , ( "registry", Registry.registryEncoder registry )
-        ]
-
-
-envDecoder : Decode.Decoder T.BDS_Env
-envDecoder =
-    Decode.map4 T.BDS_Env
-        (Decode.field "cache" Stuff.packageCacheDecoder)
-        (Decode.field "manager" Http.managerDecoder)
-        (Decode.field "connection" connectionDecoder)
-        (Decode.field "registry" Registry.registryDecoder)
-
-
-connectionEncoder : T.BDS_Connection -> Encode.Value
-connectionEncoder connection =
-    case connection of
-        T.BDS_Online manager ->
-            Encode.object
-                [ ( "type", Encode.string "Online" )
-                , ( "manager", Http.managerEncoder manager )
-                ]
-
-        T.BDS_Offline ->
-            Encode.object
-                [ ( "type", Encode.string "Offline" )
-                ]
-
-
-connectionDecoder : Decode.Decoder T.BDS_Connection
-connectionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Online" ->
-                        Decode.map T.BDS_Online (Decode.field "manager" Http.managerDecoder)
-
-                    "Offline" ->
-                        Decode.succeed T.BDS_Offline
-
-                    _ ->
-                        Decode.fail ("Failed to decode Connection's type: " ++ type_)
-            )

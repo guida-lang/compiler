@@ -3,15 +3,11 @@ module Builder.Http exposing
     , MultiPart
     , Sha
     , accept
-    , errorDecoder
-    , errorEncoder
     , filePart
     , get
     , getArchive
     , getManager
     , jsonPart
-    , managerDecoder
-    , managerEncoder
     , post
     , shaToChars
     , stringPart
@@ -21,35 +17,14 @@ module Builder.Http exposing
 
 import Basics.Extra exposing (uncurry)
 import Compiler.Elm.Version as V
-import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
 import Types as T exposing (IO(..))
 import Url.Builder
-import Utils.Main as Utils
 
 
 
 -- MANAGER
-
-
-managerEncoder : T.BH_Manager -> Encode.Value
-managerEncoder _ =
-    Encode.object [ ( "type", Encode.string "Manager" ) ]
-
-
-managerDecoder : Decode.Decoder T.BH_Manager
-managerDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Manager" ->
-                        Decode.succeed T.BH_Manager
-
-                    _ ->
-                        Decode.fail "Failed to decode Http.Manager"
-            )
 
 
 getManager : IO T.BH_Manager
@@ -222,58 +197,3 @@ jsonPart name filePath value =
 stringPart : String -> String -> MultiPart
 stringPart name string =
     StringPart name string
-
-
-
--- ENCODERS and DECODERS
-
-
-errorEncoder : T.BH_Error -> Encode.Value
-errorEncoder error =
-    case error of
-        T.BH_BadUrl url reason ->
-            Encode.object
-                [ ( "type", Encode.string "BadUrl" )
-                , ( "url", Encode.string url )
-                , ( "reason", Encode.string reason )
-                ]
-
-        T.BH_BadHttp url httpExceptionContent ->
-            Encode.object
-                [ ( "type", Encode.string "BadHttp" )
-                , ( "url", Encode.string url )
-                , ( "httpExceptionContent", Utils.httpExceptionContentEncoder httpExceptionContent )
-                ]
-
-        T.BH_BadMystery url someException ->
-            Encode.object
-                [ ( "type", Encode.string "BadMystery" )
-                , ( "url", Encode.string url )
-                , ( "someException", Utils.someExceptionEncoder someException )
-                ]
-
-
-errorDecoder : Decode.Decoder T.BH_Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadUrl" ->
-                        Decode.map2 T.BH_BadUrl
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "reason" Decode.string)
-
-                    "BadHttp" ->
-                        Decode.map2 T.BH_BadHttp
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "httpExceptionContent" Utils.httpExceptionContentDecoder)
-
-                    "BadMystery" ->
-                        Decode.map2 T.BH_BadMystery
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "someException" Utils.someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )

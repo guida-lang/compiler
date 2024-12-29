@@ -4,8 +4,6 @@ module Builder.Deps.Registry exposing
     , getVersions_
     , latest
     , read
-    , registryDecoder
-    , registryEncoder
     , update
     )
 

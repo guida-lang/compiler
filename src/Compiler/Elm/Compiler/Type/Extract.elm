@@ -5,8 +5,6 @@ module Compiler.Elm.Compiler.Type.Extract exposing
     , fromType
     , merge
     , mergeMany
-    , typesDecoder
-    , typesEncoder
     )
 
 import Compiler.AST.Canonical as Can
@@ -16,12 +14,8 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Type as T
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Types as T
 import Utils.Main as Utils
@@ -296,33 +290,3 @@ traverse f =
 tupleTraverse : (b -> Extractor c) -> ( a, b ) -> Extractor ( a, c )
 tupleTraverse f ( a, b ) =
     fmap (Tuple.pair a) (f b)
-
-
-
--- ENCODERS and DECODERS
-
-
-typesEncoder : T.CECTE_Types -> Encode.Value
-typesEncoder (T.CECTE_Types types) =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder types_Encoder types
-
-
-typesDecoder : Decode.Decoder T.CECTE_Types
-typesDecoder =
-    Decode.map T.CECTE_Types (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
-
-
-types_Encoder : T.CECTE_Types_ -> Encode.Value
-types_Encoder (T.CECTE_Types_ unionInfo aliasInfo) =
-    Encode.object
-        [ ( "type", Encode.string "Types_" )
-        , ( "unionInfo", E.assocListDict compare Encode.string Can.unionEncoder unionInfo )
-        , ( "aliasInfo", E.assocListDict compare Encode.string Can.aliasEncoder aliasInfo )
-        ]
-
-
-types_Decoder : Decode.Decoder T.CECTE_Types_
-types_Decoder =
-    Decode.map2 T.CECTE_Types_
-        (Decode.field "unionInfo" (D.assocListDict identity Decode.string Can.unionDecoder))
-        (Decode.field "aliasInfo" (D.assocListDict identity Decode.string Can.aliasDecoder))

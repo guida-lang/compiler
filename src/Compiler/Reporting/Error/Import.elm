@@ -1,24 +1,12 @@
-module Compiler.Reporting.Error.Import exposing
-    ( errorDecoder
-    , errorEncoder
-    , problemDecoder
-    , problemEncoder
-    , toReport
-    )
+module Compiler.Reporting.Error.Import exposing (toReport)
 
-import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Types as T
 
 
@@ -164,94 +152,3 @@ toSuggestions : T.CEMN_Raw -> EverySet String T.CEMN_Raw -> List T.CEMN_Raw
 toSuggestions name unimportedModules =
     List.take 4 <|
         Suggest.sort name identity (EverySet.toList compare unimportedModules)
-
-
-
--- ENCODERS and DECODERS
-
-
-problemEncoder : T.CREI_Problem -> Encode.Value
-problemEncoder problem =
-    case problem of
-        T.CREI_NotFound ->
-            Encode.object
-                [ ( "type", Encode.string "NotFound" )
-                ]
-
-        T.CREI_Ambiguous path paths pkg pkgs ->
-            Encode.object
-                [ ( "type", Encode.string "Ambiguous" )
-                , ( "path", Encode.string path )
-                , ( "paths", Encode.list Encode.string paths )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "pkgs", Encode.list Pkg.nameEncoder pkgs )
-                ]
-
-        T.CREI_AmbiguousLocal path1 path2 paths ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousLocal" )
-                , ( "path1", Encode.string path1 )
-                , ( "path2", Encode.string path2 )
-                , ( "paths", Encode.list Encode.string paths )
-                ]
-
-        T.CREI_AmbiguousForeign pkg1 pkg2 pkgs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousForeign" )
-                , ( "pkg1", Pkg.nameEncoder pkg1 )
-                , ( "pkg2", Pkg.nameEncoder pkg2 )
-                , ( "pkgs", Encode.list Pkg.nameEncoder pkgs )
-                ]
-
-
-problemDecoder : Decode.Decoder T.CREI_Problem
-problemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NotFound" ->
-                        Decode.succeed T.CREI_NotFound
-
-                    "Ambiguous" ->
-                        Decode.map4 T.CREI_Ambiguous
-                            (Decode.field "path" Decode.string)
-                            (Decode.field "paths" (Decode.list Decode.string))
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
-
-                    "AmbiguousLocal" ->
-                        Decode.map3 T.CREI_AmbiguousLocal
-                            (Decode.field "path1" Decode.string)
-                            (Decode.field "path2" Decode.string)
-                            (Decode.field "paths" (Decode.list Decode.string))
-
-                    "AmbiguousForeign" ->
-                        Decode.map3 T.CREI_AmbiguousForeign
-                            (Decode.field "pkg1" Pkg.nameDecoder)
-                            (Decode.field "pkg2" Pkg.nameDecoder)
-                            (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode Problem's type: " ++ type_)
-            )
-
-
-errorEncoder : T.CREI_Error -> Encode.Value
-errorEncoder (T.CREI_Error region name unimportedModules problem) =
-    Encode.object
-        [ ( "type", Encode.string "Error" )
-        , ( "region", A.regionEncoder region )
-        , ( "name", ModuleName.rawEncoder name )
-        , ( "unimportedModules", EncodeX.everySet compare ModuleName.rawEncoder unimportedModules )
-        , ( "problem", problemEncoder problem )
-        ]
-
-
-errorDecoder : Decode.Decoder T.CREI_Error
-errorDecoder =
-    Decode.map4 T.CREI_Error
-        (Decode.field "region" A.regionDecoder)
-        (Decode.field "name" ModuleName.rawDecoder)
-        (Decode.field "unimportedModules" (DecodeX.everySet identity ModuleName.rawDecoder))
-        (Decode.field "problem" problemDecoder)

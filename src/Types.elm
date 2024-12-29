@@ -1,4 +1,284 @@
-module Types exposing (..)
+module Types exposing
+    ( BBW_Scope(..)
+    , BB_Artifacts(..)
+    , BB_BResult(..)
+    , BB_CachedInterface(..)
+    , BB_Dep
+    , BB_Dependencies
+    , BB_DocsNeed(..)
+    , BB_Module(..)
+    , BB_ResultDict
+    , BB_Root(..)
+    , BB_RootInfo(..)
+    , BB_RootLocation(..)
+    , BB_RootResult(..)
+    , BB_RootStatus(..)
+    , BB_Status(..)
+    , BB_StatusDict
+    , BDR_KnownVersions(..)
+    , BDR_Registry(..)
+    , BDS_Connection(..)
+    , BDS_Env(..)
+    , BED_BuildID
+    , BED_DResult(..)
+    , BED_DocsStatus(..)
+    , BED_Local(..)
+    , BED_Status(..)
+    , BED_StatusDict
+    , BF_Time(..)
+    , BH_Error(..)
+    , BH_Manager(..)
+    , BRE_BuildProblem(..)
+    , BRE_BuildProjectProblem(..)
+    , BRE_DetailsBadDep(..)
+    , BRE_PackageProblem(..)
+    , BRE_RegistryProblem(..)
+    , BR_BKey
+    , BR_BMsg(..)
+    , BR_BResult
+    , BR_DMsg(..)
+    , BR_Key(..)
+    , BS_PackageCache(..)
+    , CASTC_Alias(..)
+    , CASTC_AliasType(..)
+    , CASTC_Annotation(..)
+    , CASTC_CaseBranch(..)
+    , CASTC_Ctor(..)
+    , CASTC_CtorOpts(..)
+    , CASTC_Decls(..)
+    , CASTC_Def(..)
+    , CASTC_Expr
+    , CASTC_Expr_(..)
+    , CASTC_FieldType(..)
+    , CASTC_FieldUpdate(..)
+    , CASTC_FreeVars
+    , CASTC_Pattern
+    , CASTC_PatternCtorArg(..)
+    , CASTC_Pattern_(..)
+    , CASTC_Type(..)
+    , CASTC_Union(..)
+    , CASTO_Choice(..)
+    , CASTO_Decider(..)
+    , CASTO_Def(..)
+    , CASTO_Destructor(..)
+    , CASTO_EffectsType(..)
+    , CASTO_Expr(..)
+    , CASTO_Global(..)
+    , CASTO_GlobalGraph(..)
+    , CASTO_LocalGraph(..)
+    , CASTO_Main(..)
+    , CASTO_Node(..)
+    , CASTO_Path(..)
+    , CASTS_Alias(..)
+    , CASTS_Comment(..)
+    , CASTS_Def(..)
+    , CASTS_Docs(..)
+    , CASTS_Effects(..)
+    , CASTS_Exposed(..)
+    , CASTS_Exposing(..)
+    , CASTS_Expr
+    , CASTS_Expr_(..)
+    , CASTS_Import(..)
+    , CASTS_Infix(..)
+    , CASTS_Manager(..)
+    , CASTS_Module(..)
+    , CASTS_Pattern
+    , CASTS_Pattern_(..)
+    , CASTS_Port(..)
+    , CASTS_Privacy(..)
+    , CASTS_Type
+    , CASTS_Type_(..)
+    , CASTS_Union(..)
+    , CASTS_Value(..)
+    , CASTS_VarType(..)
+    , CASTUB_Associativity(..)
+    , CASTUB_Precedence
+    , CASTUS_Source(..)
+    , CASTUS_Type(..)
+    , CASTUS_Types(..)
+    , CAZ_Archive
+    , CAZ_Entry
+    , CDI_ZeroBased(..)
+    , CDN_Name
+    , CECTE_Types(..)
+    , CECTE_Types_(..)
+    , CECT_Type(..)
+    , CED_Alias(..)
+    , CED_Artifacts(..)
+    , CED_Binop(..)
+    , CED_Comment
+    , CED_Dep
+    , CED_Documentation
+    , CED_Module(..)
+    , CED_Union(..)
+    , CED_Value(..)
+    , CEI_Alias(..)
+    , CEI_Binop(..)
+    , CEI_DependencyInterface(..)
+    , CEI_Interface(..)
+    , CEI_Union(..)
+    , CEK_Chunk(..)
+    , CEMN_Canonical(..)
+    , CEMN_Raw
+    , CEP_Author
+    , CEP_Name
+    , CEP_Project
+    , CEV_Version(..)
+    , CNPM_Context(..)
+    , CNPM_Error(..)
+    , CNPM_Literal(..)
+    , CNPM_Pattern(..)
+    , CODT_Path(..)
+    , CODT_Test(..)
+    , CPP_Col
+    , CPP_Row
+    , CPP_Snippet(..)
+    , CPS_BadOperator(..)
+    , CRA_Located(..)
+    , CRA_Position(..)
+    , CRA_Region(..)
+    , CREC_BadArityContext(..)
+    , CREC_DuplicatePatternContext(..)
+    , CREC_Error(..)
+    , CREC_InvalidPayload(..)
+    , CREC_PortProblem(..)
+    , CREC_PossibleNames
+    , CREC_VarKind(..)
+    , CRED_DefProblem(..)
+    , CRED_Error(..)
+    , CRED_NameProblem(..)
+    , CRED_SyntaxProblem(..)
+    , CREI_Error(..)
+    , CREI_Problem(..)
+    , CREM_Error(..)
+    , CRES_Case(..)
+    , CRES_Char(..)
+    , CRES_CustomType(..)
+    , CRES_Decl(..)
+    , CRES_DeclDef(..)
+    , CRES_DeclType(..)
+    , CRES_Def(..)
+    , CRES_Destruct(..)
+    , CRES_Error(..)
+    , CRES_Escape(..)
+    , CRES_Exposing(..)
+    , CRES_Expr(..)
+    , CRES_Func(..)
+    , CRES_If(..)
+    , CRES_Let(..)
+    , CRES_List_(..)
+    , CRES_Module(..)
+    , CRES_Number(..)
+    , CRES_PList(..)
+    , CRES_PRecord(..)
+    , CRES_PTuple(..)
+    , CRES_Pattern(..)
+    , CRES_Port(..)
+    , CRES_Record(..)
+    , CRES_Space(..)
+    , CRES_String_(..)
+    , CRES_TRecord(..)
+    , CRES_TTuple(..)
+    , CRES_Tuple(..)
+    , CRES_Type(..)
+    , CRES_TypeAlias(..)
+    , CRET_Category(..)
+    , CRET_Context(..)
+    , CRET_Error(..)
+    , CRET_Expected(..)
+    , CRET_MaybeName(..)
+    , CRET_PCategory(..)
+    , CRET_PContext(..)
+    , CRET_PExpected(..)
+    , CRET_SubContext(..)
+    , CRE_Error(..)
+    , CRE_Module
+    , CRRTL_Exposing(..)
+    , CRRTL_Import
+    , CRRTL_Localizer(..)
+    , CTE_Extension(..)
+    , CTE_Super(..)
+    , CTE_Type(..)
+    , ChItem_Maybe_DMsg(..)
+    , ChItem_ResultBMsgBResultArtifacts(..)
+    , ChItem_ResultBMsgBResultDocumentation(..)
+    , ChItem_ResultBMsgBResultUnit(..)
+    , FilePath
+    , Handle(..)
+    , IO(..)
+    , IOMode(..)
+    , ION(..)
+    , MVarSubscriber_BB_BResult(..)
+    , MVarSubscriber_BB_CachedInterface(..)
+    , MVarSubscriber_BB_ResultDict(..)
+    , MVarSubscriber_BB_RootResult(..)
+    , MVarSubscriber_BB_RootStatus(..)
+    , MVarSubscriber_BB_Status(..)
+    , MVarSubscriber_BB_StatusDict(..)
+    , MVarSubscriber_BED_StatusDict(..)
+    , MVarSubscriber_CED_Dep(..)
+    , MVarSubscriber_ChItemResultBMsgBResultArtifacts(..)
+    , MVarSubscriber_ChItemResultBMsgBResultDocumentation(..)
+    , MVarSubscriber_ChItemResultBMsgBResultUnit(..)
+    , MVarSubscriber_ChItem_Maybe_DMsg(..)
+    , MVarSubscriber_DictNameMVarDep(..)
+    , MVarSubscriber_DictRawMVarMaybeDResult(..)
+    , MVarSubscriber_ListMVar(..)
+    , MVarSubscriber_Manager(..)
+    , MVarSubscriber_MaybeDep(..)
+    , MVarSubscriber_Maybe_BB_Dependencies(..)
+    , MVarSubscriber_Maybe_BED_DResult(..)
+    , MVarSubscriber_Maybe_BED_Status(..)
+    , MVarSubscriber_Maybe_CASTO_GlobalGraph(..)
+    , MVarSubscriber_Maybe_CASTO_LocalGraph(..)
+    , MVarSubscriber_Maybe_CECTE_Types(..)
+    , MVarSubscriber_ResultRegistryProblemEnv(..)
+    , MVarSubscriber_Result_BuildProjectProblem_RootInfo(..)
+    , MVarSubscriber_StreamResultBMsgBResultArtifacts(..)
+    , MVarSubscriber_StreamResultBMsgBResultDocumentation(..)
+    , MVarSubscriber_StreamResultBMsgBResultUnit(..)
+    , MVarSubscriber_Stream_Maybe_DMsg(..)
+    , MVarSubscriber_Unit(..)
+    , MVar_BB_BResult(..)
+    , MVar_BB_CachedInterface(..)
+    , MVar_BB_ResultDict(..)
+    , MVar_BB_RootResult(..)
+    , MVar_BB_RootStatus(..)
+    , MVar_BB_Status(..)
+    , MVar_BB_StatusDict(..)
+    , MVar_BED_StatusDict(..)
+    , MVar_CED_Dep(..)
+    , MVar_ChItemResultBMsgBResultArtifacts(..)
+    , MVar_ChItemResultBMsgBResultDocumentation(..)
+    , MVar_ChItemResultBMsgBResultUnit(..)
+    , MVar_ChItem_Maybe_DMsg(..)
+    , MVar_DictNameMVarDep(..)
+    , MVar_DictRawMVarMaybeDResult(..)
+    , MVar_ListMVar(..)
+    , MVar_Manager(..)
+    , MVar_MaybeDep(..)
+    , MVar_Maybe_BB_Dependencies(..)
+    , MVar_Maybe_BED_DResult(..)
+    , MVar_Maybe_BED_Status(..)
+    , MVar_Maybe_CASTO_GlobalGraph(..)
+    , MVar_Maybe_CASTO_LocalGraph(..)
+    , MVar_Maybe_CECTE_Types(..)
+    , MVar_ResultRegistryProblemEnv(..)
+    , MVar_Result_BuildProjectProblem_RootInfo(..)
+    , MVar_StreamResultBMsgBResultArtifacts(..)
+    , MVar_StreamResultBMsgBResultDocumentation(..)
+    , MVar_StreamResultBMsgBResultUnit(..)
+    , MVar_Stream_Maybe_DMsg(..)
+    , MVar_Unit(..)
+    , Next(..)
+    , RealWorld
+    , ReplState(..)
+    , UM_HttpExceptionContent(..)
+    , UM_HttpResponse(..)
+    , UM_HttpResponseHeaders
+    , UM_HttpStatus(..)
+    , UM_SomeException(..)
+    )
 
 {-| -}
 
@@ -52,11 +332,6 @@ type ION a
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
     | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
-      -- MVars
-    | NewEmptyMVar (Int -> IO a) Int
-    | ReadMVar (Encode.Value -> IO a) (Maybe Encode.Value)
-    | TakeMVar (Encode.Value -> IO a) (Maybe Encode.Value) (Maybe Int)
-    | PutMVar (() -> IO a) (List Int) (Maybe Encode.Value)
       -- MVars (Maybe BED_Status)
     | NewEmptyMVar_Maybe_BED_Status (Int -> IO a) Int
     | ReadMVar_Maybe_BED_Status (Maybe BED_Status -> IO a) (Maybe (Maybe BED_Status))
@@ -105,36 +380,29 @@ type ION a
       -- MVars (Result BRE_RegistryProblem BDS_Env)
     | NewEmptyMVar_ResultRegistryProblemEnv (Int -> IO a) Int
     | ReadMVar_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO a) (Maybe (Result BRE_RegistryProblem BDS_Env))
-    | TakeMVar_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO a) (Maybe (Result BRE_RegistryProblem BDS_Env)) (Maybe Int)
     | PutMVar_ResultRegistryProblemEnv (() -> IO a) (List Int) (Maybe (Result BRE_RegistryProblem BDS_Env))
       -- MVars (CED_Dep)
     | NewEmptyMVar_CED_Dep (Int -> IO a) Int
     | ReadMVar_CED_Dep (CED_Dep -> IO a) (Maybe CED_Dep)
-    | TakeMVar_CED_Dep (CED_Dep -> IO a) (Maybe CED_Dep) (Maybe Int)
     | PutMVar_CED_Dep (() -> IO a) (List Int) (Maybe CED_Dep)
       -- MVars (Maybe CECTE_Types)
     | NewEmptyMVar_Maybe_CECTE_Types (Int -> IO a) Int
     | ReadMVar_Maybe_CECTE_Types (Maybe CECTE_Types -> IO a) (Maybe (Maybe CECTE_Types))
-    | TakeMVar_Maybe_CECTE_Types (Maybe CECTE_Types -> IO a) (Maybe (Maybe CECTE_Types)) (Maybe Int)
     | PutMVar_Maybe_CECTE_Types (() -> IO a) (List Int) (Maybe (Maybe CECTE_Types))
       -- MVars (Maybe BB_Dependencies)
     | NewEmptyMVar_Maybe_BB_Dependencies (Int -> IO a) Int
     | ReadMVar_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO a) (Maybe (Maybe BB_Dependencies))
-    | TakeMVar_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO a) (Maybe (Maybe BB_Dependencies)) (Maybe Int)
     | PutMVar_Maybe_BB_Dependencies (() -> IO a) (List Int) (Maybe (Maybe BB_Dependencies))
       -- MVars (Dict ( String, String ) CEP_Name MVar_CED_Dep)
     | NewEmptyMVar_DictNameMVarDep (Int -> IO a) Int
     | ReadMVar_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep))
-    | TakeMVar_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO a) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep)) (Maybe Int)
     | PutMVar_DictNameMVarDep (() -> IO a) (List Int) (Maybe (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep))
       -- MVars (Dict String CEMN_Raw MVar_Maybe_BED_DResult)
     | NewEmptyMVar_DictRawMVarMaybeDResult (Int -> IO a) Int
     | ReadMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
-    | TakeMVar_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO a) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)) (Maybe Int)
     | PutMVar_DictRawMVarMaybeDResult (() -> IO a) (List Int) (Maybe (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult))
       -- MVars (List (MVar_Unit))
     | NewEmptyMVar_ListMVar (Int -> IO a) Int
-    | ReadMVar_ListMVar (List MVar_Unit -> IO a) (Maybe (List MVar_Unit))
     | TakeMVar_ListMVar (List MVar_Unit -> IO a) (Maybe (List MVar_Unit)) (Maybe Int)
     | PutMVar_ListMVar (() -> IO a) (List Int) (Maybe (List MVar_Unit))
       -- MVars (BB_CachedInterface)
@@ -155,58 +423,43 @@ type ION a
       -- MVars (BH_Manager)
     | NewEmptyMVar_Manager (Int -> IO a) Int
     | ReadMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager)
-    | TakeMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager) (Maybe Int)
     | PutMVar_Manager (() -> IO a) (List Int) (Maybe BH_Manager)
       -- MVars (BB_ResultDict)
     | NewEmptyMVar_BB_ResultDict (Int -> IO a) Int
     | ReadMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict)
-    | TakeMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict) (Maybe Int)
     | PutMVar_BB_ResultDict (() -> IO a) (List Int) (Maybe BB_ResultDict)
       -- MVars (MVar_ChItem_Maybe_DMsg)
     | NewEmptyMVar_Stream_Maybe_DMsg (Int -> IO a) Int
-    | ReadMVar_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO a) (Maybe MVar_ChItem_Maybe_DMsg)
     | TakeMVar_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO a) (Maybe MVar_ChItem_Maybe_DMsg) (Maybe Int)
     | PutMVar_Stream_Maybe_DMsg (() -> IO a) (List Int) (Maybe MVar_ChItem_Maybe_DMsg)
       -- MVars (ChItem_Maybe_DMsg)
     | NewEmptyMVar_ChItem_Maybe_DMsg (Int -> IO a) Int
     | ReadMVar_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO a) (Maybe ChItem_Maybe_DMsg)
-    | TakeMVar_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO a) (Maybe ChItem_Maybe_DMsg) (Maybe Int)
     | PutMVar_ChItem_Maybe_DMsg (() -> IO a) (List Int) (Maybe ChItem_Maybe_DMsg)
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVar_StreamResultBMsgBResultDocumentation (Int -> IO a) Int
-    | ReadMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
     | TakeMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation) (Maybe Int)
     | PutMVar_StreamResultBMsgBResultDocumentation (() -> IO a) (List Int) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
       -- MVars (ChItem_ResultBMsgBResultDocumentation)
     | NewEmptyMVar_ChItemResultBMsgBResultDocumentation (Int -> IO a) Int
     | ReadMVar_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO a) (Maybe ChItem_ResultBMsgBResultDocumentation)
-    | TakeMVar_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO a) (Maybe ChItem_ResultBMsgBResultDocumentation) (Maybe Int)
     | PutMVar_ChItemResultBMsgBResultDocumentation (() -> IO a) (List Int) (Maybe ChItem_ResultBMsgBResultDocumentation)
       -- MVars (MVar_ChItemResultBMsgBResultUnit)
     | NewEmptyMVar_StreamResultBMsgBResultUnit (Int -> IO a) Int
-    | ReadMVar_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO a) (Maybe MVar_ChItemResultBMsgBResultUnit)
     | TakeMVar_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO a) (Maybe MVar_ChItemResultBMsgBResultUnit) (Maybe Int)
     | PutMVar_StreamResultBMsgBResultUnit (() -> IO a) (List Int) (Maybe MVar_ChItemResultBMsgBResultUnit)
       -- MVars (ChItem_ResultBMsgBResultUnit)
     | NewEmptyMVar_ChItemResultBMsgBResultUnit (Int -> IO a) Int
     | ReadMVar_ChItemResultBMsgBResultUnit (ChItem_ResultBMsgBResultUnit -> IO a) (Maybe ChItem_ResultBMsgBResultUnit)
-    | TakeMVar_ChItemResultBMsgBResultUnit (ChItem_ResultBMsgBResultUnit -> IO a) (Maybe ChItem_ResultBMsgBResultUnit) (Maybe Int)
     | PutMVar_ChItemResultBMsgBResultUnit (() -> IO a) (List Int) (Maybe ChItem_ResultBMsgBResultUnit)
       -- MVars (MVar_ChItemResultBMsgBResultArtifacts)
     | NewEmptyMVar_StreamResultBMsgBResultArtifacts (Int -> IO a) Int
-    | ReadMVar_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO a) (Maybe MVar_ChItemResultBMsgBResultArtifacts)
     | TakeMVar_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO a) (Maybe MVar_ChItemResultBMsgBResultArtifacts) (Maybe Int)
     | PutMVar_StreamResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe MVar_ChItemResultBMsgBResultArtifacts)
       -- MVars (ChItem_ResultBMsgBResultArtifacts)
     | NewEmptyMVar_ChItemResultBMsgBResultArtifacts (Int -> IO a) Int
     | ReadMVar_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO a) (Maybe ChItem_ResultBMsgBResultArtifacts)
-    | TakeMVar_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO a) (Maybe ChItem_ResultBMsgBResultArtifacts) (Maybe Int)
     | PutMVar_ChItemResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe ChItem_ResultBMsgBResultArtifacts)
-      -- MVars (Result BR_BMsg (BR_BResult BB_Artifacts))
-    | NewEmptyMVar_ResultBMsgBResultArtifacts (Int -> IO a) Int
-    | ReadMVar_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO a) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)))
-    | TakeMVar_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO a) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts))) (Maybe Int)
-    | PutMVar_ResultBMsgBResultArtifacts (() -> IO a) (List Int) (Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)))
 
 
 type alias RealWorld =
@@ -216,7 +469,6 @@ type alias RealWorld =
     , homedir : FilePath
     , progName : String
     , state : ReplState
-    , mVars : Array { subscribers : List MVarSubscriber, value : Maybe Encode.Value }
     , mVars_Maybe_BED_Status : Array { subscribers : List MVarSubscriber_Maybe_BED_Status, value : Maybe (Maybe BED_Status) }
     , mVars_Maybe_BED_DResult : Array { subscribers : List MVarSubscriber_Maybe_BED_DResult, value : Maybe (Maybe BED_DResult) }
     , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe CASTO_LocalGraph) }
@@ -248,74 +500,57 @@ type alias RealWorld =
     , mVars_ChItemResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultUnit, value : Maybe ChItem_ResultBMsgBResultUnit }
     , mVars_StreamResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultArtifacts, value : Maybe MVar_ChItemResultBMsgBResultArtifacts }
     , mVars_ChItemResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultArtifacts, value : Maybe ChItem_ResultBMsgBResultArtifacts }
-    , mVars_ResultBMsgBResultArtifacts : Array { subscribers : List MVarSubscriber_ResultBMsgBResultArtifacts, value : Maybe (Result BR_BMsg (BR_BResult BB_Artifacts)) }
     , next : Dict Int Next
     }
 
 
-type MVarSubscriber
-    = ReadMVarSubscriber Int
-    | TakeMVarSubscriber Int
-    | PutMVarSubscriber Int Encode.Value
-
-
 type MVarSubscriber_Maybe_BED_Status
     = ReadMVarSubscriber_Maybe_BED_Status Int
-    | TakeMVarSubscriber_Maybe_BED_Status Int
     | PutMVarSubscriber_Maybe_BED_Status Int (Maybe BED_Status)
 
 
 type MVarSubscriber_Maybe_BED_DResult
     = ReadMVarSubscriber_Maybe_BED_DResult Int
-    | TakeMVarSubscriber_Maybe_BED_DResult Int
     | PutMVarSubscriber_Maybe_BED_DResult Int (Maybe BED_DResult)
 
 
 type MVarSubscriber_Maybe_CASTO_LocalGraph
     = ReadMVarSubscriber_Maybe_CASTO_LocalGraph Int
-    | TakeMVarSubscriber_Maybe_CASTO_LocalGraph Int
     | PutMVarSubscriber_Maybe_CASTO_LocalGraph Int (Maybe CASTO_LocalGraph)
 
 
 type MVarSubscriber_Maybe_CASTO_GlobalGraph
     = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
-    | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe CASTO_GlobalGraph)
 
 
 type MVarSubscriber_Result_BuildProjectProblem_RootInfo
     = ReadMVarSubscriber_Result_BuildProjectProblem_RootInfo Int
-    | TakeMVarSubscriber_Result_BuildProjectProblem_RootInfo Int
     | PutMVarSubscriber_Result_BuildProjectProblem_RootInfo Int (Result BRE_BuildProjectProblem BB_RootInfo)
 
 
 type MVarSubscriber_MaybeDep
     = ReadMVarSubscriber_MaybeDep Int
-    | TakeMVarSubscriber_MaybeDep Int
     | PutMVarSubscriber_MaybeDep Int (Maybe BB_Dep)
 
 
 type MVarSubscriber_BB_RootResult
     = ReadMVarSubscriber_BB_RootResult Int
-    | TakeMVarSubscriber_BB_RootResult Int
     | PutMVarSubscriber_BB_RootResult Int BB_RootResult
 
 
 type MVarSubscriber_BB_RootStatus
     = ReadMVarSubscriber_BB_RootStatus Int
-    | TakeMVarSubscriber_BB_RootStatus Int
     | PutMVarSubscriber_BB_RootStatus Int BB_RootStatus
 
 
 type MVarSubscriber_BB_BResult
     = ReadMVarSubscriber_BB_BResult Int
-    | TakeMVarSubscriber_BB_BResult Int
     | PutMVarSubscriber_BB_BResult Int BB_BResult
 
 
 type MVarSubscriber_BB_Status
     = ReadMVarSubscriber_BB_Status Int
-    | TakeMVarSubscriber_BB_Status Int
     | PutMVarSubscriber_BB_Status Int BB_Status
 
 
@@ -327,43 +562,36 @@ type MVarSubscriber_BB_StatusDict
 
 type MVarSubscriber_ResultRegistryProblemEnv
     = ReadMVarSubscriber_ResultRegistryProblemEnv Int
-    | TakeMVarSubscriber_ResultRegistryProblemEnv Int
     | PutMVarSubscriber_ResultRegistryProblemEnv Int (Result BRE_RegistryProblem BDS_Env)
 
 
 type MVarSubscriber_CED_Dep
     = ReadMVarSubscriber_CED_Dep Int
-    | TakeMVarSubscriber_CED_Dep Int
     | PutMVarSubscriber_CED_Dep Int CED_Dep
 
 
 type MVarSubscriber_Maybe_CECTE_Types
     = ReadMVarSubscriber_Maybe_CECTE_Types Int
-    | TakeMVarSubscriber_Maybe_CECTE_Types Int
     | PutMVarSubscriber_Maybe_CECTE_Types Int (Maybe CECTE_Types)
 
 
 type MVarSubscriber_Maybe_BB_Dependencies
     = ReadMVarSubscriber_Maybe_BB_Dependencies Int
-    | TakeMVarSubscriber_Maybe_BB_Dependencies Int
     | PutMVarSubscriber_Maybe_BB_Dependencies Int (Maybe BB_Dependencies)
 
 
 type MVarSubscriber_DictNameMVarDep
     = ReadMVarSubscriber_DictNameMVarDep Int
-    | TakeMVarSubscriber_DictNameMVarDep Int
     | PutMVarSubscriber_DictNameMVarDep Int (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep)
 
 
 type MVarSubscriber_DictRawMVarMaybeDResult
     = ReadMVarSubscriber_DictRawMVarMaybeDResult Int
-    | TakeMVarSubscriber_DictRawMVarMaybeDResult Int
     | PutMVarSubscriber_DictRawMVarMaybeDResult Int (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)
 
 
 type MVarSubscriber_ListMVar
-    = ReadMVarSubscriber_ListMVar Int
-    | TakeMVarSubscriber_ListMVar Int
+    = TakeMVarSubscriber_ListMVar Int
     | PutMVarSubscriber_ListMVar Int (List MVar_Unit)
 
 
@@ -381,13 +609,11 @@ type MVarSubscriber_BED_StatusDict
 
 type MVarSubscriber_Manager
     = ReadMVarSubscriber_Manager Int
-    | TakeMVarSubscriber_Manager Int
     | PutMVarSubscriber_Manager Int BH_Manager
 
 
 type MVarSubscriber_BB_ResultDict
     = ReadMVarSubscriber_BB_ResultDict Int
-    | TakeMVarSubscriber_BB_ResultDict Int
     | PutMVarSubscriber_BB_ResultDict Int BB_ResultDict
 
 
@@ -398,57 +624,43 @@ type MVarSubscriber_Unit
 
 
 type MVarSubscriber_Stream_Maybe_DMsg
-    = ReadMVarSubscriber_Stream_Maybe_DMsg Int
-    | TakeMVarSubscriber_Stream_Maybe_DMsg Int
+    = TakeMVarSubscriber_Stream_Maybe_DMsg Int
     | PutMVarSubscriber_Stream_Maybe_DMsg Int MVar_ChItem_Maybe_DMsg
 
 
 type MVarSubscriber_ChItem_Maybe_DMsg
     = ReadMVarSubscriber_ChItem_Maybe_DMsg Int
-    | TakeMVarSubscriber_ChItem_Maybe_DMsg Int
     | PutMVarSubscriber_ChItem_Maybe_DMsg Int ChItem_Maybe_DMsg
 
 
 type MVarSubscriber_StreamResultBMsgBResultDocumentation
-    = ReadMVarSubscriber_StreamResultBMsgBResultDocumentation Int
-    | TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
     | PutMVarSubscriber_StreamResultBMsgBResultDocumentation Int MVar_ChItemResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_ChItemResultBMsgBResultDocumentation
     = ReadMVarSubscriber_ChItemResultBMsgBResultDocumentation Int
-    | TakeMVarSubscriber_ChItemResultBMsgBResultDocumentation Int
     | PutMVarSubscriber_ChItemResultBMsgBResultDocumentation Int ChItem_ResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_StreamResultBMsgBResultUnit
-    = ReadMVarSubscriber_StreamResultBMsgBResultUnit Int
-    | TakeMVarSubscriber_StreamResultBMsgBResultUnit Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultUnit Int
     | PutMVarSubscriber_StreamResultBMsgBResultUnit Int MVar_ChItemResultBMsgBResultUnit
 
 
 type MVarSubscriber_ChItemResultBMsgBResultUnit
     = ReadMVarSubscriber_ChItemResultBMsgBResultUnit Int
-    | TakeMVarSubscriber_ChItemResultBMsgBResultUnit Int
     | PutMVarSubscriber_ChItemResultBMsgBResultUnit Int ChItem_ResultBMsgBResultUnit
 
 
 type MVarSubscriber_StreamResultBMsgBResultArtifacts
-    = ReadMVarSubscriber_StreamResultBMsgBResultArtifacts Int
-    | TakeMVarSubscriber_StreamResultBMsgBResultArtifacts Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultArtifacts Int
     | PutMVarSubscriber_StreamResultBMsgBResultArtifacts Int MVar_ChItemResultBMsgBResultArtifacts
 
 
 type MVarSubscriber_ChItemResultBMsgBResultArtifacts
     = ReadMVarSubscriber_ChItemResultBMsgBResultArtifacts Int
-    | TakeMVarSubscriber_ChItemResultBMsgBResultArtifacts Int
     | PutMVarSubscriber_ChItemResultBMsgBResultArtifacts Int ChItem_ResultBMsgBResultArtifacts
-
-
-type MVarSubscriber_ResultBMsgBResultArtifacts
-    = ReadMVarSubscriber_ResultBMsgBResultArtifacts Int
-    | TakeMVarSubscriber_ResultBMsgBResultArtifacts Int
-    | PutMVarSubscriber_ResultBMsgBResultArtifacts Int (Result BR_BMsg (BR_BResult BB_Artifacts))
 
 
 type Next
@@ -481,11 +693,6 @@ type Next
     | DirRemoveDirectoryRecursiveNext (() -> IO ())
     | DirWithCurrentDirectoryNext (() -> IO ())
     | ReplGetInputLineWithInitialNext (Maybe String -> IO ())
-      -- MVars
-    | NewEmptyMVarNext (Int -> IO ())
-    | ReadMVarNext (Encode.Value -> IO ())
-    | TakeMVarNext (Encode.Value -> IO ())
-    | PutMVarNext (() -> IO ())
       -- MVars (Maybe BED_Status)
     | NewEmptyMVarNext_Maybe_BED_Status (Int -> IO ())
     | ReadMVarNext_Maybe_BED_Status (Maybe BED_Status -> IO ())
@@ -534,36 +741,29 @@ type Next
       -- MVars (Result BRE_RegistryProblem BDS_Env)
     | NewEmptyMVarNext_ResultRegistryProblemEnv (Int -> IO ())
     | ReadMVarNext_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO ())
-    | TakeMVarNext_ResultRegistryProblemEnv (Result BRE_RegistryProblem BDS_Env -> IO ())
     | PutMVarNext_ResultRegistryProblemEnv (() -> IO ())
       -- MVars (Result BRE_RegistryProblem BDS_Env)
     | NewEmptyMVarNext_CED_Dep (Int -> IO ())
     | ReadMVarNext_CED_Dep (CED_Dep -> IO ())
-    | TakeMVarNext_CED_Dep (CED_Dep -> IO ())
     | PutMVarNext_CED_Dep (() -> IO ())
       -- MVars (Maybe CECTE_Types)
     | NewEmptyMVarNext_Maybe_CECTE_Types (Int -> IO ())
     | ReadMVarNext_Maybe_CECTE_Types (Maybe CECTE_Types -> IO ())
-    | TakeMVarNext_Maybe_CECTE_Types (Maybe CECTE_Types -> IO ())
     | PutMVarNext_Maybe_CECTE_Types (() -> IO ())
       -- MVars (Maybe BB_Dependencies)
     | NewEmptyMVarNext_Maybe_BB_Dependencies (Int -> IO ())
     | ReadMVarNext_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO ())
-    | TakeMVarNext_Maybe_BB_Dependencies (Maybe BB_Dependencies -> IO ())
     | PutMVarNext_Maybe_BB_Dependencies (() -> IO ())
       -- MVars (Dict ( String, String ) CEP_Name MVar_CED_Dep)
     | NewEmptyMVarNext_DictNameMVarDep (Int -> IO ())
     | ReadMVarNext_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO ())
-    | TakeMVarNext_DictNameMVarDep (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep -> IO ())
     | PutMVarNext_DictNameMVarDep (() -> IO ())
       -- MVars (Dict String CEMN_Raw MVar_Maybe_BED_DResult)
     | NewEmptyMVarNext_DictRawMVarMaybeDResult (Int -> IO ())
     | ReadMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
-    | TakeMVarNext_DictRawMVarMaybeDResult (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult -> IO ())
     | PutMVarNext_DictRawMVarMaybeDResult (() -> IO ())
       -- MVars (List (MVar_Unit))
     | NewEmptyMVarNext_ListMVar (Int -> IO ())
-    | ReadMVarNext_ListMVar (List MVar_Unit -> IO ())
     | TakeMVarNext_ListMVar (List MVar_Unit -> IO ())
     | PutMVarNext_ListMVar (() -> IO ())
       -- MVars (BB_CachedInterface)
@@ -584,58 +784,43 @@ type Next
       -- MVars (BH_Manager)
     | NewEmptyMVarNext_Manager (Int -> IO ())
     | ReadMVarNext_Manager (BH_Manager -> IO ())
-    | TakeMVarNext_Manager (BH_Manager -> IO ())
     | PutMVarNext_Manager (() -> IO ())
       -- MVars (BB_ResultDict)
     | NewEmptyMVarNext_BB_ResultDict (Int -> IO ())
     | ReadMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
-    | TakeMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
     | PutMVarNext_BB_ResultDict (() -> IO ())
       -- MVars (MVar_ChItem_Maybe_DMsg)
     | NewEmptyMVarNext_Stream_Maybe_DMsg (Int -> IO ())
-    | ReadMVarNext_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO ())
     | TakeMVarNext_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO ())
     | PutMVarNext_Stream_Maybe_DMsg (() -> IO ())
       -- MVars (ChItem_Maybe_DMsg)
     | NewEmptyMVarNext_ChItem_Maybe_DMsg (Int -> IO ())
     | ReadMVarNext_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO ())
-    | TakeMVarNext_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO ())
     | PutMVarNext_ChItem_Maybe_DMsg (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarNext_StreamResultBMsgBResultDocumentation (Int -> IO ())
-    | ReadMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
     | TakeMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
     | PutMVarNext_StreamResultBMsgBResultDocumentation (() -> IO ())
       -- MVars (ChItem_ResultBMsgBResultDocumentation)
     | NewEmptyMVarNext_ChItemResultBMsgBResultDocumentation (Int -> IO ())
     | ReadMVarNext_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO ())
-    | TakeMVarNext_ChItemResultBMsgBResultDocumentation (ChItem_ResultBMsgBResultDocumentation -> IO ())
     | PutMVarNext_ChItemResultBMsgBResultDocumentation (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultUnit)
     | NewEmptyMVarNext_StreamResultBMsgBResultUnit (Int -> IO ())
-    | ReadMVarNext_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO ())
     | TakeMVarNext_StreamResultBMsgBResultUnit (MVar_ChItemResultBMsgBResultUnit -> IO ())
     | PutMVarNext_StreamResultBMsgBResultUnit (() -> IO ())
       -- MVars (ChItem_ResultBMsgBResultUnit)
     | NewEmptyMVarNext_ChItemResultBMsgBResultUnit (Int -> IO ())
     | ReadMVarNext_ChItemResultBMsgBResultUnit (ChItem_ResultBMsgBResultUnit -> IO ())
-    | TakeMVarNext_ChItemResultBMsgBResultUnit (ChItem_ResultBMsgBResultUnit -> IO ())
     | PutMVarNext_ChItemResultBMsgBResultUnit (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultArtifacts)
     | NewEmptyMVarNext_StreamResultBMsgBResultArtifacts (Int -> IO ())
-    | ReadMVarNext_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO ())
     | TakeMVarNext_StreamResultBMsgBResultArtifacts (MVar_ChItemResultBMsgBResultArtifacts -> IO ())
     | PutMVarNext_StreamResultBMsgBResultArtifacts (() -> IO ())
       -- MVars (ChItem_ResultBMsgBResultArtifacts)
     | NewEmptyMVarNext_ChItemResultBMsgBResultArtifacts (Int -> IO ())
     | ReadMVarNext_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO ())
-    | TakeMVarNext_ChItemResultBMsgBResultArtifacts (ChItem_ResultBMsgBResultArtifacts -> IO ())
     | PutMVarNext_ChItemResultBMsgBResultArtifacts (() -> IO ())
-      -- MVars (Result BR_BMsg (BR_BResult BB_Artifacts))
-    | NewEmptyMVarNext_ResultBMsgBResultArtifacts (Int -> IO ())
-    | ReadMVarNext_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO ())
-    | TakeMVarNext_ResultBMsgBResultArtifacts (Result BR_BMsg (BR_BResult BB_Artifacts) -> IO ())
-    | PutMVarNext_ResultBMsgBResultArtifacts (() -> IO ())
 
 
 type IOMode
@@ -1196,12 +1381,6 @@ type CPP_Snippet
 
 {-| FIXME Utils.Main
 -}
-type MVar a
-    = MVar Int
-
-
-{-| FIXME Utils.Main
--}
 type MVar_Maybe_BED_Status
     = MVar_Maybe_BED_Status Int
 
@@ -1386,26 +1565,8 @@ type MVar_ChItemResultBMsgBResultArtifacts
     = MVar_ChItemResultBMsgBResultArtifacts Int
 
 
-{-| FIXME Utils.Main
--}
-type MVar_ResultBMsgBResultArtifacts
-    = MVar_ResultBMsgBResultArtifacts Int
-
-
 
 -- Control.Concurrent.Chan
-
-
-{-| FIXME Utils.Main
--}
-type alias Stream a =
-    MVar (ChItem a)
-
-
-{-| FIXME Utils.Main
--}
-type ChItem a
-    = ChItem a (Stream a)
 
 
 {-| FIXME Utils.Main

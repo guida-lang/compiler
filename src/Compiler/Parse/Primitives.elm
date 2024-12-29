@@ -19,8 +19,6 @@ module Compiler.Parse.Primitives exposing
     , oneOf
     , oneOfWithFallback
     , pure
-    , snippetDecoder
-    , snippetEncoder
     , specialize
     , unsafeIndex
     , withBacksetIndent
@@ -30,8 +28,6 @@ module Compiler.Parse.Primitives exposing
     )
 
 import Compiler.Reporting.Annotation as A
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Types as T
 import Utils.Crash exposing (crash)
 
@@ -363,41 +359,6 @@ getCharWidth word =
 
     else
         1
-
-
-
--- ENCODERS and DECODERS
-
-
-snippetEncoder : T.CPP_Snippet -> Encode.Value
-snippetEncoder (T.CPP_Snippet { fptr, offset, length, offRow, offCol }) =
-    Encode.object
-        [ ( "type", Encode.string "Snippet" )
-        , ( "fptr", Encode.string fptr )
-        , ( "offset", Encode.int offset )
-        , ( "length", Encode.int length )
-        , ( "offRow", Encode.int offRow )
-        , ( "offCol", Encode.int offCol )
-        ]
-
-
-snippetDecoder : Decode.Decoder T.CPP_Snippet
-snippetDecoder =
-    Decode.map5
-        (\fptr offset length offRow offCol ->
-            T.CPP_Snippet
-                { fptr = fptr
-                , offset = offset
-                , length = length
-                , offRow = offRow
-                , offCol = offCol
-                }
-        )
-        (Decode.field "fptr" Decode.string)
-        (Decode.field "offset" Decode.int)
-        (Decode.field "length" Decode.int)
-        (Decode.field "offRow" Decode.int)
-        (Decode.field "offCol" Decode.int)
 
 
 

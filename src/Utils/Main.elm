@@ -1,7 +1,5 @@
 module Utils.Main exposing
-    ( AsyncException(..)
-    , Chan
-    , Chan_Maybe_DMsg
+    ( Chan_Maybe_DMsg
     , Chan_ResultBMsgBResultArtifacts
     , Chan_ResultBMsgBResultDocumentation
     , Chan_ResultBMsgBResultUnit
@@ -11,8 +9,6 @@ module Utils.Main exposing
     , ReplInputT
     , ReplSettings(..)
     , ThreadId
-    , ZipArchive(..)
-    , ZipEntry(..)
     , binaryDecodeFileOrFail
     , binaryEncodeFile
     , bracket_
@@ -53,8 +49,6 @@ module Utils.Main exposing
     , fpTakeDirectory
     , fpTakeExtension
     , fpTakeFileName
-    , httpExceptionContentDecoder
-    , httpExceptionContentEncoder
     , httpHLocation
     , httpResponseHeaders
     , httpResponseStatus
@@ -70,20 +64,6 @@ module Utils.Main exposing
     , listTraverse
     , listTraverse_
     , lockWithFileLock
-    , mVarDecoder
-    , mVarDecoder_BB_BResult
-    , mVarDecoder_BB_CachedInterface
-    , mVarDecoder_CED_Dep
-    , mVarDecoder_Maybe_BED_DResult
-    , mVarDecoder_Maybe_BED_Status
-    , mVarDecoder_Maybe_CECTE_Types
-    , mVarEncoder
-    , mVarEncoder_BB_BResult
-    , mVarEncoder_BB_CachedInterface
-    , mVarEncoder_CED_Dep
-    , mVarEncoder_Maybe_BED_DResult
-    , mVarEncoder_Maybe_BED_Status
-    , mVarEncoder_Maybe_CECTE_Types
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -101,17 +81,13 @@ module Utils.Main exposing
     , mapUnionWith
     , mapUnions
     , mapUnionsWith
-    , maybeEncoder
     , maybeMapM
     , maybeTraverseTask
-    , newChan
     , newChan_Maybe_DMsg
     , newChan_ResultBMsgBResultArtifacts
     , newChan_ResultBMsgBResultDocumentation
     , newChan_ResultBMsgBResultUnit
-    , newEmptyMVar
     , newEmptyMVar_BB_BResult
-    , newEmptyMVar_BB_CachedInterface
     , newEmptyMVar_BB_ResultDict
     , newEmptyMVar_BB_RootResult
     , newEmptyMVar_BB_RootStatus
@@ -121,7 +97,6 @@ module Utils.Main exposing
     , newEmptyMVar_CED_Dep
     , newEmptyMVar_DictNameMVarDep
     , newEmptyMVar_DictRawMVarMaybeDResult
-    , newEmptyMVar_ListMVar
     , newEmptyMVar_Manager
     , newEmptyMVar_MaybeDep
     , newEmptyMVar_Maybe_BB_Dependencies
@@ -130,26 +105,16 @@ module Utils.Main exposing
     , newEmptyMVar_Maybe_CASTO_GlobalGraph
     , newEmptyMVar_Maybe_CASTO_LocalGraph
     , newEmptyMVar_Maybe_CECTE_Types
-    , newEmptyMVar_ResultBMsgBResultArtifacts
     , newEmptyMVar_ResultRegistryProblemEnv
     , newEmptyMVar_Result_BuildProjectProblem_RootInfo
     , newEmptyMVar_Unit
-    , newMVar
-    , newMVar_BB_BResult
     , newMVar_BB_CachedInterface
-    , newMVar_BB_Status
     , newMVar_BB_StatusDict
-    , newMVar_BED_StatusDict
-    , newMVar_CED_Dep
-    , newMVar_DictNameMVarDep
-    , newMVar_DictRawMVarMaybeDResult
     , newMVar_ListMVar
     , newMVar_Maybe_BB_Dependencies
     , newMVar_Maybe_CASTO_GlobalGraph
     , newMVar_Maybe_CASTO_LocalGraph
     , newMVar_Maybe_CECTE_Types
-    , newMVar_ResultRegistryProblemEnv
-    , newMVar_StreamResultBMsgBResultArtifacts
     , newMVar_Unit
     , nonEmptyListTraverse
     , putMVar_BB_BResult
@@ -161,8 +126,6 @@ module Utils.Main exposing
     , putMVar_BB_StatusDict
     , putMVar_BED_StatusDict
     , putMVar_CED_Dep
-    , putMVar_ChItemResultBMsgBResultDocumentation
-    , putMVar_ChItemResultBMsgBResultUnit
     , putMVar_DictNameMVarDep
     , putMVar_DictRawMVarMaybeDResult
     , putMVar_ListMVar
@@ -176,14 +139,11 @@ module Utils.Main exposing
     , putMVar_Maybe_CECTE_Types
     , putMVar_ResultRegistryProblemEnv
     , putMVar_Result_BuildProjectProblem_RootInfo
-    , putMVar_StreamResultBMsgBResultUnit
     , putMVar_Unit
-    , readChan
     , readChan_Maybe_DMsg
     , readChan_ResultBMsgBResultArtifacts
     , readChan_ResultBMsgBResultDocumentation
     , readChan_ResultBMsgBResultUnit
-    , readMVar
     , readMVar_BB_BResult
     , readMVar_BB_CachedInterface
     , readMVar_BB_ResultDict
@@ -195,7 +155,6 @@ module Utils.Main exposing
     , readMVar_CED_Dep
     , readMVar_DictNameMVarDep
     , readMVar_DictRawMVarMaybeDResult
-    , readMVar_ListMVar
     , readMVar_Manager
     , readMVar_MaybeDep
     , readMVar_Maybe_BB_Dependencies
@@ -218,24 +177,13 @@ module Utils.Main exposing
     , sequenceDictResult_
     , sequenceListMaybe
     , sequenceNonemptyListResult
-    , someExceptionDecoder
-    , someExceptionEncoder
-    , takeMVar
     , takeMVar_BB_CachedInterface
     , takeMVar_BB_StatusDict
     , takeMVar_BED_StatusDict
-    , takeMVar_CED_Dep
-    , takeMVar_DictNameMVarDep
-    , takeMVar_DictRawMVarMaybeDResult
     , takeMVar_ListMVar
-    , takeMVar_Maybe_BB_Dependencies
-    , takeMVar_Maybe_CECTE_Types
-    , takeMVar_ResultRegistryProblemEnv
-    , takeMVar_Stream_Maybe_DMsg
     , takeMVar_Unit
     , unlines
     , unzip3
-    , writeChan
     , writeChan_Maybe_DMsg
     , writeChan_ResultBMsgBResultArtifacts
     , writeChan_ResultBMsgBResultDocumentation
@@ -248,8 +196,6 @@ import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
@@ -312,16 +258,6 @@ mapFromListWith toComparable f =
             Map.update toComparable k (Maybe.map (flip f a))
         )
         Map.empty
-
-
-maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybeEncoder encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
 
 
 eitherLefts : List (Result e a) -> List e
@@ -932,21 +868,6 @@ envGetArgs =
 
 
 
--- Codec.Archive.Zip
-
-
-type ZipArchive
-    = ZipArchive (List ZipEntry)
-
-
-type ZipEntry
-    = ZipEntry
-        { eRelativePath : T.FilePath
-        , eData : String
-        }
-
-
-
 -- Network.HTTP.Client
 
 
@@ -972,10 +893,6 @@ httpHLocation =
 
 
 -- Control.Exception
-
-
-type AsyncException
-    = UserInterrupt
 
 
 bracket : IO a -> (a -> IO b) -> (a -> IO c) -> IO c
@@ -1012,16 +929,6 @@ forkIO ioArg =
 
 
 -- Control.Concurrent.MVar
-
-
-newMVar : (a -> Encode.Value) -> a -> IO (T.MVar a)
-newMVar encoder value =
-    newEmptyMVar
-        |> IO.bind
-            (\mvar ->
-                putMVar encoder mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
 
 
 newMVar_Stream_Maybe_DMsg : T.MVar_ChItem_Maybe_DMsg -> IO T.MVar_Stream_Maybe_DMsg
@@ -1061,35 +968,6 @@ newMVar_StreamResultBMsgBResultArtifacts value =
             (\mvar ->
                 putMVar_StreamResultBMsgBResultArtifacts mvar value
                     |> IO.fmap (\_ -> mvar)
-            )
-
-
-readMVar : Decode.Decoder a -> T.MVar a -> IO a
-readMVar decoder (T.MVar ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            ( s, T.ReadMVar IO.pure (Just value) )
-
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber index ] } s.mVars }
-                            , T.ReadMVar IO.pure Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.readMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.readMVar: invalid value"
             )
 
 
@@ -1233,17 +1111,6 @@ readMVar_ChItemResultBMsgBResultArtifacts (T.MVar_ChItemResultBMsgBResultArtifac
         )
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> T.MVar a -> (a -> IO ( a, b )) -> IO b
-modifyMVar decoder encoder m io =
-    takeMVar decoder m
-        |> IO.bind io
-        |> IO.bind
-            (\( a, b ) ->
-                putMVar encoder m a
-                    |> IO.fmap (\_ -> b)
-            )
-
-
 modifyMVar_Stream_Maybe_DMsg_Maybe_DMsg :
     T.MVar_Stream_Maybe_DMsg
     -> (T.MVar_ChItem_Maybe_DMsg -> IO ( T.MVar_ChItem_Maybe_DMsg, Maybe T.BR_DMsg ))
@@ -1297,44 +1164,6 @@ modifyMVar_StreamResultBMsgBResultArtifacts_ResultBMsgBResultArtifacts m io =
             (\( a, b ) ->
                 putMVar_StreamResultBMsgBResultArtifacts m a
                     |> IO.fmap (\_ -> b)
-            )
-
-
-takeMVar : Decode.Decoder a -> T.MVar a -> IO a
-takeMVar decoder (T.MVar ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars }
-                                    , T.TakeMVar IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
-                                    , T.TakeMVar IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber index ] } s.mVars }
-                            , T.TakeMVar IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.takeMVar: invalid value"
             )
 
 
@@ -1454,42 +1283,6 @@ takeMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifac
         )
 
 
-putMVar : (a -> Encode.Value) -> T.MVar a -> a -> IO ()
-putMVar encoder (T.MVar ref) value =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just _ ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber index (encoder value) ] } s.mVars }
-                            , T.PutMVar IO.pure [] Nothing
-                            )
-
-                        Nothing ->
-                            let
-                                ( filteredSubscribers, readIndexes ) =
-                                    List.foldr
-                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
-                                        )
-                                        ( [], [] )
-                                        mVar.subscribers
-                            in
-                            ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just (encoder value) } s.mVars }
-                            , T.PutMVar IO.pure readIndexes (Just (encoder value))
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.putMVar: invalid ref"
-        )
-
-
 putMVar_Manager : T.MVar_Manager -> T.BH_Manager -> IO ()
 putMVar_Manager (T.MVar_Manager ref) value =
     IO
@@ -1579,12 +1372,7 @@ putMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) value =
                                 ( filteredSubscribers, readIndexes ) =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber_Stream_Maybe_DMsg readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                            ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
                                         ( [], [] )
                                         mVar.subscribers
@@ -1651,12 +1439,7 @@ putMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDocu
                                 ( filteredSubscribers, readIndexes ) =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber_StreamResultBMsgBResultDocumentation readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                            ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
                                         ( [], [] )
                                         mVar.subscribers
@@ -1723,12 +1506,7 @@ putMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) val
                                 ( filteredSubscribers, readIndexes ) =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber_StreamResultBMsgBResultUnit readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                            ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
                                         ( [], [] )
                                         mVar.subscribers
@@ -1795,12 +1573,7 @@ putMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifact
                                 ( filteredSubscribers, readIndexes ) =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber_StreamResultBMsgBResultArtifacts readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                            ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
                                         ( [], [] )
                                         mVar.subscribers
@@ -1848,17 +1621,6 @@ putMVar_ChItemResultBMsgBResultArtifacts (T.MVar_ChItemResultBMsgBResultArtifact
                 Nothing ->
                     crash "Utils.Main.putMVar_ChItemResultBMsgBResultArtifacts: invalid ref"
         )
-
-
-newEmptyMVar : IO (T.MVar a)
-newEmptyMVar =
-    IO
-        (\_ s ->
-            ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
-            , T.NewEmptyMVar IO.pure (Array.length s.mVars)
-            )
-        )
-        |> IO.fmap T.MVar
 
 
 newEmptyMVar_Manager : IO T.MVar_Manager
@@ -1969,17 +1731,6 @@ newEmptyMVar_ChItemResultBMsgBResultArtifacts =
             )
         )
         |> IO.fmap T.MVar_ChItemResultBMsgBResultArtifacts
-
-
-newEmptyMVar_ResultBMsgBResultArtifacts : IO T.MVar_ResultBMsgBResultArtifacts
-newEmptyMVar_ResultBMsgBResultArtifacts =
-    IO
-        (\_ s ->
-            ( { s | mVars_ResultBMsgBResultArtifacts = Array.push { subscribers = [], value = Nothing } s.mVars_ResultBMsgBResultArtifacts }
-            , T.NewEmptyMVar_ResultBMsgBResultArtifacts IO.pure (Array.length s.mVars_ResultBMsgBResultArtifacts)
-            )
-        )
-        |> IO.fmap T.MVar_ResultBMsgBResultArtifacts
 
 
 
@@ -2288,16 +2039,6 @@ newEmptyMVar_Maybe_CASTO_GlobalGraph =
 
 
 -- Control.Concurrent.MVar (T.BB_BResult)
-
-
-newMVar_BB_BResult : T.BB_BResult -> IO T.MVar_BB_BResult
-newMVar_BB_BResult value =
-    newEmptyMVar_BB_BResult
-        |> IO.bind
-            (\mvar ->
-                putMVar_BB_BResult mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
 
 
 readMVar_MaybeDep : T.MVar_MaybeDep -> IO (Maybe T.BB_Dep)
@@ -2619,16 +2360,6 @@ newEmptyMVar_BB_BResult =
 -- Control.Concurrent.MVar (T.BB_Status)
 
 
-newMVar_BB_Status : T.BB_Status -> IO T.MVar_BB_Status
-newMVar_BB_Status value =
-    newEmptyMVar_BB_Status
-        |> IO.bind
-            (\mvar ->
-                putMVar_BB_Status mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
-
-
 readMVar_BB_Status : T.MVar_BB_Status -> IO T.BB_Status
 readMVar_BB_Status (T.MVar_BB_Status ref) =
     IO
@@ -2810,16 +2541,6 @@ newEmptyMVar_BB_StatusDict =
 -- Control.Concurrent.MVar (Result T.BRE_RegistryProblem T.BDS_Env)
 
 
-newMVar_ResultRegistryProblemEnv : Result T.BRE_RegistryProblem T.BDS_Env -> IO T.MVar_ResultRegistryProblemEnv
-newMVar_ResultRegistryProblemEnv value =
-    newEmptyMVar_ResultRegistryProblemEnv
-        |> IO.bind
-            (\mvar ->
-                putMVar_ResultRegistryProblemEnv mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
-
-
 readMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> IO (Result T.BRE_RegistryProblem T.BDS_Env)
 readMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
     IO
@@ -2837,35 +2558,6 @@ readMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_ResultRegistryProblemEnv: invalid ref"
-        )
-
-
-takeMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> IO (Result T.BRE_RegistryProblem T.BDS_Env)
-takeMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_ResultRegistryProblemEnv of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_ResultRegistryProblemEnv putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_ResultRegistryProblemEnv }
-                                    , T.TakeMVar_ResultRegistryProblemEnv IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | value = Nothing } s.mVars_ResultRegistryProblemEnv }
-                                    , T.TakeMVar_ResultRegistryProblemEnv IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_ResultRegistryProblemEnv index ] } s.mVars_ResultRegistryProblemEnv }
-                            , T.TakeMVar_ResultRegistryProblemEnv IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_ResultRegistryProblemEnv: invalid ref"
         )
 
 
@@ -2920,16 +2612,6 @@ newEmptyMVar_ResultRegistryProblemEnv =
 -- Control.Concurrent.MVar (T.CED_Dep)
 
 
-newMVar_CED_Dep : T.CED_Dep -> IO T.MVar_CED_Dep
-newMVar_CED_Dep value =
-    newEmptyMVar_CED_Dep
-        |> IO.bind
-            (\mvar ->
-                putMVar_CED_Dep mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
-
-
 readMVar_CED_Dep : T.MVar_CED_Dep -> IO T.CED_Dep
 readMVar_CED_Dep (T.MVar_CED_Dep ref) =
     IO
@@ -2947,35 +2629,6 @@ readMVar_CED_Dep (T.MVar_CED_Dep ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_CED_Dep: invalid ref"
-        )
-
-
-takeMVar_CED_Dep : T.MVar_CED_Dep -> IO T.CED_Dep
-takeMVar_CED_Dep (T.MVar_CED_Dep ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_CED_Dep of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_CED_Dep putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_CED_Dep }
-                                    , T.TakeMVar_CED_Dep IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_CED_Dep = Array.set ref { mVar | value = Nothing } s.mVars_CED_Dep }
-                                    , T.TakeMVar_CED_Dep IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_CED_Dep index ] } s.mVars_CED_Dep }
-                            , T.TakeMVar_CED_Dep IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_CED_Dep: invalid ref"
         )
 
 
@@ -3060,35 +2713,6 @@ readMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
         )
 
 
-takeMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> IO (Maybe T.CECTE_Types)
-takeMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_Maybe_CECTE_Types of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_Maybe_CECTE_Types putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_CECTE_Types }
-                                    , T.TakeMVar_Maybe_CECTE_Types IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_CECTE_Types }
-                                    , T.TakeMVar_Maybe_CECTE_Types IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Maybe_CECTE_Types index ] } s.mVars_Maybe_CECTE_Types }
-                            , T.TakeMVar_Maybe_CECTE_Types IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_Maybe_CECTE_Types: invalid ref"
-        )
-
-
 putMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Maybe T.CECTE_Types -> IO ()
 putMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) value =
     IO
@@ -3170,35 +2794,6 @@ readMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
         )
 
 
-takeMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> IO (Maybe T.BB_Dependencies)
-takeMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_Maybe_BB_Dependencies of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_Maybe_BB_Dependencies putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Maybe_BB_Dependencies }
-                                    , T.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | value = Nothing } s.mVars_Maybe_BB_Dependencies }
-                                    , T.TakeMVar_Maybe_BB_Dependencies IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Maybe_BB_Dependencies index ] } s.mVars_Maybe_BB_Dependencies }
-                            , T.TakeMVar_Maybe_BB_Dependencies IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_Maybe_BB_Dependencies: invalid ref"
-        )
-
-
 putMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> Maybe T.BB_Dependencies -> IO ()
 putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
     IO
@@ -3250,16 +2845,6 @@ newEmptyMVar_Maybe_BB_Dependencies =
 -- Control.Concurrent.MVar (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
 
 
-newMVar_DictNameMVarDep : Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO T.MVar_DictNameMVarDep
-newMVar_DictNameMVarDep value =
-    newEmptyMVar_DictNameMVarDep
-        |> IO.bind
-            (\mvar ->
-                putMVar_DictNameMVarDep mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
-
-
 readMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> IO (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
 readMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
     IO
@@ -3277,35 +2862,6 @@ readMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_DictNameMVarDep: invalid ref"
-        )
-
-
-takeMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> IO (Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep)
-takeMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_DictNameMVarDep of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_DictNameMVarDep putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_DictNameMVarDep }
-                                    , T.TakeMVar_DictNameMVarDep IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | value = Nothing } s.mVars_DictNameMVarDep }
-                                    , T.TakeMVar_DictNameMVarDep IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_DictNameMVarDep index ] } s.mVars_DictNameMVarDep }
-                            , T.TakeMVar_DictNameMVarDep IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_DictNameMVarDep: invalid ref"
         )
 
 
@@ -3360,16 +2916,6 @@ newEmptyMVar_DictNameMVarDep =
 -- Control.Concurrent.MVar (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
 
 
-newMVar_DictRawMVarMaybeDResult : Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO T.MVar_DictRawMVarMaybeDResult
-newMVar_DictRawMVarMaybeDResult value =
-    newEmptyMVar_DictRawMVarMaybeDResult
-        |> IO.bind
-            (\mvar ->
-                putMVar_DictRawMVarMaybeDResult mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
-
-
 readMVar_DictRawMVarMaybeDResult : T.MVar_DictRawMVarMaybeDResult -> IO (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
 readMVar_DictRawMVarMaybeDResult (T.MVar_DictRawMVarMaybeDResult ref) =
     IO
@@ -3387,35 +2933,6 @@ readMVar_DictRawMVarMaybeDResult (T.MVar_DictRawMVarMaybeDResult ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_DictRawMVarMaybeDResult: invalid ref"
-        )
-
-
-takeMVar_DictRawMVarMaybeDResult : T.MVar_DictRawMVarMaybeDResult -> IO (Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult)
-takeMVar_DictRawMVarMaybeDResult (T.MVar_DictRawMVarMaybeDResult ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_DictRawMVarMaybeDResult of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (T.PutMVarSubscriber_DictRawMVarMaybeDResult putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars_DictRawMVarMaybeDResult = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_DictRawMVarMaybeDResult }
-                                    , T.TakeMVar_DictRawMVarMaybeDResult IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars_DictRawMVarMaybeDResult = Array.set ref { mVar | value = Nothing } s.mVars_DictRawMVarMaybeDResult }
-                                    , T.TakeMVar_DictRawMVarMaybeDResult IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars_DictRawMVarMaybeDResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_DictRawMVarMaybeDResult index ] } s.mVars_DictRawMVarMaybeDResult }
-                            , T.TakeMVar_DictRawMVarMaybeDResult IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar_DictRawMVarMaybeDResult: invalid ref"
         )
 
 
@@ -3480,26 +2997,6 @@ newMVar_ListMVar value =
             )
 
 
-readMVar_ListMVar : T.MVar_ListMVar -> IO (List T.MVar_Unit)
-readMVar_ListMVar (T.MVar_ListMVar ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars_ListMVar of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            ( s, T.ReadMVar_ListMVar IO.pure (Just value) )
-
-                        Nothing ->
-                            ( { s | mVars_ListMVar = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_ListMVar index ] } s.mVars_ListMVar }
-                            , T.ReadMVar_ListMVar IO.pure Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.readMVar_ListMVar: invalid ref"
-        )
-
-
 takeMVar_ListMVar : T.MVar_ListMVar -> IO (List T.MVar_Unit)
 takeMVar_ListMVar (T.MVar_ListMVar ref) =
     IO
@@ -3546,12 +3043,7 @@ putMVar_ListMVar (T.MVar_ListMVar ref) value =
                                 ( filteredSubscribers, readIndexes ) =
                                     List.foldr
                                         (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                T.ReadMVarSubscriber_ListMVar readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                            ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
                                         ( [], [] )
                                         mVar.subscribers
@@ -3688,16 +3180,6 @@ newEmptyMVar_BB_CachedInterface =
 
 
 -- Control.Concurrent.MVar (T.BED_StatusDict)
-
-
-newMVar_BED_StatusDict : T.BED_StatusDict -> IO T.MVar_BED_StatusDict
-newMVar_BED_StatusDict value =
-    newEmptyMVar_BED_StatusDict
-        |> IO.bind
-            (\mvar ->
-                putMVar_BED_StatusDict mvar value
-                    |> IO.fmap (\_ -> mvar)
-            )
 
 
 readMVar_BED_StatusDict : T.MVar_BED_StatusDict -> IO T.BED_StatusDict
@@ -3910,10 +3392,6 @@ newEmptyMVar_Unit =
 -- Control.Concurrent.Chan
 
 
-type Chan a
-    = Chan (T.MVar (T.Stream a)) (T.MVar (T.Stream a))
-
-
 type Chan_Maybe_DMsg
     = Chan_Maybe_DMsg T.MVar_Stream_Maybe_DMsg T.MVar_Stream_Maybe_DMsg
 
@@ -3928,23 +3406,6 @@ type Chan_ResultBMsgBResultUnit
 
 type Chan_ResultBMsgBResultArtifacts
     = Chan_ResultBMsgBResultArtifacts T.MVar_StreamResultBMsgBResultArtifacts T.MVar_StreamResultBMsgBResultArtifacts
-
-
-newChan : (T.Stream a -> Encode.Value) -> IO (Chan a)
-newChan encoder =
-    newEmptyMVar
-        |> IO.bind
-            (\hole ->
-                newMVar encoder hole
-                    |> IO.bind
-                        (\readVar ->
-                            newMVar encoder hole
-                                |> IO.fmap
-                                    (\writeVar ->
-                                        Chan readVar writeVar
-                                    )
-                        )
-            )
 
 
 newChan_Maybe_DMsg : IO Chan_Maybe_DMsg
@@ -4015,19 +3476,6 @@ newChan_ResultBMsgBResultArtifacts =
             )
 
 
-readChan : Decode.Decoder a -> Chan a -> IO a
-readChan decoder (Chan readVar _) =
-    modifyMVar mVarDecoder mVarEncoder readVar <|
-        \read_end ->
-            readMVar (chItemDecoder decoder) read_end
-                |> IO.fmap
-                    (\(T.ChItem val new_read_end) ->
-                        -- Use readMVar here, not takeMVar,
-                        -- else dupChan doesn't work
-                        ( new_read_end, val )
-                    )
-
-
 readChan_Maybe_DMsg : Chan_Maybe_DMsg -> IO (Maybe T.BR_DMsg)
 readChan_Maybe_DMsg (Chan_Maybe_DMsg readVar _) =
     modifyMVar_Stream_Maybe_DMsg_Maybe_DMsg readVar <|
@@ -4078,20 +3526,6 @@ readChan_ResultBMsgBResultArtifacts (Chan_ResultBMsgBResultArtifacts readVar _) 
                         -- else dupChan doesn't work
                         ( new_read_end, val )
                     )
-
-
-writeChan : (a -> Encode.Value) -> Chan a -> a -> IO ()
-writeChan encoder (Chan _ writeVar) val =
-    newEmptyMVar
-        |> IO.bind
-            (\new_hole ->
-                takeMVar mVarDecoder writeVar
-                    |> IO.bind
-                        (\old_hole ->
-                            putMVar (chItemEncoder encoder) old_hole (T.ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
-                        )
-            )
 
 
 writeChan_Maybe_DMsg : Chan_Maybe_DMsg -> Maybe T.BR_DMsg -> IO ()
@@ -4225,194 +3659,3 @@ replGetInputLine prompt =
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
     IO (\_ s -> ( s, T.ReplGetInputLineWithInitial IO.pure prompt left right ))
-
-
-
--- ENCODERS and DECODERS
-
-
-mVarDecoder : Decode.Decoder (T.MVar a)
-mVarDecoder =
-    Decode.map T.MVar Decode.int
-
-
-mVarDecoder_Maybe_BED_Status : Decode.Decoder T.MVar_Maybe_BED_Status
-mVarDecoder_Maybe_BED_Status =
-    Decode.map T.MVar_Maybe_BED_Status Decode.int
-
-
-mVarDecoder_Maybe_BED_DResult : Decode.Decoder T.MVar_Maybe_BED_DResult
-mVarDecoder_Maybe_BED_DResult =
-    Decode.map T.MVar_Maybe_BED_DResult Decode.int
-
-
-mVarDecoder_BB_BResult : Decode.Decoder T.MVar_BB_BResult
-mVarDecoder_BB_BResult =
-    Decode.map T.MVar_BB_BResult Decode.int
-
-
-mVarDecoder_CED_Dep : Decode.Decoder T.MVar_CED_Dep
-mVarDecoder_CED_Dep =
-    Decode.map T.MVar_CED_Dep Decode.int
-
-
-mVarDecoder_Maybe_CECTE_Types : Decode.Decoder T.MVar_Maybe_CECTE_Types
-mVarDecoder_Maybe_CECTE_Types =
-    Decode.map T.MVar_Maybe_CECTE_Types Decode.int
-
-
-mVarDecoder_BB_CachedInterface : Decode.Decoder T.MVar_BB_CachedInterface
-mVarDecoder_BB_CachedInterface =
-    Decode.map T.MVar_BB_CachedInterface Decode.int
-
-
-mVarEncoder : T.MVar a -> Encode.Value
-mVarEncoder (T.MVar ref) =
-    Encode.int ref
-
-
-mVarEncoder_Maybe_BED_Status : T.MVar_Maybe_BED_Status -> Encode.Value
-mVarEncoder_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) =
-    Encode.int ref
-
-
-mVarEncoder_Maybe_BED_DResult : T.MVar_Maybe_BED_DResult -> Encode.Value
-mVarEncoder_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) =
-    Encode.int ref
-
-
-mVarEncoder_BB_BResult : T.MVar_BB_BResult -> Encode.Value
-mVarEncoder_BB_BResult (T.MVar_BB_BResult ref) =
-    Encode.int ref
-
-
-mVarEncoder_CED_Dep : T.MVar_CED_Dep -> Encode.Value
-mVarEncoder_CED_Dep (T.MVar_CED_Dep ref) =
-    Encode.int ref
-
-
-mVarEncoder_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Encode.Value
-mVarEncoder_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
-    Encode.int ref
-
-
-mVarEncoder_BB_CachedInterface : T.MVar_BB_CachedInterface -> Encode.Value
-mVarEncoder_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
-    Encode.int ref
-
-
-chItemEncoder : (a -> Encode.Value) -> T.ChItem a -> Encode.Value
-chItemEncoder valueEncoder (T.ChItem value hole) =
-    Encode.object
-        [ ( "type", Encode.string "ChItem" )
-        , ( "value", valueEncoder value )
-        , ( "hole", mVarEncoder hole )
-        ]
-
-
-chItemDecoder : Decode.Decoder a -> Decode.Decoder (T.ChItem a)
-chItemDecoder decoder =
-    Decode.map2 T.ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
-
-
-someExceptionEncoder : T.UM_SomeException -> Encode.Value
-someExceptionEncoder _ =
-    Encode.object [ ( "type", Encode.string "SomeException" ) ]
-
-
-someExceptionDecoder : Decode.Decoder T.UM_SomeException
-someExceptionDecoder =
-    Decode.succeed T.UM_SomeException
-
-
-httpResponseEncoder : T.UM_HttpResponse body -> Encode.Value
-httpResponseEncoder (T.UM_HttpResponse httpResponse) =
-    Encode.object
-        [ ( "type", Encode.string "HttpResponse" )
-        , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
-        , ( "responseHeaders", httpResponseHeadersEncoder httpResponse.responseHeaders )
-        ]
-
-
-httpResponseDecoder : Decode.Decoder (T.UM_HttpResponse body)
-httpResponseDecoder =
-    Decode.map2
-        (\responseStatus responseHeaders ->
-            T.UM_HttpResponse
-                { responseStatus = responseStatus
-                , responseHeaders = responseHeaders
-                }
-        )
-        (Decode.field "responseStatus" httpStatusDecoder)
-        (Decode.field "responseHeaders" httpResponseHeadersDecoder)
-
-
-httpStatusEncoder : T.UM_HttpStatus -> Encode.Value
-httpStatusEncoder (T.UM_HttpStatus statusCode statusMessage) =
-    Encode.object
-        [ ( "type", Encode.string "HttpStatus" )
-        , ( "statusCode", Encode.int statusCode )
-        , ( "statusMessage", Encode.string statusMessage )
-        ]
-
-
-httpStatusDecoder : Decode.Decoder T.UM_HttpStatus
-httpStatusDecoder =
-    Decode.map2 T.UM_HttpStatus
-        (Decode.field "statusCode" Decode.int)
-        (Decode.field "statusMessage" Decode.string)
-
-
-httpResponseHeadersEncoder : T.UM_HttpResponseHeaders -> Encode.Value
-httpResponseHeadersEncoder =
-    Encode.list (E.jsonPair Encode.string Encode.string)
-
-
-httpResponseHeadersDecoder : Decode.Decoder T.UM_HttpResponseHeaders
-httpResponseHeadersDecoder =
-    Decode.list (D.jsonPair Decode.string Decode.string)
-
-
-httpExceptionContentEncoder : T.UM_HttpExceptionContent -> Encode.Value
-httpExceptionContentEncoder httpExceptionContent =
-    case httpExceptionContent of
-        T.UM_StatusCodeException response body ->
-            Encode.object
-                [ ( "type", Encode.string "StatusCodeException" )
-                , ( "response", httpResponseEncoder response )
-                , ( "body", Encode.string body )
-                ]
-
-        T.UM_TooManyRedirects responses ->
-            Encode.object
-                [ ( "type", Encode.string "TooManyRedirects" )
-                , ( "responses", Encode.list httpResponseEncoder responses )
-                ]
-
-        T.UM_ConnectionFailure someException ->
-            Encode.object
-                [ ( "type", Encode.string "ConnectionFailure" )
-                , ( "someException", someExceptionEncoder someException )
-                ]
-
-
-httpExceptionContentDecoder : Decode.Decoder T.UM_HttpExceptionContent
-httpExceptionContentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StatusCodeException" ->
-                        Decode.map2 T.UM_StatusCodeException
-                            (Decode.field "response" httpResponseDecoder)
-                            (Decode.field "body" Decode.string)
-
-                    "TooManyRedirects" ->
-                        Decode.map T.UM_TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
-
-                    "ConnectionFailure" ->
-                        Decode.map T.UM_ConnectionFailure (Decode.field "someException" someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
-            )

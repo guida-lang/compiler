@@ -2,8 +2,6 @@ module Compiler.Reporting.Render.Type.Localizer exposing
     ( empty
     , fromModule
     , fromNames
-    , localizerDecoder
-    , localizerEncoder
     , toChars
     , toDoc
     )
@@ -11,13 +9,9 @@ module Compiler.Reporting.Render.Type.Localizer exposing
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Types as T
 
 
@@ -109,65 +103,3 @@ addType exposed types =
 
         T.CASTS_Operator _ _ ->
             types
-
-
-
--- ENCODERS and DECODERS
-
-
-localizerEncoder : T.CRRTL_Localizer -> Encode.Value
-localizerEncoder (T.CRRTL_Localizer localizer) =
-    EncodeX.assocListDict compare Encode.string importEncoder localizer
-
-
-localizerDecoder : Decode.Decoder T.CRRTL_Localizer
-localizerDecoder =
-    Decode.map T.CRRTL_Localizer (DecodeX.assocListDict identity Decode.string importDecoder)
-
-
-importEncoder : T.CRRTL_Import -> Encode.Value
-importEncoder import_ =
-    Encode.object
-        [ ( "type", Encode.string "Import" )
-        , ( "alias", EncodeX.maybe Encode.string import_.alias )
-        , ( "exposing", exposingEncoder import_.exposing_ )
-        ]
-
-
-importDecoder : Decode.Decoder T.CRRTL_Import
-importDecoder =
-    Decode.map2 T.CRRTL_Import
-        (Decode.field "alias" (Decode.maybe Decode.string))
-        (Decode.field "exposing" exposingDecoder)
-
-
-exposingEncoder : T.CRRTL_Exposing -> Encode.Value
-exposingEncoder exposing_ =
-    case exposing_ of
-        T.CRRTL_All ->
-            Encode.object
-                [ ( "type", Encode.string "All" )
-                ]
-
-        T.CRRTL_Only set ->
-            Encode.object
-                [ ( "type", Encode.string "Only" )
-                , ( "set", EncodeX.everySet compare Encode.string set )
-                ]
-
-
-exposingDecoder : Decode.Decoder T.CRRTL_Exposing
-exposingDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "All" ->
-                        Decode.succeed T.CRRTL_All
-
-                    "Only" ->
-                        Decode.map T.CRRTL_Only (Decode.field "set" (DecodeX.everySet identity Decode.string))
-
-                    _ ->
-                        Decode.fail ("Unknown Exposing's type: " ++ type_)
-            )

@@ -1,18 +1,9 @@
-module Compiler.Reporting.Error.Main exposing
-    ( errorDecoder
-    , errorEncoder
-    , toReport
-    )
+module Compiler.Reporting.Error.Main exposing (toReport)
 
-import Compiler.AST.Canonical as Can
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
-import Compiler.Reporting.Error.Canonicalize as E
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Types as T
 
 
@@ -80,62 +71,3 @@ toReport localizer source err =
                             , D.reflow "Since JSON values can flow through, you can use JSON encoders and decoders to allow other types through as well. More advanced users often just do everything with encoders and decoders for more control and better errors."
                             ]
                         )
-
-
-
--- ENCODERS and DECODERS
-
-
-errorEncoder : T.CREM_Error -> Encode.Value
-errorEncoder error =
-    case error of
-        T.CREM_BadType region tipe ->
-            Encode.object
-                [ ( "type", Encode.string "BadType" )
-                , ( "region", A.regionEncoder region )
-                , ( "tipe", Can.typeEncoder tipe )
-                ]
-
-        T.CREM_BadCycle region name names ->
-            Encode.object
-                [ ( "type", Encode.string "BadCycle" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "names", Encode.list Encode.string names )
-                ]
-
-        T.CREM_BadFlags region subType invalidPayload ->
-            Encode.object
-                [ ( "type", Encode.string "BadFlags" )
-                , ( "region", A.regionEncoder region )
-                , ( "subType", Can.typeEncoder subType )
-                , ( "invalidPayload", E.invalidPayloadEncoder invalidPayload )
-                ]
-
-
-errorDecoder : Decode.Decoder T.CREM_Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadType" ->
-                        Decode.map2 T.CREM_BadType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "tipe" Can.typeDecoder)
-
-                    "BadCycle" ->
-                        Decode.map3 T.CREM_BadCycle
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "names" (Decode.list Decode.string))
-
-                    "BadFlags" ->
-                        Decode.map3 T.CREM_BadFlags
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "subType" Can.typeDecoder)
-                            (Decode.field "invalidPayload" E.invalidPayloadDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )

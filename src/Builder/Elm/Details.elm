@@ -8,8 +8,6 @@ module Builder.Elm.Details exposing
     , load
     , loadInterfaces
     , loadObjects
-    , localDecoder
-    , localEncoder
     , verifyInstall
     )
 

@@ -5,8 +5,6 @@ module Compiler.Elm.Compiler.Type exposing
     , decoder
     , encode
     , encodeMetadata
-    , jsonDecoder
-    , jsonEncoder
     , toDoc
     )
 
@@ -19,8 +17,6 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Types as T
 import Utils.Crash exposing (crash)
 
@@ -185,90 +181,3 @@ toCustomTypeField (Union name args constructors) =
 toVariantObject : ( T.CDN_Name, List T.CECT_Type ) -> ( String, Value )
 toVariantObject ( name, args ) =
     ( Json.fromName name, E.list encode args )
-
-
-
--- ENCODERS and DECODERS
-
-
-jsonEncoder : T.CECT_Type -> Encode.Value
-jsonEncoder type_ =
-    case type_ of
-        T.CECT_Lambda arg body ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                , ( "arg", jsonEncoder arg )
-                , ( "body", jsonEncoder body )
-                ]
-
-        T.CECT_Var name ->
-            Encode.object
-                [ ( "type", Encode.string "Var" )
-                , ( "name", Encode.string name )
-                ]
-
-        T.CECT_Type name args ->
-            Encode.object
-                [ ( "type", Encode.string "Type" )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list jsonEncoder args )
-                ]
-
-        T.CECT_Record fields ext ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "fields", Encode.list (E.jsonPair Encode.string jsonEncoder) fields )
-                , ( "ext", E.maybe Encode.string ext )
-                ]
-
-        T.CECT_Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
-
-        T.CECT_Tuple a b cs ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "a", jsonEncoder a )
-                , ( "b", jsonEncoder b )
-                , ( "cs", Encode.list jsonEncoder cs )
-                ]
-
-
-jsonDecoder : Decode.Decoder T.CECT_Type
-jsonDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Lambda" ->
-                        Decode.map2 T.CECT_Lambda
-                            (Decode.field "arg" jsonDecoder)
-                            (Decode.field "body" jsonDecoder)
-
-                    "Var" ->
-                        Decode.map T.CECT_Var
-                            (Decode.field "name" Decode.string)
-
-                    "Type" ->
-                        Decode.map2 T.CECT_Type
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list jsonDecoder))
-
-                    "Record" ->
-                        Decode.map2 T.CECT_Record
-                            (Decode.field "fields" (Decode.list (D.jsonPair Decode.string jsonDecoder)))
-                            (Decode.field "ext" (Decode.maybe Decode.string))
-
-                    "Unit" ->
-                        Decode.succeed T.CECT_Unit
-
-                    "Tuple" ->
-                        Decode.map3 T.CECT_Tuple
-                            (Decode.field "a" jsonDecoder)
-                            (Decode.field "b" jsonDecoder)
-                            (Decode.field "cs" (Decode.list jsonDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode Type's type: " ++ type_)
-            )

@@ -12,8 +12,6 @@ module Compiler.AST.Canonical exposing
     , annotationEncoder
     , ctorOptsDecoder
     , ctorOptsEncoder
-    , fieldUpdateDecoder
-    , fieldUpdateEncoder
     , fieldsToList
     , typeDecoder
     , typeEncoder
