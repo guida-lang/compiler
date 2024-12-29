@@ -1,7 +1,6 @@
 module Builder.Build exposing
     ( DocsGoal(..)
     , ReplArtifacts(..)
-    , cachedInterfaceDecoder
     , fromExposed_Documentation
     , fromExposed_Unit
     , fromPaths
@@ -31,15 +30,12 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO
 import Types as T exposing (IO)
 import Utils.Crash exposing (crash)
@@ -101,12 +97,12 @@ addRelative (AbsoluteSrcDir srcDir) path =
 described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 <https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead>
 -}
-fork : (a -> Encode.Value) -> IO a -> IO (T.MVar a)
-fork encoder work =
-    Utils.newEmptyMVar
+fork_Result_BuildProjectProblem_RootInfo : IO (Result T.BRE_BuildProjectProblem T.BB_RootInfo) -> IO T.MVar_Result_BuildProjectProblem_RootInfo
+fork_Result_BuildProjectProblem_RootInfo work =
+    Utils.newEmptyMVar_Result_BuildProjectProblem_RootInfo
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
+                Utils.forkIO (IO.bind (Utils.putMVar_Result_BuildProjectProblem_RootInfo mvar) work)
                     |> IO.fmap (\_ -> mvar)
             )
 
@@ -1472,17 +1468,12 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((T.CASTS
 -- FIND ROOT
 
 
-type RootLocation
-    = LInside T.CEMN_Raw
-    | LOutside T.FilePath
-
-
-findRoots : Env -> NE.Nonempty T.FilePath -> IO (Result T.BRE_BuildProjectProblem (NE.Nonempty RootLocation))
+findRoots : Env -> NE.Nonempty T.FilePath -> IO (Result T.BRE_BuildProjectProblem (NE.Nonempty T.BB_RootLocation))
 findRoots env paths =
-    Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
+    Utils.nonEmptyListTraverse (fork_Result_BuildProjectProblem_RootInfo << getRootInfo env) paths
         |> IO.bind
             (\mvars ->
-                Utils.nonEmptyListTraverse (Utils.readMVar resultBuildProjectProblemRootInfoDecoder) mvars
+                Utils.nonEmptyListTraverse Utils.readMVar_Result_BuildProjectProblem_RootInfo mvars
                     |> IO.bind
                         (\einfos ->
                             IO.pure (Result.andThen checkRoots (Utils.sequenceNonemptyListResult einfos))
@@ -1490,23 +1481,23 @@ findRoots env paths =
             )
 
 
-checkRoots : NE.Nonempty RootInfo -> Result T.BRE_BuildProjectProblem (NE.Nonempty RootLocation)
+checkRoots : NE.Nonempty T.BB_RootInfo -> Result T.BRE_BuildProjectProblem (NE.Nonempty T.BB_RootLocation)
 checkRoots infos =
     let
-        toOneOrMore : RootInfo -> ( T.FilePath, OneOrMore.OneOrMore RootInfo )
-        toOneOrMore ((RootInfo absolute _ _) as loc) =
+        toOneOrMore : T.BB_RootInfo -> ( T.FilePath, OneOrMore.OneOrMore T.BB_RootInfo )
+        toOneOrMore ((T.BB_RootInfo absolute _ _) as loc) =
             ( absolute, OneOrMore.one loc )
 
-        fromOneOrMore : RootInfo -> List RootInfo -> Result T.BRE_BuildProjectProblem ()
-        fromOneOrMore (RootInfo _ relative _) locs =
+        fromOneOrMore : T.BB_RootInfo -> List T.BB_RootInfo -> Result T.BRE_BuildProjectProblem ()
+        fromOneOrMore (T.BB_RootInfo _ relative _) locs =
             case locs of
                 [] ->
                     Ok ()
 
-                (RootInfo _ relative2 _) :: _ ->
+                (T.BB_RootInfo _ relative2 _) :: _ ->
                     Err (T.BRE_BP_MainPathDuplicate relative relative2)
     in
-    Result.map (\_ -> NE.map (\(RootInfo _ _ location) -> location) infos) <|
+    Result.map (\_ -> NE.map (\(T.BB_RootInfo _ _ location) -> location) infos) <|
         Utils.mapTraverseResult identity compare (OneOrMore.destruct fromOneOrMore) <|
             Utils.mapFromListWith identity OneOrMore.more <|
                 List.map toOneOrMore (NE.toList infos)
@@ -1516,11 +1507,7 @@ checkRoots infos =
 -- ROOT INFO
 
 
-type RootInfo
-    = RootInfo T.FilePath T.FilePath RootLocation
-
-
-getRootInfo : Env -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem RootInfo)
+getRootInfo : Env -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
 getRootInfo env path =
     File.exists path
         |> IO.bind
@@ -1533,7 +1520,7 @@ getRootInfo env path =
             )
 
 
-getRootInfoHelp : Env -> T.FilePath -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem RootInfo)
+getRootInfoHelp : Env -> T.FilePath -> T.FilePath -> IO (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
 getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
     let
         ( dirs, file ) =
@@ -1553,7 +1540,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
         in
         case List.filterMap (isInsideSrcDirByPath absoluteSegments) srcDirs of
             [] ->
-                IO.pure <| Ok <| RootInfo absolutePath path (LOutside path)
+                IO.pure <| Ok <| T.BB_RootInfo absolutePath path (T.BB_LOutside path)
 
             [ ( _, Ok names ) ] ->
                 let
@@ -1578,7 +1565,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                                     IO.pure <| Err <| T.BRE_BP_RootNameDuplicate name p1 p2
 
                                 _ ->
-                                    IO.pure <| Ok <| RootInfo absolutePath path (LInside name)
+                                    IO.pure <| Ok <| T.BB_RootInfo absolutePath path (T.BB_LInside name)
                         )
 
             [ ( s, Err names ) ] ->
@@ -1643,10 +1630,10 @@ dropPrefix roots paths =
 -- CRAWL ROOTS
 
 
-crawlRoot : Env -> T.MVar_BB_StatusDict -> RootLocation -> IO T.BB_RootStatus
+crawlRoot : Env -> T.MVar_BB_StatusDict -> T.BB_RootLocation -> IO T.BB_RootStatus
 crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
     case root of
-        LInside name ->
+        T.BB_LInside name ->
             Utils.newEmptyMVar_BB_Status
                 |> IO.bind
                     (\statusMVar ->
@@ -1662,7 +1649,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                                 )
                     )
 
-        LOutside path ->
+        T.BB_LOutside path ->
             File.getTime path
                 |> IO.bind
                     (\time ->
@@ -1866,88 +1853,3 @@ addOutside root modules =
 
         T.BB_ROutsideBlocked ->
             modules
-
-
-
--- ENCODERS and DECODERS
-
-
-resultBuildProjectProblemRootInfoEncoder : Result T.BRE_BuildProjectProblem RootInfo -> Encode.Value
-resultBuildProjectProblemRootInfoEncoder =
-    E.result Exit.buildProjectProblemEncoder rootInfoEncoder
-
-
-resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result T.BRE_BuildProjectProblem RootInfo)
-resultBuildProjectProblemRootInfoDecoder =
-    D.result Exit.buildProjectProblemDecoder rootInfoDecoder
-
-
-cachedInterfaceDecoder : Decode.Decoder T.BB_CachedInterface
-cachedInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Unneeded" ->
-                        Decode.succeed T.BB_Unneeded
-
-                    "Loaded" ->
-                        Decode.map T.BB_Loaded (Decode.field "iface" I.interfaceDecoder)
-
-                    "Corrupted" ->
-                        Decode.succeed T.BB_Corrupted
-
-                    _ ->
-                        Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)
-            )
-
-
-rootInfoEncoder : RootInfo -> Encode.Value
-rootInfoEncoder (RootInfo absolute relative location) =
-    Encode.object
-        [ ( "type", Encode.string "RootInfo" )
-        , ( "absolute", Encode.string absolute )
-        , ( "relative", Encode.string relative )
-        , ( "location", rootLocationEncoder location )
-        ]
-
-
-rootInfoDecoder : Decode.Decoder RootInfo
-rootInfoDecoder =
-    Decode.map3 RootInfo
-        (Decode.field "absolute" Decode.string)
-        (Decode.field "relative" Decode.string)
-        (Decode.field "location" rootLocationDecoder)
-
-
-rootLocationEncoder : RootLocation -> Encode.Value
-rootLocationEncoder rootLocation =
-    case rootLocation of
-        LInside name ->
-            Encode.object
-                [ ( "type", Encode.string "LInside" )
-                , ( "name", ModuleName.rawEncoder name )
-                ]
-
-        LOutside path ->
-            Encode.object
-                [ ( "type", Encode.string "LOutside" )
-                , ( "path", Encode.string path )
-                ]
-
-
-rootLocationDecoder : Decode.Decoder RootLocation
-rootLocationDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LInside" ->
-                        Decode.map LInside (Decode.field "name" ModuleName.rawDecoder)
-
-                    "LOutside" ->
-                        Decode.map LOutside (Decode.field "path" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Failed to decode RootLocation's type: " ++ type_)
-            )

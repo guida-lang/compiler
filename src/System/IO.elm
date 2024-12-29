@@ -106,6 +106,7 @@ run app =
                     , mVars_Maybe_BED_DResult = Array.empty
                     , mVars_Maybe_CASTO_LocalGraph = Array.empty
                     , mVars_Maybe_CASTO_GlobalGraph = Array.empty
+                    , mVars_Result_BuildProjectProblem_RootInfo = Array.empty
                     , mVars_MaybeDep = Array.empty
                     , mVars_BB_RootResult = Array.empty
                     , mVars_BB_RootStatus = Array.empty
@@ -124,6 +125,8 @@ run app =
                     , mVars_Unit = Array.empty
                     , mVars_Manager = Array.empty
                     , mVars_BB_ResultDict = Array.empty
+                    , mVars_Stream_Maybe_DMsg = Array.empty
+                    , mVars_ChItem_Maybe_DMsg = Array.empty
                     , mVars_StreamResultBMsgBResultDocumentation = Array.empty
                     , mVars_ChItemResultBMsgBResultDocumentation = Array.empty
                     , mVars_StreamResultBMsgBResultUnit = Array.empty
@@ -223,6 +226,10 @@ type Msg
     | NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph Int Int
     | ReadMVarMsg_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
     | PutMVarMsg_Maybe_CASTO_GlobalGraph Int
+      -- MVars (Result BRE_BuildProjectProblem BB_RootInfo)
+    | NewEmptyMVarMsg_Result_BuildProjectProblem_RootInfo Int Int
+    | ReadMVarMsg_Result_BuildProjectProblem_RootInfo Int (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
+    | PutMVarMsg_Result_BuildProjectProblem_RootInfo Int
       -- MVars (Maybe T.BB_Dep)
     | NewEmptyMVarMsg_MaybeDep Int Int
     | ReadMVarMsg_MaybeDep Int (Maybe T.BB_Dep)
@@ -295,6 +302,14 @@ type Msg
     | NewEmptyMVarMsg_BB_ResultDict Int Int
     | ReadMVarMsg_BB_ResultDict Int T.BB_ResultDict
     | PutMVarMsg_BB_ResultDict Int
+      -- MVars (T.MVar_ChItem_Maybe_DMsg)
+    | NewEmptyMVarMsg_Stream_Maybe_DMsg Int Int
+    | ReadMVarMsg_Stream_Maybe_DMsg Int T.MVar_ChItem_Maybe_DMsg
+    | PutMVarMsg_Stream_Maybe_DMsg Int
+      -- MVars (T.ChItem_Maybe_DMsg)
+    | NewEmptyMVarMsg_ChItem_Maybe_DMsg Int Int
+    | ReadMVarMsg_ChItem_Maybe_DMsg Int T.ChItem_Maybe_DMsg
+    | PutMVarMsg_ChItem_Maybe_DMsg Int
       -- MVars (T.MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarMsg_StreamResultBMsgBResultDocumentation Int Int
     | ReadMVarMsg_StreamResultBMsgBResultDocumentation Int T.MVar_ChItemResultBMsgBResultDocumentation
@@ -569,6 +584,28 @@ update msg model =
 
                 ( newRealWorld, T.PutMVar_Maybe_CASTO_GlobalGraph next _ Nothing ) ->
                     update (PutMVarMsg_Maybe_CASTO_GlobalGraph index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
+
+                -- MVars (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
+                ( newRealWorld, T.NewEmptyMVar_Result_BuildProjectProblem_RootInfo next value ) ->
+                    update (NewEmptyMVarMsg_Result_BuildProjectProblem_RootInfo index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_Result_BuildProjectProblem_RootInfo next) model.next }
+
+                ( newRealWorld, T.ReadMVar_Result_BuildProjectProblem_RootInfo next (Just value) ) ->
+                    update (ReadMVarMsg_Result_BuildProjectProblem_RootInfo index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_Result_BuildProjectProblem_RootInfo next) model.next }
+
+                ( newRealWorld, T.ReadMVar_Result_BuildProjectProblem_RootInfo next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_Result_BuildProjectProblem_RootInfo next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.PutMVar_Result_BuildProjectProblem_RootInfo next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Result_BuildProjectProblem_RootInfo readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Result_BuildProjectProblem_RootInfo index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Result_BuildProjectProblem_RootInfo next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_Result_BuildProjectProblem_RootInfo next _ Nothing ) ->
+                    update (PutMVarMsg_Result_BuildProjectProblem_RootInfo index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Result_BuildProjectProblem_RootInfo next) model.next }
 
                 -- MVars (Maybe T.BB_Dep)
                 ( newRealWorld, T.NewEmptyMVar_MaybeDep next value ) ->
@@ -1069,6 +1106,66 @@ update msg model =
 
                 ( newRealWorld, T.PutMVar_BB_ResultDict next _ Nothing ) ->
                     update (PutMVarMsg_BB_ResultDict index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_ResultDict next) model.next }
+
+                -- MVars (T.MVar_ChItem_Maybe_DMsg)
+                ( newRealWorld, T.NewEmptyMVar_Stream_Maybe_DMsg next value ) ->
+                    update (NewEmptyMVarMsg_Stream_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_Stream_Maybe_DMsg next) model.next }
+
+                ( newRealWorld, T.ReadMVar_Stream_Maybe_DMsg next (Just value) ) ->
+                    update (ReadMVarMsg_Stream_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_Stream_Maybe_DMsg next) model.next }
+
+                ( newRealWorld, T.ReadMVar_Stream_Maybe_DMsg next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_Stream_Maybe_DMsg next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.TakeMVar_Stream_Maybe_DMsg next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_Stream_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.TakeMVarNext_Stream_Maybe_DMsg next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.TakeMVar_Stream_Maybe_DMsg next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.TakeMVarNext_Stream_Maybe_DMsg next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.PutMVar_Stream_Maybe_DMsg next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_Stream_Maybe_DMsg readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_Stream_Maybe_DMsg index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Stream_Maybe_DMsg next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_Stream_Maybe_DMsg next _ Nothing ) ->
+                    update (PutMVarMsg_Stream_Maybe_DMsg index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Stream_Maybe_DMsg next) model.next }
+
+                -- MVars (T.ChItem_Maybe_DMsg)
+                ( newRealWorld, T.NewEmptyMVar_ChItem_Maybe_DMsg next value ) ->
+                    update (NewEmptyMVarMsg_ChItem_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_ChItem_Maybe_DMsg next) model.next }
+
+                ( newRealWorld, T.ReadMVar_ChItem_Maybe_DMsg next (Just value) ) ->
+                    update (ReadMVarMsg_ChItem_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_ChItem_Maybe_DMsg next) model.next }
+
+                ( newRealWorld, T.ReadMVar_ChItem_Maybe_DMsg next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_ChItem_Maybe_DMsg next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.TakeMVar_ChItem_Maybe_DMsg next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_ChItem_Maybe_DMsg index value) { newRealWorld | next = Dict.insert index (T.TakeMVarNext_ChItem_Maybe_DMsg next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.TakeMVar_ChItem_Maybe_DMsg next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.TakeMVarNext_ChItem_Maybe_DMsg next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.PutMVar_ChItem_Maybe_DMsg next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_ChItem_Maybe_DMsg readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_ChItem_Maybe_DMsg index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_ChItem_Maybe_DMsg next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_ChItem_Maybe_DMsg next _ Nothing ) ->
+                    update (PutMVarMsg_ChItem_Maybe_DMsg index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_ChItem_Maybe_DMsg next) model.next }
 
                 -- MVars (T.MVar_StreamResultBMsgBResultDocumentation)
                 ( newRealWorld, T.NewEmptyMVar_StreamResultBMsgBResultDocumentation next value ) ->
@@ -1632,6 +1729,31 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_Maybe_CASTO_GlobalGraph"
 
+        -- MVars (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
+        NewEmptyMVarMsg_Result_BuildProjectProblem_RootInfo index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_Result_BuildProjectProblem_RootInfo fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Result_BuildProjectProblem_RootInfo"
+
+        ReadMVarMsg_Result_BuildProjectProblem_RootInfo index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_Result_BuildProjectProblem_RootInfo fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Result_BuildProjectProblem_RootInfo"
+
+        PutMVarMsg_Result_BuildProjectProblem_RootInfo index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_Result_BuildProjectProblem_RootInfo fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Result_BuildProjectProblem_RootInfo"
+
         -- MVars (Maybe T.BB_Dep)
         NewEmptyMVarMsg_MaybeDep index value ->
             case Dict.get index model.next of
@@ -2120,6 +2242,62 @@ update msg model =
 
                 _ ->
                     crash "PutMVarMsg_BB_ResultDict"
+
+        -- MVars (T.MVar_ChItem_Maybe_DMsg)
+        NewEmptyMVarMsg_Stream_Maybe_DMsg index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_Stream_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_Stream_Maybe_DMsg"
+
+        ReadMVarMsg_Stream_Maybe_DMsg index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_Stream_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (T.TakeMVarNext_Stream_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_Stream_Maybe_DMsg"
+
+        PutMVarMsg_Stream_Maybe_DMsg index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_Stream_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_Stream_Maybe_DMsg"
+
+        -- MVars (T.ChItem_Maybe_DMsg)
+        NewEmptyMVarMsg_ChItem_Maybe_DMsg index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_ChItem_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_ChItem_Maybe_DMsg"
+
+        ReadMVarMsg_ChItem_Maybe_DMsg index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_ChItem_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (T.TakeMVarNext_ChItem_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_ChItem_Maybe_DMsg"
+
+        PutMVarMsg_ChItem_Maybe_DMsg index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_ChItem_Maybe_DMsg fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_ChItem_Maybe_DMsg"
 
         -- MVars (MVar_StreamResultBMsgBResultDocumentation)
         NewEmptyMVarMsg_StreamResultBMsgBResultDocumentation index value ->
@@ -2670,6 +2848,16 @@ bind f (T.IO ma) =
                 ( s1, T.PutMVar_Maybe_CASTO_GlobalGraph next readIndexes value ) ->
                     ( s1, T.PutMVar_Maybe_CASTO_GlobalGraph (\() -> bind f (next ())) readIndexes value )
 
+                -- MVars (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
+                ( s1, T.NewEmptyMVar_Result_BuildProjectProblem_RootInfo next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_Result_BuildProjectProblem_RootInfo (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_Result_BuildProjectProblem_RootInfo next mVarValue ) ->
+                    ( s1, T.ReadMVar_Result_BuildProjectProblem_RootInfo (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.PutMVar_Result_BuildProjectProblem_RootInfo next readIndexes value ) ->
+                    ( s1, T.PutMVar_Result_BuildProjectProblem_RootInfo (\() -> bind f (next ())) readIndexes value )
+
                 -- MVars (Maybe T.BB_Dep)
                 ( s1, T.NewEmptyMVar_MaybeDep next emptyMVarIndex ) ->
                     ( s1, T.NewEmptyMVar_MaybeDep (\value -> bind f (next value)) emptyMVarIndex )
@@ -2888,6 +3076,32 @@ bind f (T.IO ma) =
 
                 ( s1, T.PutMVar_BB_ResultDict next readIndexes value ) ->
                     ( s1, T.PutMVar_BB_ResultDict (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.MVar_ChItem_Maybe_DMsg)
+                ( s1, T.NewEmptyMVar_Stream_Maybe_DMsg next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_Stream_Maybe_DMsg (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_Stream_Maybe_DMsg next mVarValue ) ->
+                    ( s1, T.ReadMVar_Stream_Maybe_DMsg (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.TakeMVar_Stream_Maybe_DMsg next mVarValue maybePutIndex ) ->
+                    ( s1, T.TakeMVar_Stream_Maybe_DMsg (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, T.PutMVar_Stream_Maybe_DMsg next readIndexes value ) ->
+                    ( s1, T.PutMVar_Stream_Maybe_DMsg (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.ChItem_Maybe_DMsg)
+                ( s1, T.NewEmptyMVar_ChItem_Maybe_DMsg next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_ChItem_Maybe_DMsg (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_ChItem_Maybe_DMsg next mVarValue ) ->
+                    ( s1, T.ReadMVar_ChItem_Maybe_DMsg (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.TakeMVar_ChItem_Maybe_DMsg next mVarValue maybePutIndex ) ->
+                    ( s1, T.TakeMVar_ChItem_Maybe_DMsg (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, T.PutMVar_ChItem_Maybe_DMsg next readIndexes value ) ->
+                    ( s1, T.PutMVar_ChItem_Maybe_DMsg (\() -> bind f (next ())) readIndexes value )
 
                 -- MVars (T.MVar_StreamResultBMsgBResultDocumentation)
                 ( s1, T.NewEmptyMVar_StreamResultBMsgBResultDocumentation next emptyMVarIndex ) ->

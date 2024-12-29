@@ -73,6 +73,10 @@ type ION a
     | NewEmptyMVar_Maybe_CASTO_GlobalGraph (Int -> IO a) Int
     | ReadMVar_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO a) (Maybe (Maybe CASTO_GlobalGraph))
     | PutMVar_Maybe_CASTO_GlobalGraph (() -> IO a) (List Int) (Maybe (Maybe CASTO_GlobalGraph))
+      -- MVars (Result BRE_BuildProjectProblem BB_RootInfo)
+    | NewEmptyMVar_Result_BuildProjectProblem_RootInfo (Int -> IO a) Int
+    | ReadMVar_Result_BuildProjectProblem_RootInfo (Result BRE_BuildProjectProblem BB_RootInfo -> IO a) (Maybe (Result BRE_BuildProjectProblem BB_RootInfo))
+    | PutMVar_Result_BuildProjectProblem_RootInfo (() -> IO a) (List Int) (Maybe (Result BRE_BuildProjectProblem BB_RootInfo))
       -- MVars (Maybe BB_Dep)
     | NewEmptyMVar_MaybeDep (Int -> IO a) Int
     | ReadMVar_MaybeDep (Maybe BB_Dep -> IO a) (Maybe (Maybe BB_Dep))
@@ -158,6 +162,16 @@ type ION a
     | ReadMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict)
     | TakeMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict) (Maybe Int)
     | PutMVar_BB_ResultDict (() -> IO a) (List Int) (Maybe BB_ResultDict)
+      -- MVars (MVar_ChItem_Maybe_DMsg)
+    | NewEmptyMVar_Stream_Maybe_DMsg (Int -> IO a) Int
+    | ReadMVar_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO a) (Maybe MVar_ChItem_Maybe_DMsg)
+    | TakeMVar_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO a) (Maybe MVar_ChItem_Maybe_DMsg) (Maybe Int)
+    | PutMVar_Stream_Maybe_DMsg (() -> IO a) (List Int) (Maybe MVar_ChItem_Maybe_DMsg)
+      -- MVars (ChItem_Maybe_DMsg)
+    | NewEmptyMVar_ChItem_Maybe_DMsg (Int -> IO a) Int
+    | ReadMVar_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO a) (Maybe ChItem_Maybe_DMsg)
+    | TakeMVar_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO a) (Maybe ChItem_Maybe_DMsg) (Maybe Int)
+    | PutMVar_ChItem_Maybe_DMsg (() -> IO a) (List Int) (Maybe ChItem_Maybe_DMsg)
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVar_StreamResultBMsgBResultDocumentation (Int -> IO a) Int
     | ReadMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
@@ -207,6 +221,7 @@ type alias RealWorld =
     , mVars_Maybe_BED_DResult : Array { subscribers : List MVarSubscriber_Maybe_BED_DResult, value : Maybe (Maybe BED_DResult) }
     , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe CASTO_LocalGraph) }
     , mVars_Maybe_CASTO_GlobalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_GlobalGraph, value : Maybe (Maybe CASTO_GlobalGraph) }
+    , mVars_Result_BuildProjectProblem_RootInfo : Array { subscribers : List MVarSubscriber_Result_BuildProjectProblem_RootInfo, value : Maybe (Result BRE_BuildProjectProblem BB_RootInfo) }
     , mVars_MaybeDep : Array { subscribers : List MVarSubscriber_MaybeDep, value : Maybe (Maybe BB_Dep) }
     , mVars_BB_RootResult : Array { subscribers : List MVarSubscriber_BB_RootResult, value : Maybe BB_RootResult }
     , mVars_BB_RootStatus : Array { subscribers : List MVarSubscriber_BB_RootStatus, value : Maybe BB_RootStatus }
@@ -225,6 +240,8 @@ type alias RealWorld =
     , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
     , mVars_Manager : Array { subscribers : List MVarSubscriber_Manager, value : Maybe BH_Manager }
     , mVars_BB_ResultDict : Array { subscribers : List MVarSubscriber_BB_ResultDict, value : Maybe BB_ResultDict }
+    , mVars_Stream_Maybe_DMsg : Array { subscribers : List MVarSubscriber_Stream_Maybe_DMsg, value : Maybe MVar_ChItem_Maybe_DMsg }
+    , mVars_ChItem_Maybe_DMsg : Array { subscribers : List MVarSubscriber_ChItem_Maybe_DMsg, value : Maybe ChItem_Maybe_DMsg }
     , mVars_StreamResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultDocumentation, value : Maybe MVar_ChItemResultBMsgBResultDocumentation }
     , mVars_ChItemResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultDocumentation, value : Maybe ChItem_ResultBMsgBResultDocumentation }
     , mVars_StreamResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultUnit, value : Maybe MVar_ChItemResultBMsgBResultUnit }
@@ -264,6 +281,12 @@ type MVarSubscriber_Maybe_CASTO_GlobalGraph
     = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe CASTO_GlobalGraph)
+
+
+type MVarSubscriber_Result_BuildProjectProblem_RootInfo
+    = ReadMVarSubscriber_Result_BuildProjectProblem_RootInfo Int
+    | TakeMVarSubscriber_Result_BuildProjectProblem_RootInfo Int
+    | PutMVarSubscriber_Result_BuildProjectProblem_RootInfo Int (Result BRE_BuildProjectProblem BB_RootInfo)
 
 
 type MVarSubscriber_MaybeDep
@@ -374,6 +397,18 @@ type MVarSubscriber_Unit
     | PutMVarSubscriber_Unit Int ()
 
 
+type MVarSubscriber_Stream_Maybe_DMsg
+    = ReadMVarSubscriber_Stream_Maybe_DMsg Int
+    | TakeMVarSubscriber_Stream_Maybe_DMsg Int
+    | PutMVarSubscriber_Stream_Maybe_DMsg Int MVar_ChItem_Maybe_DMsg
+
+
+type MVarSubscriber_ChItem_Maybe_DMsg
+    = ReadMVarSubscriber_ChItem_Maybe_DMsg Int
+    | TakeMVarSubscriber_ChItem_Maybe_DMsg Int
+    | PutMVarSubscriber_ChItem_Maybe_DMsg Int ChItem_Maybe_DMsg
+
+
 type MVarSubscriber_StreamResultBMsgBResultDocumentation
     = ReadMVarSubscriber_StreamResultBMsgBResultDocumentation Int
     | TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
@@ -467,6 +502,10 @@ type Next
     | NewEmptyMVarNext_Maybe_CASTO_GlobalGraph (Int -> IO ())
     | ReadMVarNext_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO ())
     | PutMVarNext_Maybe_CASTO_GlobalGraph (() -> IO ())
+      -- MVars (Result BRE_BuildProjectProblem BB_RootInfo)
+    | NewEmptyMVarNext_Result_BuildProjectProblem_RootInfo (Int -> IO ())
+    | ReadMVarNext_Result_BuildProjectProblem_RootInfo (Result BRE_BuildProjectProblem BB_RootInfo -> IO ())
+    | PutMVarNext_Result_BuildProjectProblem_RootInfo (() -> IO ())
       -- MVars (Maybe BB_Dep)
     | NewEmptyMVarNext_MaybeDep (Int -> IO ())
     | ReadMVarNext_MaybeDep (Maybe BB_Dep -> IO ())
@@ -552,6 +591,16 @@ type Next
     | ReadMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
     | TakeMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
     | PutMVarNext_BB_ResultDict (() -> IO ())
+      -- MVars (MVar_ChItem_Maybe_DMsg)
+    | NewEmptyMVarNext_Stream_Maybe_DMsg (Int -> IO ())
+    | ReadMVarNext_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO ())
+    | TakeMVarNext_Stream_Maybe_DMsg (MVar_ChItem_Maybe_DMsg -> IO ())
+    | PutMVarNext_Stream_Maybe_DMsg (() -> IO ())
+      -- MVars (ChItem_Maybe_DMsg)
+    | NewEmptyMVarNext_ChItem_Maybe_DMsg (Int -> IO ())
+    | ReadMVarNext_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO ())
+    | TakeMVarNext_ChItem_Maybe_DMsg (ChItem_Maybe_DMsg -> IO ())
+    | PutMVarNext_ChItem_Maybe_DMsg (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarNext_StreamResultBMsgBResultDocumentation (Int -> IO ())
     | ReadMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
@@ -1177,6 +1226,12 @@ type MVar_Maybe_CASTO_GlobalGraph
 
 {-| FIXME Utils.Main
 -}
+type MVar_Result_BuildProjectProblem_RootInfo
+    = MVar_Result_BuildProjectProblem_RootInfo Int
+
+
+{-| FIXME Utils.Main
+-}
 type MVar_MaybeDep
     = MVar_MaybeDep Int
 
@@ -1285,6 +1340,18 @@ type MVar_BB_ResultDict
 
 {-| FIXME Utils.Main
 -}
+type MVar_Stream_Maybe_DMsg
+    = MVar_Stream_Maybe_DMsg Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_ChItem_Maybe_DMsg
+    = MVar_ChItem_Maybe_DMsg Int
+
+
+{-| FIXME Utils.Main
+-}
 type MVar_StreamResultBMsgBResultDocumentation
     = MVar_StreamResultBMsgBResultDocumentation Int
 
@@ -1339,6 +1406,12 @@ type alias Stream a =
 -}
 type ChItem a
     = ChItem a (Stream a)
+
+
+{-| FIXME Utils.Main
+-}
+type ChItem_Maybe_DMsg
+    = ChItem_Maybe_DMsg (Maybe BR_DMsg) MVar_ChItem_Maybe_DMsg
 
 
 {-| FIXME Utils.Main
@@ -3097,3 +3170,36 @@ type BB_RootResult
 -}
 type alias BB_Dep =
     ( CEMN_Raw, CEI_Interface )
+
+
+
+-- ROOT INFO
+
+
+{-| FIXME Builder.Build
+-}
+type BB_RootInfo
+    = BB_RootInfo FilePath FilePath BB_RootLocation
+
+
+
+-- FIND ROOT
+
+
+{-| FIXME Builder.Build
+-}
+type BB_RootLocation
+    = BB_LInside CEMN_Raw
+    | BB_LOutside FilePath
+
+
+{-| FIXME Builder.Reporting
+-}
+type BR_DMsg
+    = BR_DStart Int
+    | BR_DCached
+    | BR_DRequested
+    | BR_DReceived CEP_Name CEV_Version
+    | BR_DFailed CEP_Name CEV_Version
+    | BR_DBuilt
+    | BR_DBroken

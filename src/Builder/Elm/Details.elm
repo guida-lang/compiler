@@ -405,7 +405,7 @@ fork_Maybe_BB_Dependencies work =
 verifyDependencies : Env -> T.BF_Time -> ValidOutline -> Dict ( String, String ) T.CEP_Name Solver.Details -> Dict ( String, String ) T.CEP_Name a -> Task Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
-        (Reporting.report key (Reporting.DStart (Dict.size solution))
+        (Reporting.report key (T.BR_DStart (Dict.size solution))
             |> IO.bind (\_ -> Utils.newEmptyMVar_DictNameMVarDep)
             |> IO.bind
                 (\mvar ->
@@ -512,7 +512,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
         |> IO.bind
             (\exists ->
                 if exists then
-                    Reporting.report key Reporting.DCached
+                    Reporting.report key T.BR_DCached
                         |> IO.bind
                             (\_ ->
                                 File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.json")
@@ -524,7 +524,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
                                                     if EverySet.member toComparableFingerprint fingerprint fingerprints then
-                                                        IO.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
+                                                        IO.fmap (\_ -> Ok artifacts) (Reporting.report key T.BR_DBuilt)
 
                                                     else
                                                         build key cache depsMVar pkg details fingerprint fingerprints
@@ -532,7 +532,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                             )
 
                 else
-                    Reporting.report key Reporting.DRequested
+                    Reporting.report key T.BR_DRequested
                         |> IO.bind
                             (\_ ->
                                 downloadPackage cache manager pkg vsn
@@ -540,11 +540,11 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                                         (\result ->
                                             case result of
                                                 Err problem ->
-                                                    Reporting.report key (Reporting.DFailed pkg vsn)
+                                                    Reporting.report key (T.BR_DFailed pkg vsn)
                                                         |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadDownload pkg vsn problem)))
 
                                                 Ok () ->
-                                                    Reporting.report key (Reporting.DReceived pkg vsn)
+                                                    Reporting.report key (T.BR_DReceived pkg vsn)
                                                         |> IO.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
                                         )
                             )
@@ -580,11 +580,11 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
             (\eitherOutline ->
                 case eitherOutline of
                     Err _ ->
-                        Reporting.report key Reporting.DBroken
+                        Reporting.report key T.BR_DBroken
                             |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.App _) ->
-                        Reporting.report key Reporting.DBroken
+                        Reporting.report key T.BR_DBroken
                             |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
@@ -596,7 +596,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                             (\directDeps ->
                                                 case Utils.sequenceDictResult identity Pkg.compareName directDeps of
                                                     Err _ ->
-                                                        Reporting.report key Reporting.DBroken
+                                                        Reporting.report key T.BR_DBroken
                                                             |> IO.fmap (\_ -> Err Nothing)
 
                                                     Ok directArtifacts ->
@@ -629,7 +629,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
                                                                                                             Nothing ->
-                                                                                                                Reporting.report key Reporting.DBroken
+                                                                                                                Reporting.report key T.BR_DBroken
                                                                                                                     |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                                                                                                             Just statuses ->
@@ -645,7 +645,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                 (\maybeResults ->
                                                                                                                                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                                                                                                                                         Nothing ->
-                                                                                                                                                            Reporting.report key Reporting.DBroken
+                                                                                                                                                            Reporting.report key T.BR_DBroken
                                                                                                                                                                 |> IO.fmap (\_ -> Err (Just (T.BRE_BD_BadBuild pkg vsn f)))
 
                                                                                                                                                         Just results ->
@@ -672,7 +672,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                             in
                                                                                                                                                             writeDocs cache pkg vsn docsStatus results
                                                                                                                                                                 |> IO.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
-                                                                                                                                                                |> IO.bind (\_ -> Reporting.report key Reporting.DBuilt)
+                                                                                                                                                                |> IO.bind (\_ -> Reporting.report key T.BR_DBuilt)
                                                                                                                                                                 |> IO.fmap (\_ -> Ok artifacts)
                                                                                                                                                 )
                                                                                                                                     )

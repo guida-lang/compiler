@@ -1,6 +1,7 @@
 module Utils.Main exposing
     ( AsyncException(..)
     , Chan
+    , Chan_Maybe_DMsg
     , Chan_ResultBMsgBResultArtifacts
     , Chan_ResultBMsgBResultDocumentation
     , Chan_ResultBMsgBResultUnit
@@ -104,6 +105,7 @@ module Utils.Main exposing
     , maybeMapM
     , maybeTraverseTask
     , newChan
+    , newChan_Maybe_DMsg
     , newChan_ResultBMsgBResultArtifacts
     , newChan_ResultBMsgBResultDocumentation
     , newChan_ResultBMsgBResultUnit
@@ -130,6 +132,7 @@ module Utils.Main exposing
     , newEmptyMVar_Maybe_CECTE_Types
     , newEmptyMVar_ResultBMsgBResultArtifacts
     , newEmptyMVar_ResultRegistryProblemEnv
+    , newEmptyMVar_Result_BuildProjectProblem_RootInfo
     , newEmptyMVar_Unit
     , newMVar
     , newMVar_BB_BResult
@@ -149,7 +152,6 @@ module Utils.Main exposing
     , newMVar_StreamResultBMsgBResultArtifacts
     , newMVar_Unit
     , nonEmptyListTraverse
-    , putMVar
     , putMVar_BB_BResult
     , putMVar_BB_CachedInterface
     , putMVar_BB_ResultDict
@@ -173,9 +175,11 @@ module Utils.Main exposing
     , putMVar_Maybe_CASTO_LocalGraph
     , putMVar_Maybe_CECTE_Types
     , putMVar_ResultRegistryProblemEnv
+    , putMVar_Result_BuildProjectProblem_RootInfo
     , putMVar_StreamResultBMsgBResultUnit
     , putMVar_Unit
     , readChan
+    , readChan_Maybe_DMsg
     , readChan_ResultBMsgBResultArtifacts
     , readChan_ResultBMsgBResultDocumentation
     , readChan_ResultBMsgBResultUnit
@@ -201,6 +205,7 @@ module Utils.Main exposing
     , readMVar_Maybe_CASTO_LocalGraph
     , readMVar_Maybe_CECTE_Types
     , readMVar_ResultRegistryProblemEnv
+    , readMVar_Result_BuildProjectProblem_RootInfo
     , readMVar_Unit
     , replCompleteWord
     , replGetInputLine
@@ -226,10 +231,12 @@ module Utils.Main exposing
     , takeMVar_Maybe_BB_Dependencies
     , takeMVar_Maybe_CECTE_Types
     , takeMVar_ResultRegistryProblemEnv
+    , takeMVar_Stream_Maybe_DMsg
     , takeMVar_Unit
     , unlines
     , unzip3
     , writeChan
+    , writeChan_Maybe_DMsg
     , writeChan_ResultBMsgBResultArtifacts
     , writeChan_ResultBMsgBResultDocumentation
     , writeChan_ResultBMsgBResultUnit
@@ -1017,6 +1024,16 @@ newMVar encoder value =
             )
 
 
+newMVar_Stream_Maybe_DMsg : T.MVar_ChItem_Maybe_DMsg -> IO T.MVar_Stream_Maybe_DMsg
+newMVar_Stream_Maybe_DMsg value =
+    newEmptyMVar_Stream_Maybe_DMsg
+        |> IO.bind
+            (\mvar ->
+                putMVar_Stream_Maybe_DMsg mvar value
+                    |> IO.fmap (\_ -> mvar)
+            )
+
+
 newMVar_StreamResultBMsgBResultDocumentation : T.MVar_ChItemResultBMsgBResultDocumentation -> IO T.MVar_StreamResultBMsgBResultDocumentation
 newMVar_StreamResultBMsgBResultDocumentation value =
     newEmptyMVar_StreamResultBMsgBResultDocumentation
@@ -1076,6 +1093,26 @@ readMVar decoder (T.MVar ref) =
             )
 
 
+readMVar_Result_BuildProjectProblem_RootInfo : T.MVar_Result_BuildProjectProblem_RootInfo -> IO (Result T.BRE_BuildProjectProblem T.BB_RootInfo)
+readMVar_Result_BuildProjectProblem_RootInfo (T.MVar_Result_BuildProjectProblem_RootInfo ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Result_BuildProjectProblem_RootInfo of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_Result_BuildProjectProblem_RootInfo IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_Result_BuildProjectProblem_RootInfo index ] } s.mVars_Result_BuildProjectProblem_RootInfo }
+                            , T.ReadMVar_Result_BuildProjectProblem_RootInfo IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_Result_BuildProjectProblem_RootInfo: invalid ref"
+        )
+
+
 readMVar_Manager : T.MVar_Manager -> IO T.BH_Manager
 readMVar_Manager (T.MVar_Manager ref) =
     IO
@@ -1113,6 +1150,26 @@ readMVar_BB_ResultDict (T.MVar_BB_ResultDict ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_BB_ResultDict: invalid ref"
+        )
+
+
+readMVar_ChItem_Maybe_DMsg : T.MVar_ChItem_Maybe_DMsg -> IO T.ChItem_Maybe_DMsg
+readMVar_ChItem_Maybe_DMsg (T.MVar_ChItem_Maybe_DMsg ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ChItem_Maybe_DMsg of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_ChItem_Maybe_DMsg IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_ChItem_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_ChItem_Maybe_DMsg index ] } s.mVars_ChItem_Maybe_DMsg }
+                            , T.ReadMVar_ChItem_Maybe_DMsg IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_ChItem_Maybe_DMsg: invalid ref"
         )
 
 
@@ -1183,6 +1240,20 @@ modifyMVar decoder encoder m io =
         |> IO.bind
             (\( a, b ) ->
                 putMVar encoder m a
+                    |> IO.fmap (\_ -> b)
+            )
+
+
+modifyMVar_Stream_Maybe_DMsg_Maybe_DMsg :
+    T.MVar_Stream_Maybe_DMsg
+    -> (T.MVar_ChItem_Maybe_DMsg -> IO ( T.MVar_ChItem_Maybe_DMsg, Maybe T.BR_DMsg ))
+    -> IO (Maybe T.BR_DMsg)
+modifyMVar_Stream_Maybe_DMsg_Maybe_DMsg m io =
+    takeMVar_Stream_Maybe_DMsg m
+        |> IO.bind io
+        |> IO.bind
+            (\( a, b ) ->
+                putMVar_Stream_Maybe_DMsg m a
                     |> IO.fmap (\_ -> b)
             )
 
@@ -1265,6 +1336,35 @@ takeMVar decoder (T.MVar ref) =
                     Err _ ->
                         crash "Utils.Main.takeMVar: invalid value"
             )
+
+
+takeMVar_Stream_Maybe_DMsg : T.MVar_Stream_Maybe_DMsg -> IO T.MVar_ChItem_Maybe_DMsg
+takeMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Stream_Maybe_DMsg of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (T.PutMVarSubscriber_Stream_Maybe_DMsg putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars_Stream_Maybe_DMsg }
+                                    , T.TakeMVar_Stream_Maybe_DMsg IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | value = Nothing } s.mVars_Stream_Maybe_DMsg }
+                                    , T.TakeMVar_Stream_Maybe_DMsg IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Stream_Maybe_DMsg index ] } s.mVars_Stream_Maybe_DMsg }
+                            , T.TakeMVar_Stream_Maybe_DMsg IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar_Stream_Maybe_DMsg: invalid ref"
+        )
 
 
 takeMVar_StreamResultBMsgBResultDocumentation : T.MVar_StreamResultBMsgBResultDocumentation -> IO T.MVar_ChItemResultBMsgBResultDocumentation
@@ -1459,6 +1559,78 @@ putMVar_BB_ResultDict (T.MVar_BB_ResultDict ref) value =
 
                 Nothing ->
                     crash "Utils.Main.putMVar_BB_ResultDict: invalid ref"
+        )
+
+
+putMVar_Stream_Maybe_DMsg : T.MVar_Stream_Maybe_DMsg -> T.MVar_ChItem_Maybe_DMsg -> IO ()
+putMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Stream_Maybe_DMsg of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Stream_Maybe_DMsg index value ] } s.mVars_Stream_Maybe_DMsg }
+                            , T.PutMVar_Stream_Maybe_DMsg IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_Stream_Maybe_DMsg readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Stream_Maybe_DMsg }
+                            , T.PutMVar_Stream_Maybe_DMsg IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Stream_Maybe_DMsg: invalid ref"
+        )
+
+
+putMVar_ChItem_Maybe_DMsg : T.MVar_ChItem_Maybe_DMsg -> T.ChItem_Maybe_DMsg -> IO ()
+putMVar_ChItem_Maybe_DMsg (T.MVar_ChItem_Maybe_DMsg ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_ChItem_Maybe_DMsg of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_ChItem_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItem_Maybe_DMsg index value ] } s.mVars_ChItem_Maybe_DMsg }
+                            , T.PutMVar_ChItem_Maybe_DMsg IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_ChItem_Maybe_DMsg readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_ChItem_Maybe_DMsg = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_ChItem_Maybe_DMsg }
+                            , T.PutMVar_ChItem_Maybe_DMsg IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_ChItem_Maybe_DMsg: invalid ref"
         )
 
 
@@ -1709,6 +1881,28 @@ newEmptyMVar_BB_ResultDict =
             )
         )
         |> IO.fmap T.MVar_BB_ResultDict
+
+
+newEmptyMVar_Stream_Maybe_DMsg : IO T.MVar_Stream_Maybe_DMsg
+newEmptyMVar_Stream_Maybe_DMsg =
+    IO
+        (\_ s ->
+            ( { s | mVars_Stream_Maybe_DMsg = Array.push { subscribers = [], value = Nothing } s.mVars_Stream_Maybe_DMsg }
+            , T.NewEmptyMVar_Stream_Maybe_DMsg IO.pure (Array.length s.mVars_Stream_Maybe_DMsg)
+            )
+        )
+        |> IO.fmap T.MVar_Stream_Maybe_DMsg
+
+
+newEmptyMVar_ChItem_Maybe_DMsg : IO T.MVar_ChItem_Maybe_DMsg
+newEmptyMVar_ChItem_Maybe_DMsg =
+    IO
+        (\_ s ->
+            ( { s | mVars_ChItem_Maybe_DMsg = Array.push { subscribers = [], value = Nothing } s.mVars_ChItem_Maybe_DMsg }
+            , T.NewEmptyMVar_ChItem_Maybe_DMsg IO.pure (Array.length s.mVars_ChItem_Maybe_DMsg)
+            )
+        )
+        |> IO.fmap T.MVar_ChItem_Maybe_DMsg
 
 
 newEmptyMVar_StreamResultBMsgBResultDocumentation : IO T.MVar_StreamResultBMsgBResultDocumentation
@@ -2186,6 +2380,42 @@ readMVar_BB_BResult (T.MVar_BB_BResult ref) =
         )
 
 
+putMVar_Result_BuildProjectProblem_RootInfo : T.MVar_Result_BuildProjectProblem_RootInfo -> Result T.BRE_BuildProjectProblem T.BB_RootInfo -> IO ()
+putMVar_Result_BuildProjectProblem_RootInfo (T.MVar_Result_BuildProjectProblem_RootInfo ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_Result_BuildProjectProblem_RootInfo of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Result_BuildProjectProblem_RootInfo index value ] } s.mVars_Result_BuildProjectProblem_RootInfo }
+                            , T.PutMVar_Result_BuildProjectProblem_RootInfo IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_Result_BuildProjectProblem_RootInfo readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_Result_BuildProjectProblem_RootInfo }
+                            , T.PutMVar_Result_BuildProjectProblem_RootInfo IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_Result_BuildProjectProblem_RootInfo: invalid ref"
+        )
+
+
 putMVar_MaybeDep : T.MVar_MaybeDep -> Maybe T.BB_Dep -> IO ()
 putMVar_MaybeDep (T.MVar_MaybeDep ref) value =
     IO
@@ -2328,6 +2558,17 @@ putMVar_BB_BResult (T.MVar_BB_BResult ref) value =
                 Nothing ->
                     crash "Utils.Main.putMVar_BB_BResult: invalid ref"
         )
+
+
+newEmptyMVar_Result_BuildProjectProblem_RootInfo : IO T.MVar_Result_BuildProjectProblem_RootInfo
+newEmptyMVar_Result_BuildProjectProblem_RootInfo =
+    IO
+        (\_ s ->
+            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.push { subscribers = [], value = Nothing } s.mVars_Result_BuildProjectProblem_RootInfo }
+            , T.NewEmptyMVar_Result_BuildProjectProblem_RootInfo IO.pure (Array.length s.mVars_Result_BuildProjectProblem_RootInfo)
+            )
+        )
+        |> IO.fmap T.MVar_Result_BuildProjectProblem_RootInfo
 
 
 newEmptyMVar_MaybeDep : IO T.MVar_MaybeDep
@@ -3673,6 +3914,10 @@ type Chan a
     = Chan (T.MVar (T.Stream a)) (T.MVar (T.Stream a))
 
 
+type Chan_Maybe_DMsg
+    = Chan_Maybe_DMsg T.MVar_Stream_Maybe_DMsg T.MVar_Stream_Maybe_DMsg
+
+
 type Chan_ResultBMsgBResultDocumentation
     = Chan_ResultBMsgBResultDocumentation T.MVar_StreamResultBMsgBResultDocumentation T.MVar_StreamResultBMsgBResultDocumentation
 
@@ -3697,6 +3942,23 @@ newChan encoder =
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
+                                    )
+                        )
+            )
+
+
+newChan_Maybe_DMsg : IO Chan_Maybe_DMsg
+newChan_Maybe_DMsg =
+    newEmptyMVar_ChItem_Maybe_DMsg
+        |> IO.bind
+            (\hole ->
+                newMVar_Stream_Maybe_DMsg hole
+                    |> IO.bind
+                        (\readVar ->
+                            newMVar_Stream_Maybe_DMsg hole
+                                |> IO.fmap
+                                    (\writeVar ->
+                                        Chan_Maybe_DMsg readVar writeVar
                                     )
                         )
             )
@@ -3766,6 +4028,19 @@ readChan decoder (Chan readVar _) =
                     )
 
 
+readChan_Maybe_DMsg : Chan_Maybe_DMsg -> IO (Maybe T.BR_DMsg)
+readChan_Maybe_DMsg (Chan_Maybe_DMsg readVar _) =
+    modifyMVar_Stream_Maybe_DMsg_Maybe_DMsg readVar <|
+        \read_end ->
+            readMVar_ChItem_Maybe_DMsg read_end
+                |> IO.fmap
+                    (\(T.ChItem_Maybe_DMsg val new_read_end) ->
+                        -- Use readMVar here, not takeMVar,
+                        -- else dupChan doesn't work
+                        ( new_read_end, val )
+                    )
+
+
 readChan_ResultBMsgBResultDocumentation : Chan_ResultBMsgBResultDocumentation -> IO (Result T.BR_BMsg (T.BR_BResult T.CED_Documentation))
 readChan_ResultBMsgBResultDocumentation (Chan_ResultBMsgBResultDocumentation readVar _) =
     modifyMVar_StreamResultBMsgBResultDocumentation_ResultBMsgBResultDocumentation readVar <|
@@ -3815,6 +4090,20 @@ writeChan encoder (Chan _ writeVar) val =
                         (\old_hole ->
                             putMVar (chItemEncoder encoder) old_hole (T.ChItem val new_hole)
                                 |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                        )
+            )
+
+
+writeChan_Maybe_DMsg : Chan_Maybe_DMsg -> Maybe T.BR_DMsg -> IO ()
+writeChan_Maybe_DMsg (Chan_Maybe_DMsg _ writeVar) val =
+    newEmptyMVar_ChItem_Maybe_DMsg
+        |> IO.bind
+            (\new_hole ->
+                takeMVar_Stream_Maybe_DMsg writeVar
+                    |> IO.bind
+                        (\old_hole ->
+                            putMVar_ChItem_Maybe_DMsg old_hole (T.ChItem_Maybe_DMsg val new_hole)
+                                |> IO.bind (\_ -> putMVar_Stream_Maybe_DMsg writeVar new_hole)
                         )
             )
 

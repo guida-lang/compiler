@@ -1,6 +1,5 @@
 module Builder.Reporting exposing
     ( DKey
-    , DMsg(..)
     , Style
     , ask
     , attempt
@@ -21,16 +20,12 @@ import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
-import Json.Decode as Decode
-import Json.Encode as CoreEncode
 import System.Exit as Exit
 import System.IO as IO
 import Types as T
-import Utils.Main as Utils exposing (Chan, Chan_ResultBMsgBResultArtifacts, Chan_ResultBMsgBResultDocumentation, Chan_ResultBMsgBResultUnit)
+import Utils.Main as Utils exposing (Chan_Maybe_DMsg, Chan_ResultBMsgBResultArtifacts, Chan_ResultBMsgBResultDocumentation, Chan_ResultBMsgBResultUnit)
 
 
 
@@ -190,7 +185,7 @@ askHelp =
 
 
 type alias DKey =
-    T.BR_Key DMsg
+    T.BR_Key T.BR_DMsg
 
 
 trackDetails : Style -> (DKey -> T.IO a) -> T.IO a
@@ -203,39 +198,34 @@ trackDetails style callback =
             callback (T.BR_Key (\_ -> IO.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan_Maybe_DMsg
                 |> IO.bind
                     (\chan ->
                         Utils.forkIO
                             (Utils.takeMVar_Unit mvar
-                                |> IO.bind (\_ -> detailsLoop chan (DState 0 0 0 0 0 0 0))
+                                |> IO.bind (\_ -> detailsLoop_Maybe_DMsg chan (DState 0 0 0 0 0 0 0))
                                 |> IO.bind (\_ -> Utils.putMVar_Unit mvar ())
                             )
                             |> IO.bind
                                 (\_ ->
-                                    let
-                                        encoder : Maybe DMsg -> CoreEncode.Value
-                                        encoder =
-                                            Encode.maybe dMsgEncoder
-                                    in
-                                    callback (T.BR_Key (Utils.writeChan encoder chan << Just))
+                                    callback (T.BR_Key (Utils.writeChan_Maybe_DMsg chan << Just))
                                         |> IO.bind
                                             (\answer ->
-                                                Utils.writeChan encoder chan Nothing
+                                                Utils.writeChan_Maybe_DMsg chan Nothing
                                                     |> IO.fmap (\_ -> answer)
                                             )
                                 )
                     )
 
 
-detailsLoop : Chan (Maybe DMsg) -> DState -> T.IO ()
-detailsLoop chan ((DState total _ _ _ _ built _) as state) =
-    Utils.readChan (Decode.maybe dMsgDecoder) chan
+detailsLoop_Maybe_DMsg : Chan_Maybe_DMsg -> DState -> T.IO ()
+detailsLoop_Maybe_DMsg chan ((DState total _ _ _ _ built _) as state) =
+    Utils.readChan_Maybe_DMsg chan
         |> IO.bind
             (\msg ->
                 case msg of
                     Just dmsg ->
-                        IO.bind (detailsLoop chan) (detailsStep dmsg state)
+                        IO.bind (detailsLoop_Maybe_DMsg chan) (detailsStep dmsg state)
 
                     Nothing ->
                         IO.putStrLn
@@ -254,26 +244,16 @@ type DState
     = DState Int Int Int Int Int Int Int
 
 
-type DMsg
-    = DStart Int
-    | DCached
-    | DRequested
-    | DReceived T.CEP_Name T.CEV_Version
-    | DFailed T.CEP_Name T.CEV_Version
-    | DBuilt
-    | DBroken
-
-
-detailsStep : DMsg -> DState -> T.IO DState
+detailsStep : T.BR_DMsg -> DState -> T.IO DState
 detailsStep msg (DState total cached rqst rcvd failed built broken) =
     case msg of
-        DStart numDependencies ->
+        T.BR_DStart numDependencies ->
             IO.pure (DState numDependencies 0 0 0 0 0 0)
 
-        DCached ->
+        T.BR_DCached ->
             putTransition (DState total (cached + 1) rqst rcvd failed built broken)
 
-        DRequested ->
+        T.BR_DRequested ->
             (if rqst == 0 then
                 IO.putStrLn "Starting downloads...\n"
 
@@ -282,18 +262,18 @@ detailsStep msg (DState total cached rqst rcvd failed built broken) =
             )
                 |> IO.fmap (\_ -> DState total cached (rqst + 1) rcvd failed built broken)
 
-        DReceived pkg vsn ->
+        T.BR_DReceived pkg vsn ->
             putDownload goodMark pkg vsn
                 |> IO.bind (\_ -> putTransition (DState total cached rqst (rcvd + 1) failed built broken))
 
-        DFailed pkg vsn ->
+        T.BR_DFailed pkg vsn ->
             putDownload badMark pkg vsn
                 |> IO.bind (\_ -> putTransition (DState total cached rqst rcvd (failed + 1) built broken))
 
-        DBuilt ->
+        T.BR_DBuilt ->
             putBuilt (DState total cached rqst rcvd failed (built + 1) broken)
 
-        DBroken ->
+        T.BR_DBroken ->
             putBuilt (DState total cached rqst rcvd failed built (broken + 1))
 
 
@@ -670,87 +650,3 @@ putStrFlush : String -> T.IO ()
 putStrFlush str =
     IO.hPutStr IO.stdout str
         |> IO.bind (\_ -> IO.hFlush IO.stdout)
-
-
-
--- ENCODERS and DECODERS
-
-
-dMsgEncoder : DMsg -> CoreEncode.Value
-dMsgEncoder dMsg =
-    case dMsg of
-        DStart numDependencies ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DStart" )
-                , ( "numDependencies", CoreEncode.int numDependencies )
-                ]
-
-        DCached ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DCached" )
-                ]
-
-        DRequested ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DRequested" )
-                ]
-
-        DReceived pkg vsn ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DReceived" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                ]
-
-        DFailed pkg vsn ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DFailed" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                ]
-
-        DBuilt ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DBuilt" )
-                ]
-
-        DBroken ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DBroken" )
-                ]
-
-
-dMsgDecoder : Decode.Decoder DMsg
-dMsgDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DStart" ->
-                        Decode.map DStart (Decode.field "numDependencies" Decode.int)
-
-                    "DCached" ->
-                        Decode.succeed DCached
-
-                    "DRequested" ->
-                        Decode.succeed DRequested
-
-                    "DReceived" ->
-                        Decode.map2 DReceived
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "vsn" V.versionDecoder)
-
-                    "DFailed" ->
-                        Decode.map2 DFailed
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "vsn" V.versionDecoder)
-
-                    "DBuilt" ->
-                        Decode.succeed DBuilt
-
-                    "DBroken" ->
-                        Decode.succeed DBroken
-
-                    _ ->
-                        Decode.fail ("Failed to decode DMsg's type: " ++ type_)
-            )
