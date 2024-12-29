@@ -73,6 +73,18 @@ type ION a
     | NewEmptyMVar_Maybe_CASTO_GlobalGraph (Int -> IO a) Int
     | ReadMVar_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO a) (Maybe (Maybe CASTO_GlobalGraph))
     | PutMVar_Maybe_CASTO_GlobalGraph (() -> IO a) (List Int) (Maybe (Maybe CASTO_GlobalGraph))
+      -- MVars (Maybe BB_Dep)
+    | NewEmptyMVar_MaybeDep (Int -> IO a) Int
+    | ReadMVar_MaybeDep (Maybe BB_Dep -> IO a) (Maybe (Maybe BB_Dep))
+    | PutMVar_MaybeDep (() -> IO a) (List Int) (Maybe (Maybe BB_Dep))
+      -- MVars (BB_RootResult)
+    | NewEmptyMVar_BB_RootResult (Int -> IO a) Int
+    | ReadMVar_BB_RootResult (BB_RootResult -> IO a) (Maybe BB_RootResult)
+    | PutMVar_BB_RootResult (() -> IO a) (List Int) (Maybe BB_RootResult)
+      -- MVars (BB_RootStatus)
+    | NewEmptyMVar_BB_RootStatus (Int -> IO a) Int
+    | ReadMVar_BB_RootStatus (BB_RootStatus -> IO a) (Maybe BB_RootStatus)
+    | PutMVar_BB_RootStatus (() -> IO a) (List Int) (Maybe BB_RootStatus)
       -- MVars (BB_BResult)
     | NewEmptyMVar_BB_BResult (Int -> IO a) Int
     | ReadMVar_BB_BResult (BB_BResult -> IO a) (Maybe BB_BResult)
@@ -195,6 +207,9 @@ type alias RealWorld =
     , mVars_Maybe_BED_DResult : Array { subscribers : List MVarSubscriber_Maybe_BED_DResult, value : Maybe (Maybe BED_DResult) }
     , mVars_Maybe_CASTO_LocalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_LocalGraph, value : Maybe (Maybe CASTO_LocalGraph) }
     , mVars_Maybe_CASTO_GlobalGraph : Array { subscribers : List MVarSubscriber_Maybe_CASTO_GlobalGraph, value : Maybe (Maybe CASTO_GlobalGraph) }
+    , mVars_MaybeDep : Array { subscribers : List MVarSubscriber_MaybeDep, value : Maybe (Maybe BB_Dep) }
+    , mVars_BB_RootResult : Array { subscribers : List MVarSubscriber_BB_RootResult, value : Maybe BB_RootResult }
+    , mVars_BB_RootStatus : Array { subscribers : List MVarSubscriber_BB_RootStatus, value : Maybe BB_RootStatus }
     , mVars_BB_BResult : Array { subscribers : List MVarSubscriber_BB_BResult, value : Maybe BB_BResult }
     , mVars_BB_Status : Array { subscribers : List MVarSubscriber_BB_Status, value : Maybe BB_Status }
     , mVars_BB_StatusDict : Array { subscribers : List MVarSubscriber_BB_StatusDict, value : Maybe BB_StatusDict }
@@ -249,6 +264,24 @@ type MVarSubscriber_Maybe_CASTO_GlobalGraph
     = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | TakeMVarSubscriber_Maybe_CASTO_GlobalGraph Int
     | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe CASTO_GlobalGraph)
+
+
+type MVarSubscriber_MaybeDep
+    = ReadMVarSubscriber_MaybeDep Int
+    | TakeMVarSubscriber_MaybeDep Int
+    | PutMVarSubscriber_MaybeDep Int (Maybe BB_Dep)
+
+
+type MVarSubscriber_BB_RootResult
+    = ReadMVarSubscriber_BB_RootResult Int
+    | TakeMVarSubscriber_BB_RootResult Int
+    | PutMVarSubscriber_BB_RootResult Int BB_RootResult
+
+
+type MVarSubscriber_BB_RootStatus
+    = ReadMVarSubscriber_BB_RootStatus Int
+    | TakeMVarSubscriber_BB_RootStatus Int
+    | PutMVarSubscriber_BB_RootStatus Int BB_RootStatus
 
 
 type MVarSubscriber_BB_BResult
@@ -434,6 +467,18 @@ type Next
     | NewEmptyMVarNext_Maybe_CASTO_GlobalGraph (Int -> IO ())
     | ReadMVarNext_Maybe_CASTO_GlobalGraph (Maybe CASTO_GlobalGraph -> IO ())
     | PutMVarNext_Maybe_CASTO_GlobalGraph (() -> IO ())
+      -- MVars (Maybe BB_Dep)
+    | NewEmptyMVarNext_MaybeDep (Int -> IO ())
+    | ReadMVarNext_MaybeDep (Maybe BB_Dep -> IO ())
+    | PutMVarNext_MaybeDep (() -> IO ())
+      -- MVars (BB_RootResult)
+    | NewEmptyMVarNext_BB_RootResult (Int -> IO ())
+    | ReadMVarNext_BB_RootResult (BB_RootResult -> IO ())
+    | PutMVarNext_BB_RootResult (() -> IO ())
+      -- MVars (BB_RootStatus)
+    | NewEmptyMVarNext_BB_RootStatus (Int -> IO ())
+    | ReadMVarNext_BB_RootStatus (BB_RootStatus -> IO ())
+    | PutMVarNext_BB_RootStatus (() -> IO ())
       -- MVars (BB_BResult)
     | NewEmptyMVarNext_BB_BResult (Int -> IO ())
     | ReadMVarNext_BB_BResult (BB_BResult -> IO ())
@@ -1128,6 +1173,24 @@ type MVar_Maybe_CASTO_LocalGraph
 -}
 type MVar_Maybe_CASTO_GlobalGraph
     = MVar_Maybe_CASTO_GlobalGraph Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_MaybeDep
+    = MVar_MaybeDep Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_RootResult
+    = MVar_BB_RootResult Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_RootStatus
+    = MVar_BB_RootStatus Int
 
 
 {-| FIXME Utils.Main
@@ -2999,3 +3062,38 @@ type alias CAZ_Entry =
     { eRelativePath : FilePath
     , eData : String
     }
+
+
+
+-- CRAWL ROOTS
+
+
+{-| FIXME Builder.Build
+-}
+type BB_RootStatus
+    = BB_SInside CEMN_Raw
+    | BB_SOutsideOk BED_Local String CASTS_Module
+    | BB_SOutsideErr CRE_Module
+
+
+
+-- CHECK ROOTS
+
+
+{-| FIXME Builder.Build
+-}
+type BB_RootResult
+    = BB_RInside CEMN_Raw
+    | BB_ROutsideOk CEMN_Raw CEI_Interface CASTO_LocalGraph
+    | BB_ROutsideErr CRE_Module
+    | BB_ROutsideBlocked
+
+
+
+-- CHECK DEPS
+
+
+{-| FIXME Builder.Build
+-}
+type alias BB_Dep =
+    ( CEMN_Raw, CEI_Interface )

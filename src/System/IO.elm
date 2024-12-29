@@ -106,6 +106,9 @@ run app =
                     , mVars_Maybe_BED_DResult = Array.empty
                     , mVars_Maybe_CASTO_LocalGraph = Array.empty
                     , mVars_Maybe_CASTO_GlobalGraph = Array.empty
+                    , mVars_MaybeDep = Array.empty
+                    , mVars_BB_RootResult = Array.empty
+                    , mVars_BB_RootStatus = Array.empty
                     , mVars_BB_BResult = Array.empty
                     , mVars_BB_Status = Array.empty
                     , mVars_BB_StatusDict = Array.empty
@@ -220,6 +223,18 @@ type Msg
     | NewEmptyMVarMsg_Maybe_CASTO_GlobalGraph Int Int
     | ReadMVarMsg_Maybe_CASTO_GlobalGraph Int (Maybe T.CASTO_GlobalGraph)
     | PutMVarMsg_Maybe_CASTO_GlobalGraph Int
+      -- MVars (Maybe T.BB_Dep)
+    | NewEmptyMVarMsg_MaybeDep Int Int
+    | ReadMVarMsg_MaybeDep Int (Maybe T.BB_Dep)
+    | PutMVarMsg_MaybeDep Int
+      -- MVars (T.BB_RootResult)
+    | NewEmptyMVarMsg_BB_RootResult Int Int
+    | ReadMVarMsg_BB_RootResult Int T.BB_RootResult
+    | PutMVarMsg_BB_RootResult Int
+      -- MVars (T.BB_RootStatus)
+    | NewEmptyMVarMsg_BB_RootStatus Int Int
+    | ReadMVarMsg_BB_RootStatus Int T.BB_RootStatus
+    | PutMVarMsg_BB_RootStatus Int
       -- MVars (T.BB_BResult)
     | NewEmptyMVarMsg_BB_BResult Int Int
     | ReadMVarMsg_BB_BResult Int T.BB_BResult
@@ -554,6 +569,72 @@ update msg model =
 
                 ( newRealWorld, T.PutMVar_Maybe_CASTO_GlobalGraph next _ Nothing ) ->
                     update (PutMVarMsg_Maybe_CASTO_GlobalGraph index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Maybe_CASTO_GlobalGraph next) model.next }
+
+                -- MVars (Maybe T.BB_Dep)
+                ( newRealWorld, T.NewEmptyMVar_MaybeDep next value ) ->
+                    update (NewEmptyMVarMsg_MaybeDep index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_MaybeDep next) model.next }
+
+                ( newRealWorld, T.ReadMVar_MaybeDep next (Just value) ) ->
+                    update (ReadMVarMsg_MaybeDep index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_MaybeDep next) model.next }
+
+                ( newRealWorld, T.ReadMVar_MaybeDep next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_MaybeDep next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.PutMVar_MaybeDep next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_MaybeDep readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_MaybeDep index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_MaybeDep next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_MaybeDep next _ Nothing ) ->
+                    update (PutMVarMsg_MaybeDep index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_MaybeDep next) model.next }
+
+                -- MVars (T.BB_RootResult)
+                ( newRealWorld, T.NewEmptyMVar_BB_RootResult next value ) ->
+                    update (NewEmptyMVarMsg_BB_RootResult index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_BB_RootResult next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_RootResult next (Just value) ) ->
+                    update (ReadMVarMsg_BB_RootResult index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_RootResult next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_RootResult next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_RootResult next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.PutMVar_BB_RootResult next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_RootResult readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_RootResult index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_RootResult next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_BB_RootResult next _ Nothing ) ->
+                    update (PutMVarMsg_BB_RootResult index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_RootResult next) model.next }
+
+                -- MVars (T.BB_RootStatus)
+                ( newRealWorld, T.NewEmptyMVar_BB_RootStatus next value ) ->
+                    update (NewEmptyMVarMsg_BB_RootStatus index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_BB_RootStatus next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_RootStatus next (Just value) ) ->
+                    update (ReadMVarMsg_BB_RootStatus index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_RootStatus next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_RootStatus next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_RootStatus next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.PutMVar_BB_RootStatus next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_RootStatus readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_RootStatus index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_RootStatus next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_BB_RootStatus next _ Nothing ) ->
+                    update (PutMVarMsg_BB_RootStatus index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_RootStatus next) model.next }
 
                 -- MVars (T.BB_BResult)
                 ( newRealWorld, T.NewEmptyMVar_BB_BResult next value ) ->
@@ -1551,6 +1632,81 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_Maybe_CASTO_GlobalGraph"
 
+        -- MVars (Maybe T.BB_Dep)
+        NewEmptyMVarMsg_MaybeDep index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_MaybeDep fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_MaybeDep"
+
+        ReadMVarMsg_MaybeDep index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_MaybeDep fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_MaybeDep"
+
+        PutMVarMsg_MaybeDep index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_MaybeDep fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_MaybeDep"
+
+        -- MVars (T.BB_RootResult)
+        NewEmptyMVarMsg_BB_RootResult index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_BB_RootResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_RootResult"
+
+        ReadMVarMsg_BB_RootResult index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_BB_RootResult fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_RootResult"
+
+        PutMVarMsg_BB_RootResult index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_BB_RootResult fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_RootResult"
+
+        -- MVars (T.BB_RootStatus)
+        NewEmptyMVarMsg_BB_RootStatus index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_BB_RootStatus fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_RootStatus"
+
+        ReadMVarMsg_BB_RootStatus index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_BB_RootStatus fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_RootStatus"
+
+        PutMVarMsg_BB_RootStatus index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_BB_RootStatus fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_RootStatus"
+
         -- MVars (T.BB_BResult)
         NewEmptyMVarMsg_BB_BResult index value ->
             case Dict.get index model.next of
@@ -2513,6 +2669,36 @@ bind f (T.IO ma) =
 
                 ( s1, T.PutMVar_Maybe_CASTO_GlobalGraph next readIndexes value ) ->
                     ( s1, T.PutMVar_Maybe_CASTO_GlobalGraph (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (Maybe T.BB_Dep)
+                ( s1, T.NewEmptyMVar_MaybeDep next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_MaybeDep (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_MaybeDep next mVarValue ) ->
+                    ( s1, T.ReadMVar_MaybeDep (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.PutMVar_MaybeDep next readIndexes value ) ->
+                    ( s1, T.PutMVar_MaybeDep (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_RootResult)
+                ( s1, T.NewEmptyMVar_BB_RootResult next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_BB_RootResult (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_BB_RootResult next mVarValue ) ->
+                    ( s1, T.ReadMVar_BB_RootResult (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.PutMVar_BB_RootResult next readIndexes value ) ->
+                    ( s1, T.PutMVar_BB_RootResult (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_RootStatus)
+                ( s1, T.NewEmptyMVar_BB_RootStatus next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_BB_RootStatus (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_BB_RootStatus next mVarValue ) ->
+                    ( s1, T.ReadMVar_BB_RootStatus (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.PutMVar_BB_RootStatus next readIndexes value ) ->
+                    ( s1, T.PutMVar_BB_RootStatus (\() -> bind f (next ())) readIndexes value )
 
                 -- MVars (T.BB_BResult)
                 ( s1, T.NewEmptyMVar_BB_BResult next emptyMVarIndex ) ->

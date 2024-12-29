@@ -111,6 +111,8 @@ module Utils.Main exposing
     , newEmptyMVar_BB_BResult
     , newEmptyMVar_BB_CachedInterface
     , newEmptyMVar_BB_ResultDict
+    , newEmptyMVar_BB_RootResult
+    , newEmptyMVar_BB_RootStatus
     , newEmptyMVar_BB_Status
     , newEmptyMVar_BB_StatusDict
     , newEmptyMVar_BED_StatusDict
@@ -119,6 +121,7 @@ module Utils.Main exposing
     , newEmptyMVar_DictRawMVarMaybeDResult
     , newEmptyMVar_ListMVar
     , newEmptyMVar_Manager
+    , newEmptyMVar_MaybeDep
     , newEmptyMVar_Maybe_BB_Dependencies
     , newEmptyMVar_Maybe_BED_DResult
     , newEmptyMVar_Maybe_BED_Status
@@ -150,6 +153,8 @@ module Utils.Main exposing
     , putMVar_BB_BResult
     , putMVar_BB_CachedInterface
     , putMVar_BB_ResultDict
+    , putMVar_BB_RootResult
+    , putMVar_BB_RootStatus
     , putMVar_BB_Status
     , putMVar_BB_StatusDict
     , putMVar_BED_StatusDict
@@ -160,6 +165,7 @@ module Utils.Main exposing
     , putMVar_DictRawMVarMaybeDResult
     , putMVar_ListMVar
     , putMVar_Manager
+    , putMVar_MaybeDep
     , putMVar_Maybe_BB_Dependencies
     , putMVar_Maybe_BED_DResult
     , putMVar_Maybe_BED_Status
@@ -177,6 +183,8 @@ module Utils.Main exposing
     , readMVar_BB_BResult
     , readMVar_BB_CachedInterface
     , readMVar_BB_ResultDict
+    , readMVar_BB_RootResult
+    , readMVar_BB_RootStatus
     , readMVar_BB_Status
     , readMVar_BB_StatusDict
     , readMVar_BED_StatusDict
@@ -185,6 +193,7 @@ module Utils.Main exposing
     , readMVar_DictRawMVarMaybeDResult
     , readMVar_ListMVar
     , readMVar_Manager
+    , readMVar_MaybeDep
     , readMVar_Maybe_BB_Dependencies
     , readMVar_Maybe_BED_DResult
     , readMVar_Maybe_BED_Status
@@ -2097,6 +2106,66 @@ newMVar_BB_BResult value =
             )
 
 
+readMVar_MaybeDep : T.MVar_MaybeDep -> IO (Maybe T.BB_Dep)
+readMVar_MaybeDep (T.MVar_MaybeDep ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_MaybeDep of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_MaybeDep IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_MaybeDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_MaybeDep index ] } s.mVars_MaybeDep }
+                            , T.ReadMVar_MaybeDep IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_MaybeDep: invalid ref"
+        )
+
+
+readMVar_BB_RootResult : T.MVar_BB_RootResult -> IO T.BB_RootResult
+readMVar_BB_RootResult (T.MVar_BB_RootResult ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_RootResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_BB_RootResult IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_RootResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_BB_RootResult index ] } s.mVars_BB_RootResult }
+                            , T.ReadMVar_BB_RootResult IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_RootResult: invalid ref"
+        )
+
+
+readMVar_BB_RootStatus : T.MVar_BB_RootStatus -> IO T.BB_RootStatus
+readMVar_BB_RootStatus (T.MVar_BB_RootStatus ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_RootStatus of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_BB_RootStatus IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_RootStatus = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_BB_RootStatus index ] } s.mVars_BB_RootStatus }
+                            , T.ReadMVar_BB_RootStatus IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_RootStatus: invalid ref"
+        )
+
+
 readMVar_BB_BResult : T.MVar_BB_BResult -> IO T.BB_BResult
 readMVar_BB_BResult (T.MVar_BB_BResult ref) =
     IO
@@ -2114,6 +2183,114 @@ readMVar_BB_BResult (T.MVar_BB_BResult ref) =
 
                 Nothing ->
                     crash "Utils.Main.readMVar_BB_BResult: invalid ref"
+        )
+
+
+putMVar_MaybeDep : T.MVar_MaybeDep -> Maybe T.BB_Dep -> IO ()
+putMVar_MaybeDep (T.MVar_MaybeDep ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_MaybeDep of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_MaybeDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_MaybeDep index value ] } s.mVars_MaybeDep }
+                            , T.PutMVar_MaybeDep IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_MaybeDep readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_MaybeDep = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_MaybeDep }
+                            , T.PutMVar_MaybeDep IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_MaybeDep: invalid ref"
+        )
+
+
+putMVar_BB_RootResult : T.MVar_BB_RootResult -> T.BB_RootResult -> IO ()
+putMVar_BB_RootResult (T.MVar_BB_RootResult ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_RootResult of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_RootResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootResult index value ] } s.mVars_BB_RootResult }
+                            , T.PutMVar_BB_RootResult IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_BB_RootResult readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_RootResult = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_RootResult }
+                            , T.PutMVar_BB_RootResult IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_RootResult: invalid ref"
+        )
+
+
+putMVar_BB_RootStatus : T.MVar_BB_RootStatus -> T.BB_RootStatus -> IO ()
+putMVar_BB_RootStatus (T.MVar_BB_RootStatus ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_RootStatus of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_RootStatus = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootStatus index value ] } s.mVars_BB_RootStatus }
+                            , T.PutMVar_BB_RootStatus IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_BB_RootStatus readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_RootStatus = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_RootStatus }
+                            , T.PutMVar_BB_RootStatus IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_RootStatus: invalid ref"
         )
 
 
@@ -2151,6 +2328,39 @@ putMVar_BB_BResult (T.MVar_BB_BResult ref) value =
                 Nothing ->
                     crash "Utils.Main.putMVar_BB_BResult: invalid ref"
         )
+
+
+newEmptyMVar_MaybeDep : IO T.MVar_MaybeDep
+newEmptyMVar_MaybeDep =
+    IO
+        (\_ s ->
+            ( { s | mVars_MaybeDep = Array.push { subscribers = [], value = Nothing } s.mVars_MaybeDep }
+            , T.NewEmptyMVar_MaybeDep IO.pure (Array.length s.mVars_MaybeDep)
+            )
+        )
+        |> IO.fmap T.MVar_MaybeDep
+
+
+newEmptyMVar_BB_RootResult : IO T.MVar_BB_RootResult
+newEmptyMVar_BB_RootResult =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_RootResult = Array.push { subscribers = [], value = Nothing } s.mVars_BB_RootResult }
+            , T.NewEmptyMVar_BB_RootResult IO.pure (Array.length s.mVars_BB_RootResult)
+            )
+        )
+        |> IO.fmap T.MVar_BB_RootResult
+
+
+newEmptyMVar_BB_RootStatus : IO T.MVar_BB_RootStatus
+newEmptyMVar_BB_RootStatus =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_RootStatus = Array.push { subscribers = [], value = Nothing } s.mVars_BB_RootStatus }
+            , T.NewEmptyMVar_BB_RootStatus IO.pure (Array.length s.mVars_BB_RootStatus)
+            )
+        )
+        |> IO.fmap T.MVar_BB_RootStatus
 
 
 newEmptyMVar_BB_BResult : IO T.MVar_BB_BResult
