@@ -181,13 +181,13 @@ fromExposed_Documentation style root details docsGoal ((NE.Nonempty e es) as exp
                                                                                                                     IO.pure (Err (T.BRE_BuildProjectProblem problem))
 
                                                                                                                 Ok foreigns ->
-                                                                                                                    Utils.newEmptyMVar
+                                                                                                                    Utils.newEmptyMVar_BB_ResultDict
                                                                                                                         |> IO.bind
                                                                                                                             (\rmvar ->
                                                                                                                                 forkWithKey_BB_BResult identity compare (checkModule env foreigns rmvar) statuses
                                                                                                                                     |> IO.bind
                                                                                                                                         (\resultMVars ->
-                                                                                                                                            Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
+                                                                                                                                            Utils.putMVar_BB_ResultDict rmvar resultMVars
                                                                                                                                                 |> IO.bind
                                                                                                                                                     (\_ ->
                                                                                                                                                         Utils.mapTraverse identity compare Utils.readMVar_BB_BResult resultMVars
@@ -252,13 +252,13 @@ fromExposed_Unit style root details docsGoal ((NE.Nonempty e es) as exposed) =
                                                                                                                     IO.pure (Err (T.BRE_BuildProjectProblem problem))
 
                                                                                                                 Ok foreigns ->
-                                                                                                                    Utils.newEmptyMVar
+                                                                                                                    Utils.newEmptyMVar_BB_ResultDict
                                                                                                                         |> IO.bind
                                                                                                                             (\rmvar ->
                                                                                                                                 forkWithKey_BB_BResult identity compare (checkModule env foreigns rmvar) statuses
                                                                                                                                     |> IO.bind
                                                                                                                                         (\resultMVars ->
-                                                                                                                                            Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
+                                                                                                                                            Utils.putMVar_BB_ResultDict rmvar resultMVars
                                                                                                                                                 |> IO.bind
                                                                                                                                                     (\_ ->
                                                                                                                                                         Utils.mapTraverse identity compare Utils.readMVar_BB_BResult resultMVars
@@ -327,13 +327,13 @@ fromPaths style root details paths =
 
                                                                                                                         Ok foreigns ->
                                                                                                                             -- compile
-                                                                                                                            Utils.newEmptyMVar
+                                                                                                                            Utils.newEmptyMVar_BB_ResultDict
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvar ->
                                                                                                                                         forkWithKey_BB_BResult identity compare (checkModule env foreigns rmvar) statuses
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\resultsMVars ->
-                                                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultsMVars
+                                                                                                                                                    Utils.putMVar_BB_ResultDict rmvar resultsMVars
                                                                                                                                                         |> IO.bind
                                                                                                                                                             (\_ ->
                                                                                                                                                                 Utils.nonEmptyListTraverse (fork rootResultEncoder << checkRoot env resultsMVars) sroots
@@ -520,11 +520,11 @@ isMain (T.CRA_At _ (T.CASTS_Value (T.CRA_At _ name) _ _ _)) =
 -- CHECK MODULE
 
 
-checkModule : Env -> T.BB_Dependencies -> T.MVar T.BB_ResultDict -> T.CEMN_Raw -> T.BB_Status -> IO T.BB_BResult
+checkModule : Env -> T.BB_Dependencies -> T.MVar_BB_ResultDict -> T.CEMN_Raw -> T.BB_Status -> IO T.BB_BResult
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
         T.BB_SCached ((T.BED_Local path time deps hasMain lastChange lastCompile) as local) ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            Utils.readMVar_BB_ResultDict resultsMVar
                 |> IO.bind
                     (\results ->
                         checkDeps root results deps lastCompile
@@ -573,7 +573,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                     )
 
         T.BB_SChanged ((T.BED_Local path time deps _ _ lastCompile) as local) source ((T.CASTS_Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            Utils.readMVar_BB_ResultDict resultsMVar
                 |> IO.bind
                     (\results ->
                         checkDeps root results deps lastCompile
@@ -1340,13 +1340,13 @@ fromRepl root details source =
                                                                                             IO.pure <| Err <| Exit.ReplProjectProblem problem
 
                                                                                         Ok foreigns ->
-                                                                                            Utils.newEmptyMVar
+                                                                                            Utils.newEmptyMVar_BB_ResultDict
                                                                                                 |> IO.bind
                                                                                                     (\rmvar ->
                                                                                                         forkWithKey_BB_BResult identity compare (checkModule env foreigns rmvar) statuses
                                                                                                             |> IO.bind
                                                                                                                 (\resultMVars ->
-                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultMVars
+                                                                                                                    Utils.putMVar_BB_ResultDict rmvar resultMVars
                                                                                                                         |> IO.bind
                                                                                                                             (\_ ->
                                                                                                                                 Utils.mapTraverse identity compare Utils.readMVar_BB_BResult resultMVars
@@ -1860,11 +1860,6 @@ addOutside root modules =
 -- ENCODERS and DECODERS
 
 
-dictRawMVarBResultEncoder : Dict String T.CEMN_Raw T.MVar_BB_BResult -> Encode.Value
-dictRawMVarBResultEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder_BB_BResult
-
-
 rootStatusEncoder : RootStatus -> Encode.Value
 rootStatusEncoder rootStatus =
     case rootStatus of
@@ -1910,16 +1905,6 @@ rootStatusDecoder =
                     _ ->
                         Decode.fail ("Failed to decode RootStatus' type: " ++ type_)
             )
-
-
-resultDictEncoder : T.BB_ResultDict -> Encode.Value
-resultDictEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder_BB_BResult
-
-
-resultDictDecoder : Decode.Decoder T.BB_ResultDict
-resultDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder_BB_BResult
 
 
 rootResultEncoder : RootResult -> Encode.Value

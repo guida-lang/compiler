@@ -110,6 +110,7 @@ module Utils.Main exposing
     , newEmptyMVar
     , newEmptyMVar_BB_BResult
     , newEmptyMVar_BB_CachedInterface
+    , newEmptyMVar_BB_ResultDict
     , newEmptyMVar_BB_Status
     , newEmptyMVar_BB_StatusDict
     , newEmptyMVar_BED_StatusDict
@@ -148,6 +149,7 @@ module Utils.Main exposing
     , putMVar
     , putMVar_BB_BResult
     , putMVar_BB_CachedInterface
+    , putMVar_BB_ResultDict
     , putMVar_BB_Status
     , putMVar_BB_StatusDict
     , putMVar_BED_StatusDict
@@ -174,6 +176,7 @@ module Utils.Main exposing
     , readMVar
     , readMVar_BB_BResult
     , readMVar_BB_CachedInterface
+    , readMVar_BB_ResultDict
     , readMVar_BB_Status
     , readMVar_BB_StatusDict
     , readMVar_BED_StatusDict
@@ -1084,6 +1087,26 @@ readMVar_Manager (T.MVar_Manager ref) =
         )
 
 
+readMVar_BB_ResultDict : T.MVar_BB_ResultDict -> IO T.BB_ResultDict
+readMVar_BB_ResultDict (T.MVar_BB_ResultDict ref) =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_ResultDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, T.ReadMVar_BB_ResultDict IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars_BB_ResultDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.ReadMVarSubscriber_BB_ResultDict index ] } s.mVars_BB_ResultDict }
+                            , T.ReadMVar_BB_ResultDict IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar_BB_ResultDict: invalid ref"
+        )
+
+
 readMVar_ChItemResultBMsgBResultDocumentation : T.MVar_ChItemResultBMsgBResultDocumentation -> IO T.ChItem_ResultBMsgBResultDocumentation
 readMVar_ChItemResultBMsgBResultDocumentation (T.MVar_ChItemResultBMsgBResultDocumentation ref) =
     IO
@@ -1394,6 +1417,42 @@ putMVar_Manager (T.MVar_Manager ref) value =
         )
 
 
+putMVar_BB_ResultDict : T.MVar_BB_ResultDict -> T.BB_ResultDict -> IO ()
+putMVar_BB_ResultDict (T.MVar_BB_ResultDict ref) value =
+    IO
+        (\index s ->
+            case Array.get ref s.mVars_BB_ResultDict of
+                Just mVar ->
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars_BB_ResultDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_ResultDict index value ] } s.mVars_BB_ResultDict }
+                            , T.PutMVar_BB_ResultDict IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                T.ReadMVarSubscriber_BB_ResultDict readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars_BB_ResultDict = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just value } s.mVars_BB_ResultDict }
+                            , T.PutMVar_BB_ResultDict IO.pure readIndexes (Just value)
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.putMVar_BB_ResultDict: invalid ref"
+        )
+
+
 putMVar_StreamResultBMsgBResultDocumentation : T.MVar_StreamResultBMsgBResultDocumentation -> T.MVar_ChItemResultBMsgBResultDocumentation -> IO ()
 putMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDocumentation ref) value =
     IO
@@ -1630,6 +1689,17 @@ newEmptyMVar_Manager =
             )
         )
         |> IO.fmap T.MVar_Manager
+
+
+newEmptyMVar_BB_ResultDict : IO T.MVar_BB_ResultDict
+newEmptyMVar_BB_ResultDict =
+    IO
+        (\_ s ->
+            ( { s | mVars_BB_ResultDict = Array.push { subscribers = [], value = Nothing } s.mVars_BB_ResultDict }
+            , T.NewEmptyMVar_BB_ResultDict IO.pure (Array.length s.mVars_BB_ResultDict)
+            )
+        )
+        |> IO.fmap T.MVar_BB_ResultDict
 
 
 newEmptyMVar_StreamResultBMsgBResultDocumentation : IO T.MVar_StreamResultBMsgBResultDocumentation

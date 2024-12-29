@@ -120,6 +120,7 @@ run app =
                     , mVars_BED_StatusDict = Array.empty
                     , mVars_Unit = Array.empty
                     , mVars_Manager = Array.empty
+                    , mVars_BB_ResultDict = Array.empty
                     , mVars_StreamResultBMsgBResultDocumentation = Array.empty
                     , mVars_ChItemResultBMsgBResultDocumentation = Array.empty
                     , mVars_StreamResultBMsgBResultUnit = Array.empty
@@ -275,6 +276,10 @@ type Msg
     | NewEmptyMVarMsg_Manager Int Int
     | ReadMVarMsg_Manager Int T.BH_Manager
     | PutMVarMsg_Manager Int
+      -- MVars (T.BB_ResultDict)
+    | NewEmptyMVarMsg_BB_ResultDict Int Int
+    | ReadMVarMsg_BB_ResultDict Int T.BB_ResultDict
+    | PutMVarMsg_BB_ResultDict Int
       -- MVars (T.MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarMsg_StreamResultBMsgBResultDocumentation Int Int
     | ReadMVarMsg_StreamResultBMsgBResultDocumentation Int T.MVar_ChItemResultBMsgBResultDocumentation
@@ -953,6 +958,36 @@ update msg model =
 
                 ( newRealWorld, T.PutMVar_Manager next _ Nothing ) ->
                     update (PutMVarMsg_Manager index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_Manager next) model.next }
+
+                -- MVars (T.BB_ResultDict)
+                ( newRealWorld, T.NewEmptyMVar_BB_ResultDict next value ) ->
+                    update (NewEmptyMVarMsg_BB_ResultDict index value) { newRealWorld | next = Dict.insert index (T.NewEmptyMVarNext_BB_ResultDict next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_ResultDict next (Just value) ) ->
+                    update (ReadMVarMsg_BB_ResultDict index value) { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_ResultDict next) model.next }
+
+                ( newRealWorld, T.ReadMVar_BB_ResultDict next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.ReadMVarNext_BB_ResultDict next) model.next }, Cmd.none )
+
+                ( newRealWorld, T.TakeMVar_BB_ResultDict next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg_BB_ResultDict index value) { newRealWorld | next = Dict.insert index (T.TakeMVarNext_BB_ResultDict next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.TakeMVar_BB_ResultDict next Nothing maybePutIndex ) ->
+                    ( { newRealWorld | next = Dict.insert index (T.TakeMVarNext_BB_ResultDict next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, T.PutMVar_BB_ResultDict next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg_BB_ResultDict readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
+                        )
+                        (update (PutMVarMsg_BB_ResultDict index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_ResultDict next) model.next })
+                        readIndexes
+
+                ( newRealWorld, T.PutMVar_BB_ResultDict next _ Nothing ) ->
+                    update (PutMVarMsg_BB_ResultDict index) { newRealWorld | next = Dict.insert index (T.PutMVarNext_BB_ResultDict next) model.next }
 
                 -- MVars (T.MVar_StreamResultBMsgBResultDocumentation)
                 ( newRealWorld, T.NewEmptyMVar_StreamResultBMsgBResultDocumentation next value ) ->
@@ -1902,6 +1937,34 @@ update msg model =
                 _ ->
                     crash "PutMVarMsg_Manager"
 
+        -- MVars (T.BB_ResultDict)
+        NewEmptyMVarMsg_BB_ResultDict index value ->
+            case Dict.get index model.next of
+                Just (T.NewEmptyMVarNext_BB_ResultDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "NewEmptyMVarMsg_BB_ResultDict"
+
+        ReadMVarMsg_BB_ResultDict index value ->
+            case Dict.get index model.next of
+                Just (T.ReadMVarNext_BB_ResultDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                Just (T.TakeMVarNext_BB_ResultDict fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadMVarMsg_BB_ResultDict"
+
+        PutMVarMsg_BB_ResultDict index ->
+            case Dict.get index model.next of
+                Just (T.PutMVarNext_BB_ResultDict fn) ->
+                    update (PureMsg index (fn ())) model
+
+                _ ->
+                    crash "PutMVarMsg_BB_ResultDict"
+
         -- MVars (MVar_StreamResultBMsgBResultDocumentation)
         NewEmptyMVarMsg_StreamResultBMsgBResultDocumentation index value ->
             case Dict.get index model.next of
@@ -2626,6 +2689,19 @@ bind f (T.IO ma) =
 
                 ( s1, T.PutMVar_Manager next readIndexes value ) ->
                     ( s1, T.PutMVar_Manager (\() -> bind f (next ())) readIndexes value )
+
+                -- MVars (T.BB_ResultDict)
+                ( s1, T.NewEmptyMVar_BB_ResultDict next emptyMVarIndex ) ->
+                    ( s1, T.NewEmptyMVar_BB_ResultDict (\value -> bind f (next value)) emptyMVarIndex )
+
+                ( s1, T.ReadMVar_BB_ResultDict next mVarValue ) ->
+                    ( s1, T.ReadMVar_BB_ResultDict (\value -> bind f (next value)) mVarValue )
+
+                ( s1, T.TakeMVar_BB_ResultDict next mVarValue maybePutIndex ) ->
+                    ( s1, T.TakeMVar_BB_ResultDict (\value -> bind f (next value)) mVarValue maybePutIndex )
+
+                ( s1, T.PutMVar_BB_ResultDict next readIndexes value ) ->
+                    ( s1, T.PutMVar_BB_ResultDict (\() -> bind f (next ())) readIndexes value )
 
                 -- MVars (T.MVar_StreamResultBMsgBResultDocumentation)
                 ( s1, T.NewEmptyMVar_StreamResultBMsgBResultDocumentation next emptyMVarIndex ) ->

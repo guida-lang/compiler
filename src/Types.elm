@@ -141,6 +141,11 @@ type ION a
     | ReadMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager)
     | TakeMVar_Manager (BH_Manager -> IO a) (Maybe BH_Manager) (Maybe Int)
     | PutMVar_Manager (() -> IO a) (List Int) (Maybe BH_Manager)
+      -- MVars (BB_ResultDict)
+    | NewEmptyMVar_BB_ResultDict (Int -> IO a) Int
+    | ReadMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict)
+    | TakeMVar_BB_ResultDict (BB_ResultDict -> IO a) (Maybe BB_ResultDict) (Maybe Int)
+    | PutMVar_BB_ResultDict (() -> IO a) (List Int) (Maybe BB_ResultDict)
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVar_StreamResultBMsgBResultDocumentation (Int -> IO a) Int
     | ReadMVar_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO a) (Maybe MVar_ChItemResultBMsgBResultDocumentation)
@@ -204,6 +209,7 @@ type alias RealWorld =
     , mVars_BED_StatusDict : Array { subscribers : List MVarSubscriber_BED_StatusDict, value : Maybe BED_StatusDict }
     , mVars_Unit : Array { subscribers : List MVarSubscriber_Unit, value : Maybe () }
     , mVars_Manager : Array { subscribers : List MVarSubscriber_Manager, value : Maybe BH_Manager }
+    , mVars_BB_ResultDict : Array { subscribers : List MVarSubscriber_BB_ResultDict, value : Maybe BB_ResultDict }
     , mVars_StreamResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultDocumentation, value : Maybe MVar_ChItemResultBMsgBResultDocumentation }
     , mVars_ChItemResultBMsgBResultDocumentation : Array { subscribers : List MVarSubscriber_ChItemResultBMsgBResultDocumentation, value : Maybe ChItem_ResultBMsgBResultDocumentation }
     , mVars_StreamResultBMsgBResultUnit : Array { subscribers : List MVarSubscriber_StreamResultBMsgBResultUnit, value : Maybe MVar_ChItemResultBMsgBResultUnit }
@@ -321,6 +327,12 @@ type MVarSubscriber_Manager
     = ReadMVarSubscriber_Manager Int
     | TakeMVarSubscriber_Manager Int
     | PutMVarSubscriber_Manager Int BH_Manager
+
+
+type MVarSubscriber_BB_ResultDict
+    = ReadMVarSubscriber_BB_ResultDict Int
+    | TakeMVarSubscriber_BB_ResultDict Int
+    | PutMVarSubscriber_BB_ResultDict Int BB_ResultDict
 
 
 type MVarSubscriber_Unit
@@ -490,6 +502,11 @@ type Next
     | ReadMVarNext_Manager (BH_Manager -> IO ())
     | TakeMVarNext_Manager (BH_Manager -> IO ())
     | PutMVarNext_Manager (() -> IO ())
+      -- MVars (BB_ResultDict)
+    | NewEmptyMVarNext_BB_ResultDict (Int -> IO ())
+    | ReadMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
+    | TakeMVarNext_BB_ResultDict (BB_ResultDict -> IO ())
+    | PutMVarNext_BB_ResultDict (() -> IO ())
       -- MVars (MVar_ChItemResultBMsgBResultDocumentation)
     | NewEmptyMVarNext_StreamResultBMsgBResultDocumentation (Int -> IO ())
     | ReadMVarNext_StreamResultBMsgBResultDocumentation (MVar_ChItemResultBMsgBResultDocumentation -> IO ())
@@ -1195,6 +1212,12 @@ type MVar_Unit
 -}
 type MVar_Manager
     = MVar_Manager Int
+
+
+{-| FIXME Utils.Main
+-}
+type MVar_BB_ResultDict
+    = MVar_BB_ResultDict Int
 
 
 {-| FIXME Utils.Main
