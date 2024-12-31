@@ -1025,6 +1025,7 @@ putMVar encoder (MVar ref) value =
             case Array.get ref s.mVars of
                 Just mVar ->
                     let
+                        encodedValue : Encode.Value
                         encodedValue =
                             encoder value
                     in
