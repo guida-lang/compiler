@@ -19,7 +19,7 @@ import Basics.Extra exposing (uncurry)
 import Compiler.Elm.Version as V
 import Json.Encode as Encode
 import System.IO as IO
-import Types as T exposing (IO(..))
+import Types as T exposing (IO)
 import Url.Builder
 
 
@@ -78,21 +78,20 @@ type Method
 
 fetch : Method -> T.BH_Manager -> String -> List Header -> (T.BH_Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 fetch methodVerb _ url headers _ onSuccess =
-    IO
-        (\_ s ->
-            ( s
-            , T.HttpFetch IO.pure
-                (case methodVerb of
-                    MethodGet ->
-                        "GET"
+    (\_ s ->
+        ( s
+        , T.HttpFetch IO.pure
+            (case methodVerb of
+                MethodGet ->
+                    "GET"
 
-                    MethodPost ->
-                        "POST"
-                )
-                url
-                (addDefaultHeaders headers)
+                MethodPost ->
+                    "POST"
             )
+            url
+            (addDefaultHeaders headers)
         )
+    )
         |> IO.bind onSuccess
 
 
@@ -130,7 +129,7 @@ shaToChars =
 
 getArchive : T.BH_Manager -> String -> (T.BH_Error -> e) -> e -> (( Sha, T.CAZ_Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO (\_ s -> ( s, T.GetArchive IO.pure "GET" url ))
+    (\_ s -> ( s, T.GetArchive IO.pure "GET" url ))
         |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
 
 
@@ -146,41 +145,40 @@ type MultiPart
 
 upload : T.BH_Manager -> String -> List MultiPart -> IO (Result T.BH_Error ())
 upload _ url parts =
-    IO
-        (\_ s ->
-            ( s
-            , T.HttpUpload IO.pure
-                url
-                (addDefaultHeaders [])
-                (List.map
-                    (\part ->
-                        case part of
-                            FilePart name filePath ->
-                                Encode.object
-                                    [ ( "type", Encode.string "FilePart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    ]
+    (\_ s ->
+        ( s
+        , T.HttpUpload IO.pure
+            url
+            (addDefaultHeaders [])
+            (List.map
+                (\part ->
+                    case part of
+                        FilePart name filePath ->
+                            Encode.object
+                                [ ( "type", Encode.string "FilePart" )
+                                , ( "name", Encode.string name )
+                                , ( "filePath", Encode.string filePath )
+                                ]
 
-                            JsonPart name filePath value ->
-                                Encode.object
-                                    [ ( "type", Encode.string "JsonPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    , ( "value", value )
-                                    ]
+                        JsonPart name filePath value ->
+                            Encode.object
+                                [ ( "type", Encode.string "JsonPart" )
+                                , ( "name", Encode.string name )
+                                , ( "filePath", Encode.string filePath )
+                                , ( "value", value )
+                                ]
 
-                            StringPart name string ->
-                                Encode.object
-                                    [ ( "type", Encode.string "StringPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "string", Encode.string string )
-                                    ]
-                    )
-                    parts
+                        StringPart name string ->
+                            Encode.object
+                                [ ( "type", Encode.string "StringPart" )
+                                , ( "name", Encode.string name )
+                                , ( "string", Encode.string string )
+                                ]
                 )
+                parts
             )
         )
+    )
         |> IO.fmap Ok
 
 

@@ -205,7 +205,7 @@ module Types exposing
     , ChItem_ResultBMsgBResultUnit(..)
     , FilePath
     , Handle(..)
-    , IO(..)
+    , IO
     , IOMode(..)
     , ION(..)
     , MVarSubscriber_BB_BResult(..)
@@ -296,8 +296,8 @@ import Time
 -- The IO monad
 
 
-type IO a
-    = IO (Int -> RealWorld -> ( RealWorld, ION a ))
+type alias IO a =
+    Int -> RealWorld -> ( RealWorld, ION a )
 
 
 type ION a

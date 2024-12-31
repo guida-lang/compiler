@@ -6,7 +6,7 @@ module System.Exit exposing
     )
 
 import System.IO as IO
-import Types as T exposing (IO(..))
+import Types as T exposing (IO)
 
 
 type ExitCode
@@ -15,21 +15,18 @@ type ExitCode
 
 
 exitWith : ExitCode -> IO a
-exitWith exitCode =
-    IO
-        (\_ s ->
-            let
-                code : Int
-                code =
-                    case exitCode of
-                        ExitSuccess ->
-                            0
+exitWith exitCode _ s =
+    let
+        code : Int
+        code =
+            case exitCode of
+                ExitSuccess ->
+                    0
 
-                        ExitFailure int ->
-                            int
-            in
-            ( s, T.ExitWith IO.pure code )
-        )
+                ExitFailure int ->
+                    int
+    in
+    ( s, T.ExitWith IO.pure code )
 
 
 exitFailure : IO a

@@ -18,7 +18,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
 import Time
-import Types as T exposing (IO(..))
+import Types as T exposing (IO)
 import Utils.Main as Utils
 
 
@@ -90,8 +90,8 @@ readBinary decoder path =
 
 
 writeUtf8 : T.FilePath -> String -> IO ()
-writeUtf8 path content =
-    IO (\_ s -> ( s, T.WriteString IO.pure path content ))
+writeUtf8 path content _ s =
+    ( s, T.WriteString IO.pure path content )
 
 
 
@@ -99,8 +99,8 @@ writeUtf8 path content =
 
 
 readUtf8 : T.FilePath -> IO String
-readUtf8 path =
-    IO (\_ s -> ( s, T.Read IO.pure path ))
+readUtf8 path _ s =
+    ( s, T.Read IO.pure path )
 
 
 
@@ -108,8 +108,8 @@ readUtf8 path =
 
 
 writeBuilder : T.FilePath -> String -> IO ()
-writeBuilder path builder =
-    IO (\_ s -> ( s, T.WriteString IO.pure path builder ))
+writeBuilder path builder _ s =
+    ( s, T.WriteString IO.pure path builder )
 
 
 

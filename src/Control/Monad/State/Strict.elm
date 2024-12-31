@@ -11,7 +11,7 @@ module Control.Monad.State.Strict exposing
 -}
 
 import System.IO as IO
-import Types as T exposing (IO(..))
+import Types as T exposing (IO)
 
 
 {-| newtype StateT s m a
@@ -65,10 +65,10 @@ pure value =
 
 get : StateT s T.ReplState
 get =
-    IO (\_ s -> ( s, T.Pure s.state ))
+    (\_ s -> ( s, T.Pure s.state ))
         |> liftIO
 
 
 put : T.ReplState -> IO ()
-put state =
-    IO (\_ s -> ( { s | state = state }, T.Pure () ))
+put state _ s =
+    ( { s | state = state }, T.Pure () )
