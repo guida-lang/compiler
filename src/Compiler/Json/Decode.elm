@@ -23,16 +23,13 @@ module Compiler.Json.Decode exposing
     , nonEmptyList
     , nonempty
     , oneOf
-    , oneOrMore
     , pair
     , pairs
     , pure
-    , result
     , string
     )
 
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Json.String as Json
 import Compiler.Parse.Keyword as K
 import Compiler.Parse.Primitives as P
@@ -77,33 +74,6 @@ nonempty decoder =
 
                     [] ->
                         Decode.fail "Empty list when it should have at least one element (non-empty list)!"
-            )
-
-
-oneOrMore : Decode.Decoder a -> Decode.Decoder (OneOrMore a)
-oneOrMore decoder =
-    Decode.oneOf
-        [ Decode.map OneOrMore.one (Decode.field "one" decoder)
-        , Decode.map2 OneOrMore.more
-            (Decode.field "left" (Decode.lazy (\_ -> oneOrMore decoder)))
-            (Decode.field "right" (Decode.lazy (\_ -> oneOrMore decoder)))
-        ]
-
-
-result : Decode.Decoder x -> Decode.Decoder a -> Decode.Decoder (Result x a)
-result errDecoder successDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Err" ->
-                        Decode.map Err (Decode.field "value" errDecoder)
-
-                    "Ok" ->
-                        Decode.map Ok (Decode.field "value" successDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode result's type: " ++ type_)
             )
 
 

@@ -1170,7 +1170,7 @@ modifyMVar_StreamResultBMsgBResultArtifacts_ResultBMsgBResultArtifacts m io =
 takeMVar_Stream_Maybe_DMsg : T.MVar_Stream_Maybe_DMsg -> IO T.MVar_ChItem_Maybe_DMsg
 takeMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Stream_Maybe_DMsg of
                 Just mVar ->
                     case mVar.value of
@@ -1187,7 +1187,7 @@ takeMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Stream_Maybe_DMsg index ] } s.mVars_Stream_Maybe_DMsg }
+                            ( { s | mVars_Stream_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Stream_Maybe_DMsg ] } s.mVars_Stream_Maybe_DMsg }
                             , T.TakeMVar_Stream_Maybe_DMsg IO.pure Nothing Nothing
                             )
 
@@ -1199,7 +1199,7 @@ takeMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) =
 takeMVar_StreamResultBMsgBResultDocumentation : T.MVar_StreamResultBMsgBResultDocumentation -> IO T.MVar_ChItemResultBMsgBResultDocumentation
 takeMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDocumentation ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_StreamResultBMsgBResultDocumentation of
                 Just mVar ->
                     case mVar.value of
@@ -1216,7 +1216,7 @@ takeMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDoc
                                     )
 
                         Nothing ->
-                            ( { s | mVars_StreamResultBMsgBResultDocumentation = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultDocumentation index ] } s.mVars_StreamResultBMsgBResultDocumentation }
+                            ( { s | mVars_StreamResultBMsgBResultDocumentation = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultDocumentation ] } s.mVars_StreamResultBMsgBResultDocumentation }
                             , T.TakeMVar_StreamResultBMsgBResultDocumentation IO.pure Nothing Nothing
                             )
 
@@ -1228,7 +1228,7 @@ takeMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDoc
 takeMVar_StreamResultBMsgBResultUnit : T.MVar_StreamResultBMsgBResultUnit -> IO T.MVar_ChItemResultBMsgBResultUnit
 takeMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_StreamResultBMsgBResultUnit of
                 Just mVar ->
                     case mVar.value of
@@ -1245,7 +1245,7 @@ takeMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultUnit index ] } s.mVars_StreamResultBMsgBResultUnit }
+                            ( { s | mVars_StreamResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultUnit ] } s.mVars_StreamResultBMsgBResultUnit }
                             , T.TakeMVar_StreamResultBMsgBResultUnit IO.pure Nothing Nothing
                             )
 
@@ -1257,7 +1257,7 @@ takeMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) =
 takeMVar_StreamResultBMsgBResultArtifacts : T.MVar_StreamResultBMsgBResultArtifacts -> IO T.MVar_ChItemResultBMsgBResultArtifacts
 takeMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifacts ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_StreamResultBMsgBResultArtifacts of
                 Just mVar ->
                     case mVar.value of
@@ -1274,7 +1274,7 @@ takeMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifac
                                     )
 
                         Nothing ->
-                            ( { s | mVars_StreamResultBMsgBResultArtifacts = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultArtifacts index ] } s.mVars_StreamResultBMsgBResultArtifacts }
+                            ( { s | mVars_StreamResultBMsgBResultArtifacts = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_StreamResultBMsgBResultArtifacts ] } s.mVars_StreamResultBMsgBResultArtifacts }
                             , T.TakeMVar_StreamResultBMsgBResultArtifacts IO.pure Nothing Nothing
                             )
 
@@ -1286,12 +1286,12 @@ takeMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifac
 putMVar_Manager : T.MVar_Manager -> T.BH_Manager -> IO ()
 putMVar_Manager (T.MVar_Manager ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Manager of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Manager = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Manager index value ] } s.mVars_Manager }
+                            ( { s | mVars_Manager = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Manager ] } s.mVars_Manager }
                             , T.PutMVar_Manager IO.pure [] Nothing
                             )
 
@@ -1322,12 +1322,12 @@ putMVar_Manager (T.MVar_Manager ref) value =
 putMVar_BB_ResultDict : T.MVar_BB_ResultDict -> T.BB_ResultDict -> IO ()
 putMVar_BB_ResultDict (T.MVar_BB_ResultDict ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_ResultDict of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_BB_ResultDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_ResultDict index value ] } s.mVars_BB_ResultDict }
+                            ( { s | mVars_BB_ResultDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_ResultDict ] } s.mVars_BB_ResultDict }
                             , T.PutMVar_BB_ResultDict IO.pure [] Nothing
                             )
 
@@ -1389,12 +1389,12 @@ putMVar_Stream_Maybe_DMsg (T.MVar_Stream_Maybe_DMsg ref) value =
 putMVar_ChItem_Maybe_DMsg : T.MVar_ChItem_Maybe_DMsg -> T.ChItem_Maybe_DMsg -> IO ()
 putMVar_ChItem_Maybe_DMsg (T.MVar_ChItem_Maybe_DMsg ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ChItem_Maybe_DMsg of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_ChItem_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItem_Maybe_DMsg index value ] } s.mVars_ChItem_Maybe_DMsg }
+                            ( { s | mVars_ChItem_Maybe_DMsg = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItem_Maybe_DMsg ] } s.mVars_ChItem_Maybe_DMsg }
                             , T.PutMVar_ChItem_Maybe_DMsg IO.pure [] Nothing
                             )
 
@@ -1456,12 +1456,12 @@ putMVar_StreamResultBMsgBResultDocumentation (T.MVar_StreamResultBMsgBResultDocu
 putMVar_ChItemResultBMsgBResultDocumentation : T.MVar_ChItemResultBMsgBResultDocumentation -> T.ChItem_ResultBMsgBResultDocumentation -> IO ()
 putMVar_ChItemResultBMsgBResultDocumentation (T.MVar_ChItemResultBMsgBResultDocumentation ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ChItemResultBMsgBResultDocumentation of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_ChItemResultBMsgBResultDocumentation = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultDocumentation index value ] } s.mVars_ChItemResultBMsgBResultDocumentation }
+                            ( { s | mVars_ChItemResultBMsgBResultDocumentation = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultDocumentation ] } s.mVars_ChItemResultBMsgBResultDocumentation }
                             , T.PutMVar_ChItemResultBMsgBResultDocumentation IO.pure [] Nothing
                             )
 
@@ -1523,12 +1523,12 @@ putMVar_StreamResultBMsgBResultUnit (T.MVar_StreamResultBMsgBResultUnit ref) val
 putMVar_ChItemResultBMsgBResultUnit : T.MVar_ChItemResultBMsgBResultUnit -> T.ChItem_ResultBMsgBResultUnit -> IO ()
 putMVar_ChItemResultBMsgBResultUnit (T.MVar_ChItemResultBMsgBResultUnit ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ChItemResultBMsgBResultUnit of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultUnit index value ] } s.mVars_ChItemResultBMsgBResultUnit }
+                            ( { s | mVars_ChItemResultBMsgBResultUnit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultUnit ] } s.mVars_ChItemResultBMsgBResultUnit }
                             , T.PutMVar_ChItemResultBMsgBResultUnit IO.pure [] Nothing
                             )
 
@@ -1590,12 +1590,12 @@ putMVar_StreamResultBMsgBResultArtifacts (T.MVar_StreamResultBMsgBResultArtifact
 putMVar_ChItemResultBMsgBResultArtifacts : T.MVar_ChItemResultBMsgBResultArtifacts -> T.ChItem_ResultBMsgBResultArtifacts -> IO ()
 putMVar_ChItemResultBMsgBResultArtifacts (T.MVar_ChItemResultBMsgBResultArtifacts ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ChItemResultBMsgBResultArtifacts of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_ChItemResultBMsgBResultArtifacts = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultArtifacts index value ] } s.mVars_ChItemResultBMsgBResultArtifacts }
+                            ( { s | mVars_ChItemResultBMsgBResultArtifacts = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ChItemResultBMsgBResultArtifacts ] } s.mVars_ChItemResultBMsgBResultArtifacts }
                             , T.PutMVar_ChItemResultBMsgBResultArtifacts IO.pure [] Nothing
                             )
 
@@ -1760,12 +1760,12 @@ readMVar_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) =
 putMVar_Maybe_BED_Status : T.MVar_Maybe_BED_Status -> Maybe T.BED_Status -> IO ()
 putMVar_Maybe_BED_Status (T.MVar_Maybe_BED_Status ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_BED_Status of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_BED_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BED_Status index value ] } s.mVars_Maybe_BED_Status }
+                            ( { s | mVars_Maybe_BED_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BED_Status ] } s.mVars_Maybe_BED_Status }
                             , T.PutMVar_Maybe_BED_Status IO.pure [] Nothing
                             )
 
@@ -1831,12 +1831,12 @@ readMVar_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) =
 putMVar_Maybe_BED_DResult : T.MVar_Maybe_BED_DResult -> Maybe T.BED_DResult -> IO ()
 putMVar_Maybe_BED_DResult (T.MVar_Maybe_BED_DResult ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_BED_DResult of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_BED_DResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BED_DResult index value ] } s.mVars_Maybe_BED_DResult }
+                            ( { s | mVars_Maybe_BED_DResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BED_DResult ] } s.mVars_Maybe_BED_DResult }
                             , T.PutMVar_Maybe_BED_DResult IO.pure [] Nothing
                             )
 
@@ -1912,12 +1912,12 @@ readMVar_Maybe_CASTO_LocalGraph (T.MVar_Maybe_CASTO_LocalGraph ref) =
 putMVar_Maybe_CASTO_LocalGraph : T.MVar_Maybe_CASTO_LocalGraph -> Maybe T.CASTO_LocalGraph -> IO ()
 putMVar_Maybe_CASTO_LocalGraph (T.MVar_Maybe_CASTO_LocalGraph ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_CASTO_LocalGraph of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CASTO_LocalGraph index value ] } s.mVars_Maybe_CASTO_LocalGraph }
+                            ( { s | mVars_Maybe_CASTO_LocalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CASTO_LocalGraph ] } s.mVars_Maybe_CASTO_LocalGraph }
                             , T.PutMVar_Maybe_CASTO_LocalGraph IO.pure [] Nothing
                             )
 
@@ -1993,12 +1993,12 @@ readMVar_Maybe_CASTO_GlobalGraph (T.MVar_Maybe_CASTO_GlobalGraph ref) =
 putMVar_Maybe_CASTO_GlobalGraph : T.MVar_Maybe_CASTO_GlobalGraph -> Maybe T.CASTO_GlobalGraph -> IO ()
 putMVar_Maybe_CASTO_GlobalGraph (T.MVar_Maybe_CASTO_GlobalGraph ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_CASTO_GlobalGraph of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CASTO_GlobalGraph index value ] } s.mVars_Maybe_CASTO_GlobalGraph }
+                            ( { s | mVars_Maybe_CASTO_GlobalGraph = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CASTO_GlobalGraph ] } s.mVars_Maybe_CASTO_GlobalGraph }
                             , T.PutMVar_Maybe_CASTO_GlobalGraph IO.pure [] Nothing
                             )
 
@@ -2124,12 +2124,12 @@ readMVar_BB_BResult (T.MVar_BB_BResult ref) =
 putMVar_Result_BuildProjectProblem_RootInfo : T.MVar_Result_BuildProjectProblem_RootInfo -> Result T.BRE_BuildProjectProblem T.BB_RootInfo -> IO ()
 putMVar_Result_BuildProjectProblem_RootInfo (T.MVar_Result_BuildProjectProblem_RootInfo ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Result_BuildProjectProblem_RootInfo of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Result_BuildProjectProblem_RootInfo index value ] } s.mVars_Result_BuildProjectProblem_RootInfo }
+                            ( { s | mVars_Result_BuildProjectProblem_RootInfo = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Result_BuildProjectProblem_RootInfo ] } s.mVars_Result_BuildProjectProblem_RootInfo }
                             , T.PutMVar_Result_BuildProjectProblem_RootInfo IO.pure [] Nothing
                             )
 
@@ -2160,12 +2160,12 @@ putMVar_Result_BuildProjectProblem_RootInfo (T.MVar_Result_BuildProjectProblem_R
 putMVar_MaybeDep : T.MVar_MaybeDep -> Maybe T.BB_Dep -> IO ()
 putMVar_MaybeDep (T.MVar_MaybeDep ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_MaybeDep of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_MaybeDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_MaybeDep index value ] } s.mVars_MaybeDep }
+                            ( { s | mVars_MaybeDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_MaybeDep ] } s.mVars_MaybeDep }
                             , T.PutMVar_MaybeDep IO.pure [] Nothing
                             )
 
@@ -2196,12 +2196,12 @@ putMVar_MaybeDep (T.MVar_MaybeDep ref) value =
 putMVar_BB_RootResult : T.MVar_BB_RootResult -> T.BB_RootResult -> IO ()
 putMVar_BB_RootResult (T.MVar_BB_RootResult ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_RootResult of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_BB_RootResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootResult index value ] } s.mVars_BB_RootResult }
+                            ( { s | mVars_BB_RootResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootResult ] } s.mVars_BB_RootResult }
                             , T.PutMVar_BB_RootResult IO.pure [] Nothing
                             )
 
@@ -2232,12 +2232,12 @@ putMVar_BB_RootResult (T.MVar_BB_RootResult ref) value =
 putMVar_BB_RootStatus : T.MVar_BB_RootStatus -> T.BB_RootStatus -> IO ()
 putMVar_BB_RootStatus (T.MVar_BB_RootStatus ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_RootStatus of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_BB_RootStatus = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootStatus index value ] } s.mVars_BB_RootStatus }
+                            ( { s | mVars_BB_RootStatus = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_RootStatus ] } s.mVars_BB_RootStatus }
                             , T.PutMVar_BB_RootStatus IO.pure [] Nothing
                             )
 
@@ -2268,12 +2268,12 @@ putMVar_BB_RootStatus (T.MVar_BB_RootStatus ref) value =
 putMVar_BB_BResult : T.MVar_BB_BResult -> T.BB_BResult -> IO ()
 putMVar_BB_BResult (T.MVar_BB_BResult ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_BResult of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_BB_BResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_BResult index value ] } s.mVars_BB_BResult }
+                            ( { s | mVars_BB_BResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_BResult ] } s.mVars_BB_BResult }
                             , T.PutMVar_BB_BResult IO.pure [] Nothing
                             )
 
@@ -2383,12 +2383,12 @@ readMVar_BB_Status (T.MVar_BB_Status ref) =
 putMVar_BB_Status : T.MVar_BB_Status -> T.BB_Status -> IO ()
 putMVar_BB_Status (T.MVar_BB_Status ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_Status of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_BB_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_Status index value ] } s.mVars_BB_Status }
+                            ( { s | mVars_BB_Status = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_BB_Status ] } s.mVars_BB_Status }
                             , T.PutMVar_BB_Status IO.pure [] Nothing
                             )
 
@@ -2464,7 +2464,7 @@ readMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) =
 takeMVar_BB_StatusDict : T.MVar_BB_StatusDict -> IO T.BB_StatusDict
 takeMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_StatusDict of
                 Just mVar ->
                     case mVar.value of
@@ -2481,7 +2481,7 @@ takeMVar_BB_StatusDict (T.MVar_BB_StatusDict ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BB_StatusDict index ] } s.mVars_BB_StatusDict }
+                            ( { s | mVars_BB_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BB_StatusDict ] } s.mVars_BB_StatusDict }
                             , T.TakeMVar_BB_StatusDict IO.pure Nothing Nothing
                             )
 
@@ -2564,12 +2564,12 @@ readMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) =
 putMVar_ResultRegistryProblemEnv : T.MVar_ResultRegistryProblemEnv -> Result T.BRE_RegistryProblem T.BDS_Env -> IO ()
 putMVar_ResultRegistryProblemEnv (T.MVar_ResultRegistryProblemEnv ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ResultRegistryProblemEnv of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ResultRegistryProblemEnv index value ] } s.mVars_ResultRegistryProblemEnv }
+                            ( { s | mVars_ResultRegistryProblemEnv = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_ResultRegistryProblemEnv ] } s.mVars_ResultRegistryProblemEnv }
                             , T.PutMVar_ResultRegistryProblemEnv IO.pure [] Nothing
                             )
 
@@ -2635,12 +2635,12 @@ readMVar_CED_Dep (T.MVar_CED_Dep ref) =
 putMVar_CED_Dep : T.MVar_CED_Dep -> T.CED_Dep -> IO ()
 putMVar_CED_Dep (T.MVar_CED_Dep ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_CED_Dep of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_CED_Dep index value ] } s.mVars_CED_Dep }
+                            ( { s | mVars_CED_Dep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_CED_Dep ] } s.mVars_CED_Dep }
                             , T.PutMVar_CED_Dep IO.pure [] Nothing
                             )
 
@@ -2716,12 +2716,12 @@ readMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) =
 putMVar_Maybe_CECTE_Types : T.MVar_Maybe_CECTE_Types -> Maybe T.CECTE_Types -> IO ()
 putMVar_Maybe_CECTE_Types (T.MVar_Maybe_CECTE_Types ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_CECTE_Types of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CECTE_Types index value ] } s.mVars_Maybe_CECTE_Types }
+                            ( { s | mVars_Maybe_CECTE_Types = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_CECTE_Types ] } s.mVars_Maybe_CECTE_Types }
                             , T.PutMVar_Maybe_CECTE_Types IO.pure [] Nothing
                             )
 
@@ -2797,12 +2797,12 @@ readMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) =
 putMVar_Maybe_BB_Dependencies : T.MVar_Maybe_BB_Dependencies -> Maybe T.BB_Dependencies -> IO ()
 putMVar_Maybe_BB_Dependencies (T.MVar_Maybe_BB_Dependencies ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Maybe_BB_Dependencies of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BB_Dependencies index value ] } s.mVars_Maybe_BB_Dependencies }
+                            ( { s | mVars_Maybe_BB_Dependencies = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_Maybe_BB_Dependencies ] } s.mVars_Maybe_BB_Dependencies }
                             , T.PutMVar_Maybe_BB_Dependencies IO.pure [] Nothing
                             )
 
@@ -2868,12 +2868,12 @@ readMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) =
 putMVar_DictNameMVarDep : T.MVar_DictNameMVarDep -> Dict ( String, String ) T.CEP_Name T.MVar_CED_Dep -> IO ()
 putMVar_DictNameMVarDep (T.MVar_DictNameMVarDep ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_DictNameMVarDep of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_DictNameMVarDep index value ] } s.mVars_DictNameMVarDep }
+                            ( { s | mVars_DictNameMVarDep = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_DictNameMVarDep ] } s.mVars_DictNameMVarDep }
                             , T.PutMVar_DictNameMVarDep IO.pure [] Nothing
                             )
 
@@ -2939,12 +2939,12 @@ readMVar_DictRawMVarMaybeDResult (T.MVar_DictRawMVarMaybeDResult ref) =
 putMVar_DictRawMVarMaybeDResult : T.MVar_DictRawMVarMaybeDResult -> Dict String T.CEMN_Raw T.MVar_Maybe_BED_DResult -> IO ()
 putMVar_DictRawMVarMaybeDResult (T.MVar_DictRawMVarMaybeDResult ref) value =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_DictRawMVarMaybeDResult of
                 Just mVar ->
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars_DictRawMVarMaybeDResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_DictRawMVarMaybeDResult index value ] } s.mVars_DictRawMVarMaybeDResult }
+                            ( { s | mVars_DictRawMVarMaybeDResult = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.PutMVarSubscriber_DictRawMVarMaybeDResult ] } s.mVars_DictRawMVarMaybeDResult }
                             , T.PutMVar_DictRawMVarMaybeDResult IO.pure [] Nothing
                             )
 
@@ -3000,7 +3000,7 @@ newMVar_ListMVar value =
 takeMVar_ListMVar : T.MVar_ListMVar -> IO (List T.MVar_Unit)
 takeMVar_ListMVar (T.MVar_ListMVar ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_ListMVar of
                 Just mVar ->
                     case mVar.value of
@@ -3017,7 +3017,7 @@ takeMVar_ListMVar (T.MVar_ListMVar ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_ListMVar = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_ListMVar index ] } s.mVars_ListMVar }
+                            ( { s | mVars_ListMVar = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_ListMVar ] } s.mVars_ListMVar }
                             , T.TakeMVar_ListMVar IO.pure Nothing Nothing
                             )
 
@@ -3105,7 +3105,7 @@ readMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
 takeMVar_BB_CachedInterface : T.MVar_BB_CachedInterface -> IO T.BB_CachedInterface
 takeMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BB_CachedInterface of
                 Just mVar ->
                     case mVar.value of
@@ -3122,7 +3122,7 @@ takeMVar_BB_CachedInterface (T.MVar_BB_CachedInterface ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BB_CachedInterface index ] } s.mVars_BB_CachedInterface }
+                            ( { s | mVars_BB_CachedInterface = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BB_CachedInterface ] } s.mVars_BB_CachedInterface }
                             , T.TakeMVar_BB_CachedInterface IO.pure Nothing Nothing
                             )
 
@@ -3205,7 +3205,7 @@ readMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) =
 takeMVar_BED_StatusDict : T.MVar_BED_StatusDict -> IO T.BED_StatusDict
 takeMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_BED_StatusDict of
                 Just mVar ->
                     case mVar.value of
@@ -3222,7 +3222,7 @@ takeMVar_BED_StatusDict (T.MVar_BED_StatusDict ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BED_StatusDict index ] } s.mVars_BED_StatusDict }
+                            ( { s | mVars_BED_StatusDict = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_BED_StatusDict ] } s.mVars_BED_StatusDict }
                             , T.TakeMVar_BED_StatusDict IO.pure Nothing Nothing
                             )
 
@@ -3315,7 +3315,7 @@ readMVar_Unit (T.MVar_Unit ref) =
 takeMVar_Unit : T.MVar_Unit -> IO ()
 takeMVar_Unit (T.MVar_Unit ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars_Unit of
                 Just mVar ->
                     case mVar.value of
@@ -3332,7 +3332,7 @@ takeMVar_Unit (T.MVar_Unit ref) =
                                     )
 
                         Nothing ->
-                            ( { s | mVars_Unit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Unit index ] } s.mVars_Unit }
+                            ( { s | mVars_Unit = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ T.TakeMVarSubscriber_Unit ] } s.mVars_Unit }
                             , T.TakeMVar_Unit IO.pure Nothing Nothing
                             )
 

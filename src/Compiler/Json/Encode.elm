@@ -16,8 +16,6 @@ module Compiler.Json.Encode exposing
     , null
     , number
     , object
-    , oneOrMore
-    , result
     , string
     , toJsonValue
     , write
@@ -25,7 +23,6 @@ module Compiler.Json.Encode exposing
     )
 
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Data.OneOrMore exposing (OneOrMore(..))
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
@@ -55,22 +52,6 @@ everySet keyComparison encoder =
     Encode.list encoder << List.reverse << EverySet.toList keyComparison
 
 
-result : (x -> Encode.Value) -> (a -> Encode.Value) -> Result x a -> Encode.Value
-result errEncoder successEncoder resultValue =
-    case resultValue of
-        Ok value ->
-            Encode.object
-                [ ( "type", Encode.string "Ok" )
-                , ( "value", successEncoder value )
-                ]
-
-        Err err ->
-            Encode.object
-                [ ( "type", Encode.string "Err" )
-                , ( "value", errEncoder err )
-                ]
-
-
 maybe : (a -> Encode.Value) -> Maybe a -> Encode.Value
 maybe encoder maybeValue =
     case maybeValue of
@@ -84,19 +65,6 @@ maybe encoder maybeValue =
 nonempty : (a -> Encode.Value) -> NE.Nonempty a -> Encode.Value
 nonempty encoder (NE.Nonempty x xs) =
     Encode.list encoder (x :: xs)
-
-
-oneOrMore : (a -> Encode.Value) -> OneOrMore a -> Encode.Value
-oneOrMore encoder oneOrMore_ =
-    case oneOrMore_ of
-        One value ->
-            Encode.object [ ( "one", encoder value ) ]
-
-        More left right ->
-            Encode.object
-                [ ( "left", oneOrMore encoder left )
-                , ( "right", oneOrMore encoder right )
-                ]
 
 
 

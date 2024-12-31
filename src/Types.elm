@@ -506,161 +506,161 @@ type alias RealWorld =
 
 type MVarSubscriber_Maybe_BED_Status
     = ReadMVarSubscriber_Maybe_BED_Status Int
-    | PutMVarSubscriber_Maybe_BED_Status Int (Maybe BED_Status)
+    | PutMVarSubscriber_Maybe_BED_Status
 
 
 type MVarSubscriber_Maybe_BED_DResult
     = ReadMVarSubscriber_Maybe_BED_DResult Int
-    | PutMVarSubscriber_Maybe_BED_DResult Int (Maybe BED_DResult)
+    | PutMVarSubscriber_Maybe_BED_DResult
 
 
 type MVarSubscriber_Maybe_CASTO_LocalGraph
     = ReadMVarSubscriber_Maybe_CASTO_LocalGraph Int
-    | PutMVarSubscriber_Maybe_CASTO_LocalGraph Int (Maybe CASTO_LocalGraph)
+    | PutMVarSubscriber_Maybe_CASTO_LocalGraph
 
 
 type MVarSubscriber_Maybe_CASTO_GlobalGraph
     = ReadMVarSubscriber_Maybe_CASTO_GlobalGraph Int
-    | PutMVarSubscriber_Maybe_CASTO_GlobalGraph Int (Maybe CASTO_GlobalGraph)
+    | PutMVarSubscriber_Maybe_CASTO_GlobalGraph
 
 
 type MVarSubscriber_Result_BuildProjectProblem_RootInfo
     = ReadMVarSubscriber_Result_BuildProjectProblem_RootInfo Int
-    | PutMVarSubscriber_Result_BuildProjectProblem_RootInfo Int (Result BRE_BuildProjectProblem BB_RootInfo)
+    | PutMVarSubscriber_Result_BuildProjectProblem_RootInfo
 
 
 type MVarSubscriber_MaybeDep
     = ReadMVarSubscriber_MaybeDep Int
-    | PutMVarSubscriber_MaybeDep Int (Maybe BB_Dep)
+    | PutMVarSubscriber_MaybeDep
 
 
 type MVarSubscriber_BB_RootResult
     = ReadMVarSubscriber_BB_RootResult Int
-    | PutMVarSubscriber_BB_RootResult Int BB_RootResult
+    | PutMVarSubscriber_BB_RootResult
 
 
 type MVarSubscriber_BB_RootStatus
     = ReadMVarSubscriber_BB_RootStatus Int
-    | PutMVarSubscriber_BB_RootStatus Int BB_RootStatus
+    | PutMVarSubscriber_BB_RootStatus
 
 
 type MVarSubscriber_BB_BResult
     = ReadMVarSubscriber_BB_BResult Int
-    | PutMVarSubscriber_BB_BResult Int BB_BResult
+    | PutMVarSubscriber_BB_BResult
 
 
 type MVarSubscriber_BB_Status
     = ReadMVarSubscriber_BB_Status Int
-    | PutMVarSubscriber_BB_Status Int BB_Status
+    | PutMVarSubscriber_BB_Status
 
 
 type MVarSubscriber_BB_StatusDict
     = ReadMVarSubscriber_BB_StatusDict Int
-    | TakeMVarSubscriber_BB_StatusDict Int
+    | TakeMVarSubscriber_BB_StatusDict
     | PutMVarSubscriber_BB_StatusDict Int BB_StatusDict
 
 
 type MVarSubscriber_ResultRegistryProblemEnv
     = ReadMVarSubscriber_ResultRegistryProblemEnv Int
-    | PutMVarSubscriber_ResultRegistryProblemEnv Int (Result BRE_RegistryProblem BDS_Env)
+    | PutMVarSubscriber_ResultRegistryProblemEnv
 
 
 type MVarSubscriber_CED_Dep
     = ReadMVarSubscriber_CED_Dep Int
-    | PutMVarSubscriber_CED_Dep Int CED_Dep
+    | PutMVarSubscriber_CED_Dep
 
 
 type MVarSubscriber_Maybe_CECTE_Types
     = ReadMVarSubscriber_Maybe_CECTE_Types Int
-    | PutMVarSubscriber_Maybe_CECTE_Types Int (Maybe CECTE_Types)
+    | PutMVarSubscriber_Maybe_CECTE_Types
 
 
 type MVarSubscriber_Maybe_BB_Dependencies
     = ReadMVarSubscriber_Maybe_BB_Dependencies Int
-    | PutMVarSubscriber_Maybe_BB_Dependencies Int (Maybe BB_Dependencies)
+    | PutMVarSubscriber_Maybe_BB_Dependencies
 
 
 type MVarSubscriber_DictNameMVarDep
     = ReadMVarSubscriber_DictNameMVarDep Int
-    | PutMVarSubscriber_DictNameMVarDep Int (Map.Dict ( String, String ) CEP_Name MVar_CED_Dep)
+    | PutMVarSubscriber_DictNameMVarDep
 
 
 type MVarSubscriber_DictRawMVarMaybeDResult
     = ReadMVarSubscriber_DictRawMVarMaybeDResult Int
-    | PutMVarSubscriber_DictRawMVarMaybeDResult Int (Map.Dict String CEMN_Raw MVar_Maybe_BED_DResult)
+    | PutMVarSubscriber_DictRawMVarMaybeDResult
 
 
 type MVarSubscriber_ListMVar
-    = TakeMVarSubscriber_ListMVar Int
+    = TakeMVarSubscriber_ListMVar
     | PutMVarSubscriber_ListMVar Int (List MVar_Unit)
 
 
 type MVarSubscriber_BB_CachedInterface
     = ReadMVarSubscriber_BB_CachedInterface Int
-    | TakeMVarSubscriber_BB_CachedInterface Int
+    | TakeMVarSubscriber_BB_CachedInterface
     | PutMVarSubscriber_BB_CachedInterface Int BB_CachedInterface
 
 
 type MVarSubscriber_BED_StatusDict
     = ReadMVarSubscriber_BED_StatusDict Int
-    | TakeMVarSubscriber_BED_StatusDict Int
+    | TakeMVarSubscriber_BED_StatusDict
     | PutMVarSubscriber_BED_StatusDict Int BED_StatusDict
 
 
 type MVarSubscriber_Manager
     = ReadMVarSubscriber_Manager Int
-    | PutMVarSubscriber_Manager Int BH_Manager
+    | PutMVarSubscriber_Manager
 
 
 type MVarSubscriber_BB_ResultDict
     = ReadMVarSubscriber_BB_ResultDict Int
-    | PutMVarSubscriber_BB_ResultDict Int BB_ResultDict
+    | PutMVarSubscriber_BB_ResultDict
 
 
 type MVarSubscriber_Unit
     = ReadMVarSubscriber_Unit Int
-    | TakeMVarSubscriber_Unit Int
+    | TakeMVarSubscriber_Unit
     | PutMVarSubscriber_Unit Int ()
 
 
 type MVarSubscriber_Stream_Maybe_DMsg
-    = TakeMVarSubscriber_Stream_Maybe_DMsg Int
+    = TakeMVarSubscriber_Stream_Maybe_DMsg
     | PutMVarSubscriber_Stream_Maybe_DMsg Int MVar_ChItem_Maybe_DMsg
 
 
 type MVarSubscriber_ChItem_Maybe_DMsg
     = ReadMVarSubscriber_ChItem_Maybe_DMsg Int
-    | PutMVarSubscriber_ChItem_Maybe_DMsg Int ChItem_Maybe_DMsg
+    | PutMVarSubscriber_ChItem_Maybe_DMsg
 
 
 type MVarSubscriber_StreamResultBMsgBResultDocumentation
-    = TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultDocumentation
     | PutMVarSubscriber_StreamResultBMsgBResultDocumentation Int MVar_ChItemResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_ChItemResultBMsgBResultDocumentation
     = ReadMVarSubscriber_ChItemResultBMsgBResultDocumentation Int
-    | PutMVarSubscriber_ChItemResultBMsgBResultDocumentation Int ChItem_ResultBMsgBResultDocumentation
+    | PutMVarSubscriber_ChItemResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_StreamResultBMsgBResultUnit
-    = TakeMVarSubscriber_StreamResultBMsgBResultUnit Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultUnit
     | PutMVarSubscriber_StreamResultBMsgBResultUnit Int MVar_ChItemResultBMsgBResultUnit
 
 
 type MVarSubscriber_ChItemResultBMsgBResultUnit
     = ReadMVarSubscriber_ChItemResultBMsgBResultUnit Int
-    | PutMVarSubscriber_ChItemResultBMsgBResultUnit Int ChItem_ResultBMsgBResultUnit
+    | PutMVarSubscriber_ChItemResultBMsgBResultUnit
 
 
 type MVarSubscriber_StreamResultBMsgBResultArtifacts
-    = TakeMVarSubscriber_StreamResultBMsgBResultArtifacts Int
+    = TakeMVarSubscriber_StreamResultBMsgBResultArtifacts
     | PutMVarSubscriber_StreamResultBMsgBResultArtifacts Int MVar_ChItemResultBMsgBResultArtifacts
 
 
 type MVarSubscriber_ChItemResultBMsgBResultArtifacts
     = ReadMVarSubscriber_ChItemResultBMsgBResultArtifacts Int
-    | PutMVarSubscriber_ChItemResultBMsgBResultArtifacts Int ChItem_ResultBMsgBResultArtifacts
+    | PutMVarSubscriber_ChItemResultBMsgBResultArtifacts
 
 
 type Next
