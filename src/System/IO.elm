@@ -245,7 +245,7 @@ update msg model =
                         ( updatedModel, updatedCmd ) =
                             update (PureMsg index (next ())) newRealWorld
                     in
-                    update (PureMsg (Dict.size model.next) forkIO) updatedModel
+                    update (PureMsg (Dict.size updatedModel.next) forkIO) updatedModel
                         |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, updatedCmd ])
 
                 ( newRealWorld, GetLine next ) ->
@@ -353,42 +353,35 @@ update msg model =
                 ( newRealWorld, ReplGetInputLineWithInitial next prompt left right ) ->
                     ( { newRealWorld | next = Dict.insert index (ReplGetInputLineWithInitialNext next) model.next }, sendReplGetInputLineWithInitial { index = index, prompt = prompt, left = left, right = right } )
 
+                -- MVars
                 ( newRealWorld, NewEmptyMVar next value ) ->
                     update (NewEmptyMVarMsg index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext next) model.next }
 
-                ( newRealWorld, ReadMVarWaiting next ) ->
-                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
-
-                ( newRealWorld, ReadMVarDone next value ) ->
+                ( newRealWorld, ReadMVar next (Just value) ) ->
                     update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }
 
-                ( newRealWorld, TakeMVarWaiting next ) ->
+                ( newRealWorld, ReadMVar next Nothing ) ->
+                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
+
+                ( newRealWorld, TakeMVar next (Just value) maybePutIndex ) ->
+                    update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }
+                        |> updatePutIndex maybePutIndex
+
+                ( newRealWorld, TakeMVar next Nothing maybePutIndex ) ->
                     ( { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }, Cmd.none )
+                        |> updatePutIndex maybePutIndex
 
-                ( newRealWorld, TakeMVarDone next value maybePutIndex ) ->
-                    let
-                        ( updatedModel, updatedCmd ) =
-                            update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }
-                    in
-                    case maybePutIndex of
-                        Just putIndex ->
-                            update (PutMVarMsg putIndex) updatedModel
-                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, updatedCmd ])
-
-                        Nothing ->
-                            ( updatedModel, updatedCmd )
-
-                ( newRealWorld, PutMVarWaiting next ) ->
-                    ( { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }, Cmd.none )
-
-                ( newRealWorld, PutMVarDone next readSubscriberIds maybeTakeIndex value ) ->
-                    List.foldr
-                        (\readSubscriberId ( accModel, accCmd ) ->
-                            update (ReadMVarMsg readSubscriberId value) accModel
-                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ cmd, accCmd ])
+                ( newRealWorld, PutMVar next readIndexes (Just value) ) ->
+                    List.foldl
+                        (\readIndex ( updatedModel, updateCmd ) ->
+                            update (ReadMVarMsg readIndex value) updatedModel
+                                |> Tuple.mapSecond (\cmd -> Cmd.batch [ updateCmd, cmd ])
                         )
                         (update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next })
-                        readSubscriberIds
+                        readIndexes
+
+                ( newRealWorld, PutMVar next _ Nothing ) ->
+                    update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }
 
         GetLineMsg index input ->
             case Dict.get index model.next of
@@ -642,6 +635,17 @@ update msg model =
                     crash "PutMVarMsg"
 
 
+updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+updatePutIndex maybePutIndex ( model, cmd ) =
+    case maybePutIndex of
+        Just putIndex ->
+            update (PutMVarMsg putIndex) model
+                |> Tuple.mapSecond (\putCmd -> Cmd.batch [ cmd, putCmd ])
+
+        Nothing ->
+            ( model, cmd )
+
+
 port sendGetLine : Int -> Cmd msg
 
 
@@ -853,13 +857,11 @@ type ION a
     | DirRemoveDirectoryRecursive (() -> IO a) FilePath
     | DirWithCurrentDirectory (() -> IO a) FilePath
     | ReplGetInputLineWithInitial (Maybe String -> IO a) String String String
+      -- MVars
     | NewEmptyMVar (Int -> IO a) Int
-    | ReadMVarWaiting (Encode.Value -> IO a)
-    | ReadMVarDone (Encode.Value -> IO a) Encode.Value
-    | TakeMVarWaiting (Encode.Value -> IO a)
-    | TakeMVarDone (Encode.Value -> IO a) Encode.Value (Maybe Int)
-    | PutMVarWaiting (() -> IO a)
-    | PutMVarDone (() -> IO a) (List Int) (Maybe Int) Encode.Value
+    | ReadMVar (Encode.Value -> IO a) (Maybe Encode.Value)
+    | TakeMVar (Encode.Value -> IO a) (Maybe Encode.Value) (Maybe Int)
+    | PutMVar (() -> IO a) (List Int) (Maybe Encode.Value)
 
 
 type alias RealWorld =
@@ -882,7 +884,7 @@ type alias RealWorldMVar =
 
 type MVarSubscriber
     = ReadSubscriber Int
-    | TakeSubscriber Int
+    | TakeSubscriber
     | PutSubscriber Int Encode.Value
 
 
@@ -1002,23 +1004,14 @@ bind f (IO ma) =
                 ( s1, NewEmptyMVar next newValue ) ->
                     ( s1, NewEmptyMVar (\value -> bind f (next value)) newValue )
 
-                ( s1, ReadMVarWaiting next ) ->
-                    ( s1, ReadMVarWaiting (\value -> bind f (next value)) )
+                ( s1, ReadMVar next mVarValue ) ->
+                    ( s1, ReadMVar (\value -> bind f (next value)) mVarValue )
 
-                ( s1, ReadMVarDone next readValue ) ->
-                    ( s1, ReadMVarDone (\value -> bind f (next value)) readValue )
+                ( s1, TakeMVar next mVarValue maybePutIndex ) ->
+                    ( s1, TakeMVar (\value -> bind f (next value)) mVarValue maybePutIndex )
 
-                ( s1, TakeMVarWaiting next ) ->
-                    ( s1, TakeMVarWaiting (\value -> bind f (next value)) )
-
-                ( s1, TakeMVarDone next takenValue maybePutIndex ) ->
-                    ( s1, TakeMVarDone (\value -> bind f (next value)) takenValue maybePutIndex )
-
-                ( s1, PutMVarWaiting next ) ->
-                    ( s1, PutMVarWaiting (\() -> bind f (next ())) )
-
-                ( s1, PutMVarDone next readSubscriberIds maybeTakeIndex value ) ->
-                    ( s1, PutMVarDone (\() -> bind f (next ())) readSubscriberIds maybeTakeIndex value )
+                ( s1, PutMVar next readIndexes value ) ->
+                    ( s1, PutMVar (\() -> bind f (next ())) readIndexes value )
         )
 
 

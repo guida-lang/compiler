@@ -948,11 +948,11 @@ readMVar decoder (MVar ref) =
                 Just mVar ->
                     case mVar.value of
                         Just value ->
-                            ( s, IO.ReadMVarDone IO.pure value )
+                            ( s, IO.ReadMVar IO.pure (Just value) )
 
                         Nothing ->
                             ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadSubscriber index ] } s.mVars }
-                            , IO.ReadMVarWaiting IO.pure
+                            , IO.ReadMVar IO.pure Nothing
                             )
 
                 Nothing ->
@@ -983,27 +983,25 @@ modifyMVar decoder encoder m io =
 takeMVar : Decode.Decoder a -> MVar a -> IO a
 takeMVar decoder (MVar ref) =
     IO
-        (\index s ->
+        (\_ s ->
             case Array.get ref s.mVars of
                 Just mVar ->
                     case mVar.value of
                         Just value ->
-                            let
-                                ( newValue, newSubscribers, maybePutIndex ) =
-                                    case mVar.subscribers of
-                                        (IO.PutSubscriber putIndex putValue) :: restSubscribers ->
-                                            ( Just putValue, restSubscribers, Just putIndex )
+                            case mVar.subscribers of
+                                (IO.PutSubscriber putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars }
+                                    , IO.TakeMVar IO.pure (Just value) (Just putIndex)
+                                    )
 
-                                        subscribers ->
-                                            ( Nothing, subscribers, Nothing )
-                            in
-                            ( { s | mVars = Array.set ref { mVar | subscribers = newSubscribers, value = newValue } s.mVars }
-                            , IO.TakeMVarDone IO.pure value maybePutIndex
-                            )
+                                _ ->
+                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
+                                    , IO.TakeMVar IO.pure (Just value) Nothing
+                                    )
 
                         Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber index ] } s.mVars }
-                            , IO.TakeMVarWaiting IO.pure
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber ] } s.mVars }
+                            , IO.TakeMVar IO.pure Nothing Nothing
                             )
 
                 Nothing ->
@@ -1026,51 +1024,33 @@ putMVar encoder (MVar ref) value =
         (\index s ->
             case Array.get ref s.mVars of
                 Just mVar ->
+                    let
+                        encodedValue =
+                            encoder value
+                    in
                     case mVar.value of
                         Just _ ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index (encoder value) ] } s.mVars }
-                            , IO.PutMVarWaiting IO.pure
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index encodedValue ] } s.mVars }
+                            , IO.PutMVar IO.pure [] Nothing
                             )
 
                         Nothing ->
                             let
-                                encodedValue =
-                                    encoder value
-
-                                readSubscriberIds =
-                                    List.filterMap
-                                        (\subscriber ->
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
                                             case subscriber of
                                                 IO.ReadSubscriber readIndex ->
-                                                    Just readIndex
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
 
                                                 _ ->
-                                                    Nothing
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
                                         )
+                                        ( [], [] )
                                         mVar.subscribers
-
-                                nonReadSubscribers =
-                                    List.filter
-                                        (\subscriber ->
-                                            case subscriber of
-                                                IO.ReadSubscriber _ ->
-                                                    False
-
-                                                _ ->
-                                                    True
-                                        )
-                                        mVar.subscribers
-
-                                ( newValue, maybeTakeIndex, subscribers ) =
-                                    case nonReadSubscribers of
-                                        (IO.TakeSubscriber takeIndex) :: remainingSubscribers ->
-                                            ( Nothing, Just takeIndex, remainingSubscribers )
-
-                                        _ ->
-                                            ( Just encodedValue, Nothing, nonReadSubscribers )
                             in
-                            ( { s | mVars = Array.set ref { mVar | subscribers = subscribers, value = newValue } s.mVars }
-                            , IO.PutMVarDone IO.pure readSubscriberIds maybeTakeIndex encodedValue
+                            ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just encodedValue } s.mVars }
+                            , IO.PutMVar IO.pure readIndexes (Just encodedValue)
                             )
 
                 _ ->
