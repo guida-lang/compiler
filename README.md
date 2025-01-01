@@ -74,6 +74,8 @@ You should now be able to run `guida`:
 guida --help
 ```
 
+To compare the performance of guida with elm, you can run `./performance-comparison.sh`.
+
 # Examples
 
 To run an example `cd` into the `examples` folder, and run the `guida make` command:
