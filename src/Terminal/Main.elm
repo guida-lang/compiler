@@ -5,6 +5,7 @@ import Compiler.Reporting.Doc as D
 import System.IO as IO exposing (IO)
 import Terminal.Bump as Bump
 import Terminal.Diff as Diff
+import Terminal.Format as Format
 import Terminal.Init as Init
 import Terminal.Install as Install
 import Terminal.Make as Make
@@ -32,6 +33,7 @@ app =
         , bump
         , diff
         , publish
+        , format
         ]
 
 
@@ -174,7 +176,7 @@ make =
         example =
             stack
                 [ reflow "For example:"
-                , D.indent 4 <| D.green (D.fromChars "elm make src/Main.elm")
+                , D.indent 4 <| D.green (D.fromChars "guida make src/Main.elm")
                 , reflow "This tries to compile an Elm file named src/Main.elm, generating an index.html file if possible."
                 ]
 
@@ -228,8 +230,8 @@ install =
                 , D.indent 4 <|
                     D.green <|
                         D.vcat <|
-                            [ D.fromChars "elm install elm/http"
-                            , D.fromChars "elm install elm/json"
+                            [ D.fromChars "guida install elm/http"
+                            , D.fromChars "guida install elm/json"
                             ]
                 , reflow
                     "Notice that you must say the AUTHOR name and PROJECT name! After running those commands, you could say `import Http` or `import Json.Decode` in your code."
@@ -427,6 +429,50 @@ diff =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Diff.run args flags)
+
+
+
+-- FORMAT
+
+
+format : Terminal.Command
+format =
+    let
+        details : String
+        details =
+            "The `format` command formats Elm code in place."
+
+        example : D.Doc
+        example =
+            stack
+                [ reflow "For example:"
+                , D.indent 4 <| D.green (D.fromChars "guida format src/Main.elm")
+                , reflow "This tries to format an Elm file named src/Main.elm, formatting it in place."
+                ]
+
+        formatArgs : Terminal.Args
+        formatArgs =
+            Terminal.zeroOrMore Terminal.elmFile
+
+        formatFlags : Terminal.Flags
+        formatFlags =
+            Terminal.noFlags
+    in
+    Terminal.Command "format" Terminal.Uncommon details example formatArgs formatFlags <|
+        \chunks ->
+            Chomp.chomp Nothing
+                chunks
+                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseElmFile
+                ]
+                (Chomp.pure ()
+                    |> Chomp.bind
+                        (\value ->
+                            Chomp.checkForUnknownFlags Terminal.noFlags
+                                |> Chomp.fmap (\_ -> value)
+                        )
+                )
+                |> Tuple.second
+                |> Result.map (\( args, flags ) -> Format.run args flags)
 
 
 
