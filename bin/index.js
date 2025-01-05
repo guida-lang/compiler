@@ -64,7 +64,7 @@ const app = Elm.Terminal.Main.init({
   flags: {
     args: process.argv.slice(2),
     currentDirectory: process.cwd(),
-    envVars: Object.keys(process.env).reduce((acc, key) => { acc.push([key, process.env[key]]); return acc }, []),
+    envVars: Object.entries(process.env),
     homedir: os.homedir(),
     progName: "guida"
   }
