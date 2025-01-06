@@ -1,4 +1,7 @@
-module Terminal.Format exposing (run)
+module Terminal.Format exposing
+    ( Flags(..)
+    , run
+    )
 
 import Builder.File as File
 import Compiler.AST.Source as Src
@@ -6,15 +9,20 @@ import Compiler.Parse.Module as Parse
 import Compiler.Reporting.Annotation as A
 import List.Extra as List
 import System.IO as IO exposing (IO)
+import Utils.Main as Utils exposing (FilePath)
 
 
-run : List String -> () -> IO ()
-run paths () =
-    runHelp paths
+type Flags
+    = Flags (Maybe FilePath)
 
 
-runHelp : List String -> IO ()
-runHelp paths =
+run : List String -> Flags -> IO ()
+run paths flags =
+    runHelp paths flags
+
+
+runHelp : List String -> Flags -> IO ()
+runHelp paths ((Flags maybeOutput) as flags) =
     case paths of
         [] ->
             IO.pure ()
@@ -30,13 +38,13 @@ runHelp paths =
                         in
                         case Parse.fromByteString projectType source of
                             Ok modul ->
-                                File.writeUtf8 path (formatModule modul)
+                                File.writeUtf8 (Maybe.withDefault path maybeOutput) (formatModule (Debug.log "modul" modul))
 
                             Err err ->
                                 -- FIXME
                                 IO.pure ()
                     )
-                |> IO.bind (\_ -> runHelp remainingPaths)
+                |> IO.bind (\_ -> runHelp remainingPaths flags)
 
 
 formatModule : Src.Module -> String
@@ -44,6 +52,7 @@ formatModule modul =
     -- FIXME
     formatModuleHeader modul
         ++ formatModuleImports modul
+        ++ formatModuleBody modul
 
 
 
@@ -144,8 +153,8 @@ formatModuleImports (Src.Module _ _ _ imports _ _ _ _ _) =
             ""
 
         _ ->
-            List.map formatModuleImport imports
-                |> String.join "\n"
+            String.join "\n" (List.map formatModuleImport imports)
+                ++ "\n\n"
 
 
 formatModuleImport : Src.Import -> String
@@ -157,3 +166,53 @@ formatModuleImport (Src.Import (A.At _ name) maybeAlias exports) =
                 |> Maybe.withDefault ""
     in
     "import " ++ name ++ alias ++ formatExposing exports
+
+
+
+-- BODY
+
+
+formatModuleBody : Src.Module -> String
+formatModuleBody (Src.Module _ _ _ _ values unions aliases binops effects) =
+    List.map formatModuleValue values
+        |> String.join "\n\n"
+
+
+formatModuleValue : A.Located Src.Value -> String
+formatModuleValue (A.At _ (Src.Value (A.At _ name) srcArgs body maybeType)) =
+    let
+        signature =
+            maybeType
+                |> Maybe.map (\tipe -> name ++ " : " ++ formatModuleType tipe ++ "\n")
+                |> Maybe.withDefault ""
+    in
+    signature
+        ++ name
+        ++ String.join " " (List.map (\(A.At _ srcArg) -> Debug.toString srcArg) srcArgs)
+        ++ " =\n    "
+        ++ Debug.toString body
+
+
+formatModuleType : Src.Type -> String
+formatModuleType (A.At _ type_) =
+    case Debug.log "type_" type_ of
+        Src.TLambda arg result ->
+            formatModuleType arg ++ " -> " ++ formatModuleType result
+
+        Src.TVar name ->
+            name
+
+        Src.TType _ name args ->
+            name ++ " " ++ String.join " " (List.map formatModuleType args)
+
+        Src.TTypeQual _ home name args ->
+            Debug.todo "formatModuleType TTypeQual"
+
+        Src.TRecord fields ext ->
+            Debug.todo "formatModuleType TRecord"
+
+        Src.TUnit ->
+            "()"
+
+        Src.TTuple a b cs ->
+            Debug.todo "formatModuleType TTuple"

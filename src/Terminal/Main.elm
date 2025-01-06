@@ -456,7 +456,8 @@ format =
 
         formatFlags : Terminal.Flags
         formatFlags =
-            Terminal.noFlags
+            Terminal.flags
+                |> Terminal.more (Terminal.flag "output" output "Write output to FILE instead of overwriting the given source file.")
     in
     Terminal.Command "format" Terminal.Uncommon details example formatArgs formatFlags <|
         \chunks ->
@@ -464,15 +465,26 @@ format =
                 chunks
                 [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseElmFile
                 ]
-                (Chomp.pure ()
+                (Chomp.pure Format.Flags
+                    |> Chomp.apply (Chomp.chompNormalFlag "output" output Just)
                     |> Chomp.bind
                         (\value ->
-                            Chomp.checkForUnknownFlags Terminal.noFlags
+                            Chomp.checkForUnknownFlags formatFlags
                                 |> Chomp.fmap (\_ -> value)
                         )
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Format.run args flags)
+
+
+output : Terminal.Parser
+output =
+    Terminal.Parser
+        { singular = "output"
+        , plural = "outputs"
+        , suggest = \_ -> IO.pure []
+        , examples = \_ -> IO.pure []
+        }
 
 
 
