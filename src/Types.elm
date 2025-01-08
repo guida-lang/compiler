@@ -205,7 +205,7 @@ module Types exposing
     , ChItem_ResultBMsgBResultUnit(..)
     , FilePath
     , Handle(..)
-    , IO
+    , IO(..)
     , IOMode(..)
     , ION(..)
     , MVarSubscriber_BB_BResult(..)
@@ -296,8 +296,8 @@ import Time
 -- The IO monad
 
 
-type alias IO a =
-    Int -> RealWorld -> ( RealWorld, ION a )
+type IO a
+    = IO (Int -> RealWorld -> ( RealWorld, ION a ))
 
 
 type ION a
@@ -463,7 +463,8 @@ type ION a
 
 
 type alias RealWorld =
-    { args : List String
+    { count : Int
+    , args : List String
     , currentDirectory : String
     , envVars : Dict String String
     , homedir : FilePath
@@ -556,7 +557,7 @@ type MVarSubscriber_BB_Status
 
 type MVarSubscriber_BB_StatusDict
     = ReadMVarSubscriber_BB_StatusDict Int
-    | TakeMVarSubscriber_BB_StatusDict
+    | TakeMVarSubscriber_BB_StatusDict Int
     | PutMVarSubscriber_BB_StatusDict Int BB_StatusDict
 
 
@@ -591,19 +592,19 @@ type MVarSubscriber_DictRawMVarMaybeDResult
 
 
 type MVarSubscriber_ListMVar
-    = TakeMVarSubscriber_ListMVar
+    = TakeMVarSubscriber_ListMVar Int
     | PutMVarSubscriber_ListMVar Int (List MVar_Unit)
 
 
 type MVarSubscriber_BB_CachedInterface
     = ReadMVarSubscriber_BB_CachedInterface Int
-    | TakeMVarSubscriber_BB_CachedInterface
+    | TakeMVarSubscriber_BB_CachedInterface Int
     | PutMVarSubscriber_BB_CachedInterface Int BB_CachedInterface
 
 
 type MVarSubscriber_BED_StatusDict
     = ReadMVarSubscriber_BED_StatusDict Int
-    | TakeMVarSubscriber_BED_StatusDict
+    | TakeMVarSubscriber_BED_StatusDict Int
     | PutMVarSubscriber_BED_StatusDict Int BED_StatusDict
 
 
@@ -619,12 +620,12 @@ type MVarSubscriber_BB_ResultDict
 
 type MVarSubscriber_Unit
     = ReadMVarSubscriber_Unit Int
-    | TakeMVarSubscriber_Unit
+    | TakeMVarSubscriber_Unit Int
     | PutMVarSubscriber_Unit Int ()
 
 
 type MVarSubscriber_Stream_Maybe_DMsg
-    = TakeMVarSubscriber_Stream_Maybe_DMsg
+    = TakeMVarSubscriber_Stream_Maybe_DMsg Int
     | PutMVarSubscriber_Stream_Maybe_DMsg Int MVar_ChItem_Maybe_DMsg
 
 
@@ -634,7 +635,7 @@ type MVarSubscriber_ChItem_Maybe_DMsg
 
 
 type MVarSubscriber_StreamResultBMsgBResultDocumentation
-    = TakeMVarSubscriber_StreamResultBMsgBResultDocumentation
+    = TakeMVarSubscriber_StreamResultBMsgBResultDocumentation Int
     | PutMVarSubscriber_StreamResultBMsgBResultDocumentation Int MVar_ChItemResultBMsgBResultDocumentation
 
 
@@ -644,7 +645,7 @@ type MVarSubscriber_ChItemResultBMsgBResultDocumentation
 
 
 type MVarSubscriber_StreamResultBMsgBResultUnit
-    = TakeMVarSubscriber_StreamResultBMsgBResultUnit
+    = TakeMVarSubscriber_StreamResultBMsgBResultUnit Int
     | PutMVarSubscriber_StreamResultBMsgBResultUnit Int MVar_ChItemResultBMsgBResultUnit
 
 
@@ -654,7 +655,7 @@ type MVarSubscriber_ChItemResultBMsgBResultUnit
 
 
 type MVarSubscriber_StreamResultBMsgBResultArtifacts
-    = TakeMVarSubscriber_StreamResultBMsgBResultArtifacts
+    = TakeMVarSubscriber_StreamResultBMsgBResultArtifacts Int
     | PutMVarSubscriber_StreamResultBMsgBResultArtifacts Int MVar_ChItemResultBMsgBResultArtifacts
 
 

@@ -48,65 +48,66 @@ proc cmd args =
 
 withCreateProcess : CreateProcess -> (Maybe T.Handle -> Maybe T.Handle -> Maybe T.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
 withCreateProcess createProcess f =
-    (\_ s ->
-        ( s
-        , T.ProcWithCreateProcess IO.pure
-            (Encode.object
-                [ ( "cmdspec"
-                  , case createProcess.cmdspec of
-                        RawCommand cmd args ->
-                            Encode.object
-                                [ ( "type", Encode.string "RawCommand" )
-                                , ( "cmd", Encode.string cmd )
-                                , ( "args", Encode.list Encode.string args )
-                                ]
-                  )
-                , ( "stdin"
-                  , case createProcess.std_in of
-                        Inherit ->
-                            Encode.string "inherit"
+    T.IO
+        (\_ s ->
+            ( s
+            , T.ProcWithCreateProcess IO.pure
+                (Encode.object
+                    [ ( "cmdspec"
+                      , case createProcess.cmdspec of
+                            RawCommand cmd args ->
+                                Encode.object
+                                    [ ( "type", Encode.string "RawCommand" )
+                                    , ( "cmd", Encode.string cmd )
+                                    , ( "args", Encode.list Encode.string args )
+                                    ]
+                      )
+                    , ( "stdin"
+                      , case createProcess.std_in of
+                            Inherit ->
+                                Encode.string "inherit"
 
-                        UseHandle (T.Handle handle) ->
-                            Encode.int handle
+                            UseHandle (T.Handle handle) ->
+                                Encode.int handle
 
-                        CreatePipe ->
-                            Encode.string "pipe"
+                            CreatePipe ->
+                                Encode.string "pipe"
 
-                        NoStream ->
-                            Encode.string "ignore"
-                  )
-                , ( "stdout"
-                  , case createProcess.std_out of
-                        Inherit ->
-                            Encode.string "inherit"
+                            NoStream ->
+                                Encode.string "ignore"
+                      )
+                    , ( "stdout"
+                      , case createProcess.std_out of
+                            Inherit ->
+                                Encode.string "inherit"
 
-                        UseHandle (T.Handle handle) ->
-                            Encode.int handle
+                            UseHandle (T.Handle handle) ->
+                                Encode.int handle
 
-                        CreatePipe ->
-                            Encode.string "pipe"
+                            CreatePipe ->
+                                Encode.string "pipe"
 
-                        NoStream ->
-                            Encode.string "ignore"
-                  )
-                , ( "stderr"
-                  , case createProcess.std_err of
-                        Inherit ->
-                            Encode.string "inherit"
+                            NoStream ->
+                                Encode.string "ignore"
+                      )
+                    , ( "stderr"
+                      , case createProcess.std_err of
+                            Inherit ->
+                                Encode.string "inherit"
 
-                        UseHandle (T.Handle handle) ->
-                            Encode.int handle
+                            UseHandle (T.Handle handle) ->
+                                Encode.int handle
 
-                        CreatePipe ->
-                            Encode.string "pipe"
+                            CreatePipe ->
+                                Encode.string "pipe"
 
-                        NoStream ->
-                            Encode.string "ignore"
-                  )
-                ]
+                            NoStream ->
+                                Encode.string "ignore"
+                      )
+                    ]
+                )
             )
         )
-    )
         |> IO.bind
             (\{ stdinHandle, ph } ->
                 f (Maybe.map T.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
@@ -115,7 +116,7 @@ withCreateProcess createProcess f =
 
 waitForProcess : ProcessHandle -> IO Exit.ExitCode
 waitForProcess (ProcessHandle ph) =
-    (\_ s -> ( s, T.ProcWaitForProcess IO.pure ph ))
+    T.IO (\_ s -> ( s, T.ProcWaitForProcess IO.pure ph ))
         |> IO.fmap
             (\exitCode ->
                 case exitCode of

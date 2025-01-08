@@ -48,11 +48,11 @@ config =
     , NoSimpleLetBody.rule
     , NoPrematureLetComputation.rule
 
-    , NoUnused.CustomTypeConstructors.rule []
-    , NoUnused.CustomTypeConstructorArgs.rule
+    -- , NoUnused.CustomTypeConstructors.rule []
+    -- , NoUnused.CustomTypeConstructorArgs.rule
     , NoUnused.Dependencies.rule
 
-    , NoUnused.Exports.rule
+    -- , NoUnused.Exports.rule
     , NoUnused.Parameters.rule
         |> Rule.ignoreErrorsForFiles [ "src/Utils/Crash.elm" ]
     , NoUnused.Patterns.rule

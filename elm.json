@@ -6,6 +6,7 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
+            "GlobalWebIndex/cmd-extra": "1.4.0",
             "dasch/levenshtein": "1.0.3",
             "elm/core": "1.0.5",
             "elm/json": "1.1.3",

@@ -78,20 +78,21 @@ type Method
 
 fetch : Method -> T.BH_Manager -> String -> List Header -> (T.BH_Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 fetch methodVerb _ url headers _ onSuccess =
-    (\_ s ->
-        ( s
-        , T.HttpFetch IO.pure
-            (case methodVerb of
-                MethodGet ->
-                    "GET"
+    T.IO
+        (\_ s ->
+            ( s
+            , T.HttpFetch IO.pure
+                (case methodVerb of
+                    MethodGet ->
+                        "GET"
 
-                MethodPost ->
-                    "POST"
+                    MethodPost ->
+                        "POST"
+                )
+                url
+                (addDefaultHeaders headers)
             )
-            url
-            (addDefaultHeaders headers)
         )
-    )
         |> IO.bind onSuccess
 
 
@@ -129,7 +130,7 @@ shaToChars =
 
 getArchive : T.BH_Manager -> String -> (T.BH_Error -> e) -> e -> (( Sha, T.CAZ_Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    (\_ s -> ( s, T.GetArchive IO.pure "GET" url ))
+    T.IO (\_ s -> ( s, T.GetArchive IO.pure "GET" url ))
         |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
 
 
@@ -145,40 +146,41 @@ type MultiPart
 
 upload : T.BH_Manager -> String -> List MultiPart -> IO (Result T.BH_Error ())
 upload _ url parts =
-    (\_ s ->
-        ( s
-        , T.HttpUpload IO.pure
-            url
-            (addDefaultHeaders [])
-            (List.map
-                (\part ->
-                    case part of
-                        FilePart name filePath ->
-                            Encode.object
-                                [ ( "type", Encode.string "FilePart" )
-                                , ( "name", Encode.string name )
-                                , ( "filePath", Encode.string filePath )
-                                ]
+    T.IO
+        (\_ s ->
+            ( s
+            , T.HttpUpload IO.pure
+                url
+                (addDefaultHeaders [])
+                (List.map
+                    (\part ->
+                        case part of
+                            FilePart name filePath ->
+                                Encode.object
+                                    [ ( "type", Encode.string "FilePart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "filePath", Encode.string filePath )
+                                    ]
 
-                        JsonPart name filePath value ->
-                            Encode.object
-                                [ ( "type", Encode.string "JsonPart" )
-                                , ( "name", Encode.string name )
-                                , ( "filePath", Encode.string filePath )
-                                , ( "value", value )
-                                ]
+                            JsonPart name filePath value ->
+                                Encode.object
+                                    [ ( "type", Encode.string "JsonPart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "filePath", Encode.string filePath )
+                                    , ( "value", value )
+                                    ]
 
-                        StringPart name string ->
-                            Encode.object
-                                [ ( "type", Encode.string "StringPart" )
-                                , ( "name", Encode.string name )
-                                , ( "string", Encode.string string )
-                                ]
+                            StringPart name string ->
+                                Encode.object
+                                    [ ( "type", Encode.string "StringPart" )
+                                    , ( "name", Encode.string name )
+                                    , ( "string", Encode.string string )
+                                    ]
+                    )
+                    parts
                 )
-                parts
             )
         )
-    )
         |> IO.fmap Ok
 
 

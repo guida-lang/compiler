@@ -189,8 +189,8 @@ writeUgly path value =
 {-| FIXME Builder.File.writeBuilder
 -}
 fileWriteBuilder : String -> String -> IO ()
-fileWriteBuilder path value _ s =
-    ( s, T.WriteString IO.pure path value )
+fileWriteBuilder path value =
+    T.IO (\_ s -> ( s, T.WriteString IO.pure path value ))
 
 
 

@@ -65,10 +65,10 @@ pure value =
 
 get : StateT s T.ReplState
 get =
-    (\_ s -> ( s, T.Pure s.state ))
+    T.IO (\_ s -> ( s, T.Pure s.state ))
         |> liftIO
 
 
 put : T.ReplState -> IO ()
-put state _ s =
-    ( { s | state = state }, T.Pure () )
+put state =
+    T.IO (\_ s -> ( { s | state = state }, T.Pure () ))

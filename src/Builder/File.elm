@@ -90,8 +90,8 @@ readBinary decoder path =
 
 
 writeUtf8 : T.FilePath -> String -> IO ()
-writeUtf8 path content _ s =
-    ( s, T.WriteString IO.pure path content )
+writeUtf8 path content =
+    T.IO (\_ s -> ( s, T.WriteString IO.pure path content ))
 
 
 
@@ -99,8 +99,8 @@ writeUtf8 path content _ s =
 
 
 readUtf8 : T.FilePath -> IO String
-readUtf8 path _ s =
-    ( s, T.Read IO.pure path )
+readUtf8 path =
+    T.IO (\_ s -> ( s, T.Read IO.pure path ))
 
 
 
@@ -108,8 +108,8 @@ readUtf8 path _ s =
 
 
 writeBuilder : T.FilePath -> String -> IO ()
-writeBuilder path builder _ s =
-    ( s, T.WriteString IO.pure path builder )
+writeBuilder path builder =
+    T.IO (\_ s -> ( s, T.WriteString IO.pure path builder ))
 
 
 
