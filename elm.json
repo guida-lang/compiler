@@ -15,6 +15,7 @@
             "elm-community/basics-extra": "4.1.0",
             "elm-community/list-extra": "8.7.0",
             "elm-community/maybe-extra": "5.3.0",
+            "elm-community/result-extra": "2.4.0",
             "guida-lang/glsl": "1.0.0",
             "guida-lang/graph": "1.0.0",
             "lue-bird/elm-syntax-format": "1.1.7",

@@ -1,6 +1,6 @@
 port module System.IO exposing
     ( Program, Flags, Model, Msg, Next, run
-    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind
+    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -20,7 +20,7 @@ port module System.IO exposing
 
 # The IO monad
 
-@docs IO, ION, RealWorld, pure, apply, fmap, bind
+@docs IO, ION, RealWorld, pure, apply, fmap, bind, mapM
 
 
 # Files and handles
@@ -135,6 +135,7 @@ run app =
                     , recvDirGetModificationTime (\{ index, value } -> DirGetModificationTimeMsg index value)
                     , recvDirDoesDirectoryExist (\{ index, value } -> DirDoesDirectoryExistMsg index value)
                     , recvDirCanonicalizePath (\{ index, value } -> DirCanonicalizePathMsg index value)
+                    , recvDirListDirectory (\{ index, value } -> DirListDirectoryMsg index value)
                     , recvBinaryDecodeFileOrFail (\{ index, value } -> BinaryDecodeFileOrFailMsg index value)
                     , recvWrite WriteMsg
                     , recvDirRemoveFile DirRemoveFileMsg
@@ -178,6 +179,7 @@ type Next
     | DirGetModificationTimeNext (Int -> IO ())
     | DirDoesDirectoryExistNext (Bool -> IO ())
     | DirCanonicalizePathNext (String -> IO ())
+    | DirListDirectoryNext (List String -> IO ())
     | BinaryDecodeFileOrFailNext (Encode.Value -> IO ())
     | WriteNext (() -> IO ())
     | DirRemoveFileNext (() -> IO ())
@@ -214,6 +216,7 @@ type Msg
     | DirGetModificationTimeMsg Int Int
     | DirDoesDirectoryExistMsg Int Bool
     | DirCanonicalizePathMsg Int FilePath
+    | DirListDirectoryMsg Int (List FilePath)
     | BinaryDecodeFileOrFailMsg Int Encode.Value
     | WriteMsg Int
     | DirRemoveFileMsg Int
@@ -333,6 +336,9 @@ update msg model =
 
                 ( newRealWorld, DirCanonicalizePath next path ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert index (DirCanonicalizePathNext next) model.next }, sendDirCanonicalizePath { index = index, path = path } )
+
+                ( newRealWorld, DirListDirectory next path ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (DirListDirectoryNext next) model.next }, sendDirListDirectory { index = index, path = path } )
 
                 ( newRealWorld, BinaryDecodeFileOrFail next filename ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert index (BinaryDecodeFileOrFailNext next) model.next }, sendBinaryDecodeFileOrFail { index = index, filename = filename } )
@@ -556,6 +562,14 @@ update msg model =
                 _ ->
                     crash "DirCanonicalizePathMsg"
 
+        DirListDirectoryMsg index value ->
+            case Dict.get index model.next of
+                Just (DirListDirectoryNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "DirListDirectoryMsg"
+
         ReadMVarMsg index value ->
             case Dict.get index model.next of
                 Just (ReadMVarNext fn) ->
@@ -751,6 +765,12 @@ port sendDirCanonicalizePath : { index : Int, path : FilePath } -> Cmd msg
 port recvDirCanonicalizePath : ({ index : Int, value : FilePath } -> msg) -> Sub msg
 
 
+port sendDirListDirectory : { index : Int, path : FilePath } -> Cmd msg
+
+
+port recvDirListDirectory : ({ index : Int, value : List FilePath } -> msg) -> Sub msg
+
+
 port sendBinaryDecodeFileOrFail : { index : Int, filename : FilePath } -> Cmd msg
 
 
@@ -849,6 +869,7 @@ type ION a
     | TakeMVar (Encode.Value -> IO a) Int
     | DirDoesDirectoryExist (Bool -> IO a) FilePath
     | DirCanonicalizePath (String -> IO a) FilePath
+    | DirListDirectory (List String -> IO a) FilePath
     | ReadMVar (Encode.Value -> IO a) Int
     | BinaryDecodeFileOrFail (Encode.Value -> IO a) FilePath
     | Write (() -> IO a) FilePath Encode.Value
@@ -963,6 +984,9 @@ bind f (IO ma) =
                 ( s1, DirCanonicalizePath next path ) ->
                     ( s1, DirCanonicalizePath (\value -> bind f (next value)) path )
 
+                ( s1, DirListDirectory next path ) ->
+                    ( s1, DirListDirectory (\value -> bind f (next value)) path )
+
                 ( s1, BinaryDecodeFileOrFail next filename ) ->
                     ( s1, BinaryDecodeFileOrFail (\value -> bind f (next value)) filename )
 
@@ -998,6 +1022,12 @@ bind f (IO ma) =
 unIO : IO a -> (RealWorld -> ( RealWorld, ION a ))
 unIO (IO a) =
     a
+
+
+mapM : (a -> IO b) -> List a -> IO (List b)
+mapM f =
+    List.foldr (\a -> bind (\c -> fmap (\va -> va :: c) (f a)))
+        (pure [])
 
 
 

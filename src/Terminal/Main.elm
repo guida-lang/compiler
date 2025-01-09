@@ -452,21 +452,27 @@ format =
 
         formatArgs : Terminal.Args
         formatArgs =
-            Terminal.zeroOrMore Terminal.elmFile
+            Terminal.zeroOrMore Terminal.filePath
 
         formatFlags : Terminal.Flags
         formatFlags =
             Terminal.flags
                 |> Terminal.more (Terminal.flag "output" output "Write output to FILE instead of overwriting the given source file.")
+                |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
+                |> Terminal.more (Terminal.onOff "validate" "Check if files are formatted without changing them.")
+                |> Terminal.more (Terminal.onOff "stdin" "Read from stdin, output to stdout.")
     in
     Terminal.Command "format" Terminal.Uncommon details example formatArgs formatFlags <|
         \chunks ->
             Chomp.chomp Nothing
                 chunks
-                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseElmFile
+                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseFilePath
                 ]
                 (Chomp.pure Format.Flags
                     |> Chomp.apply (Chomp.chompNormalFlag "output" output Just)
+                    |> Chomp.apply (Chomp.chompOnOffFlag "yes")
+                    |> Chomp.apply (Chomp.chompOnOffFlag "validate")
+                    |> Chomp.apply (Chomp.chompOnOffFlag "stdin")
                     |> Chomp.bind
                         (\value ->
                             Chomp.checkForUnknownFlags formatFlags

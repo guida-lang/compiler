@@ -1,7 +1,9 @@
 module Terminal.Terminal.Helpers exposing
     ( elmFile
+    , filePath
     , package
     , parseElmFile
+    , parseFilePath
     , parsePackage
     , parseVersion
     , version
@@ -103,6 +105,30 @@ parseElmFile chars =
 exampleElmFiles : String -> IO (List String)
 exampleElmFiles _ =
     IO.pure [ "Main.elm", "src/Main.elm" ]
+
+
+
+-- FILE PATH
+
+
+filePath : Parser
+filePath =
+    Parser
+        { singular = "file path"
+        , plural = "file paths"
+        , suggest = \_ -> IO.pure []
+        , examples = exampleFilePaths
+        }
+
+
+parseFilePath : String -> Maybe FilePath
+parseFilePath =
+    Just
+
+
+exampleFilePaths : String -> IO (List String)
+exampleFilePaths _ =
+    IO.pure [ "Main.elm", "src" ]
 
 
 

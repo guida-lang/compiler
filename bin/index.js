@@ -260,7 +260,9 @@ app.ports.sendReplGetInputLine.subscribe(function ({ index, prompt }) {
 });
 
 app.ports.sendDirDoesFileExist.subscribe(function ({ index, filename }) {
-  app.ports.recvDirDoesFileExist.send({ index, value: fs.existsSync(filename) });
+  fs.stat(filename, (err, stats) => {
+    app.ports.recvDirDoesFileExist.send({ index, value: !err && stats.isFile() });
+  });
 });
 
 app.ports.sendDirCreateDirectoryIfMissing.subscribe(function ({ index, createParents, filename }) {
@@ -304,11 +306,20 @@ app.ports.sendDirGetModificationTime.subscribe(function ({ index, filename }) {
 });
 
 app.ports.sendDirDoesDirectoryExist.subscribe(function ({ index, path }) {
-  app.ports.recvDirDoesDirectoryExist.send({ index, value: fs.existsSync(path) });
+  fs.stat(path, (err, stats) => {
+    app.ports.recvDirDoesDirectoryExist.send({ index, value: !err && stats.isDirectory() });
+  });
 });
 
 app.ports.sendDirCanonicalizePath.subscribe(function ({ index, path }) {
   app.ports.recvDirCanonicalizePath.send({ index, value: resolve(path) });
+});
+
+app.ports.sendDirListDirectory.subscribe(function ({ index, path }) {
+  fs.readdir(path, { recursive: false }, (err, files) => {
+    if (err) throw err;
+    app.ports.recvDirListDirectory.send({ index, value: files });
+  });
 });
 
 app.ports.sendBinaryDecodeFileOrFail.subscribe(function ({ index, filename }) {
