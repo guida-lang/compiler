@@ -117,6 +117,7 @@ run app =
                     , recvHPutStr HPutLineMsg
                     , recvWriteString WriteStringMsg
                     , recvRead (\{ index, value } -> ReadMsg index value)
+                    , recvReadStdin (\{ index, value } -> ReadStdinMsg index value)
                     , recvHttpFetch (\{ index, value } -> HttpFetchMsg index value)
                     , recvGetArchive (\{ index, value } -> GetArchiveMsg index value)
                     , recvHttpUpload HttpUploadMsg
@@ -160,6 +161,7 @@ type Next
     | HPutLineNext (() -> IO ())
     | WriteStringNext (() -> IO ())
     | ReadNext (String -> IO ())
+    | ReadStdinNext (String -> IO ())
     | HttpFetchNext (String -> IO ())
     | GetArchiveNext (( String, Zip.Archive ) -> IO ())
     | HttpUploadNext (() -> IO ())
@@ -198,6 +200,7 @@ type Msg
     | HPutLineMsg Int
     | WriteStringMsg Int
     | ReadMsg Int String
+    | ReadStdinMsg Int String
     | HttpFetchMsg Int String
     | GetArchiveMsg Int ( String, Zip.Archive )
     | HttpUploadMsg Int
@@ -261,6 +264,9 @@ update msg model =
 
                 ( newRealWorld, Read next fd ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadNext next) model.next }, sendRead { index = index, fd = fd } )
+
+                ( newRealWorld, ReadStdin next ) ->
+                    ( { model | realWorld = newRealWorld, next = Dict.insert index (ReadStdinNext next) model.next }, sendReadStdin { index = index } )
 
                 ( newRealWorld, HttpFetch next method urlStr headers ) ->
                     ( { model | realWorld = newRealWorld, next = Dict.insert index (HttpFetchNext next) model.next }, sendHttpFetch { index = index, method = method, urlStr = urlStr, headers = headers } )
@@ -401,6 +407,14 @@ update msg model =
 
                 _ ->
                     crash "ReadMsg"
+
+        ReadStdinMsg index value ->
+            case Dict.get index model.next of
+                Just (ReadStdinNext fn) ->
+                    update (PureMsg index (fn value)) model
+
+                _ ->
+                    crash "ReadStdinMsg"
 
         HttpFetchMsg index value ->
             case Dict.get index model.next of
@@ -654,6 +668,12 @@ port sendRead : { index : Int, fd : String } -> Cmd msg
 port recvRead : ({ index : Int, value : String } -> msg) -> Sub msg
 
 
+port sendReadStdin : { index : Int } -> Cmd msg
+
+
+port recvReadStdin : ({ index : Int, value : String } -> msg) -> Sub msg
+
+
 port sendHttpFetch : { index : Int, method : String, urlStr : String, headers : List ( String, String ) } -> Cmd msg
 
 
@@ -847,6 +867,7 @@ type ION a
     | GetLine (String -> IO a)
     | WriteString (() -> IO a) FilePath String
     | Read (String -> IO a) FilePath
+    | ReadStdin (String -> IO a)
     | HttpFetch (String -> IO a) String String (List ( String, String ))
     | GetArchive (( String, Zip.Archive ) -> IO a) String String
     | HttpUpload (() -> IO a) String (List ( String, String )) (List Encode.Value)
@@ -926,6 +947,9 @@ bind f (IO ma) =
 
                 ( s1, Read next fd ) ->
                     ( s1, Read (\input -> bind f (next input)) fd )
+
+                ( s1, ReadStdin next ) ->
+                    ( s1, ReadStdin (\input -> bind f (next input)) )
 
                 ( s1, HttpFetch next method urlStr headers ) ->
                     ( s1, HttpFetch (\body -> bind f (next body)) method urlStr headers )

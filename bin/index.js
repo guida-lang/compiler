@@ -98,6 +98,13 @@ app.ports.sendRead.subscribe(function ({ index, fd }) {
   });
 });
 
+app.ports.sendReadStdin.subscribe(function ({ index }) {
+  fs.readFile(0, (err, data) => {
+    if (err) throw err;
+    app.ports.recvReadStdin.send({ index, value: data.toString() });
+  });
+});
+
 app.ports.sendHttpFetch.subscribe(function ({ index, method, urlStr, headers }) {
   const url = new URL(urlStr);
   const client = url.protocol == "https:" ? https : http;

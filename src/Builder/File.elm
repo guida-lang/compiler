@@ -3,6 +3,7 @@ module Builder.File exposing
     , exists
     , getTime
     , readBinary
+    , readStdin
     , readUtf8
     , remove
     , timeDecoder
@@ -105,6 +106,11 @@ writeUtf8 path content =
 readUtf8 : FilePath -> IO String
 readUtf8 path =
     IO (\s -> ( s, IO.Read IO.pure path ))
+
+
+readStdin : IO String
+readStdin =
+    IO (\s -> ( s, IO.ReadStdin IO.pure ))
 
 
 

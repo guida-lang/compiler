@@ -10,10 +10,9 @@ import Elm.Syntax.File
 import ElmSyntaxParserLenient
 import ElmSyntaxPrint
 import Json.Encode as Encode
-import List.Extra as List
 import Result.Extra as Result
+import System.Exit as Exit
 import System.IO as IO exposing (IO)
-import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -32,13 +31,9 @@ runHelp paths ((Flags _ autoYes _ _) as flags) =
         |> IO.bind
             (\resolvedInputFiles ->
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
-                    Err NoInputs ->
-                        -- FIXME Program.showUsage
-                        crash "Program.showUsage"
-
                     Err err ->
-                        -- FIXME Program.error err
-                        crash "Program.error err"
+                        IO.hPutStrLn IO.stderr (toConsoleErrorMessage err)
+                            |> IO.bind (\_ -> Exit.exitFailure)
 
                     Ok a ->
                         IO.pure a
@@ -50,8 +45,7 @@ runHelp paths ((Flags _ autoYes _ _) as flags) =
                     IO.pure ()
 
                 else
-                    -- FIXME Program.failed
-                    crash "Program.failed"
+                    Exit.exitFailure
             )
 
 
@@ -252,6 +246,7 @@ toConsoleInfoMessage infoMessage =
 
         ParseError inputFile errs ->
             let
+                location : FilePath
                 location =
                     case errs of
                         [] ->
@@ -268,30 +263,26 @@ toConsoleInfoMessage infoMessage =
 
 jsonInfoMessage : InfoMessage -> Maybe Encode.Value
 jsonInfoMessage infoMessage =
-    -- let
-    --     fileMessage filename message =
-    --         Aeson.pairs
-    --             (mconcat
-    --                 [ "path" .= (filename :: FilePath)
-    --                 , "message" .= (message :: String)
-    --                 ]
-    --             )
-    -- in
-    -- case infoMessage of
-    --     ProcessingFile _ ->
-    --         Nothing
-    --     FileWouldChange elmVersion file ->
-    --         Just
-    --             $ fileMessage file
-    --             $ "File is not formatted with elm-format-"
-    --             <> ElmFormat.Version.asString
-    --             <> " --elm-version="
-    --             <> show elmVersion
-    --     ParseError inputFile _ ->
-    --         Just $ fileMessage inputFile "Error parsing the file"
-    --     JsonParseError inputFile _ ->
-    --         Just $ fileMessage inputFile "Error parsing the JSON file"
-    crash "jsonInfoMessage"
+    let
+        fileMessage : String -> String -> Encode.Value
+        fileMessage filename message =
+            Encode.object
+                [ ( "path", Encode.string filename )
+                , ( "message", Encode.string message )
+                ]
+    in
+    case infoMessage of
+        ProcessingFile _ ->
+            Nothing
+
+        FileWouldChange file ->
+            Just (fileMessage file "File is not formatted with elm-format-0.8.7 --elm-version=0.19")
+
+        ParseError inputFile _ ->
+            Just (fileMessage inputFile "Error parsing the file")
+
+        JsonParseError inputFile _ ->
+            Just (fileMessage inputFile "Error parsing the JSON file")
 
 
 toConsoleErrorMessage : ErrorMessage -> String
@@ -301,7 +292,7 @@ toConsoleErrorMessage errorMessage =
             unlines
                 [ "There was a problem reading one or more of the specified INPUT paths:"
                 , ""
-                , unlines (List.map ((++) "    " << toConsoleError) filePaths)
+                , unlines (List.map (\fp -> "    " ++ toConsoleError fp) filePaths)
                 , "Please check the given paths."
                 ]
 
@@ -319,8 +310,7 @@ toConsoleErrorMessage errorMessage =
             "Cannot use --output and --validate together"
 
         NoInputs ->
-            -- FIXME error "Error case NoInputs should be handled elsewhere. Please report this issue at https://github.com/avh4/elm-format/issues"
-            crash "Error case NoInputs should be handled elsewhere. Please report this issue at https://github.com/avh4/elm-format/issues"
+            "No file inputs provided. Use the --stdin flag to format input from standard input."
 
 
 
@@ -414,9 +404,11 @@ putStrLn usingStdout =
 resultsToJsonString : List (Result (Maybe String) ()) -> String
 resultsToJsonString results =
     let
+        lines : List String
         lines =
             List.filterMap handleResult results
 
+        handleResult : Result (Maybe String) () -> Maybe String
         handleResult result =
             case result of
                 Err info ->
@@ -531,6 +523,12 @@ updateFile result =
             File.writeUtf8 outputFile outputText
 
 
+readStdin : IO ( FilePath, String )
+readStdin =
+    File.readStdin
+        |> IO.fmap (Tuple.pair "<STDIN>")
+
+
 checkChange : ( FilePath, a ) -> a -> TranformFilesResult a
 checkChange ( inputFile, inputText ) outputText =
     if inputText == outputText then
@@ -557,6 +555,7 @@ type TransformMode
 applyTransformation : (FilePath -> InfoMessage) -> Bool -> (List FilePath -> PromptMessage) -> (( FilePath, String ) -> Result InfoMessage String) -> TransformMode -> IO Bool
 applyTransformation processingFile autoYes confirmPrompt transform mode =
     let
+        usesStdout : Bool
         usesStdout =
             case mode of
                 StdinToStdout ->
@@ -574,6 +573,7 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
                 FilesInPlace _ _ ->
                     False
 
+        onInfo : InfoMessage -> IO ()
         onInfo info =
             if usesStdout then
                 IO.hPutStrLn IO.stderr (toConsoleInfoMessage info)
@@ -583,20 +583,20 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
     in
     case mode of
         StdinToStdout ->
-            -- FIXME readStdin >>= logErrorOr onInfo World.writeStdout . transform
-            crash "StdinToStdout"
+            readStdin
+                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
 
         StdinToFile outputFile ->
-            -- FIXME readStdin >>= logErrorOr onInfo (World.writeUtf8File outputFile) . transform
-            crash "StdinToFile outputFile"
+            readStdin
+                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FileToStdout inputFile ->
-            -- FIXME World.readUtf8FileWithPath inputFile >>= logErrorOr onInfo World.writeStdout . transform
-            crash "FileToStdout inputFile"
+            readUtf8FileWithPath inputFile
+                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
 
         FileToFile inputFile outputFile ->
-            -- FIXME readFromFile (onInfo . processingFile) inputFile >>= logErrorOr onInfo (World.writeUtf8File outputFile) . transform
-            crash "FileToFile inputFile outputFile"
+            readFromFile (onInfo << processingFile) inputFile
+                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FilesInPlace first rest ->
             let
@@ -620,6 +620,7 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
 validateNoChanges : ValidateMode -> IO Bool
 validateNoChanges mode =
     let
+        newValidate : FilePath -> String -> Result (Maybe String) ()
         newValidate filePath content =
             case validate ( filePath, content ) of
                 Err info ->
@@ -630,19 +631,24 @@ validateNoChanges mode =
     in
     case mode of
         ValidateStdin ->
-            -- FIXME
-            -- do
-            --     (filePath, content) <- readStdin
-            --     let result = newValidate filePath content
-            --     World.putStrLn (InfoFormatter.resultsToJsonString [result])
-            --     return (Either.isRight result)
-            crash "ValidateStdin"
+            readStdin
+                |> IO.bind
+                    (\( filePath, content ) ->
+                        let
+                            result : Result (Maybe String) ()
+                            result =
+                                newValidate filePath content
+                        in
+                        IO.putStrLn (resultsToJsonString [ result ])
+                            |> IO.fmap (\_ -> Result.isOk result)
+                    )
 
         ValidateFiles first rest ->
             let
+                validateFile : FilePath -> IO (Result (Maybe String) ())
                 validateFile filePath =
                     File.readUtf8 filePath
-                        |> IO.fmap (\content -> newValidate filePath content)
+                        |> IO.fmap (newValidate filePath)
             in
             IO.mapM validateFile (first :: rest)
                 |> IO.bind
@@ -688,12 +694,13 @@ collectFiles children root =
 listDir : FilePath -> IO (List FilePath)
 listDir path =
     Utils.dirListDirectory path
-        |> IO.fmap (List.map ((++) (path ++ "/")))
+        |> IO.fmap (List.map (\file -> path ++ "/" ++ file))
 
 
 fileList : FilePath -> IO (List FilePath)
 fileList =
     let
+        children : FilePath -> IO (List FilePath)
         children path =
             if isSkippable path then
                 IO.pure []
@@ -744,4 +751,4 @@ hasFilename name path =
 unlines : List String -> String
 unlines =
     List.map (\line -> line ++ "\n")
-        >> String.join ""
+        >> String.concat
