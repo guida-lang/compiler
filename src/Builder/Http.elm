@@ -110,7 +110,7 @@ type Method
 fetch : Method -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 fetch methodVerb _ url headers _ onSuccess =
     IO
-        (\s ->
+        (\_ s ->
             ( s
             , IO.HttpFetch IO.pure
                 (case methodVerb of
@@ -171,7 +171,7 @@ shaToChars =
 
 getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO (\s -> ( s, IO.GetArchive IO.pure "GET" url ))
+    IO (\_ s -> ( s, IO.GetArchive IO.pure "GET" url ))
         |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
 
 
@@ -188,7 +188,7 @@ type MultiPart
 upload : Manager -> String -> List MultiPart -> IO (Result Error ())
 upload _ url parts =
     IO
-        (\s ->
+        (\_ s ->
             ( s
             , IO.HttpUpload IO.pure
                 url

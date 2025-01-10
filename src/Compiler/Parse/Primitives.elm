@@ -79,11 +79,12 @@ type alias Col =
 fmap : (a -> b) -> Parser x a -> Parser x b
 fmap f (Parser parser) =
     Parser
-        (parser
-            >> Result.map
-                (\(POk status a state) ->
-                    POk status (f a) state
+        (\state ->
+            Result.map
+                (\(POk status a s) ->
+                    POk status (f a) s
                 )
+                (parser state)
         )
 
 
@@ -93,9 +94,10 @@ fmap f (Parser parser) =
 
 oneOf : (Row -> Col -> x) -> List (Parser x a) -> Parser x a
 oneOf toError parsers =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             oneOfHelp state toError parsers
+        )
 
 
 oneOfHelp : State -> (Row -> Col -> x) -> List (Parser x a) -> Result (PErr x) (POk a)
@@ -152,8 +154,8 @@ pure value =
 
 bind : (a -> Parser x b) -> Parser x a -> Parser x b
 bind callback (Parser parserA) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             Result.andThen
                 (\(POk _ a s) ->
                     case callback a of
@@ -161,6 +163,7 @@ bind callback (Parser parserA) =
                             parserB s
                 )
                 (parserA state)
+        )
 
 
 
@@ -231,28 +234,31 @@ fromSnippet (Parser parser) toBadEnd (Snippet { fptr, offset, length, offRow, of
 
 getPosition : Parser x A.Position
 getPosition =
-    Parser <|
-        \((State _ _ _ _ row col) as state) ->
+    Parser
+        (\((State _ _ _ _ row col) as state) ->
             Ok (POk Empty (A.Position row col) state)
+        )
 
 
 addLocation : Parser x a -> Parser x (A.Located a)
 addLocation (Parser parser) =
-    Parser <|
-        \((State _ _ _ _ sr sc) as state) ->
+    Parser
+        (\((State _ _ _ _ sr sc) as state) ->
             case parser state of
                 Ok (POk status a ((State _ _ _ _ er ec) as s)) ->
                     Ok (POk status (A.At (A.Region (A.Position sr sc) (A.Position er ec)) a) s)
 
                 Err err ->
                     Err err
+        )
 
 
 addEnd : A.Position -> a -> Parser x (A.Located a)
 addEnd start value =
-    Parser <|
-        \((State _ _ _ _ row col) as state) ->
+    Parser
+        (\((State _ _ _ _ row col) as state) ->
             Ok (POk Empty (A.at start (A.Position row col) value) state)
+        )
 
 
 
@@ -261,26 +267,28 @@ addEnd start value =
 
 withIndent : Parser x a -> Parser x a
 withIndent (Parser parser) =
-    Parser <|
-        \(State src pos end oldIndent row col) ->
+    Parser
+        (\(State src pos end oldIndent row col) ->
             case parser (State src pos end col row col) of
                 Ok (POk status a (State s p e _ r c)) ->
                     Ok (POk status a (State s p e oldIndent r c))
 
                 Err err ->
                     Err err
+        )
 
 
 withBacksetIndent : Int -> Parser x a -> Parser x a
 withBacksetIndent backset (Parser parser) =
-    Parser <|
-        \(State src pos end oldIndent row col) ->
+    Parser
+        (\(State src pos end oldIndent row col) ->
             case parser (State src pos end (col - backset) row col) of
                 Ok (POk status a (State s p e _ r c)) ->
                     Ok (POk status a (State s p e oldIndent r c))
 
                 Err err ->
                     Err err
+        )
 
 
 
@@ -289,8 +297,8 @@ withBacksetIndent backset (Parser parser) =
 
 inContext : (x -> Row -> Col -> y) -> Parser y start -> Parser x a -> Parser y a
 inContext addContext (Parser parserStart) (Parser parserA) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             case parserStart state of
                 Ok (POk _ _ okState) ->
                     case parserA okState of
@@ -302,18 +310,20 @@ inContext addContext (Parser parserStart) (Parser parserA) =
 
                 Err err ->
                     Err err
+        )
 
 
 specialize : (x -> Row -> Col -> y) -> Parser x a -> Parser y a
 specialize addContext (Parser parser) =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             case parser state of
                 Ok res ->
                     Ok res
 
                 Err (PErr status r c tx) ->
                     Err (PErr status r c (addContext (tx r c)))
+        )
 
 
 
@@ -322,8 +332,8 @@ specialize addContext (Parser parser) =
 
 word1 : Char -> (Row -> Col -> x) -> Parser x ()
 word1 word toError =
-    Parser <|
-        \(State src pos end indent row col) ->
+    Parser
+        (\(State src pos end indent row col) ->
             if pos < end && unsafeIndex src pos == word then
                 let
                     newState : State
@@ -334,12 +344,13 @@ word1 word toError =
 
             else
                 Err (PErr Empty row col toError)
+        )
 
 
 word2 : Char -> Char -> (Row -> Col -> x) -> Parser x ()
 word2 w1 w2 toError =
-    Parser <|
-        \(State src pos end indent row col) ->
+    Parser
+        (\(State src pos end indent row col) ->
             let
                 pos1 : Int
                 pos1 =
@@ -355,6 +366,7 @@ word2 w1 w2 toError =
 
             else
                 Err (PErr Empty row col toError)
+        )
 
 
 
@@ -431,9 +443,10 @@ type Step state a
 
 loop : (state -> Parser x (Step state a)) -> state -> Parser x a
 loop callback loopState =
-    Parser <|
-        \state ->
+    Parser
+        (\state ->
             loopHelp callback state loopState (\a s -> Ok (POk Empty a s)) (\row col toError -> Err (PErr Empty row col toError))
+        )
 
 
 loopHelp :

@@ -124,6 +124,7 @@ module Utils.Main exposing
     , zipWithM
     )
 
+import Array
 import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
@@ -724,12 +725,12 @@ lockWithFileLock path mode ioFunc =
 
 lockFile : FilePath -> IO ()
 lockFile path =
-    IO (\s -> ( s, IO.LockFile IO.pure path ))
+    IO (\_ s -> ( s, IO.LockFile IO.pure path ))
 
 
 unlockFile : FilePath -> IO ()
 unlockFile path =
-    IO (\s -> ( s, IO.UnlockFile IO.pure path ))
+    IO (\_ s -> ( s, IO.UnlockFile IO.pure path ))
 
 
 
@@ -738,53 +739,53 @@ unlockFile path =
 
 dirDoesFileExist : FilePath -> IO Bool
 dirDoesFileExist filename =
-    IO (\s -> ( s, IO.DirDoesFileExist IO.pure filename ))
+    IO (\_ s -> ( s, IO.DirDoesFileExist IO.pure filename ))
 
 
 dirFindExecutable : FilePath -> IO (Maybe FilePath)
 dirFindExecutable filename =
-    IO (\s -> ( s, IO.DirFindExecutable IO.pure filename ))
+    IO (\_ s -> ( s, IO.DirFindExecutable IO.pure filename ))
 
 
 dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
 dirCreateDirectoryIfMissing createParents filename =
-    IO (\s -> ( s, IO.DirCreateDirectoryIfMissing IO.pure createParents filename ))
+    IO (\_ s -> ( s, IO.DirCreateDirectoryIfMissing IO.pure createParents filename ))
 
 
 dirGetCurrentDirectory : IO String
 dirGetCurrentDirectory =
-    IO (\s -> ( s, IO.Pure s.currentDirectory ))
+    IO (\_ s -> ( s, IO.Pure s.currentDirectory ))
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
 dirGetAppUserDataDirectory filename =
-    IO (\s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) ))
+    IO (\_ s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) ))
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
 dirGetModificationTime filename =
-    IO (\s -> ( s, IO.DirGetModificationTime IO.pure filename ))
+    IO (\_ s -> ( s, IO.DirGetModificationTime IO.pure filename ))
         |> IO.fmap Time.millisToPosix
 
 
 dirRemoveFile : FilePath -> IO ()
 dirRemoveFile path =
-    IO (\s -> ( s, IO.DirRemoveFile IO.pure path ))
+    IO (\_ s -> ( s, IO.DirRemoveFile IO.pure path ))
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
 dirRemoveDirectoryRecursive path =
-    IO (\s -> ( s, IO.DirRemoveDirectoryRecursive IO.pure path ))
+    IO (\_ s -> ( s, IO.DirRemoveDirectoryRecursive IO.pure path ))
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
 dirDoesDirectoryExist path =
-    IO (\s -> ( s, IO.DirDoesDirectoryExist IO.pure path ))
+    IO (\_ s -> ( s, IO.DirDoesDirectoryExist IO.pure path ))
 
 
 dirCanonicalizePath : FilePath -> IO FilePath
 dirCanonicalizePath path =
-    IO (\s -> ( s, IO.DirCanonicalizePath IO.pure path ))
+    IO (\_ s -> ( s, IO.DirCanonicalizePath IO.pure path ))
 
 
 dirWithCurrentDirectory : FilePath -> IO a -> IO a
@@ -793,15 +794,15 @@ dirWithCurrentDirectory dir action =
         |> IO.bind
             (\currentDir ->
                 bracket_
-                    (IO (\s -> ( s, IO.DirWithCurrentDirectory IO.pure dir )))
-                    (IO (\s -> ( s, IO.DirWithCurrentDirectory IO.pure currentDir )))
+                    (IO (\_ s -> ( s, IO.DirWithCurrentDirectory IO.pure dir )))
+                    (IO (\_ s -> ( s, IO.DirWithCurrentDirectory IO.pure currentDir )))
                     action
             )
 
 
 dirListDirectory : FilePath -> IO (List FilePath)
 dirListDirectory path =
-    IO (\s -> ( s, IO.DirListDirectory IO.pure path ))
+    IO (\_ s -> ( s, IO.DirListDirectory IO.pure path ))
 
 
 
@@ -810,17 +811,17 @@ dirListDirectory path =
 
 envLookupEnv : String -> IO (Maybe String)
 envLookupEnv name =
-    IO (\s -> ( s, IO.Pure (Dict.get name s.envVars) ))
+    IO (\_ s -> ( s, IO.Pure (Dict.get name s.envVars) ))
 
 
 envGetProgName : IO String
 envGetProgName =
-    IO (\s -> ( s, IO.Pure s.progName ))
+    IO (\_ s -> ( s, IO.Pure s.progName ))
 
 
 envGetArgs : IO (List String)
 envGetArgs =
-    IO (\s -> ( s, IO.Pure s.args ))
+    IO (\_ s -> ( s, IO.Pure s.args ))
 
 
 
@@ -924,7 +925,7 @@ type ThreadId
 
 forkIO : IO () -> IO ThreadId
 forkIO ioArg =
-    IO (\s -> ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg ))
+    IO (\_ s -> ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg ))
 
 
 
@@ -947,7 +948,22 @@ newMVar encoder value =
 
 readMVar : Decode.Decoder a -> MVar a -> IO a
 readMVar decoder (MVar ref) =
-    IO (\s -> ( s, IO.ReadMVar IO.pure ref ))
+    IO
+        (\index s ->
+            case Array.get ref s.mVars of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            ( s, IO.ReadMVar IO.pure (Just value) )
+
+                        Nothing ->
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadSubscriber index ] } s.mVars }
+                            , IO.ReadMVar IO.pure Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.readMVar: invalid ref"
+        )
         |> IO.fmap
             (\encodedValue ->
                 case Decode.decodeValue decoder encodedValue of
@@ -972,7 +988,31 @@ modifyMVar decoder encoder m io =
 
 takeMVar : Decode.Decoder a -> MVar a -> IO a
 takeMVar decoder (MVar ref) =
-    IO (\s -> ( s, IO.TakeMVar IO.pure ref ))
+    IO
+        (\index s ->
+            case Array.get ref s.mVars of
+                Just mVar ->
+                    case mVar.value of
+                        Just value ->
+                            case mVar.subscribers of
+                                (IO.PutSubscriber putIndex putValue) :: restSubscribers ->
+                                    ( { s | mVars = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars }
+                                    , IO.TakeMVar IO.pure (Just value) (Just putIndex)
+                                    )
+
+                                _ ->
+                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
+                                    , IO.TakeMVar IO.pure (Just value) Nothing
+                                    )
+
+                        Nothing ->
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber index ] } s.mVars }
+                            , IO.TakeMVar IO.pure Nothing Nothing
+                            )
+
+                Nothing ->
+                    crash "Utils.Main.takeMVar: invalid ref"
+        )
         |> IO.fmap
             (\encodedValue ->
                 case Decode.decodeValue decoder encodedValue of
@@ -986,12 +1026,56 @@ takeMVar decoder (MVar ref) =
 
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
 putMVar encoder (MVar ref) value =
-    IO (\s -> ( s, IO.PutMVar IO.pure ref (encoder value) ))
+    IO
+        (\index s ->
+            case Array.get ref s.mVars of
+                Just mVar ->
+                    let
+                        encodedValue : Encode.Value
+                        encodedValue =
+                            encoder value
+                    in
+                    case mVar.value of
+                        Just _ ->
+                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index encodedValue ] } s.mVars }
+                            , IO.PutMVar IO.pure [] Nothing
+                            )
+
+                        Nothing ->
+                            let
+                                ( filteredSubscribers, readIndexes ) =
+                                    List.foldr
+                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
+                                            case subscriber of
+                                                IO.ReadSubscriber readIndex ->
+                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
+
+                                                IO.TakeSubscriber takeIndex ->
+                                                    ( filteredSubscribersAcc, takeIndex :: readIndexesAcc )
+
+                                                _ ->
+                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
+                                        )
+                                        ( [], [] )
+                                        mVar.subscribers
+                            in
+                            ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just encodedValue } s.mVars }
+                            , IO.PutMVar IO.pure readIndexes (Just encodedValue)
+                            )
+
+                _ ->
+                    crash "Utils.Main.putMVar: invalid ref"
+        )
 
 
 newEmptyMVar : IO (MVar a)
 newEmptyMVar =
-    IO (\s -> ( s, IO.NewEmptyMVar IO.pure ))
+    IO
+        (\_ s ->
+            ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
+            , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
+            )
+        )
         |> IO.fmap MVar
 
 
@@ -1061,7 +1145,7 @@ writeChan encoder (Chan _ writeVar) val =
 
 builderHPutBuilder : IO.Handle -> String -> IO ()
 builderHPutBuilder handle str =
-    IO (\s -> ( s, IO.HPutStr IO.pure handle str ))
+    IO (\_ s -> ( s, IO.HPutStr IO.pure handle str ))
 
 
 
@@ -1070,7 +1154,7 @@ builderHPutBuilder handle str =
 
 binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
-    IO (\s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
+    IO (\_ s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
         |> IO.fmap
             (Decode.decodeValue decoder
                 >> Result.mapError (\_ -> ( 0, "Could not find file " ++ filename ))
@@ -1079,7 +1163,7 @@ binaryDecodeFileOrFail decoder filename =
 
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
 binaryEncodeFile encoder path value =
-    IO (\s -> ( s, IO.Write IO.pure path (encoder value) ))
+    IO (\_ s -> ( s, IO.Write IO.pure path (encoder value) ))
 
 
 
@@ -1124,12 +1208,12 @@ replCompleteWord _ _ _ =
 
 replGetInputLine : String -> ReplInputT (Maybe String)
 replGetInputLine prompt =
-    IO (\s -> ( s, IO.ReplGetInputLine IO.pure prompt ))
+    IO (\_ s -> ( s, IO.ReplGetInputLine IO.pure prompt ))
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
-    IO (\s -> ( s, IO.ReplGetInputLineWithInitial IO.pure prompt left right ))
+    IO (\_ s -> ( s, IO.ReplGetInputLineWithInitial IO.pure prompt left right ))
 
 
 

@@ -16,7 +16,7 @@ type ExitCode
 exitWith : ExitCode -> IO a
 exitWith exitCode =
     IO
-        (\s ->
+        (\_ s ->
             let
                 code : Int
                 code =

@@ -1,6 +1,6 @@
 module System.TypeCheck.IO exposing
     ( unsafePerformIO
-    , IO, State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
+    , IO(..), State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
     , foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
     , Point(..), PointInfo(..)
     , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
@@ -40,7 +40,7 @@ import Data.Map as Dict exposing (Dict)
 
 
 unsafePerformIO : IO a -> a
-unsafePerformIO ioA =
+unsafePerformIO (IO ioA) =
     { ioRefsWeight = Array.empty
     , ioRefsPointInfo = Array.empty
     , ioRefsDescriptor = Array.empty
@@ -54,8 +54,8 @@ unsafePerformIO ioA =
 -- The IO monad
 
 
-type alias IO a =
-    State -> ( State, a )
+type IO a
+    = IO (State -> ( State, a ))
 
 
 type alias State =
@@ -67,27 +67,33 @@ type alias State =
 
 
 pure : a -> IO a
-pure x s =
-    ( s, x )
+pure x =
+    IO (\s -> ( s, x ))
 
 
 apply : IO a -> IO (a -> b) -> IO b
 apply ma mf =
-    bind (\f -> bind (\a -> pure (f a)) ma) mf
+    bind (\f -> bind (pure << f) ma) mf
 
 
 fmap : (a -> b) -> IO a -> IO b
 fmap fn ma =
-    bind (\a -> pure (fn a)) ma
+    bind (pure << fn) ma
 
 
 bind : (a -> IO b) -> IO a -> IO b
-bind f ma s0 =
-    let
-        ( s1, a ) =
-            ma s0
-    in
-    f a s1
+bind f (IO ma) =
+    IO
+        (\s0 ->
+            let
+                ( s1, a ) =
+                    ma s0
+
+                (IO fa) =
+                    f a
+            in
+            fa s1
+        )
 
 
 foldrM : (a -> b -> IO b) -> b -> List a -> IO b
