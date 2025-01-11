@@ -15,6 +15,7 @@ import Terminal.Terminal as Terminal
 import Terminal.Terminal.Chomp as Chomp
 import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
+import Terminal.Uninstall as Uninstall
 
 
 main : IO.Program
@@ -30,6 +31,7 @@ app =
         , init
         , make
         , install
+        , uninstall
         , bump
         , diff
         , publish
@@ -275,6 +277,68 @@ install =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Install.run args flags)
+
+
+
+-- UNINSTALL
+
+
+uninstall : Terminal.Command
+uninstall =
+    let
+        details : String
+        details =
+            "The `uninstall` command uninstalls packages from <https://package.elm-lang.org> for use in your project:"
+
+        example : D.Doc
+        example =
+            stack
+                [ reflow
+                    "For example, if you want to remove packages for HTTP and JSON, you would say:"
+                , D.indent 4 <|
+                    D.green <|
+                        D.vcat <|
+                            [ D.fromChars "guida uninstall elm/http"
+                            , D.fromChars "guida uninstall elm/json"
+                            ]
+                ]
+
+        uninstallArgs : Terminal.Args
+        uninstallArgs =
+            Terminal.oneOf
+                [ Terminal.require0
+                , Terminal.require1 Terminal.package
+                ]
+
+        uninstallFlags : Terminal.Flags
+        uninstallFlags =
+            Terminal.flags
+                |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
+    in
+    Terminal.Command "uninstall" Terminal.Uncommon details example uninstallArgs uninstallFlags <|
+        \chunks ->
+            Chomp.chomp Nothing
+                chunks
+                [ Chomp.chompExactly (Chomp.pure Uninstall.NoArgs)
+                , Chomp.chompExactly
+                    (Chomp.pure Uninstall.Uninstall
+                        |> Chomp.bind
+                            (\func ->
+                                Chomp.chompArg (List.length chunks) Terminal.package Terminal.parsePackage
+                                    |> Chomp.fmap (\arg -> func arg)
+                            )
+                    )
+                ]
+                (Chomp.pure Uninstall.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "yes")
+                    |> Chomp.bind
+                        (\value ->
+                            Chomp.checkForUnknownFlags uninstallFlags
+                                |> Chomp.fmap (\_ -> value)
+                        )
+                )
+                |> Tuple.second
+                |> Result.map (\( args, flags ) -> Uninstall.run args flags)
 
 
 
