@@ -170,14 +170,14 @@ make =
     let
         details : String
         details =
-            "The `make` command compiles Elm code into JS or HTML:"
+            "The `make` command compiles Guida (and Elm) code into JS or HTML:"
 
         example : D.Doc
         example =
             stack
                 [ reflow "For example:"
-                , D.indent 4 <| D.green (D.fromChars "guida make src/Main.elm")
-                , reflow "This tries to compile an Elm file named src/Main.elm, generating an index.html file if possible."
+                , D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
+                , reflow "This tries to compile an Guida (and Elm) file named src/Main.guida, generating an index.html file if possible."
                 ]
 
         makeFlags : Terminal.Flags
@@ -185,15 +185,15 @@ make =
             Terminal.flags
                 |> Terminal.more (Terminal.onOff "debug" "Turn on the time-travelling debugger. It allows you to rewind and replay events. The events can be imported/exported into a file, which makes for very precise bug reports!")
                 |> Terminal.more (Terminal.onOff "optimize" "Turn on optimizations to make code smaller and faster. For example, the compiler renames record fields to be as short as possible and unboxes values to reduce allocation.")
-                |> Terminal.more (Terminal.flag "output" Make.output "Specify the name of the resulting JS file. For example --output=assets/elm.js to generate the JS at assets/elm.js or --output=/dev/null to generate no output at all!")
+                |> Terminal.more (Terminal.flag "output" Make.output "Specify the name of the resulting JS file. For example --output=assets/guida.js to generate the JS at assets/guida.js or --output=/dev/null to generate no output at all!")
                 |> Terminal.more (Terminal.flag "report" Make.reportType "You can say --report=json to get error messages as JSON. This is only really useful if you are an editor plugin. Humans should avoid it!")
                 |> Terminal.more (Terminal.flag "docs" Make.docsFile "Generate a JSON file of documentation for a package. Eventually it will be possible to preview docs with `reactor` because it is quite hard to deal with these JSON files directly.")
     in
-    Terminal.Command "make" Terminal.Uncommon details example (Terminal.zeroOrMore Terminal.elmFile) makeFlags <|
+    Terminal.Command "make" Terminal.Uncommon details example (Terminal.zeroOrMore Terminal.guidaOrElmFile) makeFlags <|
         \chunks ->
             Chomp.chomp Nothing
                 chunks
-                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseElmFile
+                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.guidaOrElmFile Terminal.parseGuidaOrElmFile
                 ]
                 (Chomp.pure Make.Flags
                     |> Chomp.apply (Chomp.chompOnOffFlag "debug")
@@ -466,7 +466,7 @@ format =
         \chunks ->
             Chomp.chomp Nothing
                 chunks
-                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.elmFile Terminal.parseFilePath
+                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.filePath Terminal.parseFilePath
                 ]
                 (Chomp.pure Format.Flags
                     |> Chomp.apply (Chomp.chompNormalFlag "output" output Just)

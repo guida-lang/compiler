@@ -44,6 +44,7 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -792,42 +793,57 @@ type Status
 crawlModule : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> IO (Maybe Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
-        path : FilePath
-        path =
-            Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) "elm")
+        path : String -> FilePath
+        path extension =
+            Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) extension)
+
+        guidaPath : FilePath
+        guidaPath =
+            path "guida"
+
+        elmPath : FilePath
+        elmPath =
+            path "elm"
     in
-    File.exists path
+    File.exists guidaPath
         |> IO.bind
-            (\exists ->
-                case Dict.get identity name foreignDeps of
-                    Just ForeignAmbiguous ->
-                        IO.pure Nothing
+            (\guidaExists ->
+                File.exists elmPath
+                    |> IO.bind
+                        (\elmExists ->
+                            case Dict.get identity name foreignDeps of
+                                Just ForeignAmbiguous ->
+                                    IO.pure Nothing
 
-                    Just (ForeignSpecific iface) ->
-                        if exists then
-                            IO.pure Nothing
+                                Just (ForeignSpecific iface) ->
+                                    if guidaExists || elmExists then
+                                        IO.pure Nothing
 
-                        else
-                            IO.pure (Just (SForeign iface))
+                                    else
+                                        IO.pure (Just (SForeign iface))
 
-                    Nothing ->
-                        if exists then
-                            crawlFile foreignDeps mvar pkg src docsStatus name path
+                                Nothing ->
+                                    if guidaExists then
+                                        crawlFile SV.Guida foreignDeps mvar pkg src docsStatus name guidaPath
 
-                        else if Pkg.isKernel pkg && Name.isKernel name then
-                            crawlKernel foreignDeps mvar pkg src name
+                                    else if elmExists then
+                                        crawlFile SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
 
-                        else
-                            IO.pure Nothing
+                                    else if Pkg.isKernel pkg && Name.isKernel name then
+                                        crawlKernel foreignDeps mvar pkg src name
+
+                                    else
+                                        IO.pure Nothing
+                        )
             )
 
 
-crawlFile : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> IO (Maybe Status)
-crawlFile foreignDeps mvar pkg src docsStatus expectedName path =
+crawlFile : SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> IO (Maybe Status)
+crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> IO.bind
             (\bytes ->
-                case Parse.fromByteString (Parse.Package pkg) bytes of
+                case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports

@@ -1,14 +1,15 @@
 module Compiler.Parse.Variable exposing
     ( Upper(..)
     , chompInnerChars
+    , chompLower
     , foreignAlpha
     , foreignUpper
     , getInnerWidth
     , getInnerWidthHelp
     , getUpperWidth
+    , isReservedWord
     , lower
     , moduleName
-    , reservedWords
     , upper
     )
 
@@ -64,7 +65,7 @@ lower toError =
                     name =
                         Name.fromPtr src pos newPos
                 in
-                if EverySet.member identity name reservedWords then
+                if isReservedWord name then
                     Err (P.PErr P.Empty row col toError)
 
                 else
@@ -74,6 +75,11 @@ lower toError =
                             P.State src newPos end indent row newCol
                     in
                     Ok (P.POk P.Consumed name newState)
+
+
+isReservedWord : Name.Name -> Bool
+isReservedWord name =
+    EverySet.member identity name reservedWords
 
 
 reservedWords : EverySet String Name
@@ -247,7 +253,7 @@ foreignAlpha toError =
                         P.State src alphaEnd end indent row newCol
                 in
                 if alphaStart == pos then
-                    if EverySet.member identity name reservedWords then
+                    if isReservedWord name then
                         Err (P.PErr P.Empty row col toError)
 
                     else

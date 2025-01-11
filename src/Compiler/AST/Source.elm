@@ -95,7 +95,7 @@ type alias Pattern =
 
 
 type Pattern_
-    = PAnything
+    = PAnything Name
     | PVar Name
     | PRecord (List (A.Located Name))
     | PAlias Pattern (A.Located Name)
@@ -753,9 +753,10 @@ patternDecoder =
 pattern_Encoder : Pattern_ -> Encode.Value
 pattern_Encoder pattern_ =
     case pattern_ of
-        PAnything ->
+        PAnything name ->
             Encode.object
                 [ ( "type", Encode.string "PAnything" )
+                , ( "name", Encode.string name )
                 ]
 
         PVar name ->
@@ -846,7 +847,8 @@ pattern_Decoder =
             (\type_ ->
                 case type_ of
                     "PAnything" ->
-                        Decode.succeed PAnything
+                        Decode.map PAnything
+                            (Decode.field "name" Decode.string)
 
                     "PVar" ->
                         Decode.map PVar (Decode.field "name" Decode.string)

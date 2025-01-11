@@ -14,6 +14,7 @@ import Compiler.Parse.Pattern as Pattern
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Space as Space
 import Compiler.Parse.Symbol as Symbol
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Parse.Type as Type
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
@@ -31,8 +32,8 @@ type Decl
     | Port (Maybe Src.Comment) Src.Port
 
 
-declaration : Space.Parser E.Decl Decl
-declaration =
+declaration : SyntaxVersion -> Space.Parser E.Decl Decl
+declaration syntaxVersion =
     chompDocComment
         |> P.bind
             (\maybeDocs ->
@@ -42,7 +43,7 @@ declaration =
                             P.oneOf E.DeclStart
                                 [ typeDecl maybeDocs start
                                 , portDecl maybeDocs
-                                , valueDecl maybeDocs start
+                                , valueDecl syntaxVersion maybeDocs start
                                 ]
                         )
             )
@@ -70,8 +71,8 @@ chompDocComment =
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : Maybe Src.Comment -> A.Position -> Space.Parser E.Decl Decl
-valueDecl maybeDocs start =
+valueDecl : SyntaxVersion -> Maybe Src.Comment -> A.Position -> Space.Parser E.Decl Decl
+valueDecl syntaxVersion maybeDocs start =
     Var.lower E.DeclStart
         |> P.bind
             (\name ->
@@ -93,10 +94,10 @@ valueDecl maybeDocs start =
                                                                 |> P.bind
                                                                     (\defName ->
                                                                         Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
-                                                                            |> P.bind (\_ -> chompDefArgsAndBody maybeDocs start defName (Just tipe) [])
+                                                                            |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion maybeDocs start defName (Just tipe) [])
                                                                     )
                                                         )
-                                                , chompDefArgsAndBody maybeDocs start (A.at start end name) Nothing []
+                                                , chompDefArgsAndBody syntaxVersion maybeDocs start (A.at start end name) Nothing []
                                                 ]
                                         )
                                 )
@@ -104,18 +105,18 @@ valueDecl maybeDocs start =
             )
 
 
-chompDefArgsAndBody : Maybe Src.Comment -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
-chompDefArgsAndBody maybeDocs start name tipe revArgs =
+chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
+chompDefArgsAndBody syntaxVersion maybeDocs start name tipe revArgs =
     P.oneOf E.DeclDefEquals
-        [ P.specialize E.DeclDefArg Pattern.term
+        [ P.specialize E.DeclDefArg (Pattern.term syntaxVersion)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
-                        |> P.bind (\_ -> chompDefArgsAndBody maybeDocs start name tipe (arg :: revArgs))
+                        |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion maybeDocs start name tipe (arg :: revArgs))
                 )
         , P.word1 '=' E.DeclDefEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DeclDefBody Expr.expression)
+            |> P.bind (\_ -> P.specialize E.DeclDefBody (Expr.expression syntaxVersion))
             |> P.fmap
                 (\( body, end ) ->
                     let

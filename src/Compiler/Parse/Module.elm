@@ -15,6 +15,7 @@ import Compiler.Parse.Keyword as Keyword
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Parse.Space as Space
 import Compiler.Parse.Symbol as Symbol
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
@@ -24,9 +25,9 @@ import Compiler.Reporting.Error.Syntax as E
 -- FROM BYTE STRING
 
 
-fromByteString : ProjectType -> String -> Result E.Error Src.Module
-fromByteString projectType source =
-    case P.fromByteString (chompModule projectType) E.ModuleBadEnd source of
+fromByteString : SyntaxVersion -> ProjectType -> String -> Result E.Error Src.Module
+fromByteString syntaxVersion projectType source =
+    case P.fromByteString (chompModule syntaxVersion projectType) E.ModuleBadEnd source of
         Ok modul ->
             checkModule projectType modul
 
@@ -75,8 +76,8 @@ type alias Module =
     }
 
 
-chompModule : ProjectType -> P.Parser E.Module Module
-chompModule projectType =
+chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
+chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
             (\header ->
@@ -97,7 +98,7 @@ chompModule projectType =
                             )
                                 |> P.bind
                                     (\infixes ->
-                                        P.specialize E.Declarations (chompDecls [])
+                                        P.specialize E.Declarations (chompDecls syntaxVersion [])
                                             |> P.fmap
                                                 (\decls ->
                                                     Module
@@ -279,14 +280,14 @@ freshLine toFreshLineError =
 -- CHOMP DECLARATIONS
 
 
-chompDecls : List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
-chompDecls decls =
-    Decl.declaration
+chompDecls : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
+chompDecls syntaxVersion decls =
+    Decl.declaration syntaxVersion
         |> P.bind
             (\( decl, _ ) ->
                 P.oneOfWithFallback
                     [ Space.checkFreshLine E.DeclStart
-                        |> P.bind (\_ -> chompDecls (decl :: decls))
+                        |> P.bind (\_ -> chompDecls syntaxVersion (decl :: decls))
                     ]
                     (List.reverse (decl :: decls))
             )

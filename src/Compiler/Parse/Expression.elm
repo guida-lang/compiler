@@ -10,6 +10,7 @@ import Compiler.Parse.Shader as Shader
 import Compiler.Parse.Space as Space
 import Compiler.Parse.String as String
 import Compiler.Parse.Symbol as Symbol
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Parse.Type as Type
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
@@ -20,8 +21,8 @@ import Compiler.Reporting.Error.Syntax as E
 -- TERMS
 
 
-term : P.Parser E.Expr Src.Expr
-term =
+term : SyntaxVersion -> P.Parser E.Expr Src.Expr
+term syntaxVersion =
     P.getPosition
         |> P.bind
             (\start ->
@@ -30,9 +31,9 @@ term =
                     , string start
                     , number start
                     , Shader.shader start
-                    , list start
-                    , record start |> P.bind (accessible start)
-                    , tuple start |> P.bind (accessible start)
+                    , list syntaxVersion start
+                    , record syntaxVersion start |> P.bind (accessible start)
+                    , tuple syntaxVersion start |> P.bind (accessible start)
                     , accessor start
                     , character start
                     ]
@@ -105,18 +106,18 @@ accessible start expr =
 -- LISTS
 
 
-list : A.Position -> P.Parser E.Expr Src.Expr
-list start =
+list : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+list syntaxVersion start =
     P.inContext E.List (P.word1 '[' E.Start) <|
         (Space.chompAndCheckIndent E.ListSpace E.ListIndentOpen
             |> P.bind
                 (\_ ->
                     P.oneOf E.ListOpen
-                        [ P.specialize E.ListExpr expression
+                        [ P.specialize E.ListExpr (expression syntaxVersion)
                             |> P.bind
                                 (\( entry, end ) ->
                                     Space.checkIndent end E.ListIndentEnd
-                                        |> P.bind (\_ -> chompListEnd start [ entry ])
+                                        |> P.bind (\_ -> chompListEnd syntaxVersion start [ entry ])
                                 )
                         , P.word1 ']' E.ListOpen
                             |> P.bind (\_ -> P.addEnd start (Src.List []))
@@ -125,16 +126,16 @@ list start =
         )
 
 
-chompListEnd : A.Position -> List Src.Expr -> P.Parser E.List_ Src.Expr
-chompListEnd start entries =
+chompListEnd : SyntaxVersion -> A.Position -> List Src.Expr -> P.Parser E.List_ Src.Expr
+chompListEnd syntaxVersion start entries =
     P.oneOf E.ListEnd
         [ P.word1 ',' E.ListEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ListSpace E.ListIndentExpr)
-            |> P.bind (\_ -> P.specialize E.ListExpr expression)
+            |> P.bind (\_ -> P.specialize E.ListExpr (expression syntaxVersion))
             |> P.bind
                 (\( entry, end ) ->
                     Space.checkIndent end E.ListIndentEnd
-                        |> P.bind (\_ -> chompListEnd start (entry :: entries))
+                        |> P.bind (\_ -> chompListEnd syntaxVersion start (entry :: entries))
                 )
         , P.word1 ']' E.ListEnd
             |> P.bind (\_ -> P.addEnd start (Src.List (List.reverse entries)))
@@ -145,8 +146,8 @@ chompListEnd start entries =
 -- TUPLES
 
 
-tuple : A.Position -> P.Parser E.Expr Src.Expr
-tuple ((A.Position row col) as start) =
+tuple : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+tuple syntaxVersion ((A.Position row col) as start) =
     P.inContext E.Tuple (P.word1 '(' E.Start) <|
         (P.getPosition
             |> P.bind
@@ -158,11 +159,11 @@ tuple ((A.Position row col) as start) =
                                     |> P.bind
                                         (\after ->
                                             if before /= after then
-                                                P.specialize E.TupleExpr expression
+                                                P.specialize E.TupleExpr (expression syntaxVersion)
                                                     |> P.bind
                                                         (\( entry, end ) ->
                                                             Space.checkIndent end E.TupleIndentEnd
-                                                                |> P.bind (\_ -> chompTupleEnd start entry [])
+                                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
                                                         )
 
                                             else
@@ -175,7 +176,7 @@ tuple ((A.Position row col) as start) =
                                                                         [ P.word1 ')' E.TupleOperatorClose
                                                                             |> P.bind (\_ -> P.addEnd start (Src.Op op))
                                                                         , P.specialize E.TupleExpr
-                                                                            (term
+                                                                            (term syntaxVersion
                                                                                 |> P.bind
                                                                                     (\((A.At (A.Region _ end) _) as negatedExpr) ->
                                                                                         Space.chomp E.Space
@@ -190,7 +191,8 @@ tuple ((A.Position row col) as start) =
                                                                                                         expr =
                                                                                                             A.at exprStart end (Src.Negate negatedExpr)
                                                                                                     in
-                                                                                                    chompExprEnd exprStart
+                                                                                                    chompExprEnd syntaxVersion
+                                                                                                        exprStart
                                                                                                         (State
                                                                                                             { ops = []
                                                                                                             , expr = expr
@@ -204,7 +206,7 @@ tuple ((A.Position row col) as start) =
                                                                             |> P.bind
                                                                                 (\( entry, end ) ->
                                                                                     Space.checkIndent end E.TupleIndentEnd
-                                                                                        |> P.bind (\_ -> chompTupleEnd start entry [])
+                                                                                        |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
                                                                                 )
                                                                         ]
 
@@ -214,11 +216,11 @@ tuple ((A.Position row col) as start) =
                                                             )
                                                     , P.word1 ')' E.TupleIndentExpr1
                                                         |> P.bind (\_ -> P.addEnd start Src.Unit)
-                                                    , P.specialize E.TupleExpr expression
+                                                    , P.specialize E.TupleExpr (expression syntaxVersion)
                                                         |> P.bind
                                                             (\( entry, end ) ->
                                                                 Space.checkIndent end E.TupleIndentEnd
-                                                                    |> P.bind (\_ -> chompTupleEnd start entry [])
+                                                                    |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
                                                             )
                                                     ]
                                         )
@@ -227,8 +229,8 @@ tuple ((A.Position row col) as start) =
         )
 
 
-chompTupleEnd : A.Position -> Src.Expr -> List Src.Expr -> P.Parser E.Tuple Src.Expr
-chompTupleEnd start firstExpr revExprs =
+chompTupleEnd : SyntaxVersion -> A.Position -> Src.Expr -> List Src.Expr -> P.Parser E.Tuple Src.Expr
+chompTupleEnd syntaxVersion start firstExpr revExprs =
     P.oneOf E.TupleEnd
         [ P.word1 ',' E.TupleEnd
             |> P.bind
@@ -236,11 +238,11 @@ chompTupleEnd start firstExpr revExprs =
                     Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExprN
                         |> P.bind
                             (\_ ->
-                                P.specialize E.TupleExpr expression
+                                P.specialize E.TupleExpr (expression syntaxVersion)
                                     |> P.bind
                                         (\( entry, end ) ->
                                             Space.checkIndent end E.TupleIndentEnd
-                                                |> P.bind (\_ -> chompTupleEnd start firstExpr (entry :: revExprs))
+                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start firstExpr (entry :: revExprs))
                                         )
                             )
                 )
@@ -261,8 +263,8 @@ chompTupleEnd start firstExpr revExprs =
 -- RECORDS
 
 
-record : A.Position -> P.Parser E.Expr Src.Expr
-record start =
+record : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+record syntaxVersion start =
     P.inContext E.Record (P.word1 '{' E.Start) <|
         (Space.chompAndCheckIndent E.RecordSpace E.RecordIndentOpen
             |> P.bind
@@ -279,16 +281,16 @@ record start =
                                                 P.oneOf E.RecordEquals
                                                     [ P.word1 '|' E.RecordEquals
                                                         |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-                                                        |> P.bind (\_ -> chompField)
-                                                        |> P.bind (\firstField -> chompFields [ firstField ])
+                                                        |> P.bind (\_ -> chompField syntaxVersion)
+                                                        |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
                                                         |> P.bind (\fields -> P.addEnd start (Src.Update starter fields))
                                                     , P.word1 '=' E.RecordEquals
                                                         |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                                                        |> P.bind (\_ -> P.specialize E.RecordExpr expression)
+                                                        |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
                                                         |> P.bind
                                                             (\( value, end ) ->
                                                                 Space.checkIndent end E.RecordIndentEnd
-                                                                    |> P.bind (\_ -> chompFields [ ( starter, value ) ])
+                                                                    |> P.bind (\_ -> chompFields syntaxVersion [ ( starter, value ) ])
                                                                     |> P.bind (\fields -> P.addEnd start (Src.Record fields))
                                                             )
                                                     ]
@@ -303,27 +305,27 @@ type alias Field =
     ( A.Located Name.Name, Src.Expr )
 
 
-chompFields : List Field -> P.Parser E.Record (List Field)
-chompFields fields =
+chompFields : SyntaxVersion -> List Field -> P.Parser E.Record (List Field)
+chompFields syntaxVersion fields =
     P.oneOf E.RecordEnd
         [ P.word1 ',' E.RecordEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-            |> P.bind (\_ -> chompField)
-            |> P.bind (\f -> chompFields (f :: fields))
+            |> P.bind (\_ -> chompField syntaxVersion)
+            |> P.bind (\f -> chompFields syntaxVersion (f :: fields))
         , P.word1 '}' E.RecordEnd
             |> P.fmap (\_ -> List.reverse fields)
         ]
 
 
-chompField : P.Parser E.Record Field
-chompField =
+chompField : SyntaxVersion -> P.Parser E.Record Field
+chompField syntaxVersion =
     P.addLocation (Var.lower E.RecordField)
         |> P.bind
             (\key ->
                 Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
                     |> P.bind (\_ -> P.word1 '=' E.RecordEquals)
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                    |> P.bind (\_ -> P.specialize E.RecordExpr expression)
+                    |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
                     |> P.bind
                         (\( value, end ) ->
                             Space.checkIndent end E.RecordIndentEnd
@@ -336,17 +338,17 @@ chompField =
 -- EXPRESSIONS
 
 
-expression : Space.Parser E.Expr Src.Expr
-expression =
+expression : SyntaxVersion -> Space.Parser E.Expr Src.Expr
+expression syntaxVersion =
     P.getPosition
         |> P.bind
             (\start ->
                 P.oneOf E.Start
-                    [ let_ start
-                    , if_ start
-                    , case_ start
-                    , function start
-                    , possiblyNegativeTerm start
+                    [ let_ syntaxVersion start
+                    , if_ syntaxVersion start
+                    , case_ syntaxVersion start
+                    , function syntaxVersion start
+                    , possiblyNegativeTerm syntaxVersion start
                         |> P.bind
                             (\expr ->
                                 P.getPosition
@@ -355,7 +357,8 @@ expression =
                                             Space.chomp E.Space
                                                 |> P.bind
                                                     (\_ ->
-                                                        chompExprEnd start
+                                                        chompExprEnd syntaxVersion
+                                                            start
                                                             (State
                                                                 { ops = []
                                                                 , expr = expr
@@ -379,12 +382,12 @@ type State
         }
 
 
-chompExprEnd : A.Position -> State -> Space.Parser E.Expr Src.Expr
-chompExprEnd start (State { ops, expr, args, end }) =
+chompExprEnd : SyntaxVersion -> A.Position -> State -> Space.Parser E.Expr Src.Expr
+chompExprEnd syntaxVersion start (State { ops, expr, args, end }) =
     P.oneOfWithFallback
         [ -- argument
           Space.checkIndent end E.Start
-            |> P.bind (\_ -> term)
+            |> P.bind (\_ -> term syntaxVersion)
             |> P.bind
                 (\arg ->
                     P.getPosition
@@ -393,7 +396,8 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                 Space.chomp E.Space
                                     |> P.bind
                                         (\_ ->
-                                            chompExprEnd start
+                                            chompExprEnd syntaxVersion
+                                                start
                                                 (State
                                                     { ops = ops
                                                     , expr = expr
@@ -415,7 +419,7 @@ chompExprEnd start (State { ops, expr, args, end }) =
                             (\newStart ->
                                 if "-" == opName && end /= opStart && opEnd == newStart then
                                     -- negative terms
-                                    term
+                                    term syntaxVersion
                                         |> P.bind
                                             (\negatedExpr ->
                                                 P.getPosition
@@ -429,7 +433,8 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                                                             arg =
                                                                                 A.at opStart newEnd (Src.Negate negatedExpr)
                                                                         in
-                                                                        chompExprEnd start
+                                                                        chompExprEnd syntaxVersion
+                                                                            start
                                                                             (State
                                                                                 { ops = ops
                                                                                 , expr = expr
@@ -449,7 +454,7 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                     in
                                     P.oneOf err
                                         [ -- term
-                                          possiblyNegativeTerm newStart
+                                          possiblyNegativeTerm syntaxVersion newStart
                                             |> P.bind
                                                 (\newExpr ->
                                                     P.getPosition
@@ -463,7 +468,8 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                                                                 newOps =
                                                                                     ( toCall expr args, op ) :: ops
                                                                             in
-                                                                            chompExprEnd start
+                                                                            chompExprEnd syntaxVersion
+                                                                                start
                                                                                 (State
                                                                                     { ops = newOps
                                                                                     , expr = newExpr
@@ -476,10 +482,10 @@ chompExprEnd start (State { ops, expr, args, end }) =
                                                 )
                                         , -- final term
                                           P.oneOf err
-                                            [ let_ newStart
-                                            , case_ newStart
-                                            , if_ newStart
-                                            , function newStart
+                                            [ let_ syntaxVersion newStart
+                                            , case_ syntaxVersion newStart
+                                            , if_ syntaxVersion newStart
+                                            , function syntaxVersion newStart
                                             ]
                                             |> P.fmap
                                                 (\( newLast, newEnd ) ->
@@ -512,19 +518,19 @@ chompExprEnd start (State { ops, expr, args, end }) =
         )
 
 
-possiblyNegativeTerm : A.Position -> P.Parser E.Expr Src.Expr
-possiblyNegativeTerm start =
+possiblyNegativeTerm : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+possiblyNegativeTerm syntaxVersion start =
     P.oneOf E.Start
         [ P.word1 '-' E.Start
             |> P.bind
                 (\_ ->
-                    term
+                    term syntaxVersion
                         |> P.bind
                             (\expr ->
                                 P.addEnd start (Src.Negate expr)
                             )
                 )
-        , term
+        , term syntaxVersion
         ]
 
 
@@ -542,22 +548,22 @@ toCall func revArgs =
 -- IF EXPRESSION
 
 
-if_ : A.Position -> Space.Parser E.Expr Src.Expr
-if_ start =
+if_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+if_ syntaxVersion start =
     P.inContext E.If (Keyword.if_ E.Start) <|
-        chompIfEnd start []
+        chompIfEnd syntaxVersion start []
 
 
-chompIfEnd : A.Position -> List ( Src.Expr, Src.Expr ) -> Space.Parser E.If Src.Expr
-chompIfEnd start branches =
+chompIfEnd : SyntaxVersion -> A.Position -> List ( Src.Expr, Src.Expr ) -> Space.Parser E.If Src.Expr
+chompIfEnd syntaxVersion start branches =
     Space.chompAndCheckIndent E.IfSpace E.IfIndentCondition
-        |> P.bind (\_ -> P.specialize E.IfCondition expression)
+        |> P.bind (\_ -> P.specialize E.IfCondition (expression syntaxVersion))
         |> P.bind
             (\( condition, condEnd ) ->
                 Space.checkIndent condEnd E.IfIndentThen
                     |> P.bind (\_ -> Keyword.then_ E.IfThen)
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentThenBranch)
-                    |> P.bind (\_ -> P.specialize E.IfThenBranch expression)
+                    |> P.bind (\_ -> P.specialize E.IfThenBranch (expression syntaxVersion))
                     |> P.bind
                         (\( thenBranch, thenEnd ) ->
                             Space.checkIndent thenEnd E.IfIndentElse
@@ -572,8 +578,8 @@ chompIfEnd start branches =
                                         in
                                         P.oneOf E.IfElseBranchStart
                                             [ Keyword.if_ E.IfElseBranchStart
-                                                |> P.bind (\_ -> chompIfEnd start newBranches)
-                                            , P.specialize E.IfElseBranch expression
+                                                |> P.bind (\_ -> chompIfEnd syntaxVersion start newBranches)
+                                            , P.specialize E.IfElseBranch (expression syntaxVersion)
                                                 |> P.fmap
                                                     (\( elseBranch, elseEnd ) ->
                                                         let
@@ -593,19 +599,19 @@ chompIfEnd start branches =
 -- LAMBDA EXPRESSION
 
 
-function : A.Position -> Space.Parser E.Expr Src.Expr
-function start =
+function : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+function syntaxVersion start =
     P.inContext E.Func (P.word1 '\\' E.Start) <|
         (Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArg
-            |> P.bind (\_ -> P.specialize E.FuncArg Pattern.term)
+            |> P.bind (\_ -> P.specialize E.FuncArg (Pattern.term syntaxVersion))
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
-                        |> P.bind (\_ -> chompArgs [ arg ])
+                        |> P.bind (\_ -> chompArgs syntaxVersion [ arg ])
                         |> P.bind
                             (\revArgs ->
                                 Space.chompAndCheckIndent E.FuncSpace E.FuncIndentBody
-                                    |> P.bind (\_ -> P.specialize E.FuncBody expression)
+                                    |> P.bind (\_ -> P.specialize E.FuncBody (expression syntaxVersion))
                                     |> P.fmap
                                         (\( body, end ) ->
                                             let
@@ -620,14 +626,14 @@ function start =
         )
 
 
-chompArgs : List Src.Pattern -> P.Parser E.Func (List Src.Pattern)
-chompArgs revArgs =
+chompArgs : SyntaxVersion -> List Src.Pattern -> P.Parser E.Func (List Src.Pattern)
+chompArgs syntaxVersion revArgs =
     P.oneOf E.FuncArrow
-        [ P.specialize E.FuncArg Pattern.term
+        [ P.specialize E.FuncArg (Pattern.term syntaxVersion)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
-                        |> P.bind (\_ -> chompArgs (arg :: revArgs))
+                        |> P.bind (\_ -> chompArgs syntaxVersion (arg :: revArgs))
                 )
         , P.word2 '-' '>' E.FuncArrow
             |> P.fmap (\_ -> revArgs)
@@ -638,11 +644,11 @@ chompArgs revArgs =
 -- CASE EXPRESSIONS
 
 
-case_ : A.Position -> Space.Parser E.Expr Src.Expr
-case_ start =
+case_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+case_ syntaxVersion start =
     P.inContext E.Case (Keyword.case_ E.Start) <|
         (Space.chompAndCheckIndent E.CaseSpace E.CaseIndentExpr
-            |> P.bind (\_ -> P.specialize E.CaseExpr expression)
+            |> P.bind (\_ -> P.specialize E.CaseExpr (expression syntaxVersion))
             |> P.bind
                 (\( expr, exprEnd ) ->
                     Space.checkIndent exprEnd E.CaseIndentOf
@@ -651,10 +657,10 @@ case_ start =
                         |> P.bind
                             (\_ ->
                                 P.withIndent <|
-                                    (chompBranch
+                                    (chompBranch syntaxVersion
                                         |> P.bind
                                             (\( firstBranch, firstEnd ) ->
-                                                chompCaseEnd [ firstBranch ] firstEnd
+                                                chompCaseEnd syntaxVersion [ firstBranch ] firstEnd
                                                     |> P.fmap
                                                         (\( branches, end ) ->
                                                             ( A.at start end (Src.Case expr branches)
@@ -668,25 +674,25 @@ case_ start =
         )
 
 
-chompBranch : Space.Parser E.Case ( Src.Pattern, Src.Expr )
-chompBranch =
-    P.specialize E.CasePattern Pattern.expression
+chompBranch : SyntaxVersion -> Space.Parser E.Case ( Src.Pattern, Src.Expr )
+chompBranch syntaxVersion =
+    P.specialize E.CasePattern (Pattern.expression syntaxVersion)
         |> P.bind
             (\( pattern, patternEnd ) ->
                 Space.checkIndent patternEnd E.CaseIndentArrow
                     |> P.bind (\_ -> P.word2 '-' '>' E.CaseArrow)
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.CaseSpace E.CaseIndentBranch)
-                    |> P.bind (\_ -> P.specialize E.CaseBranch expression)
+                    |> P.bind (\_ -> P.specialize E.CaseBranch (expression syntaxVersion))
                     |> P.fmap (\( branchExpr, end ) -> ( ( pattern, branchExpr ), end ))
             )
 
 
-chompCaseEnd : List ( Src.Pattern, Src.Expr ) -> A.Position -> Space.Parser E.Case (List ( Src.Pattern, Src.Expr ))
-chompCaseEnd branches end =
+chompCaseEnd : SyntaxVersion -> List ( Src.Pattern, Src.Expr ) -> A.Position -> Space.Parser E.Case (List ( Src.Pattern, Src.Expr ))
+chompCaseEnd syntaxVersion branches end =
     P.oneOfWithFallback
         [ Space.checkAligned E.CasePatternAlignment
-            |> P.bind (\_ -> chompBranch)
-            |> P.bind (\( branch, newEnd ) -> chompCaseEnd (branch :: branches) newEnd)
+            |> P.bind (\_ -> chompBranch syntaxVersion)
+            |> P.bind (\( branch, newEnd ) -> chompCaseEnd syntaxVersion (branch :: branches) newEnd)
         ]
         ( List.reverse branches, end )
 
@@ -695,16 +701,16 @@ chompCaseEnd branches end =
 -- LET EXPRESSION
 
 
-let_ : A.Position -> Space.Parser E.Expr Src.Expr
-let_ start =
+let_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+let_ syntaxVersion start =
     P.inContext E.Let (Keyword.let_ E.Start) <|
         ((P.withBacksetIndent 3 <|
             (Space.chompAndCheckIndent E.LetSpace E.LetIndentDef
                 |> P.bind
                     (\_ ->
                         P.withIndent <|
-                            (chompLetDef
-                                |> P.bind (\( def, end ) -> chompLetDefs [ def ] end)
+                            (chompLetDef syntaxVersion
+                                |> P.bind (\( def, end ) -> chompLetDefs syntaxVersion [ def ] end)
                             )
                     )
             )
@@ -714,7 +720,7 @@ let_ start =
                     Space.checkIndent defsEnd E.LetIndentIn
                         |> P.bind (\_ -> Keyword.in_ E.LetIn)
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.LetSpace E.LetIndentBody)
-                        |> P.bind (\_ -> P.specialize E.LetBody expression)
+                        |> P.bind (\_ -> P.specialize E.LetBody (expression syntaxVersion))
                         |> P.fmap
                             (\( body, end ) ->
                                 ( A.at start end (Src.Let defs body), end )
@@ -723,12 +729,12 @@ let_ start =
         )
 
 
-chompLetDefs : List (A.Located Src.Def) -> A.Position -> Space.Parser E.Let (List (A.Located Src.Def))
-chompLetDefs revDefs end =
+chompLetDefs : SyntaxVersion -> List (A.Located Src.Def) -> A.Position -> Space.Parser E.Let (List (A.Located Src.Def))
+chompLetDefs syntaxVersion revDefs end =
     P.oneOfWithFallback
         [ Space.checkAligned E.LetDefAlignment
-            |> P.bind (\_ -> chompLetDef)
-            |> P.bind (\( def, newEnd ) -> chompLetDefs (def :: revDefs) newEnd)
+            |> P.bind (\_ -> chompLetDef syntaxVersion)
+            |> P.bind (\( def, newEnd ) -> chompLetDefs syntaxVersion (def :: revDefs) newEnd)
         ]
         ( List.reverse revDefs, end )
 
@@ -737,11 +743,11 @@ chompLetDefs revDefs end =
 -- LET DEFINITIONS
 
 
-chompLetDef : Space.Parser E.Let (A.Located Src.Def)
-chompLetDef =
+chompLetDef : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+chompLetDef syntaxVersion =
     P.oneOf E.LetDefName
-        [ definition
-        , destructure
+        [ definition syntaxVersion
+        , destructure syntaxVersion
         ]
 
 
@@ -749,8 +755,8 @@ chompLetDef =
 -- DEFINITION
 
 
-definition : Space.Parser E.Let (A.Located Src.Def)
-definition =
+definition : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+definition syntaxVersion =
     P.addLocation (Var.lower E.LetDefName)
         |> P.bind
             (\((A.At (A.Region start _) name) as aname) ->
@@ -769,28 +775,28 @@ definition =
                                                     |> P.bind
                                                         (\defName ->
                                                             Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
-                                                                |> P.bind (\_ -> chompDefArgsAndBody start defName (Just tipe) [])
+                                                                |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion start defName (Just tipe) [])
                                                         )
                                             )
-                                    , chompDefArgsAndBody start aname Nothing []
+                                    , chompDefArgsAndBody syntaxVersion start aname Nothing []
                                     ]
                             )
                     )
             )
 
 
-chompDefArgsAndBody : A.Position -> A.Located Name.Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.Def (A.Located Src.Def)
-chompDefArgsAndBody start name tipe revArgs =
+chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.Def (A.Located Src.Def)
+chompDefArgsAndBody syntaxVersion start name tipe revArgs =
     P.oneOf E.DefEquals
-        [ P.specialize E.DefArg Pattern.term
+        [ P.specialize E.DefArg (Pattern.term syntaxVersion)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
-                        |> P.bind (\_ -> chompDefArgsAndBody start name tipe (arg :: revArgs))
+                        |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion start name tipe (arg :: revArgs))
                 )
         , P.word1 '=' E.DefEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DefBody expression)
+            |> P.bind (\_ -> P.specialize E.DefBody (expression syntaxVersion))
             |> P.fmap
                 (\( body, end ) ->
                     ( A.at start end (Src.Define name (List.reverse revArgs) body tipe)
@@ -823,19 +829,19 @@ chompMatchingName expectedName =
 -- DESTRUCTURE
 
 
-destructure : Space.Parser E.Let (A.Located Src.Def)
-destructure =
+destructure : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+destructure syntaxVersion =
     P.specialize E.LetDestruct <|
         (P.getPosition
             |> P.bind
                 (\start ->
-                    P.specialize E.DestructPattern Pattern.term
+                    P.specialize E.DestructPattern (Pattern.term syntaxVersion)
                         |> P.bind
                             (\pattern ->
                                 Space.chompAndCheckIndent E.DestructSpace E.DestructIndentEquals
                                     |> P.bind (\_ -> P.word1 '=' E.DestructEquals)
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.DestructSpace E.DestructIndentBody)
-                                    |> P.bind (\_ -> P.specialize E.DestructBody expression)
+                                    |> P.bind (\_ -> P.specialize E.DestructBody (expression syntaxVersion))
                                     |> P.fmap
                                         (\( expr, end ) ->
                                             ( A.at start end (Src.Destruct pattern expr)

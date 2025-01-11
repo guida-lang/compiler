@@ -29,6 +29,7 @@ import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Parse.Space as PS
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Parse.Type as PT
 import Compiler.Parse.Variable as PV
 import Compiler.Reporting.Annotation as A
@@ -377,7 +378,7 @@ attemptDeclOrExpr lines =
 
         declParser : P.Parser ( Row, Col ) ( PD.Decl, A.Position )
         declParser =
-            P.specialize (toDeclPosition src) PD.declaration
+            P.specialize (toDeclPosition src) (PD.declaration SV.Guida)
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
@@ -405,7 +406,7 @@ attemptDeclOrExpr lines =
                 let
                     exprParser : P.Parser ( Row, Col ) ( Src.Expr, A.Position )
                     exprParser =
-                        P.specialize (toExprPosition src) PE.expression
+                        P.specialize (toExprPosition src) (PE.expression SV.Guida)
                 in
                 case P.fromByteString exprParser Tuple.pair src of
                     Ok _ ->

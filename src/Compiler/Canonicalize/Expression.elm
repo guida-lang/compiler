@@ -344,7 +344,7 @@ addBindings (A.At _ def) bindings =
 addBindingsHelp : Dups.Tracker A.Region -> Src.Pattern -> Dups.Tracker A.Region
 addBindingsHelp bindings (A.At region pattern) =
     case pattern of
-        Src.PAnything ->
+        Src.PAnything _ ->
             bindings
 
         Src.PVar name ->
@@ -528,7 +528,7 @@ addEdge edges ((A.At _ name) as aname) nodes =
 getPatternNames : List (A.Located Name.Name) -> Src.Pattern -> List (A.Located Name.Name)
 getPatternNames names (A.At region pattern) =
     case pattern of
-        Src.PAnything ->
+        Src.PAnything _ ->
             names
 
         Src.PVar name ->
