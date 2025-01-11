@@ -375,14 +375,14 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
     in
     Utils.filterM File.exists (List.map (flip addRelative guidaFileName) srcDirs)
         |> IO.bind
-            (\paths ->
-                case paths of
+            (\guidaPaths ->
+                case guidaPaths of
                     [ path ] ->
                         IO.pure [ path ]
 
                     _ ->
                         Utils.filterM File.exists (List.map (flip addRelative elmFileName) srcDirs)
-                            |> IO.fmap ((++) paths)
+                            |> IO.fmap (\elmPaths -> guidaPaths ++ elmPaths)
             )
         |> IO.bind
             (\paths ->

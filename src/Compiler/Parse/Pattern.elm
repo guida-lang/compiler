@@ -128,15 +128,16 @@ wildcard syntaxVersion =
                                 name : String
                                 name =
                                     Name.fromPtr src newPos lowerPos
-
-                                newState : P.State
-                                newState =
-                                    P.State src lowerPos end indent row lowerCol
                             in
                             if Var.isReservedWord name then
                                 Err (P.PErr P.Consumed row col (E.PWildcardReservedWord (Name.fromPtr src newPos lowerPos) (lowerCol - col)))
 
                             else
+                                let
+                                    newState : P.State
+                                    newState =
+                                        P.State src lowerPos end indent row lowerCol
+                                in
                                 Ok (P.POk P.Consumed name newState)
 
                 else
