@@ -351,6 +351,7 @@ type Pattern
     | PFloat Int Row Col
     | PAlias Row Col
     | PWildcardNotVar Name Int Row Col
+    | PWildcardReservedWord Name Int Row Col
     | PSpace Space Row Col
       --
     | PIndentStart Row Col
@@ -6380,6 +6381,32 @@ toPatternReport source context pattern startRow startCol =
                         )
                     )
 
+        PWildcardReservedWord name width row col ->
+            let
+                region : A.Region
+                region =
+                    toWiderRegion row col width
+            in
+            Report.Report "RESERVED WORD" region [] <|
+                Code.toSnippet source region Nothing <|
+                    ( D.fillSep
+                        [ D.fromChars "I"
+                        , D.fromChars "ran"
+                        , D.fromChars "into"
+                        , D.fromChars "a"
+                        , D.fromChars "reserved"
+                        , D.fromChars "word"
+                        , D.fromChars "in"
+                        , D.fromChars "this"
+                        , D.dullyellow <| D.fromChars "_"
+                        , D.fromChars "variable:"
+                        ]
+                    , D.reflow <|
+                        "The `"
+                            ++ name
+                            ++ "` keyword is reserved. Try using a different name instead!"
+                    )
+
         PSpace space row col ->
             toSpaceReport source space row col
 
@@ -8996,6 +9023,15 @@ patternEncoder pattern =
                 , ( "col", Encode.int col )
                 ]
 
+        PWildcardReservedWord name width row col ->
+            Encode.object
+                [ ( "type", Encode.string "PWildcardReservedWord" )
+                , ( "name", Encode.string name )
+                , ( "width", Encode.int width )
+                , ( "row", Encode.int row )
+                , ( "col", Encode.int col )
+                ]
+
         PSpace space row col ->
             Encode.object
                 [ ( "type", Encode.string "PSpace" )
@@ -9079,6 +9115,13 @@ patternDecoder =
 
                     "PWildcardNotVar" ->
                         Decode.map4 PWildcardNotVar
+                            (Decode.field "name" Decode.string)
+                            (Decode.field "width" Decode.int)
+                            (Decode.field "row" Decode.int)
+                            (Decode.field "col" Decode.int)
+
+                    "PWildcardReservedWord" ->
+                        Decode.map4 PWildcardReservedWord
                             (Decode.field "name" Decode.string)
                             (Decode.field "width" Decode.int)
                             (Decode.field "row" Decode.int)

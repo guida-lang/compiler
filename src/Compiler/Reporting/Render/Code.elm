@@ -12,7 +12,7 @@ module Compiler.Reporting.Render.Code exposing
 import Char
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (binopCharSet)
-import Compiler.Parse.Variable exposing (reservedWords)
+import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D exposing (Doc)
 import Data.Set as EverySet
@@ -271,7 +271,7 @@ detectKeywords c rest =
         name =
             String.fromChar c ++ cs
     in
-    if EverySet.member identity name reservedWords then
+    if Var.isReservedWord name then
         Keyword name
 
     else

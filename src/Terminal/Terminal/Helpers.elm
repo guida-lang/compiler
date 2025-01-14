@@ -1,9 +1,9 @@
 module Terminal.Terminal.Helpers exposing
-    ( elmFile
-    , filePath
+    ( filePath
+    , guidaOrElmFile
     , package
-    , parseElmFile
     , parseFilePath
+    , parseGuidaOrElmFile
     , parsePackage
     , parseVersion
     , version
@@ -80,31 +80,35 @@ exampleVersions chars =
 
 
 
--- ELM FILE
+-- GUIDA OR ELM FILE
 
 
-elmFile : Parser
-elmFile =
+guidaOrElmFile : Parser
+guidaOrElmFile =
     Parser
-        { singular = "elm file"
-        , plural = "elm files"
+        { singular = "guida or elm file"
+        , plural = "guida or elm files"
         , suggest = \_ -> IO.pure []
-        , examples = exampleElmFiles
+        , examples = exampleGuidaOrElmFiles
         }
 
 
-parseElmFile : String -> Maybe FilePath
-parseElmFile chars =
-    if Utils.fpTakeExtension chars == ".elm" then
-        Just chars
+parseGuidaOrElmFile : String -> Maybe FilePath
+parseGuidaOrElmFile chars =
+    case Utils.fpTakeExtension chars of
+        ".guida" ->
+            Just chars
 
-    else
-        Nothing
+        ".elm" ->
+            Just chars
+
+        _ ->
+            Nothing
 
 
-exampleElmFiles : String -> IO (List String)
-exampleElmFiles _ =
-    IO.pure [ "Main.elm", "src/Main.elm" ]
+exampleGuidaOrElmFiles : String -> IO (List String)
+exampleGuidaOrElmFiles _ =
+    IO.pure [ "Main.guida", "src/Main.guida", "Main.elm" ]
 
 
 

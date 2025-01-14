@@ -39,6 +39,7 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Docs as EDocs
@@ -364,11 +365,25 @@ crawlDeps env mvar deps blockedValue =
 crawlModule : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> IO Status
 crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mvar ((DocsNeed needsDocs) as docsNeed) name =
     let
-        fileName : String
-        fileName =
+        guidaFileName : String
+        guidaFileName =
+            ModuleName.toFilePath name ++ ".guida"
+
+        elmFileName : String
+        elmFileName =
             ModuleName.toFilePath name ++ ".elm"
     in
-    Utils.filterM File.exists (List.map (flip addRelative fileName) srcDirs)
+    Utils.filterM File.exists (List.map (flip addRelative guidaFileName) srcDirs)
+        |> IO.bind
+            (\guidaPaths ->
+                case guidaPaths of
+                    [ path ] ->
+                        IO.pure [ path ]
+
+                    _ ->
+                        Utils.filterM File.exists (List.map (flip addRelative elmFileName) srcDirs)
+                            |> IO.fmap (\elmPaths -> guidaPaths ++ elmPaths)
+            )
         |> IO.bind
             (\paths ->
                 case paths of
@@ -428,7 +443,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
     File.readUtf8 (Utils.fpForwardSlash root path)
         |> IO.bind
             (\source ->
-                case Parse.fromByteString projectType source of
+                case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                     Err err ->
                         IO.pure <| SBadSyntax path time source err
 
@@ -500,7 +515,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                             File.readUtf8 path
                                                 |> IO.bind
                                                     (\source ->
-                                                        case Parse.fromByteString projectType source of
+                                                        case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                                                             Ok modul ->
                                                                 compile env (DocsNeed False) local source ifaces modul
 
@@ -527,7 +542,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                         IO.pure <|
                                                             RProblem <|
                                                                 Error.Module name path time source <|
-                                                                    case Parse.fromByteString projectType source of
+                                                                    case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                                                                         Ok (Src.Module _ _ _ imports _ _ _ _ _) ->
                                                                             Error.BadImports (toImportErrors env results imports problems)
 
@@ -1279,7 +1294,7 @@ fromRepl root details source =
     makeEnv Reporting.ignorer root details
         |> IO.bind
             (\((Env _ _ projectType _ _ _ _) as env) ->
-                case Parse.fromByteString projectType source of
+                case Parse.fromByteString SV.Guida projectType source of
                     Err syntaxError ->
                         IO.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
@@ -1486,10 +1501,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
         ( final, ext ) =
             Utils.fpSplitExtension file
     in
-    if ext /= ".elm" then
-        IO.pure <| Err <| Exit.BP_WithBadExtension path
-
-    else
+    if List.member ext [ ".guida", ".elm" ] then
         let
             absoluteSegments : List String
             absoluteSegments =
@@ -1505,7 +1517,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                     name =
                         String.join "." names
                 in
-                Utils.filterM (isInsideSrcDirByName names) srcDirs
+                Utils.filterM (isInsideSrcDirByName names ext) srcDirs
                     |> IO.bind
                         (\matchingDirs ->
                             case matchingDirs of
@@ -1513,11 +1525,11 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                                     let
                                         p1 : FilePath
                                         p1 =
-                                            addRelative d1 (Utils.fpJoinPath names ++ ".elm")
+                                            addRelative d1 (Utils.fpJoinPath names ++ ext)
 
                                         p2 : FilePath
                                         p2 =
-                                            addRelative d2 (Utils.fpJoinPath names ++ ".elm")
+                                            addRelative d2 (Utils.fpJoinPath names ++ ext)
                                     in
                                     IO.pure <| Err <| Exit.BP_RootNameDuplicate name p1 p2
 
@@ -1531,10 +1543,13 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
             ( s1, _ ) :: ( s2, _ ) :: _ ->
                 IO.pure <| Err <| Exit.BP_WithAmbiguousSrcDir path s1 s2
 
+    else
+        IO.pure <| Err <| Exit.BP_WithBadExtension path
 
-isInsideSrcDirByName : List String -> AbsoluteSrcDir -> IO Bool
-isInsideSrcDirByName names srcDir =
-    File.exists (addRelative srcDir (Utils.fpJoinPath names ++ ".elm"))
+
+isInsideSrcDirByName : List String -> String -> AbsoluteSrcDir -> IO Bool
+isInsideSrcDirByName names extension srcDir =
+    File.exists (addRelative srcDir (Utils.fpJoinPath names ++ extension))
 
 
 isInsideSrcDirByPath : List String -> AbsoluteSrcDir -> Maybe ( FilePath, Result (List String) (List String) )
@@ -1619,7 +1634,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                         File.readUtf8 path
                             |> IO.bind
                                 (\source ->
-                                    case Parse.fromByteString projectType source of
+                                    case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                                         Ok ((Src.Module _ _ _ imports values _ _ _ _) as modul) ->
                                             let
                                                 deps : List Name.Name
