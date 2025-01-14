@@ -185,6 +185,7 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
         BW.withScope
             (\scope ->
                 let
+                    askQuestion : IO Bool
                     askQuestion =
                         if autoYes then
                             IO.pure True

@@ -19,7 +19,7 @@ import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import System.IO as IO exposing (IO)
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main exposing (FilePath)
 
 
 
@@ -184,6 +184,7 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
         BW.withScope
             (\scope ->
                 let
+                    askQuestion : IO Bool
                     askQuestion =
                         if autoYes then
                             IO.pure True
@@ -310,10 +311,6 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                         changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
                                         changes =
                                             detectChanges old new
-
-                                        news : Dict ( String, String ) Pkg.Name C.Constraint
-                                        news =
-                                            Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                     in
                                     Task.pure <|
                                         Changes changes <|
@@ -323,8 +320,8 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                                     license
                                                     version
                                                     exposed
-                                                    (addNews (Just pkg) news deps)
-                                                    (addNews Nothing news test)
+                                                    (Dict.remove identity pkg deps)
+                                                    test
                                                     elmVersion
 
                                 Solver.NoSolution ->
@@ -339,23 +336,6 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
 
     else
         Task.pure AlreadyUninstalled
-
-
-addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
-addNews pkg new old =
-    Dict.merge compare
-        (Dict.insert identity)
-        (\k _ n -> Dict.insert identity k n)
-        (\k c acc ->
-            if Just k == pkg then
-                Dict.insert identity k c acc
-
-            else
-                acc
-        )
-        old
-        new
-        Dict.empty
 
 
 
@@ -393,19 +373,6 @@ keepChange _ old new =
 
     else
         Just (Change old new)
-
-
-keepNew : Change a -> Maybe a
-keepNew change =
-    case change of
-        Insert a ->
-            Just a
-
-        Change _ a ->
-            Just a
-
-        Remove _ ->
-            Nothing
 
 
 
