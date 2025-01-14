@@ -79,8 +79,6 @@ run args (Flags autoYes) =
 
 type Changes vsn
     = AlreadyUninstalled
-    | DemoteTest Outline.Outline
-    | DemoteIndirect Outline.Outline
     | Changes (Dict ( String, String ) Pkg.Name (Change vsn)) Outline.Outline
 
 
@@ -93,71 +91,6 @@ attemptChanges root env oldOutline toChars changes autoYes =
     case changes of
         AlreadyUninstalled ->
             Task.io (IO.putStrLn "It is already uninstalled!")
-
-        DemoteIndirect newOutline ->
-            attemptChangesHelp root env oldOutline newOutline autoYes <|
-                D.vcat
-                    [ D.fillSep
-                        [ D.fromChars "I"
-                        , D.fromChars "found"
-                        , D.fromChars "it"
-                        , D.fromChars "in"
-                        , D.fromChars "your"
-                        , D.fromChars "elm.json"
-                        , D.fromChars "file,"
-                        , D.fromChars "but"
-                        , D.fromChars "in"
-                        , D.fromChars "the"
-                        , D.dullyellow (D.fromChars "\"indirect\"")
-                        , D.fromChars "dependencies."
-                        ]
-                    , D.fillSep
-                        [ D.fromChars "Should"
-                        , D.fromChars "I"
-                        , D.fromChars "move"
-                        , D.fromChars "it"
-                        , D.fromChars "into"
-                        , D.green (D.fromChars "\"direct\"")
-                        , D.fromChars "dependencies"
-                        , D.fromChars "for"
-                        , D.fromChars "more"
-                        , D.fromChars "general"
-                        , D.fromChars "use?"
-                        , D.fromChars "[Y/n]: "
-                        ]
-                    ]
-
-        DemoteTest newOutline ->
-            attemptChangesHelp root env oldOutline newOutline autoYes <|
-                D.vcat
-                    [ D.fillSep
-                        [ D.fromChars "I"
-                        , D.fromChars "found"
-                        , D.fromChars "it"
-                        , D.fromChars "in"
-                        , D.fromChars "your"
-                        , D.fromChars "elm.json"
-                        , D.fromChars "file,"
-                        , D.fromChars "but"
-                        , D.fromChars "in"
-                        , D.fromChars "the"
-                        , D.dullyellow (D.fromChars "\"test-dependencies\"")
-                        , D.fromChars "field."
-                        ]
-                    , D.fillSep
-                        [ D.fromChars "Should"
-                        , D.fromChars "I"
-                        , D.fromChars "move"
-                        , D.fromChars "it"
-                        , D.fromChars "into"
-                        , D.green (D.fromChars "\"dependencies\"")
-                        , D.fromChars "for"
-                        , D.fromChars "more"
-                        , D.fromChars "general"
-                        , D.fromChars "use?"
-                        , D.fromChars "[Y/n]: "
-                        ]
-                    ]
 
         Changes changeDict newOutline ->
             let

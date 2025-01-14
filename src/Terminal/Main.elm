@@ -288,13 +288,13 @@ uninstall =
     let
         details : String
         details =
-            "The `uninstall` command uninstalls packages from <https://package.elm-lang.org> for use in your project:"
+            "The `uninstall` command removes packages your project:"
 
         example : D.Doc
         example =
             stack
                 [ reflow
-                    "For example, if you want to remove packages for HTTP and JSON, you would say:"
+                    "For example, if you want to remove the HTTP and JSON packages, you would say:"
                 , D.indent 4 <|
                     D.green <|
                         D.vcat <|
