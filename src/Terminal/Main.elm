@@ -185,6 +185,7 @@ make =
             Terminal.flags
                 |> Terminal.more (Terminal.onOff "debug" "Turn on the time-travelling debugger. It allows you to rewind and replay events. The events can be imported/exported into a file, which makes for very precise bug reports!")
                 |> Terminal.more (Terminal.onOff "optimize" "Turn on optimizations to make code smaller and faster. For example, the compiler renames record fields to be as short as possible and unboxes values to reduce allocation.")
+                |> Terminal.more (Terminal.onOff "sourcemaps" "Add source maps to resulting JavaScript code.")
                 |> Terminal.more (Terminal.flag "output" Make.output "Specify the name of the resulting JS file. For example --output=assets/guida.js to generate the JS at assets/guida.js or --output=/dev/null to generate no output at all!")
                 |> Terminal.more (Terminal.flag "report" Make.reportType "You can say --report=json to get error messages as JSON. This is only really useful if you are an editor plugin. Humans should avoid it!")
                 |> Terminal.more (Terminal.flag "docs" Make.docsFile "Generate a JSON file of documentation for a package. Eventually it will be possible to preview docs with `reactor` because it is quite hard to deal with these JSON files directly.")
@@ -198,6 +199,7 @@ make =
                 (Chomp.pure Make.Flags
                     |> Chomp.apply (Chomp.chompOnOffFlag "debug")
                     |> Chomp.apply (Chomp.chompOnOffFlag "optimize")
+                    |> Chomp.apply (Chomp.chompOnOffFlag "sourcemaps")
                     |> Chomp.apply (Chomp.chompNormalFlag "output" Make.output Make.parseOutput)
                     |> Chomp.apply (Chomp.chompNormalFlag "report" Make.reportType Make.parseReportType)
                     |> Chomp.apply (Chomp.chompNormalFlag "docs" Make.docsFile Make.parseDocsFile)

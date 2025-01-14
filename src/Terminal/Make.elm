@@ -37,7 +37,7 @@ import Utils.Main as Utils exposing (FilePath)
 
 
 type Flags
-    = Flags Bool Bool (Maybe Output) (Maybe ReportType) (Maybe String)
+    = Flags Bool Bool Bool (Maybe Output) (Maybe ReportType) (Maybe String)
 
 
 type Output
@@ -59,7 +59,7 @@ type alias Task a =
 
 
 run : List String -> Flags -> IO ()
-run paths ((Flags _ _ _ report _) as flags) =
+run paths ((Flags _ _ _ _ report _) as flags) =
     getStyle report
         |> IO.bind
             (\style ->
@@ -78,7 +78,7 @@ run paths ((Flags _ _ _ report _) as flags) =
 
 
 runHelp : String -> List String -> Reporting.Style -> Flags -> IO (Result Exit.Make ())
-runHelp root paths style (Flags debug optimize maybeOutput _ maybeDocs) =
+runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ maybeDocs) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock root <|
