@@ -105,14 +105,14 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                                 Task.pure ()
 
                                                                             [ name ] ->
-                                                                                toBuilder root details desiredMode artifacts
+                                                                                toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
                                                                                     |> Task.bind
                                                                                         (\builder ->
                                                                                             generate style "index.html" (Html.sandwich name builder) (NE.Nonempty name [])
                                                                                         )
 
                                                                             name :: names ->
-                                                                                toBuilder root details desiredMode artifacts
+                                                                                toBuilder withSourceMaps 0 root details desiredMode artifacts
                                                                                     |> Task.bind
                                                                                         (\builder ->
                                                                                             generate style "elm.js" builder (NE.Nonempty name names)
@@ -124,7 +124,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                     Just (JS target) ->
                                                                         case getNoMains artifacts of
                                                                             [] ->
-                                                                                toBuilder root details desiredMode artifacts
+                                                                                toBuilder withSourceMaps 0 root details desiredMode artifacts
                                                                                     |> Task.bind
                                                                                         (\builder ->
                                                                                             generate style target builder (Build.getRootNames artifacts)
@@ -137,7 +137,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                         hasOneMain artifacts
                                                                             |> Task.bind
                                                                                 (\name ->
-                                                                                    toBuilder root details desiredMode artifacts
+                                                                                    toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
                                                                                         |> Task.bind
                                                                                             (\builder ->
                                                                                                 generate style target (Html.sandwich name builder) (NE.Nonempty name [])
@@ -315,18 +315,18 @@ type DesiredMode
     | Prod
 
 
-toBuilder : FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
-toBuilder root details desiredMode artifacts =
+toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
+toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of
             Debug ->
-                Generate.debug root details artifacts
+                Generate.debug withSourceMaps leadingLines root details artifacts
 
             Dev ->
-                Generate.dev root details artifacts
+                Generate.dev withSourceMaps leadingLines root details artifacts
 
             Prod ->
-                Generate.prod root details artifacts
+                Generate.prod withSourceMaps leadingLines root details artifacts
 
 
 

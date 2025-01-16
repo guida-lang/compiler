@@ -1,10 +1,14 @@
-module Compiler.Generate.Html exposing (sandwich)
+module Compiler.Generate.Html exposing
+    ( leadingLines
+    , sandwich
+    )
 
 import Compiler.Data.Name exposing (Name)
 
 
-
--- SANDWICH
+leadingLines : Int
+leadingLines =
+    2
 
 
 sandwich : Name -> String -> String

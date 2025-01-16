@@ -40,12 +40,14 @@ module Utils.Main exposing
     , envLookupEnv
     , filterM
     , find
+    , findMax
     , foldM
     , foldl1_
     , foldr1
     , forkIO
     , fpAddExtension
     , fpAddTrailingPathSeparator
+    , fpDropExtension
     , fpDropFileName
     , fpForwardSlash
     , fpIsRelative
@@ -85,6 +87,7 @@ module Utils.Main exposing
     , mapIntersectionWithKey
     , mapLookupMin
     , mapM_
+    , mapMapKeys
     , mapMapMaybe
     , mapMinViewWithKey
     , mapTraverse
@@ -252,6 +255,16 @@ find toComparable k items =
             crash "Map.!: given key is not an element in the map"
 
 
+findMax : (k -> k -> Order) -> Dict comparable k a -> ( k, a )
+findMax keyComparison items =
+    case List.reverse (Map.toList keyComparison items) of
+        item :: _ ->
+            item
+
+        _ ->
+            crash "Error: empty map has no maximal element"
+
+
 mapLookupMin : Dict comparable comparable a -> Maybe ( comparable, a )
 mapLookupMin dict =
     case List.sortBy Tuple.first (Map.toList compare dict) of
@@ -391,6 +404,11 @@ dictMapM_ keyComparison f =
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
 maybeMapM =
     listMaybeTraverse
+
+
+mapMapKeys : (k2 -> comparable) -> (k1 -> k1 -> Order) -> (k1 -> k2) -> Dict comparable k1 a -> Dict comparable k2 a
+mapMapKeys toComparable keyComparison f =
+    Map.fromList toComparable << Map.foldl keyComparison (\k x xs -> ( f k, x ) :: xs) []
 
 
 mapMinViewWithKey : (k -> comparable) -> (k -> k -> Order) -> (( k, a ) -> comparable) -> Dict comparable k a -> Maybe ( ( k, a ), Dict comparable k a )
@@ -684,6 +702,11 @@ fpSplitFileName filename =
 fpTakeExtension : FilePath -> String
 fpTakeExtension =
     Tuple.second << fpSplitExtension
+
+
+fpDropExtension : FilePath -> FilePath
+fpDropExtension =
+    Tuple.first << fpSplitExtension
 
 
 fpTakeDirectory : FilePath -> FilePath

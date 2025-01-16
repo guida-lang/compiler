@@ -148,19 +148,19 @@ canonicalize env (A.At region expression) =
 
             Src.Update (A.At reg name) fields ->
                 let
-                    makeCanFields : R.RResult i w Error.Error (Dict String Name (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
+                    makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
-                        Dups.checkFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize env t)) fields
+                        Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize env t)) fields
                 in
                 R.pure (Can.Update name)
                     |> R.apply (R.fmap (A.At reg) (findVar reg env name))
-                    |> R.apply (R.bind (Utils.sequenceADict identity compare) makeCanFields)
+                    |> R.apply (R.bind (Utils.sequenceADict A.toValue (\a b -> compare (A.toValue a) (A.toValue b))) makeCanFields)
 
             Src.Record fields ->
-                Dups.checkFields fields
+                Dups.checkLocatedFields fields
                     |> R.bind
                         (\fieldDict ->
-                            R.fmap Can.Record (R.traverseDict identity compare (canonicalize env) fieldDict)
+                            R.fmap Can.Record (R.traverseDict A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (canonicalize env) fieldDict)
                         )
 
             Src.Unit ->

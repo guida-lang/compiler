@@ -47,30 +47,30 @@ import System.TypeCheck.IO as IO
 
 
 type Expr
-    = Bool Bool
-    | Chr String
-    | Str String
-    | Int Int
-    | Float Float
-    | VarLocal Name
-    | VarGlobal Global
-    | VarEnum Global Index.ZeroBased
-    | VarBox Global
-    | VarCycle IO.Canonical Name
-    | VarDebug Name IO.Canonical A.Region (Maybe Name)
-    | VarKernel Name Name
-    | List (List Expr)
-    | Function (List Name) Expr
-    | Call Expr (List Expr)
+    = Bool A.Region Bool
+    | Chr A.Region String
+    | Str A.Region String
+    | Int A.Region Int
+    | Float A.Region Float
+    | VarLocal A.Region Name
+    | VarGlobal A.Region Global
+    | VarEnum A.Region Global Index.ZeroBased
+    | VarBox A.Region Global
+    | VarCycle A.Region IO.Canonical Name
+    | VarDebug A.Region Name IO.Canonical (Maybe Name)
+    | VarKernel A.Region Name Name
+    | List A.Region (List Expr)
+    | Function (List (A.Located Name)) Expr
+    | Call A.Region Expr (List Expr)
     | TailCall Name (List ( Name, Expr ))
     | If (List ( Expr, Expr )) Expr
     | Let Def Expr
     | Destruct Destructor Expr
     | Case Name Name (Decider Choice) (List ( Int, Expr ))
-    | Accessor Name
-    | Access Expr Name
-    | Update Expr (Dict String Name Expr)
-    | Record (Dict String Name Expr)
+    | Accessor A.Region Name
+    | Access Expr A.Region Name
+    | Update A.Region Expr (Dict String (A.Located Name) Expr)
+    | Record A.Region (Dict String (A.Located Name) Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
@@ -103,8 +103,8 @@ toComparableGlobal (Global home name) =
 
 
 type Def
-    = Def Name Expr
-    | TailDef Name (List Name) Expr
+    = Def A.Region Name Expr
+    | TailDef A.Region Name (List (A.Located Name)) Expr
 
 
 type Destructor
@@ -155,8 +155,8 @@ type Main
 
 
 type Node
-    = Define Expr (EverySet (List String) Global)
-    | DefineTailFunc (List Name) Expr (EverySet (List String) Global)
+    = Define A.Region Expr (EverySet (List String) Global)
+    | DefineTailFunc A.Region (List (A.Located Name)) Expr (EverySet (List String) Global)
     | Ctor Index.ZeroBased Int
     | Enum Index.ZeroBased
     | Box
@@ -338,17 +338,19 @@ globalDecoder =
 nodeEncoder : Node -> Encode.Value
 nodeEncoder node =
     case node of
-        Define expr deps ->
+        Define region expr deps ->
             Encode.object
                 [ ( "type", Encode.string "Define" )
+                , ( "region", A.regionEncoder region )
                 , ( "expr", exprEncoder expr )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
 
-        DefineTailFunc argNames body deps ->
+        DefineTailFunc region argNames body deps ->
             Encode.object
                 [ ( "type", Encode.string "DefineTailFunc" )
-                , ( "argNames", Encode.list Encode.string argNames )
+                , ( "region", A.regionEncoder region )
+                , ( "argNames", Encode.list (A.locatedEncoder Encode.string) argNames )
                 , ( "body", exprEncoder body )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
                 ]
@@ -421,13 +423,15 @@ nodeDecoder =
             (\type_ ->
                 case type_ of
                     "Define" ->
-                        Decode.map2 Define
+                        Decode.map3 Define
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
                     "DefineTailFunc" ->
-                        Decode.map3 DefineTailFunc
-                            (Decode.field "argNames" (Decode.list Decode.string))
+                        Decode.map4 DefineTailFunc
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "argNames" (Decode.list (A.locatedDecoder Decode.string)))
                             (Decode.field "body" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
 
@@ -479,100 +483,113 @@ nodeDecoder =
 exprEncoder : Expr -> Encode.Value
 exprEncoder expr =
     case expr of
-        Bool value ->
+        Bool region value ->
             Encode.object
                 [ ( "type", Encode.string "Bool" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.bool value )
                 ]
 
-        Chr value ->
+        Chr region value ->
             Encode.object
                 [ ( "type", Encode.string "Chr" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.string value )
                 ]
 
-        Str value ->
+        Str region value ->
             Encode.object
                 [ ( "type", Encode.string "Str" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.string value )
                 ]
 
-        Int value ->
+        Int region value ->
             Encode.object
                 [ ( "type", Encode.string "Int" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.int value )
                 ]
 
-        Float value ->
+        Float region value ->
             Encode.object
                 [ ( "type", Encode.string "Float" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.float value )
                 ]
 
-        VarLocal value ->
+        VarLocal region value ->
             Encode.object
                 [ ( "type", Encode.string "VarLocal" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.string value )
                 ]
 
-        VarGlobal value ->
+        VarGlobal region value ->
             Encode.object
                 [ ( "type", Encode.string "VarGlobal" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", globalEncoder value )
                 ]
 
-        VarEnum global index ->
+        VarEnum region global index ->
             Encode.object
                 [ ( "type", Encode.string "VarEnum" )
+                , ( "region", A.regionEncoder region )
                 , ( "global", globalEncoder global )
                 , ( "index", Index.zeroBasedEncoder index )
                 ]
 
-        VarBox value ->
+        VarBox region value ->
             Encode.object
                 [ ( "type", Encode.string "VarBox" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", globalEncoder value )
                 ]
 
-        VarCycle home name ->
+        VarCycle region home name ->
             Encode.object
                 [ ( "type", Encode.string "VarCycle" )
+                , ( "region", A.regionEncoder region )
                 , ( "home", ModuleName.canonicalEncoder home )
                 , ( "name", Encode.string name )
                 ]
 
-        VarDebug name home region unhandledValueName ->
+        VarDebug region name home unhandledValueName ->
             Encode.object
                 [ ( "type", Encode.string "VarDebug" )
+                , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 , ( "home", ModuleName.canonicalEncoder home )
-                , ( "region", A.regionEncoder region )
                 , ( "unhandledValueName", E.maybe Encode.string unhandledValueName )
                 ]
 
-        VarKernel home name ->
+        VarKernel region home name ->
             Encode.object
                 [ ( "type", Encode.string "VarKernel" )
+                , ( "region", A.regionEncoder region )
                 , ( "home", Encode.string home )
                 , ( "name", Encode.string name )
                 ]
 
-        List value ->
+        List region value ->
             Encode.object
                 [ ( "type", Encode.string "List" )
+                , ( "region", A.regionEncoder region )
                 , ( "value", Encode.list exprEncoder value )
                 ]
 
         Function args body ->
             Encode.object
                 [ ( "type", Encode.string "Function" )
-                , ( "args", Encode.list Encode.string args )
+                , ( "args", Encode.list (A.locatedEncoder Encode.string) args )
                 , ( "body", exprEncoder body )
                 ]
 
-        Call func args ->
+        Call region func args ->
             Encode.object
                 [ ( "type", Encode.string "Call" )
+                , ( "region", A.regionEncoder region )
                 , ( "func", exprEncoder func )
                 , ( "args", Encode.list exprEncoder args )
                 ]
@@ -614,30 +631,34 @@ exprEncoder expr =
                 , ( "jumps", Encode.list (E.jsonPair Encode.int exprEncoder) jumps )
                 ]
 
-        Accessor field ->
+        Accessor region field ->
             Encode.object
                 [ ( "type", Encode.string "Accessor" )
+                , ( "region", A.regionEncoder region )
                 , ( "field", Encode.string field )
                 ]
 
-        Access record field ->
+        Access record region field ->
             Encode.object
                 [ ( "type", Encode.string "Access" )
                 , ( "record", exprEncoder record )
+                , ( "region", A.regionEncoder region )
                 , ( "field", Encode.string field )
                 ]
 
-        Update record fields ->
+        Update region record fields ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
+                , ( "region", A.regionEncoder region )
                 , ( "record", exprEncoder record )
-                , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
+                , ( "fields", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder fields )
                 ]
 
-        Record value ->
+        Record region value ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
-                , ( "value", E.assocListDict compare Encode.string exprEncoder value )
+                , ( "region", A.regionEncoder region )
+                , ( "value", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder value )
                 ]
 
         Unit ->
@@ -669,61 +690,83 @@ exprDecoder =
             (\type_ ->
                 case type_ of
                     "Bool" ->
-                        Decode.map Bool (Decode.field "value" Decode.bool)
+                        Decode.map2 Bool
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.bool)
 
                     "Chr" ->
-                        Decode.map Chr (Decode.field "value" Decode.string)
+                        Decode.map2 Chr
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.string)
 
                     "Str" ->
-                        Decode.map Str (Decode.field "value" Decode.string)
+                        Decode.map2 Str
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.string)
 
                     "Int" ->
-                        Decode.map Int (Decode.field "value" Decode.int)
+                        Decode.map2 Int
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.int)
 
                     "Float" ->
-                        Decode.map Float (Decode.field "value" Decode.float)
+                        Decode.map2 Float
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.float)
 
                     "VarLocal" ->
-                        Decode.map VarLocal (Decode.field "value" Decode.string)
+                        Decode.map2 VarLocal
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" Decode.string)
 
                     "VarGlobal" ->
-                        Decode.map VarGlobal (Decode.field "value" globalDecoder)
+                        Decode.map2 VarGlobal
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" globalDecoder)
 
                     "VarEnum" ->
-                        Decode.map2 VarEnum
+                        Decode.map3 VarEnum
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "global" globalDecoder)
                             (Decode.field "index" Index.zeroBasedDecoder)
 
                     "VarBox" ->
-                        Decode.map VarBox (Decode.field "value" globalDecoder)
+                        Decode.map2 VarBox
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" globalDecoder)
 
                     "VarCycle" ->
-                        Decode.map2 VarCycle
+                        Decode.map3 VarCycle
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "home" ModuleName.canonicalDecoder)
                             (Decode.field "name" Decode.string)
 
                     "VarDebug" ->
                         Decode.map4 VarDebug
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "unhandledValueName" (Decode.maybe Decode.string))
 
                     "VarKernel" ->
-                        Decode.map2 VarKernel
+                        Decode.map3 VarKernel
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "home" Decode.string)
                             (Decode.field "name" Decode.string)
 
                     "List" ->
-                        Decode.map List (Decode.field "value" (Decode.list exprDecoder))
+                        Decode.map2 List
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" (Decode.list exprDecoder))
 
                     "Function" ->
                         Decode.map2 Function
-                            (Decode.field "args" (Decode.list Decode.string))
+                            (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
                             (Decode.field "body" exprDecoder)
 
                     "Call" ->
-                        Decode.map2 Call
+                        Decode.map3 Call
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "func" exprDecoder)
                             (Decode.field "args" (Decode.list exprDecoder))
 
@@ -755,20 +798,26 @@ exprDecoder =
                             (Decode.field "jumps" (Decode.list (D.jsonPair Decode.int exprDecoder)))
 
                     "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
+                        Decode.map2 Accessor
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "field" Decode.string)
 
                     "Access" ->
-                        Decode.map2 Access
+                        Decode.map3 Access
                             (Decode.field "record" exprDecoder)
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "field" Decode.string)
 
                     "Update" ->
-                        Decode.map2 Update
+                        Decode.map3 Update
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "record" exprDecoder)
-                            (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
+                            (Decode.field "fields" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
 
                     "Record" ->
-                        Decode.map Record (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
+                        Decode.map2 Record
+                            (Decode.field "region" A.regionDecoder)
+                            (Decode.field "value" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
 
                     "Unit" ->
                         Decode.succeed Unit
@@ -793,18 +842,20 @@ exprDecoder =
 defEncoder : Def -> Encode.Value
 defEncoder def =
     case def of
-        Def name expr ->
+        Def region name expr ->
             Encode.object
                 [ ( "type", Encode.string "Def" )
+                , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
                 , ( "expr", exprEncoder expr )
                 ]
 
-        TailDef name args expr ->
+        TailDef region name args expr ->
             Encode.object
                 [ ( "type", Encode.string "TailDef" )
+                , ( "region", A.regionEncoder region )
                 , ( "name", Encode.string name )
-                , ( "args", Encode.list Encode.string args )
+                , ( "args", Encode.list (A.locatedEncoder Encode.string) args )
                 , ( "expr", exprEncoder expr )
                 ]
 
@@ -816,14 +867,16 @@ defDecoder =
             (\type_ ->
                 case type_ of
                     "Def" ->
-                        Decode.map2 Def
+                        Decode.map3 Def
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
                             (Decode.field "expr" exprDecoder)
 
                     "TailDef" ->
-                        Decode.map3 TailDef
+                        Decode.map4 TailDef
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list Decode.string))
+                            (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
                             (Decode.field "expr" exprDecoder)
 
                     _ ->

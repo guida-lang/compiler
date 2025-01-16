@@ -8,6 +8,7 @@ module Builder.Generate exposing
 
 import Builder.Build as Build
 import Builder.Elm.Details as Details
+import Builder.Elm.Outline as Outline
 import Builder.File as File
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
@@ -40,8 +41,8 @@ type alias Task a =
     Task.Task Exit.Generate a
 
 
-debug : FilePath -> Details.Details -> Build.Artifacts -> Task String
-debug root details (Build.Artifacts pkg ifaces roots modules) =
+debug : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
+debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots modules) =
     loadObjects root details modules
         |> Task.bind
             (\loading ->
@@ -49,7 +50,7 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                     |> Task.bind
                         (\types ->
                             finalizeObjects loading
-                                |> Task.fmap
+                                |> Task.bind
                                     (\objects ->
                                         let
                                             mode : Mode.Mode
@@ -64,16 +65,17 @@ debug root details (Build.Artifacts pkg ifaces roots modules) =
                                             mains =
                                                 gatherMains pkg objects roots
                                         in
-                                        JS.generate mode graph mains
+                                        prepareSourceMaps withSourceMaps root
+                                            |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
                                     )
                         )
             )
 
 
-dev : FilePath -> Details.Details -> Build.Artifacts -> Task String
-dev root details (Build.Artifacts pkg _ roots modules) =
+dev : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
+dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
-        |> Task.fmap
+        |> Task.bind
             (\objects ->
                 let
                     mode : Mode.Mode
@@ -88,17 +90,18 @@ dev root details (Build.Artifacts pkg _ roots modules) =
                     mains =
                         gatherMains pkg objects roots
                 in
-                JS.generate mode graph mains
+                prepareSourceMaps withSourceMaps root
+                    |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
             )
 
 
-prod : FilePath -> Details.Details -> Build.Artifacts -> Task String
-prod root details (Build.Artifacts pkg _ roots modules) =
+prod : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
+prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.bind
             (\objects ->
                 checkForDebugUses objects
-                    |> Task.fmap
+                    |> Task.bind
                         (\_ ->
                             let
                                 graph : Opt.GlobalGraph
@@ -113,9 +116,22 @@ prod root details (Build.Artifacts pkg _ roots modules) =
                                 mains =
                                     gatherMains pkg objects roots
                             in
-                            JS.generate mode graph mains
+                            prepareSourceMaps withSourceMaps root
+                                |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
                         )
             )
+
+
+prepareSourceMaps : Bool -> FilePath -> Task JS.SourceMaps
+prepareSourceMaps withSourceMaps root =
+    if withSourceMaps then
+        Outline.getAllModulePaths root
+            |> IO.bind (Utils.mapTraverse ModuleName.toComparableCanonical ModuleName.compareCanonical File.readUtf8)
+            |> IO.fmap JS.SourceMaps
+            |> Task.io
+
+    else
+        Task.pure JS.NoSourceMaps
 
 
 repl : FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task String

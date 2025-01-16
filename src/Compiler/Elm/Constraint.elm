@@ -8,6 +8,7 @@ module Compiler.Elm.Constraint exposing
     , exactly
     , goodElm
     , intersect
+    , lowerBound
     , satisfies
     , toChars
     , untilNextMajor
@@ -45,6 +46,15 @@ exactly version =
 anything : Constraint
 anything =
     Range V.one LessOrEqual LessOrEqual V.maxVersion
+
+
+
+-- EXTRACT VERSION
+
+
+lowerBound : Constraint -> V.Version
+lowerBound (Range lower _ _ _) =
+    lower
 
 
 

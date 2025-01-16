@@ -8,6 +8,7 @@ module Builder.Elm.Outline exposing
     , decoder
     , defaultSummary
     , flattenExposed
+    , getAllModulePaths
     , read
     , srcDirDecoder
     , srcDirEncoder
@@ -17,6 +18,8 @@ module Builder.Elm.Outline exposing
 import Basics.Extra as Basics
 import Builder.File as File
 import Builder.Reporting.Exit as Exit
+import Builder.Stuff as Stuff
+import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
 import Compiler.Elm.Constraint as Con
@@ -31,6 +34,7 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import System.TypeCheck.IO as TypeCheck
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -269,6 +273,111 @@ isDup paths =
 
         OneOrMore.More a b ->
             Just (OneOrMore.getFirstTwo a b)
+
+
+
+-- GET ALL MODULE PATHS
+
+
+getAllModulePaths : FilePath -> IO (Dict (List String) TypeCheck.Canonical FilePath)
+getAllModulePaths root =
+    read root
+        |> IO.bind
+            (\outlineResult ->
+                case outlineResult of
+                    Err _ ->
+                        IO.pure Dict.empty
+
+                    Ok outline ->
+                        case outline of
+                            App (AppOutline _ srcDirs depsDirect indirect _ _) ->
+                                let
+                                    deps =
+                                        Dict.union depsDirect indirect
+
+                                    absoluteSrcDirs =
+                                        List.map (toAbsolute root) (NE.toList srcDirs)
+                                in
+                                getAllModulePathsHelper Pkg.dummyName absoluteSrcDirs deps
+
+                            Pkg (PkgOutline name _ _ _ _ pkgDeps _ _) ->
+                                let
+                                    deps =
+                                        Dict.map (\_ -> Con.lowerBound) pkgDeps
+                                in
+                                getAllModulePathsHelper name [ root ++ "/src" ] deps
+            )
+
+
+getAllModulePathsHelper : Pkg.Name -> List FilePath -> Dict ( String, String ) Pkg.Name V.Version -> IO (Dict (List String) TypeCheck.Canonical FilePath)
+getAllModulePathsHelper packageName packageSrcDirs deps =
+    Utils.listTraverse recursiveFindFiles packageSrcDirs
+        |> IO.bind
+            (\files ->
+                Utils.mapTraverseWithKey identity compare resolvePackagePaths deps
+                    |> IO.bind
+                        (\dependencyRoots ->
+                            Utils.mapTraverse identity compare (\( pkgName, pkgRoot ) -> getAllModulePathsHelper pkgName [ pkgRoot ++ "/src" ] Dict.empty) dependencyRoots
+                                |> IO.fmap
+                                    (\dependencyMaps ->
+                                        let
+                                            asMap : Dict (List String) TypeCheck.Canonical FilePath
+                                            asMap =
+                                                List.concat files
+                                                    |> List.map (\( root, fp ) -> ( TypeCheck.Canonical packageName (moduleNameFromFilePath root fp), fp ))
+                                                    |> Dict.fromList ModuleName.toComparableCanonical
+                                        in
+                                        Dict.foldr compare (\_ -> Dict.union) asMap dependencyMaps
+                                    )
+                        )
+            )
+
+
+recursiveFindFiles : FilePath -> IO (List ( FilePath, FilePath ))
+recursiveFindFiles root =
+    recursiveFindFilesHelp root
+        |> IO.fmap (List.map (Tuple.pair root))
+
+
+recursiveFindFilesHelp : FilePath -> IO (List FilePath)
+recursiveFindFilesHelp root =
+    Utils.dirListDirectory root
+        |> IO.bind
+            (\dirContents ->
+                let
+                    ( elmFiles, ( guidaFiles, others ) ) =
+                        List.partition (hasExtension ".elm") dirContents
+                            |> Tuple.mapSecond (List.partition (hasExtension ".guida"))
+                in
+                Utils.filterM (\fp -> Utils.dirDoesDirectoryExist (root ++ "/" ++ fp)) others
+                    |> IO.bind
+                        (\subDirectories ->
+                            Utils.listTraverse (recursiveFindFilesHelp << (++) (root ++ "/")) subDirectories
+                                |> IO.fmap
+                                    (\filesFromSubDirs ->
+                                        List.concat filesFromSubDirs ++ List.map (\fp -> root ++ "/" ++ fp) (elmFiles ++ guidaFiles)
+                                    )
+                        )
+            )
+
+
+hasExtension : String -> FilePath -> Bool
+hasExtension ext path =
+    ext == Utils.fpTakeExtension path
+
+
+moduleNameFromFilePath : FilePath -> FilePath -> Name.Name
+moduleNameFromFilePath root filePath =
+    filePath
+        |> String.dropLeft (String.length root + 1)
+        |> Utils.fpDropExtension
+        |> String.replace "/" "."
+
+
+resolvePackagePaths : Pkg.Name -> V.Version -> IO ( Pkg.Name, FilePath )
+resolvePackagePaths pkgName vsn =
+    Stuff.getPackageCache
+        |> IO.fmap (\packageCache -> ( pkgName, Stuff.package packageCache pkgName vsn ))
 
 
 

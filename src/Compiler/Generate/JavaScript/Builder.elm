@@ -1,10 +1,14 @@
 module Compiler.Generate.JavaScript.Builder exposing
-    ( Case(..)
+    ( Builder(..)
+    , Case(..)
     , Expr(..)
     , InfixOp(..)
     , LValue(..)
+    , Mapping(..)
     , PrefixOp(..)
     , Stmt(..)
+    , addByteString
+    , emptyBuilder
     , exprToBuilder
     , stmtToBuilder
     )
@@ -16,7 +20,9 @@ module Compiler.Generate.JavaScript.Builder exposing
 
 import Compiler.Generate.JavaScript.Name as Name
 import Compiler.Json.Encode as Json
+import Compiler.Reporting.Annotation as A
 import Maybe.Extra as Maybe
+import System.TypeCheck.IO as IO
 
 
 
@@ -38,21 +44,31 @@ import Maybe.Extra as Maybe
 
 type Expr
     = ExprString String
+    | ExprTrackedString IO.Canonical A.Position String
     | ExprFloat String
+    | ExprTrackedFloat IO.Canonical A.Position String
     | ExprInt Int
+    | ExprTrackedInt IO.Canonical A.Position Int
     | ExprBool Bool
+    | ExprTrackedBool IO.Canonical A.Position Bool
     | ExprJson Json.Value
     | ExprArray (List Expr)
+    | ExprTrackedArray IO.Canonical A.Region (List Expr)
     | ExprObject (List ( Name.Name, Expr ))
+    | ExprTrackedObject IO.Canonical A.Region (List ( A.Located Name.Name, Expr ))
     | ExprRef Name.Name
+    | ExprTrackedRef IO.Canonical A.Position Name.Name Name.Name
     | ExprAccess Expr Name.Name
+    | ExprTrackedAccess Expr IO.Canonical A.Position Name.Name
     | ExprIndex Expr Expr
     | ExprPrefix PrefixOp Expr
     | ExprInfix InfixOp Expr Expr
     | ExprIf Expr Expr Expr
     | ExprAssign LValue Expr
     | ExprCall Expr (List Expr)
+    | ExprTrackedNormalCall IO.Canonical A.Position Expr Expr (List Expr)
     | ExprFunction (Maybe Name.Name) (List Name.Name) (List Stmt)
+    | ExprTrackedFunction IO.Canonical (List (A.Located Name.Name)) (List Stmt)
 
 
 type LValue
@@ -78,6 +94,7 @@ type Stmt
     | Throw Expr
     | Return Expr
     | Var Name.Name Expr
+    | TrackedVar IO.Canonical A.Position Name.Name Name.Name Expr
     | Vars (List ( Name.Name, Expr ))
     | FunctionStmt Name.Name (List Name.Name) (List Stmt)
 
@@ -120,17 +137,104 @@ type PrefixOp
 
 
 
+-- BUILDER
+
+
+type Builder
+    = Builder String Int Int (List Mapping)
+
+
+type Mapping
+    = Mapping Int Int IO.Canonical (Maybe Name.Name) Int Int
+
+
+emptyBuilder : Int -> Builder
+emptyBuilder currentLine =
+    Builder "" currentLine 1 []
+
+
+addAscii : String -> Builder -> Builder
+addAscii ascii (Builder code currentLine currentCol mappings) =
+    Builder (code ++ ascii) currentLine (currentCol + String.length ascii) mappings
+
+
+addByteString : String -> Builder -> Builder
+addByteString str (Builder code currentLine currentCol mappings) =
+    let
+        bsSize =
+            String.length str
+
+        bsLines =
+            String.length (String.filter ((==) '\n') str)
+    in
+    if bsLines == 0 then
+        Builder (code ++ str) currentLine (currentCol + bsSize) mappings
+
+    else
+        Builder (code ++ str) (currentLine + bsLines) 1 mappings
+
+
+addTrackedByteString : IO.Canonical -> A.Position -> String -> Builder -> Builder
+addTrackedByteString moduleName (A.Position line col) str (Builder code currentLine currentCol mappings) =
+    let
+        bsSize =
+            String.length str
+
+        bsLines =
+            String.length (String.filter ((==) '\n') str)
+
+        newMappings =
+            Mapping line col moduleName Nothing currentLine currentCol
+                :: mappings
+    in
+    if bsLines == 0 then
+        Builder (code ++ str) currentLine (currentCol + bsSize) newMappings
+
+    else
+        Builder (code ++ str) (currentLine + bsLines) 1 newMappings
+
+
+addName : IO.Canonical -> A.Position -> Name.Name -> Name.Name -> Builder -> Builder
+addName moduleName (A.Position line col) name genName (Builder code currentLine currentCol mappings) =
+    let
+        size =
+            String.length genName
+    in
+    Builder (code ++ genName)
+        currentLine
+        (currentCol + size)
+        (Mapping line col moduleName (Just name) currentLine currentCol
+            :: mappings
+        )
+
+
+addTrackedDot : IO.Canonical -> A.Position -> Builder -> Builder
+addTrackedDot moduleName (A.Position line col) (Builder code currentLine currentCol mappings) =
+    Builder (code ++ ".")
+        currentLine
+        (currentCol + 1)
+        (Mapping line col moduleName Nothing currentLine currentCol
+            :: mappings
+        )
+
+
+addLine : Builder -> Builder
+addLine (Builder code currentLine _ mappings) =
+    Builder (code ++ "\n") (currentLine + 1) 1 mappings
+
+
+
 -- ENCODE
 
 
-stmtToBuilder : Stmt -> String
-stmtToBuilder stmts =
-    fromStmt levelZero stmts
+stmtToBuilder : Stmt -> Builder -> Builder
+stmtToBuilder stmts builder =
+    fromStmt levelZero stmts builder
 
 
-exprToBuilder : Expr -> String
-exprToBuilder expr =
-    Tuple.second (fromExpr levelZero Whatever expr)
+exprToBuilder : Expr -> Builder -> Builder
+exprToBuilder expr builder =
+    fromExpr levelZero Whatever expr builder
 
 
 
@@ -161,190 +265,257 @@ makeLevel level oldTabs =
 
 
 
--- HELPERS
-
-
-commaSep : List String -> String
-commaSep builders =
-    String.join ", " builders
-
-
-commaNewlineSep : Level -> List String -> String
-commaNewlineSep (Level _ nextLevel) builders =
-    let
-        (Level deeperIndent _) =
-            nextLevel ()
-    in
-    String.join (",\n" ++ deeperIndent) builders
-
-
-
 -- STATEMENTS
 
 
-fromStmtBlock : Level -> List Stmt -> String
-fromStmtBlock level stmts =
-    String.concat (List.map (fromStmt level) stmts)
+fromStmtBlock : Level -> List Stmt -> Builder -> Builder
+fromStmtBlock level stmts builder =
+    List.foldl (fromStmt level) builder stmts
 
 
-fromStmt : Level -> Stmt -> String
-fromStmt ((Level indent nextLevel) as level) statement =
+fromStmt : Level -> Stmt -> Builder -> Builder
+fromStmt ((Level indent nextLevel) as level) statement builder =
     case statement of
         Block stmts ->
-            fromStmtBlock level stmts
+            fromStmtBlock level stmts builder
 
         EmptyStmt ->
-            ""
+            builder
 
         ExprStmt expr ->
-            indent ++ Tuple.second (fromExpr level Whatever expr) ++ ";\n"
+            builder
+                |> addByteString indent
+                |> fromExpr level Whatever expr
+                |> addAscii ";"
+                |> addLine
 
         IfStmt condition thenStmt elseStmt ->
-            indent
-                ++ "if ("
-                ++ Tuple.second (fromExpr level Whatever condition)
-                ++ ") {\n"
-                ++ fromStmt (nextLevel ()) thenStmt
-                ++ indent
-                ++ "} else {\n"
-                ++ fromStmt (nextLevel ()) elseStmt
-                ++ indent
-                ++ "}\n"
+            builder
+                |> addByteString indent
+                |> addAscii "if ("
+                |> fromExpr level Whatever condition
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmt (nextLevel ()) thenStmt
+                |> addByteString indent
+                |> addAscii "} else {"
+                |> addLine
+                |> fromStmt (nextLevel ()) elseStmt
+                |> addByteString indent
+                |> addAscii "}"
+                |> addLine
 
         Switch expr clauses ->
-            indent
-                ++ "switch ("
-                ++ Tuple.second (fromExpr level Whatever expr)
-                ++ ") {\n"
-                ++ String.concat (List.map (fromClause (nextLevel ())) clauses)
-                ++ indent
-                ++ "}\n"
+            builder
+                |> addByteString indent
+                |> addAscii "switch ("
+                |> fromExpr level Whatever expr
+                |> addAscii ") {"
+                |> addLine
+                |> fromClauses (nextLevel ()) clauses
+                |> addByteString indent
+                |> addAscii "}"
+                |> addLine
 
         While expr stmt ->
-            indent
-                ++ "while ("
-                ++ Tuple.second (fromExpr level Whatever expr)
-                ++ ") {\n"
-                ++ fromStmt (nextLevel ()) stmt
-                ++ indent
-                ++ "}\n"
+            builder
+                |> addByteString indent
+                |> addAscii "while ("
+                |> fromExpr level Whatever expr
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmt (nextLevel ()) stmt
+                |> addByteString indent
+                |> addAscii "}"
+                |> addLine
 
         Break Nothing ->
-            indent ++ "break;\n"
+            builder
+                |> addByteString indent
+                |> addAscii "break;"
+                |> addLine
 
         Break (Just label) ->
-            indent ++ "break " ++ label ++ ";\n"
+            builder
+                |> addByteString indent
+                |> addAscii "break "
+                |> addByteString label
+                |> addAscii ";"
+                |> addLine
 
         Continue Nothing ->
-            indent ++ "continue;\n"
+            builder
+                |> addByteString indent
+                |> addAscii "continue;"
+                |> addLine
 
         Continue (Just label) ->
-            indent ++ "continue " ++ label ++ ";\n"
+            builder
+                |> addByteString indent
+                |> addAscii "continue "
+                |> addByteString label
+                |> addAscii ";"
+                |> addLine
 
         Labelled label stmt ->
-            String.concat
-                [ indent
-                , label
-                , ":\n"
-                , fromStmt level stmt
-                ]
+            builder
+                |> addByteString indent
+                |> addByteString label
+                |> addAscii ":"
+                |> addLine
+                |> fromStmt level stmt
 
         Try tryStmt errorName catchStmt ->
-            indent
-                ++ "try {\n"
-                ++ fromStmt (nextLevel ()) tryStmt
-                ++ indent
-                ++ "} catch ("
-                ++ errorName
-                ++ ") {\n"
-                ++ fromStmt (nextLevel ()) catchStmt
-                ++ indent
-                ++ "}\n"
+            builder
+                |> addByteString indent
+                |> addAscii "try {"
+                |> addLine
+                |> fromStmt (nextLevel ()) tryStmt
+                |> addByteString indent
+                |> addAscii "} catch ("
+                |> addByteString errorName
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmt (nextLevel ()) catchStmt
+                |> addByteString indent
+                |> addAscii "}"
+                |> addLine
 
         Throw expr ->
-            indent ++ "throw " ++ Tuple.second (fromExpr level Whatever expr) ++ ";"
+            builder
+                |> addByteString indent
+                |> addAscii "throw "
+                |> fromExpr level Whatever expr
+                |> addAscii ";"
 
         Return expr ->
-            indent ++ "return " ++ Tuple.second (fromExpr level Whatever expr) ++ ";\n"
+            builder
+                |> addByteString indent
+                |> addAscii "return "
+                |> fromExpr level Whatever expr
+                |> addAscii ";"
+                |> addLine
 
         Var name expr ->
-            indent ++ "var " ++ name ++ " = " ++ Tuple.second (fromExpr level Whatever expr) ++ ";\n"
+            builder
+                |> addByteString indent
+                |> addAscii "var "
+                |> addByteString name
+                |> addAscii " = "
+                |> fromExpr level Whatever expr
+                |> addAscii ";"
+                |> addLine
+
+        TrackedVar moduleName pos name genName expr ->
+            builder
+                |> addByteString indent
+                |> addAscii "var "
+                |> addName moduleName pos name genName
+                |> addAscii " = "
+                |> fromExpr level Whatever expr
+                |> addAscii ";"
+                |> addLine
 
         Vars [] ->
-            ""
+            builder
 
         Vars vars ->
-            indent ++ "var " ++ commaNewlineSep level (List.map (varToBuilder level) vars) ++ ";\n"
+            builder
+                |> addByteString indent
+                |> addAscii "var "
+                |> commaNewlineSepExpr level (varToBuilder level) vars
+                |> addAscii ";"
+                |> addLine
 
         FunctionStmt name args stmts ->
-            indent
-                ++ "function "
-                ++ name
-                ++ "("
-                ++ commaSep args
-                ++ ") {\n"
-                ++ fromStmtBlock (nextLevel ()) stmts
-                ++ indent
-                ++ "}\n"
+            builder
+                |> addByteString indent
+                |> addAscii "function "
+                |> addByteString name
+                |> addAscii "("
+                |> commaSepExpr addByteString args
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmtBlock (nextLevel ()) stmts
+                |> addByteString indent
+                |> addAscii "}"
+                |> addLine
 
 
 
 -- SWITCH CLAUSES
 
 
-fromClause : Level -> Case -> String
-fromClause ((Level indent nextLevel) as level) clause =
+fromClause : Level -> Case -> Builder -> Builder
+fromClause ((Level indent nextLevel) as level) clause builder =
     case clause of
         Case expr stmts ->
-            indent
-                ++ "case "
-                ++ Tuple.second (fromExpr level Whatever expr)
-                ++ ":\n"
-                ++ fromStmtBlock (nextLevel ()) stmts
+            builder
+                |> addByteString indent
+                |> addAscii "case "
+                |> fromExpr level Whatever expr
+                |> addAscii ":"
+                |> addLine
+                |> fromStmtBlock (nextLevel ()) stmts
 
         Default stmts ->
-            indent
-                ++ "default:\n"
-                ++ fromStmtBlock (nextLevel ()) stmts
+            builder
+                |> addByteString indent
+                |> addAscii "default:"
+                |> addLine
+                |> fromStmtBlock (nextLevel ()) stmts
+
+
+fromClauses : Level -> List Case -> Builder -> Builder
+fromClauses level clauses builder =
+    case clauses of
+        [] ->
+            builder
+
+        first :: rest ->
+            fromClauses level rest (fromClause level first builder)
 
 
 
 -- VAR DECLS
 
 
-varToBuilder : Level -> ( Name.Name, Expr ) -> String
-varToBuilder level ( name, expr ) =
-    name ++ " = " ++ Tuple.second (fromExpr level Whatever expr)
+varToBuilder : Level -> ( Name.Name, Expr ) -> Builder -> Builder
+varToBuilder level ( name, expr ) builder =
+    builder
+        |> addByteString name
+        |> addAscii " = "
+        |> fromExpr level Whatever expr
 
 
 
 -- EXPRESSIONS
 
 
-type Lines
-    = One
-    | Many
+commaSepExpr : (a -> Builder -> Builder) -> List a -> Builder -> Builder
+commaSepExpr fn exprs builder =
+    case exprs of
+        [] ->
+            builder
+
+        [ first ] ->
+            fn first builder
+
+        first :: rest ->
+            commaSepExpr fn rest (addAscii ", " (fn first builder))
 
 
-merge : Lines -> Lines -> Lines
-merge a b =
-    if a == Many || b == Many then
-        Many
+commaNewlineSepExpr : Level -> (a -> Builder -> Builder) -> List a -> Builder -> Builder
+commaNewlineSepExpr ((Level indent _) as level) fn exprs builder =
+    case exprs of
+        [] ->
+            builder
 
-    else
-        One
+        [ first ] ->
+            fn first builder
 
-
-linesMap : (a -> ( Lines, b )) -> List a -> ( Bool, List b )
-linesMap func xs =
-    let
-        pairs : List ( Lines, b )
-        pairs =
-            List.map func xs
-    in
-    ( List.any ((==) Many << Tuple.first) pairs
-    , List.map Tuple.second pairs
-    )
+        first :: rest ->
+            commaNewlineSepExpr level fn rest (addByteString indent (addLine (addAscii "," (fn first builder))))
 
 
 type Grouping
@@ -352,294 +523,322 @@ type Grouping
     | Whatever
 
 
-parensFor : Grouping -> String -> String
-parensFor grouping builder =
+parensFor : Grouping -> Builder -> (Builder -> Builder) -> Builder
+parensFor grouping builder fillContent =
     case grouping of
         Atomic ->
-            "(" ++ builder ++ ")"
+            builder
+                |> addAscii "("
+                |> fillContent
+                |> addAscii ")"
 
         Whatever ->
-            builder
+            fillContent builder
 
 
-fromExpr : Level -> Grouping -> Expr -> ( Lines, String )
-fromExpr ((Level indent nextLevel) as level) grouping expression =
-    let
-        (Level deeperIndent _) =
-            nextLevel ()
-    in
+fromExpr : Level -> Grouping -> Expr -> Builder -> Builder
+fromExpr ((Level indent nextLevel) as level) grouping expression builder =
     case expression of
         ExprString string ->
-            ( One, "'" ++ string ++ "'" )
+            addByteString ("'" ++ string ++ "'") builder
+
+        ExprTrackedString moduleName position string ->
+            addTrackedByteString moduleName position ("'" ++ string ++ "'") builder
+
+        ExprTrackedFloat moduleName position float ->
+            addTrackedByteString moduleName position float builder
 
         ExprFloat float ->
-            ( One, float )
+            addByteString float builder
 
         ExprInt n ->
-            ( One, String.fromInt n )
+            addByteString (String.fromInt n) builder
+
+        ExprTrackedInt moduleName position n ->
+            addTrackedByteString moduleName position (String.fromInt n) builder
 
         ExprBool bool ->
-            ( One
-            , if bool then
-                "true"
+            addAscii
+                (if bool then
+                    "true"
 
-              else
-                "false"
-            )
+                 else
+                    "false"
+                )
+                builder
+
+        ExprTrackedBool moduleName position bool ->
+            addTrackedByteString moduleName
+                position
+                (if bool then
+                    "true"
+
+                 else
+                    "false"
+                )
+                builder
 
         ExprJson json ->
-            ( One, Json.encodeUgly json )
+            addAscii (Json.encodeUgly json) builder
 
         ExprArray exprs ->
-            let
-                ( anyMany, builders ) =
-                    linesMap (fromExpr level Whatever) exprs
-            in
-            ( Many
-            , if anyMany then
-                "[\n"
-                    ++ deeperIndent
-                    ++ commaNewlineSep level builders
-                    ++ "\n"
-                    ++ indent
-                    ++ "]"
+            builder
+                |> addAscii "[ "
+                |> commaSepExpr (fromExpr level Whatever) exprs
+                |> addAscii " ]"
 
-              else
-                "[" ++ commaSep builders ++ "]"
-            )
+        ExprTrackedArray moduleName (A.Region start (A.Position endLine endCol)) exprs ->
+            builder
+                |> addTrackedByteString moduleName start "[ "
+                |> commaSepExpr (fromExpr level Whatever) exprs
+                |> addAscii " "
+                |> addTrackedByteString moduleName (A.Position endLine (endCol - 1)) "]"
 
         ExprObject fields ->
-            let
-                ( anyMany, builders ) =
-                    linesMap (fromField (nextLevel ())) fields
-            in
-            ( Many
-            , if anyMany then
-                "{\n"
-                    ++ deeperIndent
-                    ++ commaNewlineSep level builders
-                    ++ "\n"
-                    ++ indent
-                    ++ "}"
+            builder
+                |> addAscii "{ "
+                |> commaSepExpr (fromField level) fields
+                |> addAscii " }"
 
-              else
-                "{" ++ commaSep builders ++ "}"
-            )
+        ExprTrackedObject moduleName (A.Region start (A.Position endLine endCol)) fields ->
+            builder
+                |> addTrackedByteString moduleName start "{ "
+                |> commaSepExpr (trackedFromField level moduleName) fields
+                |> addAscii " "
+                |> addTrackedByteString moduleName (A.Position endLine (endCol - 1)) "}"
 
         ExprRef name ->
-            ( One, name )
+            addByteString name builder
+
+        ExprTrackedRef position moduleName name generatedName ->
+            addName position moduleName name generatedName builder
 
         ExprAccess expr field ->
-            makeDot level expr field
+            makeDot level expr field builder
+
+        ExprTrackedAccess expr moduleName ((A.Position fieldLine fieldCol) as position) field ->
+            builder
+                |> fromExpr level Atomic expr
+                |> addTrackedDot moduleName (A.Position fieldLine (fieldCol - 1))
+                |> addName moduleName position field field
 
         ExprIndex expr bracketedExpr ->
-            makeBracketed level expr bracketedExpr
+            makeBracketed level expr bracketedExpr builder
 
         ExprPrefix op expr ->
-            let
-                ( lines, builder ) =
-                    fromExpr level Atomic expr
-            in
-            ( lines
-            , parensFor grouping (fromPrefix op ++ builder)
-            )
+            parensFor grouping builder <|
+                (fromPrefix op
+                    >> fromExpr level Atomic expr
+                )
 
         ExprInfix op leftExpr rightExpr ->
-            let
-                ( leftLines, left ) =
-                    fromExpr level Atomic leftExpr
-
-                ( rightLines, right ) =
-                    fromExpr level Atomic rightExpr
-            in
-            ( merge leftLines rightLines
-            , parensFor grouping (left ++ fromInfix op ++ right)
-            )
+            parensFor grouping builder <|
+                (fromExpr level Atomic leftExpr
+                    >> fromInfix op
+                    >> fromExpr level Atomic rightExpr
+                )
 
         ExprIf condExpr thenExpr elseExpr ->
-            let
-                condB : String
-                condB =
-                    Tuple.second (fromExpr level Atomic condExpr)
-
-                thenB : String
-                thenB =
-                    Tuple.second (fromExpr level Atomic thenExpr)
-
-                elseB : String
-                elseB =
-                    Tuple.second (fromExpr level Atomic elseExpr)
-            in
-            ( Many
-            , parensFor grouping (condB ++ " ? " ++ thenB ++ " : " ++ elseB)
-            )
+            parensFor grouping builder <|
+                (fromExpr level Atomic condExpr
+                    >> addAscii " ? "
+                    >> fromExpr level Atomic thenExpr
+                    >> addAscii " : "
+                    >> fromExpr level Atomic elseExpr
+                )
 
         ExprAssign lValue expr ->
-            let
-                ( leftLines, left ) =
-                    fromLValue level lValue
-
-                ( rightLines, right ) =
-                    fromExpr level Whatever expr
-            in
-            ( merge leftLines rightLines
-            , parensFor grouping (left ++ " = " ++ right)
-            )
+            parensFor grouping builder <|
+                (fromLValue level lValue
+                    >> addAscii " = "
+                    >> fromExpr level Whatever expr
+                )
 
         ExprCall function args ->
+            builder
+                |> fromExpr level Atomic function
+                |> addAscii "("
+                |> commaSepExpr (fromExpr (nextLevel ()) Whatever) args
+                |> addAscii ")"
+
+        ExprTrackedNormalCall position moduleName helper function args ->
             let
-                ( _, funcB ) =
-                    fromExpr level Atomic function
+                trackedHelper =
+                    case ( trackedNameFromExpr function, helper ) of
+                        ( Just functionName, ExprRef helperName ) ->
+                            ExprTrackedRef position moduleName functionName helperName
 
-                ( anyMany, argsB ) =
-                    linesMap (fromExpr (nextLevel ()) Whatever) args
+                        _ ->
+                            helper
             in
-            ( Many
-            , if anyMany then
-                funcB ++ "(\n" ++ deeperIndent ++ commaNewlineSep level argsB ++ ")"
-
-              else
-                funcB ++ "(" ++ commaSep argsB ++ ")"
-            )
+            builder
+                |> fromExpr level Atomic trackedHelper
+                |> addAscii "("
+                |> commaSepExpr (fromExpr (nextLevel ()) Whatever) (function :: args)
+                |> addAscii ")"
 
         ExprFunction maybeName args stmts ->
-            ( Many
-            , "function "
-                ++ Maybe.unwrap "" identity maybeName
-                ++ "("
-                ++ commaSep args
-                ++ ") {\n"
-                ++ fromStmtBlock (nextLevel ()) stmts
-                ++ indent
-                ++ "}"
-            )
+            builder
+                |> addAscii "function "
+                |> addByteString (Maybe.unwrap "" identity maybeName)
+                |> addAscii "("
+                |> commaSepExpr addByteString args
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmtBlock (nextLevel ()) stmts
+                |> addByteString indent
+                |> addAscii "}"
+
+        ExprTrackedFunction moduleName args stmts ->
+            builder
+                |> addAscii "function"
+                |> addAscii "("
+                |> commaSepExpr (\(A.At (A.Region start _) name) -> addName moduleName start name name) args
+                |> addAscii ") {"
+                |> addLine
+                |> fromStmtBlock (nextLevel ()) stmts
+                |> addByteString indent
+                |> addAscii "}"
+
+
+trackedNameFromExpr : Expr -> Maybe Name.Name
+trackedNameFromExpr expr =
+    case expr of
+        ExprTrackedRef _ _ name _ ->
+            Just name
+
+        _ ->
+            Nothing
 
 
 
 -- FIELDS
 
 
-fromField : Level -> ( Name.Name, Expr ) -> ( Lines, String )
-fromField level ( field, expr ) =
-    let
-        ( lines, builder ) =
-            fromExpr level Whatever expr
-    in
-    ( lines
-    , field ++ ": " ++ builder
-    )
+fromField : Level -> ( Name.Name, Expr ) -> Builder -> Builder
+fromField level ( field, expr ) builder =
+    builder
+        |> addByteString field
+        |> addAscii ": "
+        |> fromExpr level Whatever expr
+
+
+trackedFromField : Level -> IO.Canonical -> ( A.Located Name.Name, Expr ) -> Builder -> Builder
+trackedFromField level moduleName ( A.At (A.Region start end) field, expr ) builder =
+    builder
+        |> addName moduleName start field field
+        |> addTrackedByteString moduleName end ": "
+        |> fromExpr level Whatever expr
 
 
 
 -- VALUES
 
 
-fromLValue : Level -> LValue -> ( Lines, String )
-fromLValue level lValue =
+fromLValue : Level -> LValue -> Builder -> Builder
+fromLValue level lValue builder =
     case lValue of
         LRef name ->
-            ( One, name )
+            addByteString name builder
 
         LBracket expr bracketedExpr ->
-            makeBracketed level expr bracketedExpr
+            makeBracketed level expr bracketedExpr builder
 
 
-makeDot : Level -> Expr -> Name.Name -> ( Lines, String )
-makeDot level expr field =
-    let
-        ( lines, builder ) =
-            fromExpr level Atomic expr
-    in
-    ( lines, builder ++ "." ++ field )
+makeDot : Level -> Expr -> Name.Name -> Builder -> Builder
+makeDot level expr field builder =
+    builder
+        |> fromExpr level Atomic expr
+        |> addAscii "."
+        |> addByteString field
 
 
-makeBracketed : Level -> Expr -> Expr -> ( Lines, String )
-makeBracketed level expr bracketedExpr =
-    let
-        ( lines, builder ) =
-            fromExpr level Atomic expr
-
-        ( bracketedLines, bracketedBuilder ) =
-            fromExpr level Whatever bracketedExpr
-    in
-    ( merge lines bracketedLines
-    , builder ++ "[" ++ bracketedBuilder ++ "]"
-    )
+makeBracketed : Level -> Expr -> Expr -> Builder -> Builder
+makeBracketed level expr bracketedExpr builder =
+    builder
+        |> fromExpr level Atomic expr
+        |> addAscii "["
+        |> fromExpr level Whatever bracketedExpr
+        |> addAscii "]"
 
 
 
 -- OPERATORS
 
 
-fromPrefix : PrefixOp -> String
+fromPrefix : PrefixOp -> Builder -> Builder
 fromPrefix op =
-    case op of
-        PrefixNot ->
-            "!"
+    addAscii
+        (case op of
+            PrefixNot ->
+                "!"
 
-        PrefixNegate ->
-            "-"
+            PrefixNegate ->
+                "-"
 
-        PrefixComplement ->
-            "~"
+            PrefixComplement ->
+                "~"
+        )
 
 
-fromInfix : InfixOp -> String
+fromInfix : InfixOp -> Builder -> Builder
 fromInfix op =
-    case op of
-        OpAdd ->
-            " + "
+    addAscii
+        (case op of
+            OpAdd ->
+                " + "
 
-        OpSub ->
-            " - "
+            OpSub ->
+                " - "
 
-        OpMul ->
-            " * "
+            OpMul ->
+                " * "
 
-        OpDiv ->
-            " / "
+            OpDiv ->
+                " / "
 
-        OpMod ->
-            " % "
+            OpMod ->
+                " % "
 
-        OpEq ->
-            " === "
+            OpEq ->
+                " === "
 
-        OpNe ->
-            " !== "
+            OpNe ->
+                " !== "
 
-        OpLt ->
-            " < "
+            OpLt ->
+                " < "
 
-        OpLe ->
-            " <= "
+            OpLe ->
+                " <= "
 
-        OpGt ->
-            " > "
+            OpGt ->
+                " > "
 
-        OpGe ->
-            " >= "
+            OpGe ->
+                " >= "
 
-        OpAnd ->
-            " && "
+            OpAnd ->
+                " && "
 
-        OpOr ->
-            " || "
+            OpOr ->
+                " || "
 
-        OpBitwiseAnd ->
-            " & "
+            OpBitwiseAnd ->
+                " & "
 
-        OpBitwiseXor ->
-            " ^ "
+            OpBitwiseXor ->
+                " ^ "
 
-        OpBitwiseOr ->
-            " | "
+            OpBitwiseOr ->
+                " | "
 
-        OpLShift ->
-            " << "
+            OpLShift ->
+                " << "
 
-        OpSpRShift ->
-            " >> "
+            OpSpRShift ->
+                " >> "
 
-        OpZfRShift ->
-            " >>> "
+            OpZfRShift ->
+                " >>> "
+        )

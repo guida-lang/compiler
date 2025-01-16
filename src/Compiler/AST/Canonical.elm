@@ -109,8 +109,8 @@ type Expr_
     | Case Expr (List CaseBranch)
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Name Expr (Dict String Name FieldUpdate)
-    | Record (Dict String Name Expr)
+    | Update Name Expr (Dict String (A.Located Name) FieldUpdate)
+    | Record (Dict String (A.Located Name) Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
     | Shader Shader.Source Shader.Types
@@ -784,13 +784,13 @@ expr_Encoder expr_ =
                 [ ( "type", Encode.string "Update" )
                 , ( "name", Encode.string name )
                 , ( "record", exprEncoder record )
-                , ( "updates", E.assocListDict compare Encode.string fieldUpdateEncoder updates )
+                , ( "updates", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.toValue >> Encode.string) fieldUpdateEncoder updates )
                 ]
 
         Record fields ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
-                , ( "fields", E.assocListDict compare Encode.string exprEncoder fields )
+                , ( "fields", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.toValue >> Encode.string) exprEncoder fields )
                 ]
 
         Unit ->
@@ -935,11 +935,11 @@ expr_Decoder =
                         Decode.map3 Update
                             (Decode.field "name" Decode.string)
                             (Decode.field "record" exprDecoder)
-                            (Decode.field "updates" (D.assocListDict identity Decode.string fieldUpdateDecoder))
+                            (Decode.field "updates" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) fieldUpdateDecoder))
 
                     "Record" ->
                         Decode.map Record
-                            (Decode.field "fields" (D.assocListDict identity Decode.string exprDecoder))
+                            (Decode.field "fields" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
 
                     "Unit" ->
                         Decode.succeed Unit

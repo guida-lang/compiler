@@ -558,9 +558,9 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 -- CONSTRAIN RECORD
 
 
-constrainRecord : RTV -> A.Region -> Dict String Name.Name Can.Expr -> Expected Type -> IO Constraint
+constrainRecord : RTV -> A.Region -> Dict String (A.Located Name.Name) Can.Expr -> Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
-    IO.traverseMap identity compare (constrainField rtv) fields
+    IO.traverseMap A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (constrainField rtv) fields
         |> IO.fmap
             (\dict ->
                 let
@@ -570,7 +570,7 @@ constrainRecord rtv region fields expected =
 
                     recordType : Type
                     recordType =
-                        RecordN (Dict.map getType dict) EmptyRecordN
+                        RecordN (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue (Dict.map getType dict)) EmptyRecordN
 
                     recordCon : Constraint
                     recordCon =
@@ -578,11 +578,11 @@ constrainRecord rtv region fields expected =
 
                     vars : List IO.Variable
                     vars =
-                        Dict.foldr compare (\_ ( v, _, _ ) vs -> v :: vs) [] dict
+                        Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
                     cons : List Constraint
                     cons =
-                        Dict.foldr compare (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
+                        Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
                 in
                 Type.exists vars (CAnd cons)
             )
@@ -610,11 +610,15 @@ constrainField rtv expr =
 -- CONSTRAIN RECORD UPDATE
 
 
-constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict String Name.Name Can.FieldUpdate -> Expected Type -> IO Constraint
-constrainUpdate rtv region name expr fields expected =
+constrainUpdate : RTV -> A.Region -> Name.Name -> Can.Expr -> Dict String (A.Located Name.Name) Can.FieldUpdate -> Expected Type -> IO Constraint
+constrainUpdate rtv region name expr locatedFields expected =
     Type.mkFlexVar
         |> IO.bind
             (\extVar ->
+                let
+                    fields =
+                        Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue locatedFields
+                in
                 IO.traverseMapWithKey identity compare (constrainUpdateField rtv region) fields
                     |> IO.bind
                         (\fieldDict ->

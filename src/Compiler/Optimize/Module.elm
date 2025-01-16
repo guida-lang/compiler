@@ -1,4 +1,8 @@
-module Compiler.Optimize.Module exposing (Annotations, MResult, optimize)
+module Compiler.Optimize.Module exposing
+    ( Annotations
+    , MResult
+    , optimize
+    )
 
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
@@ -36,7 +40,7 @@ optimize annotations (Can.Module home _ _ decls unions aliases _ effects) =
     addDecls home annotations decls <|
         addEffects home effects <|
             addUnions home unions <|
-                addAliases home aliases <|
+                addAliases home A.zero aliases <|
                     Opt.LocalGraph Nothing Dict.empty Dict.empty
 
 
@@ -80,25 +84,25 @@ addCtorNode home opts (Can.Ctor name index numArgs _) nodes =
 -- ALIAS
 
 
-addAliases : IO.Canonical -> Dict String Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
-addAliases home aliases graph =
-    Dict.foldr compare (addAlias home) graph aliases
+addAliases : IO.Canonical -> A.Region -> Dict String Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAliases home region aliases graph =
+    Dict.foldr compare (addAlias home region) graph aliases
 
 
-addAlias : IO.Canonical -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
-addAlias home name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
+addAlias : IO.Canonical -> A.Region -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAlias home region name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
     case tipe of
         Can.TRecord fields Nothing ->
             let
                 function : Opt.Expr
                 function =
-                    Opt.Function (List.map Tuple.first (Can.fieldsToList fields)) <|
-                        Opt.Record <|
-                            Dict.map (\field _ -> Opt.VarLocal field) fields
+                    Opt.Function (List.map (Tuple.first >> A.At A.zero) (Can.fieldsToList fields)) <|
+                        Opt.Record region <|
+                            Dict.map (\field _ -> Opt.VarLocal A.zero (A.toValue field)) (Utils.mapMapKeys A.toValue compare (A.At A.zero) fields)
 
                 node : Opt.Node
                 node =
-                    Opt.Define function EverySet.empty
+                    Opt.Define region function EverySet.empty
             in
             Opt.LocalGraph
                 main
@@ -285,7 +289,7 @@ addDef home annotations def graph =
 addDefHelp : A.Region -> Annotations -> IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
 addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
-        R.ok (addDefNode home name args body EverySet.empty graph)
+        R.ok (addDefNode home region name args body EverySet.empty graph)
 
     else
         let
@@ -294,7 +298,7 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
 
             addMain : ( EverySet (List String) Opt.Global, Dict String Name.Name Int, Opt.Main ) -> Opt.LocalGraph
             addMain ( deps, fields, main ) =
-                addDefNode home name args body deps <|
+                addDefNode home region name args body deps <|
                     Opt.LocalGraph (Just main) nodes (Utils.mapUnionWith identity compare (+) fields fieldCounts)
         in
         case Type.deepDealias tipe of
@@ -321,8 +325,8 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
                 R.throw (E.BadType region tipe)
 
 
-addDefNode : IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
-addDefNode home name args body mainDeps graph =
+addDefNode : IO.Canonical -> A.Region -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
+addDefNode home region name args body mainDeps graph =
     let
         ( deps, fields, def ) =
             Names.run <|
@@ -342,7 +346,7 @@ addDefNode home name args body mainDeps graph =
                                             )
                                 )
     in
-    addToGraph (Opt.Global home name) (Opt.Define def (EverySet.union deps mainDeps)) fields graph
+    addToGraph (Opt.Global home name) (Opt.Define region def (EverySet.union deps mainDeps)) fields graph
 
 
 
@@ -432,15 +436,15 @@ addLink home link def links =
 addRecDef : EverySet String Name.Name -> State -> Can.Def -> Names.Tracker State
 addRecDef cycle state def =
     case def of
-        Can.Def (A.At _ name) args body ->
-            addRecDefHelp cycle state name args body
+        Can.Def (A.At region name) args body ->
+            addRecDefHelp cycle region state name args body
 
-        Can.TypedDef (A.At _ name) _ args body _ ->
-            addRecDefHelp cycle state name (List.map Tuple.first args) body
+        Can.TypedDef (A.At region name) _ args body _ ->
+            addRecDefHelp cycle region state name (List.map Tuple.first args) body
 
 
-addRecDefHelp : EverySet String Name.Name -> State -> Name.Name -> List Can.Pattern -> Can.Expr -> Names.Tracker State
-addRecDefHelp cycle (State { values, functions }) name args body =
+addRecDefHelp : EverySet String Name.Name -> A.Region -> State -> Name.Name -> List Can.Pattern -> Can.Expr -> Names.Tracker State
+addRecDefHelp cycle region (State { values, functions }) name args body =
     case args of
         [] ->
             Expr.optimize cycle body
@@ -453,7 +457,7 @@ addRecDefHelp cycle (State { values, functions }) name args body =
                     )
 
         _ :: _ ->
-            Expr.optimizePotentialTailCall cycle name args body
+            Expr.optimizePotentialTailCall cycle region name args body
                 |> Names.fmap
                     (\odef ->
                         State

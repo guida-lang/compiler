@@ -7,6 +7,7 @@
     "dependencies": {
         "direct": {
             "GlobalWebIndex/cmd-extra": "1.4.0",
+            "Janiczek/elm-vlq": "1.0.0",
             "dasch/levenshtein": "1.0.3",
             "elm/core": "1.0.5",
             "elm/json": "1.1.3",
@@ -23,7 +24,8 @@
             "obiloud/numeric-decimal": "3.0.1",
             "rtfeldman/elm-hex": "1.0.0",
             "stil4m/elm-syntax": "7.3.8",
-            "the-sett/elm-pretty-printer": "3.1.0"
+            "the-sett/elm-pretty-printer": "3.1.0",
+            "truqu/elm-base64": "2.0.4"
         },
         "indirect": {
             "andre-dietrich/parser-combinators": "4.1.0",
