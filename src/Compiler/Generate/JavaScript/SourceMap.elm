@@ -20,10 +20,6 @@ generate leadingLines moduleSources mappings =
 
 generateHelp : Int -> Dict (List String) IO.Canonical String -> List JS.Mapping -> String
 generateHelp leadingLines moduleSources mappings =
-    let
-        _ =
-            Debug.log "generateHelp" ( leadingLines, Dict.size moduleSources, List.length mappings )
-    in
     mappings
         |> List.map
             (\(JS.Mapping srcLine srcCol srcModule srcName genLine genCol) ->
@@ -31,7 +27,7 @@ generateHelp leadingLines moduleSources mappings =
             )
         |> parseMappings
         |> mappingsToJson moduleSources
-        |> Encode.encode 0
+        |> Encode.encode 4
         |> Base64.encode
 
 
@@ -227,6 +223,6 @@ mappingsToJson moduleSources (Mappings sources names _ vlqs) =
                 )
                 moduleNames
           )
-        , ( "names", Encode.list (\jsName -> Encode.string ("\"" ++ jsName ++ "\"")) (orderedListBuilderToList compare names) )
-        , ( "mappings", Encode.string ("\"" ++ vlqs ++ "\"") )
+        , ( "names", Encode.list (\jsName -> Encode.string jsName) (orderedListBuilderToList compare names) )
+        , ( "mappings", Encode.string vlqs )
         ]
