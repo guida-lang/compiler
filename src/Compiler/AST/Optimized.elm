@@ -72,7 +72,7 @@ type Expr
     | Update A.Region Expr (Dict String (A.Located Name) Expr)
     | Record A.Region (Dict String (A.Located Name) Expr)
     | Unit
-    | Tuple Expr Expr (Maybe Expr)
+    | Tuple A.Region Expr Expr (Maybe Expr)
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
@@ -666,9 +666,10 @@ exprEncoder expr =
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        Tuple region a b maybeC ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
+                , ( "region", A.regionEncoder region )
                 , ( "a", exprEncoder a )
                 , ( "b", exprEncoder b )
                 , ( "maybeC", E.maybe exprEncoder maybeC )
@@ -823,7 +824,8 @@ exprDecoder =
                         Decode.succeed Unit
 
                     "Tuple" ->
-                        Decode.map3 Tuple
+                        Decode.map4 Tuple
+                            (Decode.field "region" A.regionDecoder)
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
                             (Decode.field "maybeC" (Decode.maybe exprDecoder))

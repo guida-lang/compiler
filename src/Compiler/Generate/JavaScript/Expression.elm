@@ -113,6 +113,7 @@ generate mode parentModule expression =
 
         Opt.Function args body ->
             let
+                argNames : List (A.Located JsName.Name)
                 argNames =
                     List.map (\(A.At region name) -> A.At region (JsName.fromLocal name)) args
             in
@@ -170,7 +171,7 @@ generate mode parentModule expression =
                 Mode.Prod _ ->
                     JsExpr <| JS.ExprInt 0
 
-        Opt.Tuple a b maybeC ->
+        Opt.Tuple region a b maybeC ->
             JsExpr <|
                 case maybeC of
                     Nothing ->
@@ -411,6 +412,7 @@ generateTrackedFunction parentModule args body =
 
                 _ ->
                     let
+                        addArg : JsName.Name -> Code -> Code
                         addArg arg code =
                             JsExpr <|
                                 JS.ExprFunction Nothing [ arg ] <|
@@ -468,6 +470,7 @@ generateGlobalCall : IO.Canonical -> A.Position -> IO.Canonical -> Name.Name -> 
 generateGlobalCall parentModule ((A.Position line col) as pos) home name args =
     -- generateNormalCall (JS.ExprRef (JsName.fromGlobal home name)) args
     let
+        ref : JS.Expr
         ref =
             if line == 0 && col == 0 then
                 JS.ExprRef (JsName.fromGlobal home name)
@@ -721,13 +724,25 @@ isLiteral expr =
         JS.ExprString _ ->
             True
 
+        JS.ExprTrackedString _ _ _ ->
+            True
+
         JS.ExprFloat _ ->
+            True
+
+        JS.ExprTrackedFloat _ _ _ ->
             True
 
         JS.ExprInt _ ->
             True
 
+        JS.ExprTrackedInt _ _ _ ->
+            True
+
         JS.ExprBool _ ->
+            True
+
+        JS.ExprTrackedBool _ _ _ ->
             True
 
         _ ->
@@ -825,8 +840,8 @@ exprRegion expr =
         Opt.Unit ->
             Nothing
 
-        Opt.Tuple _ _ _ ->
-            Nothing
+        Opt.Tuple region _ _ _ ->
+            Just region
 
         Opt.Shader _ _ _ ->
             Nothing
@@ -871,6 +886,9 @@ isStringLiteral expr =
         JS.ExprString _ ->
             True
 
+        JS.ExprTrackedString _ _ _ ->
+            True
+
         _ ->
             False
 
@@ -885,7 +903,17 @@ strictEq left right =
         JS.ExprInt 0 ->
             JS.ExprPrefix JS.PrefixNot right
 
+        JS.ExprTrackedInt _ _ 0 ->
+            JS.ExprPrefix JS.PrefixNot right
+
         JS.ExprBool bool ->
+            if bool then
+                right
+
+            else
+                JS.ExprPrefix JS.PrefixNot right
+
+        JS.ExprTrackedBool _ _ bool ->
             if bool then
                 right
 
@@ -897,7 +925,17 @@ strictEq left right =
                 JS.ExprInt 0 ->
                     JS.ExprPrefix JS.PrefixNot left
 
+                JS.ExprTrackedInt _ _ 0 ->
+                    JS.ExprPrefix JS.PrefixNot left
+
                 JS.ExprBool bool ->
+                    if bool then
+                        left
+
+                    else
+                        JS.ExprPrefix JS.PrefixNot left
+
+                JS.ExprTrackedBool _ _ bool ->
                     if bool then
                         left
 

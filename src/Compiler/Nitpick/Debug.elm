@@ -130,7 +130,7 @@ hasDebug expression =
         Opt.Unit ->
             False
 
-        Opt.Tuple a b c ->
+        Opt.Tuple _ a b c ->
             hasDebug a || hasDebug b || Maybe.withDefault False (Maybe.map hasDebug c)
 
         Opt.Shader _ _ _ ->

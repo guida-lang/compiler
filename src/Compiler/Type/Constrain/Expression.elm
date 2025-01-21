@@ -616,6 +616,7 @@ constrainUpdate rtv region name expr locatedFields expected =
         |> IO.bind
             (\extVar ->
                 let
+                    fields : Dict String Name.Name Can.FieldUpdate
                     fields =
                         Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue locatedFields
                 in

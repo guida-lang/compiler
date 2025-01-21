@@ -292,9 +292,11 @@ getAllModulePaths root =
                         case outline of
                             App (AppOutline _ srcDirs depsDirect indirect _ _) ->
                                 let
+                                    deps : Dict ( String, String ) Pkg.Name V.Version
                                     deps =
                                         Dict.union depsDirect indirect
 
+                                    absoluteSrcDirs : List FilePath
                                     absoluteSrcDirs =
                                         List.map (toAbsolute root) (NE.toList srcDirs)
                                 in
@@ -302,6 +304,7 @@ getAllModulePaths root =
 
                             Pkg (PkgOutline name _ _ _ _ pkgDeps _ _) ->
                                 let
+                                    deps : Dict ( String, String ) Pkg.Name V.Version
                                     deps =
                                         Dict.map (\_ -> Con.lowerBound) pkgDeps
                                 in
@@ -352,7 +355,7 @@ recursiveFindFilesHelp root =
                 Utils.filterM (\fp -> Utils.dirDoesDirectoryExist (root ++ "/" ++ fp)) others
                     |> IO.bind
                         (\subDirectories ->
-                            Utils.listTraverse (recursiveFindFilesHelp << (++) (root ++ "/")) subDirectories
+                            Utils.listTraverse (\subDirectory -> recursiveFindFilesHelp (root ++ "/" ++ subDirectory)) subDirectories
                                 |> IO.fmap
                                     (\filesFromSubDirs ->
                                         List.concat filesFromSubDirs ++ List.map (\fp -> root ++ "/" ++ fp) (elmFiles ++ guidaFiles)

@@ -249,11 +249,11 @@ optimize cycle (A.At region expression) =
                                                 |> Names.bind
                                                     (\optC ->
                                                         Names.registerKernel Name.utils
-                                                            (Opt.Tuple optA optB (Just optC))
+                                                            (Opt.Tuple region optA optB (Just optC))
                                                     )
 
                                         Nothing ->
-                                            Names.registerKernel Name.utils (Opt.Tuple optA optB Nothing)
+                                            Names.registerKernel Name.utils (Opt.Tuple region optA optB Nothing)
                                 )
                     )
 

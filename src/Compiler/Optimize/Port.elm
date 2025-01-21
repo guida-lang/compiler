@@ -91,7 +91,7 @@ toEncoder tipe =
                                     value =
                                         Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal A.zero Name.dollar) A.zero name ]
                                 in
-                                Opt.Tuple (Opt.Str A.zero (Name.toElmString name)) value Nothing
+                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value Nothing
                             )
             in
             encode "object"
@@ -382,7 +382,7 @@ decodeTuple a b maybeC =
                     let
                         tuple : Opt.Expr
                         tuple =
-                            Opt.Tuple (toLocal 0) (toLocal 1) Nothing
+                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) Nothing
                     in
                     indexAndThen 1 b (Opt.Call A.zero succeed [ tuple ])
                         |> Names.bind (indexAndThen 0 a)
@@ -391,7 +391,7 @@ decodeTuple a b maybeC =
                     let
                         tuple : Opt.Expr
                         tuple =
-                            Opt.Tuple (toLocal 0) (toLocal 1) (Just (toLocal 2))
+                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) (Just (toLocal 2))
                     in
                     indexAndThen 2 c (Opt.Call A.zero succeed [ tuple ])
                         |> Names.bind (indexAndThen 1 b)

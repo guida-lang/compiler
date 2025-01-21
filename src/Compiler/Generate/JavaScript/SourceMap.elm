@@ -1,4 +1,4 @@
-module Compiler.Generate.JavaScript.SourceMap exposing (..)
+module Compiler.Generate.JavaScript.SourceMap exposing (generate)
 
 import Base64
 import Compiler.Elm.ModuleName as ModuleName
@@ -73,17 +73,21 @@ parseMappingsHelp currentLine lastLine mappingMap acc =
     else
         case Dict.get identity currentLine mappingMap of
             Nothing ->
-                parseMappingsHelp (currentLine + 1) lastLine mappingMap <|
-                    prepareForNewLine acc
+                parseMappingsHelp (currentLine + 1)
+                    lastLine
+                    mappingMap
+                    (prepareForNewLine acc)
 
             Just segments ->
                 let
+                    sortedSegments : List JS.Mapping
                     sortedSegments =
                         List.sortBy (\(JS.Mapping _ _ _ _ _ genCol) -> -genCol) segments
                 in
-                parseMappingsHelp (currentLine + 1) lastLine mappingMap <|
-                    prepareForNewLine <|
-                        List.foldr encodeSegment acc sortedSegments
+                parseMappingsHelp (currentLine + 1)
+                    lastLine
+                    mappingMap
+                    (prepareForNewLine (List.foldr encodeSegment acc sortedSegments))
 
 
 prepareForNewLine : Mappings -> Mappings
@@ -98,36 +102,46 @@ prepareForNewLine (Mappings srcs nms (SegmentAccounting _ saPrevSourceIdx saPrev
 encodeSegment : JS.Mapping -> Mappings -> Mappings
 encodeSegment (JS.Mapping segmentSrcLine segmentSrcCol segmentSrcModule segmentSrcName _ segmentGenCol) (Mappings srcs nms (SegmentAccounting saPrevCol saPrevSourceIdx saPrevSourceLine saPrevSourceCol saPrevNameIdx) vlqs) =
     let
+        newSources : OrderedListBuilder (List String) IO.Canonical
         newSources =
             insertIntoOrderedListBuilder ModuleName.toComparableCanonical segmentSrcModule srcs
 
+        genCol : Int
         genCol =
             segmentGenCol - 1
 
+        moduleIdx : Int
         moduleIdx =
             Maybe.withDefault 0 (lookupIndexOrderedListBuilder ModuleName.toComparableCanonical segmentSrcModule newSources)
 
+        sourceLine : Int
         sourceLine =
             segmentSrcLine - 1
 
+        sourceCol : Int
         sourceCol =
             segmentSrcCol - 1
 
+        genColDelta : Int
         genColDelta =
             genCol - Maybe.withDefault 0 saPrevCol
 
+        moduleIdxDelta : Int
         moduleIdxDelta =
             moduleIdx - Maybe.withDefault 0 saPrevSourceIdx
 
+        sourceLineDelta : Int
         sourceLineDelta =
             sourceLine - Maybe.withDefault 0 saPrevSourceLine
 
+        sourceColDelta : Int
         sourceColDelta =
             sourceCol - Maybe.withDefault 0 saPrevSourceCol
 
         ((SegmentAccounting updatedSaPrevCol updatedSaPrevSourceIdx updatedSaPrevSourceLine updatedSaPrevSourceCol _) as updatedSa) =
             SegmentAccounting (Just genCol) (Just moduleIdx) (Just sourceLine) (Just sourceCol) saPrevNameIdx
 
+        vlqPrefix : String
         vlqPrefix =
             case saPrevCol of
                 Nothing ->
@@ -139,12 +153,15 @@ encodeSegment (JS.Mapping segmentSrcLine segmentSrcCol segmentSrcModule segmentS
     case segmentSrcName of
         Just segmentName ->
             let
+                newNames : OrderedListBuilder JSName.Name JSName.Name
                 newNames =
                     insertIntoOrderedListBuilder identity segmentName nms
 
+                nameIdx : Int
                 nameIdx =
                     Maybe.withDefault 0 (lookupIndexOrderedListBuilder identity segmentName newNames)
 
+                nameIdxDelta : Int
                 nameIdxDelta =
                     nameIdx - Maybe.withDefault 0 saPrevNameIdx
             in

@@ -99,12 +99,12 @@ perfNote mode =
         Mode.Dev Nothing ->
             "console.warn('Compiled in DEV mode. Follow the advice at "
                 ++ D.makeNakedLink "optimize"
-                ++ " for better performance and smaller assets.');"
+                ++ " for better performance and smaller assets.');\n"
 
         Mode.Dev (Just _) ->
             "console.warn('Compiled in DEBUG mode. Follow the advice at "
                 ++ D.makeNakedLink "optimize"
-                ++ " for better performance and smaller assets.');"
+                ++ " for better performance and smaller assets.');\n"
 
 
 generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Name.Name -> Can.Annotation -> String
@@ -227,32 +227,37 @@ postMessage localizer home maybeName tipe =
 
 
 type State
-    = State JS.Builder (EverySet (List String) Opt.Global)
+    = State (List String) JS.Builder (EverySet (List String) Opt.Global)
 
 
 emptyState : Int -> State
 emptyState startingLine =
-    State (JS.emptyBuilder startingLine) EverySet.empty
+    State [] (JS.emptyBuilder startingLine) EverySet.empty
 
 
 stateToBuilder : State -> String
-stateToBuilder (State (JS.Builder code _ _ _) _) =
-    code
+stateToBuilder (State revKernels (JS.Builder code _ _ _) _) =
+    prependBuilders revKernels code
+
+
+prependBuilders : List String -> String -> String
+prependBuilders revBuilders monolith =
+    List.foldl (\b m -> b ++ m) monolith revBuilders
 
 
 stateToMappings : State -> List JS.Mapping
-stateToMappings (State (JS.Builder _ _ _ mappings) _) =
+stateToMappings (State _ (JS.Builder _ _ _ mappings) _) =
     mappings
 
 
 addGlobal : Mode.Mode -> Graph -> State -> Opt.Global -> State
-addGlobal mode graph ((State builder seen) as state) global =
+addGlobal mode graph ((State revKernels builder seen) as state) global =
     if EverySet.member Opt.toComparableGlobal global seen then
         state
 
     else
         addGlobalHelp mode graph global <|
-            State builder (EverySet.insert Opt.toComparableGlobal global seen)
+            State revKernels builder (EverySet.insert Opt.toComparableGlobal global seen)
 
 
 addGlobalHelp : Mode.Mode -> Graph -> Opt.Global -> State -> State
@@ -321,13 +326,13 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
 
 
 addStmt : State -> JS.Stmt -> State
-addStmt (State builder seen) stmt =
-    State (JS.stmtToBuilder stmt builder) seen
+addStmt (State revKernels builder seen) stmt =
+    State revKernels (JS.stmtToBuilder stmt builder) seen
 
 
 addKernel : State -> String -> State
-addKernel (State builder seen) kernel =
-    State (JS.addByteString kernel builder) seen
+addKernel (State revKernels builder seen) kernel =
+    State (kernel :: revKernels) builder seen
 
 
 var : Opt.Global -> Expr.Code -> JS.Stmt
