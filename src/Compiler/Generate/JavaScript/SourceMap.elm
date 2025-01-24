@@ -11,19 +11,19 @@ import Utils.Main as Utils
 import VLQ
 
 
-generate : Int -> Dict (List String) IO.Canonical String -> List JS.Mapping -> String
-generate leadingLines moduleSources mappings =
+generate : Int -> Int -> Dict (List String) IO.Canonical String -> List JS.Mapping -> String
+generate leadingLines kernelLeadingLines moduleSources mappings =
     "\n"
         ++ "//# sourceMappingURL=data:application/json;base64,"
-        ++ generateHelp leadingLines moduleSources mappings
+        ++ generateHelp leadingLines kernelLeadingLines moduleSources mappings
 
 
-generateHelp : Int -> Dict (List String) IO.Canonical String -> List JS.Mapping -> String
-generateHelp leadingLines moduleSources mappings =
+generateHelp : Int -> Int -> Dict (List String) IO.Canonical String -> List JS.Mapping -> String
+generateHelp leadingLines kernelLeadingLines moduleSources mappings =
     mappings
         |> List.map
             (\(JS.Mapping srcLine srcCol srcModule srcName genLine genCol) ->
-                JS.Mapping srcLine srcCol srcModule srcName (genLine + leadingLines) genCol
+                JS.Mapping srcLine srcCol srcModule srcName (genLine + leadingLines + kernelLeadingLines) genCol
             )
         |> parseMappings
         |> mappingsToJson moduleSources
@@ -67,7 +67,7 @@ mappingMapUpdater toInsert maybeVal =
 
 parseMappingsHelp : Int -> Int -> Dict Int Int (List JS.Mapping) -> Mappings -> Mappings
 parseMappingsHelp currentLine lastLine mappingMap acc =
-    if currentLine >= lastLine then
+    if currentLine > lastLine then
         acc
 
     else
@@ -168,20 +168,24 @@ encodeSegment (JS.Mapping segmentSrcLine segmentSrcCol segmentSrcModule segmentS
             Mappings newSources newNames (SegmentAccounting updatedSaPrevCol updatedSaPrevSourceIdx updatedSaPrevSourceLine updatedSaPrevSourceCol (Just nameIdx)) <|
                 vlqs
                     ++ vlqPrefix
-                    ++ VLQ.encodeSingle genColDelta
-                    ++ VLQ.encodeSingle moduleIdxDelta
-                    ++ VLQ.encodeSingle sourceLineDelta
-                    ++ VLQ.encodeSingle sourceColDelta
-                    ++ VLQ.encodeSingle nameIdxDelta
+                    ++ VLQ.encode
+                        [ genColDelta
+                        , moduleIdxDelta
+                        , sourceLineDelta
+                        , sourceColDelta
+                        , nameIdxDelta
+                        ]
 
         Nothing ->
             Mappings newSources nms updatedSa <|
                 vlqs
                     ++ vlqPrefix
-                    ++ VLQ.encodeSingle genColDelta
-                    ++ VLQ.encodeSingle moduleIdxDelta
-                    ++ VLQ.encodeSingle sourceLineDelta
-                    ++ VLQ.encodeSingle sourceColDelta
+                    ++ VLQ.encode
+                        [ genColDelta
+                        , moduleIdxDelta
+                        , sourceLineDelta
+                        , sourceColDelta
+                        ]
 
 
 

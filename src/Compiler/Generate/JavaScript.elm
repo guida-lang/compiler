@@ -82,7 +82,13 @@ generateSourceMaps sourceMaps leadingLines state =
             ""
 
         SourceMaps moduleSources ->
-            SourceMap.generate leadingLines moduleSources (stateToMappings state)
+            let
+                kernelLeadingLines =
+                    stateKernels state
+                        |> List.map (String.length << String.filter ((==) '\n'))
+                        |> List.sum
+            in
+            SourceMap.generate leadingLines kernelLeadingLines moduleSources (stateToMappings state)
 
 
 addMain : Mode.Mode -> Graph -> IO.Canonical -> Opt.Main -> State -> State
@@ -99,12 +105,12 @@ perfNote mode =
         Mode.Dev Nothing ->
             "console.warn('Compiled in DEV mode. Follow the advice at "
                 ++ D.makeNakedLink "optimize"
-                ++ " for better performance and smaller assets.');\n"
+                ++ " for better performance and smaller assets.');"
 
         Mode.Dev (Just _) ->
             "console.warn('Compiled in DEBUG mode. Follow the advice at "
                 ++ D.makeNakedLink "optimize"
-                ++ " for better performance and smaller assets.');\n"
+                ++ " for better performance and smaller assets.');"
 
 
 generateForRepl : Bool -> L.Localizer -> Opt.GlobalGraph -> IO.Canonical -> Name.Name -> Can.Annotation -> String
@@ -227,16 +233,16 @@ postMessage localizer home maybeName tipe =
 
 
 type State
-    = State (List String) JS.Builder (EverySet (List String) Opt.Global)
+    = State JS.Builder (EverySet (List String) Opt.Global)
 
 
 emptyState : Int -> State
 emptyState startingLine =
-    State [] (JS.emptyBuilder startingLine) EverySet.empty
+    State (JS.emptyBuilder startingLine) EverySet.empty
 
 
 stateToBuilder : State -> String
-stateToBuilder (State revKernels (JS.Builder code _ _ _) _) =
+stateToBuilder (State (JS.Builder revKernels code _ _ _) _) =
     prependBuilders revKernels code
 
 
@@ -246,18 +252,23 @@ prependBuilders revBuilders monolith =
 
 
 stateToMappings : State -> List JS.Mapping
-stateToMappings (State _ (JS.Builder _ _ _ mappings) _) =
+stateToMappings (State (JS.Builder _ _ _ _ mappings) _) =
     mappings
 
 
+stateKernels : State -> List String
+stateKernels (State (JS.Builder revKernels _ _ _ _) _) =
+    revKernels
+
+
 addGlobal : Mode.Mode -> Graph -> State -> Opt.Global -> State
-addGlobal mode graph ((State revKernels builder seen) as state) global =
+addGlobal mode graph ((State builder seen) as state) global =
     if EverySet.member Opt.toComparableGlobal global seen then
         state
 
     else
         addGlobalHelp mode graph global <|
-            State revKernels builder (EverySet.insert Opt.toComparableGlobal global seen)
+            State builder (EverySet.insert Opt.toComparableGlobal global seen)
 
 
 addGlobalHelp : Mode.Mode -> Graph -> Opt.Global -> State -> State
@@ -279,13 +290,12 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
                 (trackedVar region global (Expr.generate mode home expr))
 
         Opt.DefineTailFunc region argNames body deps ->
+            let
+                (Opt.Global _ name) =
+                    global
+            in
             addStmt (addDeps deps state)
-                (let
-                    (Opt.Global _ name) =
-                        global
-                 in
-                 trackedVar region global (Expr.generateTailDef mode home name argNames body)
-                )
+                (trackedVar region global (Expr.generateTailDef mode home name argNames body))
 
         Opt.Ctor index arity ->
             addStmt state
@@ -326,13 +336,13 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
 
 
 addStmt : State -> JS.Stmt -> State
-addStmt (State revKernels builder seen) stmt =
-    State revKernels (JS.stmtToBuilder stmt builder) seen
+addStmt (State builder seen) stmt =
+    State (JS.stmtToBuilder stmt builder) seen
 
 
 addKernel : State -> String -> State
-addKernel (State revKernels builder seen) kernel =
-    State (kernel :: revKernels) builder seen
+addKernel (State builder seen) kernel =
+    State (JS.addKernel kernel builder) seen
 
 
 var : Opt.Global -> Expr.Code -> JS.Stmt
@@ -629,7 +639,7 @@ generateExports mode (Trie maybeMain subs) =
 
                 Just ( home, main ) ->
                     let
-                        (JS.Builder code _ _ _) =
+                        (JS.Builder _ code _ _ _) =
                             JS.exprToBuilder (Expr.generateMain mode home main) (JS.emptyBuilder 0)
                     in
                     "{'init':"

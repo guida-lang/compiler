@@ -8,6 +8,7 @@ module Compiler.Generate.JavaScript.Builder exposing
     , PrefixOp(..)
     , Stmt(..)
     , addByteString
+    , addKernel
     , emptyBuilder
     , exprToBuilder
     , stmtToBuilder
@@ -142,7 +143,7 @@ type PrefixOp
 
 
 type Builder
-    = Builder String Int Int (List Mapping)
+    = Builder (List String) String Int Int (List Mapping)
 
 
 type Mapping
@@ -151,16 +152,21 @@ type Mapping
 
 emptyBuilder : Int -> Builder
 emptyBuilder currentLine =
-    Builder "" currentLine 1 []
+    Builder [] "" currentLine 1 []
 
 
 addAscii : String -> Builder -> Builder
-addAscii ascii (Builder code currentLine currentCol mappings) =
-    Builder (code ++ ascii) currentLine (currentCol + String.length ascii) mappings
+addAscii ascii (Builder revKernels revBuilders currentLine currentCol mappings) =
+    Builder revKernels (revBuilders ++ ascii) currentLine (currentCol + String.length ascii) mappings
+
+
+addKernel : String -> Builder -> Builder
+addKernel kernel (Builder revKernels revBuilders currentLine currentCol mappings) =
+    Builder (kernel :: revKernels) revBuilders currentLine currentCol mappings
 
 
 addByteString : String -> Builder -> Builder
-addByteString str (Builder code currentLine currentCol mappings) =
+addByteString str (Builder revKernels revBuilders currentLine currentCol mappings) =
     let
         bsLines : Int
         bsLines =
@@ -172,14 +178,14 @@ addByteString str (Builder code currentLine currentCol mappings) =
             bsSize =
                 String.length str
         in
-        Builder (code ++ str) currentLine (currentCol + bsSize) mappings
+        Builder revKernels (revBuilders ++ str) currentLine (currentCol + bsSize) mappings
 
     else
-        Builder (code ++ str) (currentLine + bsLines) 1 mappings
+        Builder revKernels (revBuilders ++ str) (currentLine + bsLines) 1 mappings
 
 
 addTrackedByteString : IO.Canonical -> A.Position -> String -> Builder -> Builder
-addTrackedByteString moduleName (A.Position line col) str (Builder code currentLine currentCol mappings) =
+addTrackedByteString moduleName (A.Position line col) str (Builder revKernels revBuilders currentLine currentCol mappings) =
     let
         bsLines : Int
         bsLines =
@@ -196,20 +202,21 @@ addTrackedByteString moduleName (A.Position line col) str (Builder code currentL
             bsSize =
                 String.length str
         in
-        Builder (code ++ str) currentLine (currentCol + bsSize) newMappings
+        Builder revKernels (revBuilders ++ str) currentLine (currentCol + bsSize) newMappings
 
     else
-        Builder (code ++ str) (currentLine + bsLines) 1 newMappings
+        Builder revKernels (revBuilders ++ str) (currentLine + bsLines) 1 newMappings
 
 
 addName : IO.Canonical -> A.Position -> Name.Name -> Name.Name -> Builder -> Builder
-addName moduleName (A.Position line col) name genName (Builder code currentLine currentCol mappings) =
+addName moduleName (A.Position line col) name genName (Builder revKernels revBuilders currentLine currentCol mappings) =
     let
         size : Int
         size =
             String.length genName
     in
-    Builder (code ++ genName)
+    Builder revKernels
+        (revBuilders ++ genName)
         currentLine
         (currentCol + size)
         (Mapping line col moduleName (Just name) currentLine currentCol
@@ -218,8 +225,9 @@ addName moduleName (A.Position line col) name genName (Builder code currentLine 
 
 
 addTrackedDot : IO.Canonical -> A.Position -> Builder -> Builder
-addTrackedDot moduleName (A.Position line col) (Builder code currentLine currentCol mappings) =
-    Builder (code ++ ".")
+addTrackedDot moduleName (A.Position line col) (Builder revKernels revBuilders currentLine currentCol mappings) =
+    Builder revKernels
+        (revBuilders ++ ".")
         currentLine
         (currentCol + 1)
         (Mapping line col moduleName Nothing currentLine currentCol
@@ -228,8 +236,8 @@ addTrackedDot moduleName (A.Position line col) (Builder code currentLine current
 
 
 addLine : Builder -> Builder
-addLine (Builder code currentLine _ mappings) =
-    Builder (code ++ "\n") (currentLine + 1) 1 mappings
+addLine (Builder revKernels revBuilders currentLine _ mappings) =
+    Builder revKernels (revBuilders ++ "\n") (currentLine + 1) 1 mappings
 
 
 
@@ -645,7 +653,7 @@ fromExpr ((Level indent nextLevel) as level) grouping expression builder =
                 builder
                     |> addAscii "["
                     |> addLine
-                    |> addByteString indent
+                    |> addByteString deeperIndent
                     |> commaNewlineSepExpr level (\expr -> Tuple.second << fromExpr level Whatever expr) exprs
                     |> addLine
                     |> addByteString indent
@@ -668,7 +676,11 @@ fromExpr ((Level indent nextLevel) as level) grouping expression builder =
             , if anyMany then
                 builder
                     |> addTrackedByteString moduleName start "["
+                    |> addLine
+                    |> addByteString deeperIndent
                     |> commaNewlineSepExpr level (\expr -> Tuple.second << fromExpr level Whatever expr) exprs
+                    |> addLine
+                    |> addByteString indent
                     |> addTrackedByteString moduleName (A.Position endLine (endCol - 1)) "]"
 
               else
@@ -712,7 +724,11 @@ fromExpr ((Level indent nextLevel) as level) grouping expression builder =
             , if anyMany then
                 builder
                     |> addTrackedByteString moduleName start "{"
+                    |> addLine
+                    |> addByteString deeperIndent
                     |> commaNewlineSepExpr level (\field -> Tuple.second << trackedFromField (nextLevel ()) moduleName field) fields
+                    |> addLine
+                    |> addByteString indent
                     |> addTrackedByteString moduleName (A.Position endLine (endCol - 1)) "}"
 
               else

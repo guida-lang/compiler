@@ -40,7 +40,7 @@ optimize annotations (Can.Module home _ _ decls unions aliases _ effects) =
     addDecls home annotations decls <|
         addEffects home effects <|
             addUnions home unions <|
-                addAliases home A.zero aliases <|
+                addAliases home aliases <|
                     Opt.LocalGraph Nothing Dict.empty Dict.empty
 
 
@@ -84,16 +84,20 @@ addCtorNode home opts (Can.Ctor name index numArgs _) nodes =
 -- ALIAS
 
 
-addAliases : IO.Canonical -> A.Region -> Dict String Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
-addAliases home region aliases graph =
-    Dict.foldr compare (addAlias home region) graph aliases
+addAliases : IO.Canonical -> Dict String Name.Name Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAliases home aliases graph =
+    Dict.foldr compare (addAlias home) graph aliases
 
 
-addAlias : IO.Canonical -> A.Region -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
-addAlias home region name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
+addAlias : IO.Canonical -> Name.Name -> Can.Alias -> Opt.LocalGraph -> Opt.LocalGraph
+addAlias home name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) as graph) =
     case tipe of
         Can.TRecord fields Nothing ->
             let
+                region =
+                    -- FIXME: This is a hack to get the region of the alias
+                    A.zero
+
                 function : Opt.Expr
                 function =
                     Opt.Function (List.map (Tuple.first >> A.At A.zero) (Can.fieldsToList fields)) <|

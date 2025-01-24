@@ -952,7 +952,17 @@ strictNEq left right =
         JS.ExprInt 0 ->
             JS.ExprPrefix JS.PrefixNot (JS.ExprPrefix JS.PrefixNot right)
 
+        JS.ExprTrackedInt _ _ 0 ->
+            JS.ExprPrefix JS.PrefixNot (JS.ExprPrefix JS.PrefixNot right)
+
         JS.ExprBool bool ->
+            if bool then
+                JS.ExprPrefix JS.PrefixNot right
+
+            else
+                right
+
+        JS.ExprTrackedBool _ _ bool ->
             if bool then
                 JS.ExprPrefix JS.PrefixNot right
 
@@ -964,7 +974,17 @@ strictNEq left right =
                 JS.ExprInt 0 ->
                     JS.ExprPrefix JS.PrefixNot (JS.ExprPrefix JS.PrefixNot left)
 
+                JS.ExprTrackedInt _ _ 0 ->
+                    JS.ExprPrefix JS.PrefixNot (JS.ExprPrefix JS.PrefixNot left)
+
                 JS.ExprBool bool ->
+                    if bool then
+                        JS.ExprPrefix JS.PrefixNot left
+
+                    else
+                        left
+
+                JS.ExprTrackedBool _ _ bool ->
                     if bool then
                         JS.ExprPrefix JS.PrefixNot left
 

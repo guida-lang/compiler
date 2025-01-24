@@ -172,11 +172,11 @@ typeDecl maybeDocs start =
                                             |> P.fmap
                                                 (\( tipe, end ) ->
                                                     let
-                                                        alias : A.Located Src.Alias
-                                                        alias =
+                                                        alias_ : A.Located Src.Alias
+                                                        alias_ =
                                                             A.at start end (Src.Alias name args tipe)
                                                     in
-                                                    ( Alias maybeDocs alias, end )
+                                                    ( Alias maybeDocs alias_, end )
                                                 )
                                     )
                             )
