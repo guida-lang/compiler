@@ -14,7 +14,6 @@ import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils
 
 
 
@@ -34,7 +33,7 @@ toEncoder tipe =
             crash "toEncoder: type variable"
 
         Can.TUnit ->
-            Names.fmap (Opt.Function [ A.At A.zero Name.dollar ]) (encode "null")
+            Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
 
         Can.TTuple a b c ->
             encodeTuple a b c
@@ -89,7 +88,7 @@ toEncoder tipe =
                                 let
                                     value : Opt.Expr
                                     value =
-                                        Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal A.zero Name.dollar) A.zero name ]
+                                        Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal Name.dollar) A.zero name ]
                                 in
                                 Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value Nothing
                             )
@@ -101,7 +100,7 @@ toEncoder tipe =
                             |> Names.bind
                                 (\keyValuePairs ->
                                     Names.registerFieldDict fields
-                                        (Opt.Function [ A.At A.zero Name.dollar ] (Opt.Call A.zero object [ Opt.List A.zero keyValuePairs ]))
+                                        (Opt.Function [ Name.dollar ] (Opt.Call A.zero object [ Opt.List A.zero keyValuePairs ]))
                                 )
                     )
 
@@ -121,12 +120,12 @@ encodeMaybe tipe =
                             Names.registerGlobal A.zero ModuleName.maybe "destruct"
                                 |> Names.fmap
                                     (\destruct ->
-                                        Opt.Function [ A.At A.zero Name.dollar ]
+                                        Opt.Function [ Name.dollar ]
                                             (Opt.Call A.zero
                                                 destruct
                                                 [ null
                                                 , encoder
-                                                , Opt.VarLocal A.zero Name.dollar
+                                                , Opt.VarLocal Name.dollar
                                                 ]
                                             )
                                     )
@@ -164,7 +163,7 @@ encodeTuple a b maybeC =
         encodeArg : Name -> Can.Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
             toEncoder tipe
-                |> Names.fmap (\encoder -> Opt.Call A.zero encoder [ Opt.VarLocal A.zero arg ])
+                |> Names.fmap (\encoder -> Opt.Call A.zero encoder [ Opt.VarLocal arg ])
     in
     encode "list"
         |> Names.bind
@@ -179,7 +178,7 @@ encodeTuple a b maybeC =
                                             case maybeC of
                                                 Nothing ->
                                                     Names.pure
-                                                        (Opt.Function [ A.At A.zero Name.dollar ]
+                                                        (Opt.Function [ Name.dollar ]
                                                             (let_ "a"
                                                                 Index.first
                                                                 (let_ "b"
@@ -197,7 +196,7 @@ encodeTuple a b maybeC =
                                                 Just c ->
                                                     Names.fmap
                                                         (\arg3 ->
-                                                            Opt.Function [ A.At A.zero Name.dollar ]
+                                                            Opt.Function [ Name.dollar ]
                                                                 (let_ "a"
                                                                     Index.first
                                                                     (let_ "b"
@@ -402,7 +401,7 @@ decodeTuple a b maybeC =
 
 toLocal : Int -> Opt.Expr
 toLocal index =
-    Opt.VarLocal A.zero (Name.fromVarIndex index)
+    Opt.VarLocal (Name.fromVarIndex index)
 
 
 indexAndThen : Int -> Can.Type -> Opt.Expr -> Names.Tracker Opt.Expr
@@ -415,7 +414,7 @@ indexAndThen i tipe decoder =
                         (\typeDecoder ->
                             Opt.Call A.zero
                                 andThen
-                                [ Opt.Function [ A.At A.zero (Name.fromVarIndex i) ] decoder
+                                [ Opt.Function [ Name.fromVarIndex i ] decoder
                                 , Opt.Call A.zero index [ Opt.Int A.zero i, typeDecoder ]
                                 ]
                         )
@@ -435,11 +434,11 @@ decodeRecord fields =
     let
         toFieldExpr : Name -> b -> Opt.Expr
         toFieldExpr name _ =
-            Opt.VarLocal A.zero name
+            Opt.VarLocal name
 
         record : Opt.Expr
         record =
-            Opt.Record A.zero (Utils.mapMapKeys A.toValue compare (A.At A.zero) (Dict.map toFieldExpr fields))
+            Opt.Record (Dict.map toFieldExpr fields)
     in
     Names.bind
         (\succeed ->
@@ -464,7 +463,7 @@ fieldAndThen decoder ( key, Can.FieldType _ tipe ) =
                         (\typeDecoder ->
                             Opt.Call A.zero
                                 andThen
-                                [ Opt.Function [ A.At A.zero key ] decoder
+                                [ Opt.Function [ key ] decoder
                                 , Opt.Call A.zero field [ Opt.Str A.zero (Name.toElmString key), typeDecoder ]
                                 ]
                         )

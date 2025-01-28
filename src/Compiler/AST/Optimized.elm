@@ -52,7 +52,8 @@ type Expr
     | Str A.Region String
     | Int A.Region Int
     | Float A.Region Float
-    | VarLocal A.Region Name
+    | VarLocal Name
+    | TrackedVarLocal A.Region Name
     | VarGlobal A.Region Global
     | VarEnum A.Region Global Index.ZeroBased
     | VarBox A.Region Global
@@ -60,7 +61,8 @@ type Expr
     | VarDebug A.Region Name IO.Canonical (Maybe Name)
     | VarKernel A.Region Name Name
     | List A.Region (List Expr)
-    | Function (List (A.Located Name)) Expr
+    | Function (List Name) Expr
+    | TrackedFunction (List (A.Located Name)) Expr
     | Call A.Region Expr (List Expr)
     | TailCall Name (List ( Name, Expr ))
     | If (List ( Expr, Expr )) Expr
@@ -70,7 +72,8 @@ type Expr
     | Accessor A.Region Name
     | Access Expr A.Region Name
     | Update A.Region Expr (Dict String (A.Located Name) Expr)
-    | Record A.Region (Dict String (A.Located Name) Expr)
+    | Record (Dict String Name Expr)
+    | TrackedRecord A.Region (Dict String (A.Located Name) Expr)
     | Unit
     | Tuple A.Region Expr Expr (Maybe Expr)
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
@@ -155,7 +158,8 @@ type Main
 
 
 type Node
-    = Define A.Region Expr (EverySet (List String) Global)
+    = Define Expr (EverySet (List String) Global)
+    | TrackedDefine A.Region Expr (EverySet (List String) Global)
     | DefineTailFunc A.Region (List (A.Located Name)) Expr (EverySet (List String) Global)
     | Ctor Index.ZeroBased Int
     | Enum Index.ZeroBased
@@ -338,9 +342,16 @@ globalDecoder =
 nodeEncoder : Node -> Encode.Value
 nodeEncoder node =
     case node of
-        Define region expr deps ->
+        Define expr deps ->
             Encode.object
                 [ ( "type", Encode.string "Define" )
+                , ( "expr", exprEncoder expr )
+                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+                ]
+
+        TrackedDefine region expr deps ->
+            Encode.object
+                [ ( "type", Encode.string "TrackedDefine" )
                 , ( "region", A.regionEncoder region )
                 , ( "expr", exprEncoder expr )
                 , ( "deps", E.everySet compareGlobal globalEncoder deps )
@@ -423,7 +434,12 @@ nodeDecoder =
             (\type_ ->
                 case type_ of
                     "Define" ->
-                        Decode.map3 Define
+                        Decode.map2 Define
+                            (Decode.field "expr" exprDecoder)
+                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+
+                    "TrackedDefine" ->
+                        Decode.map3 TrackedDefine
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "expr" exprDecoder)
                             (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
@@ -518,9 +534,15 @@ exprEncoder expr =
                 , ( "value", Encode.float value )
                 ]
 
-        VarLocal region value ->
+        VarLocal value ->
             Encode.object
                 [ ( "type", Encode.string "VarLocal" )
+                , ( "value", Encode.string value )
+                ]
+
+        TrackedVarLocal region value ->
+            Encode.object
+                [ ( "type", Encode.string "TrackedVarLocal" )
                 , ( "region", A.regionEncoder region )
                 , ( "value", Encode.string value )
                 ]
@@ -582,6 +604,13 @@ exprEncoder expr =
         Function args body ->
             Encode.object
                 [ ( "type", Encode.string "Function" )
+                , ( "args", Encode.list Encode.string args )
+                , ( "body", exprEncoder body )
+                ]
+
+        TrackedFunction args body ->
+            Encode.object
+                [ ( "type", Encode.string "TrackedFunction" )
                 , ( "args", Encode.list (A.locatedEncoder Encode.string) args )
                 , ( "body", exprEncoder body )
                 ]
@@ -654,9 +683,15 @@ exprEncoder expr =
                 , ( "fields", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder fields )
                 ]
 
-        Record region value ->
+        Record value ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
+                , ( "value", E.assocListDict compare Encode.string exprEncoder value )
+                ]
+
+        TrackedRecord region value ->
+            Encode.object
+                [ ( "type", Encode.string "TrackedRecord" )
                 , ( "region", A.regionEncoder region )
                 , ( "value", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder value )
                 ]
@@ -716,7 +751,11 @@ exprDecoder =
                             (Decode.field "value" Decode.float)
 
                     "VarLocal" ->
-                        Decode.map2 VarLocal
+                        Decode.map VarLocal
+                            (Decode.field "value" Decode.string)
+
+                    "TrackedVarLocal" ->
+                        Decode.map2 TrackedVarLocal
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "value" Decode.string)
 
@@ -762,6 +801,11 @@ exprDecoder =
 
                     "Function" ->
                         Decode.map2 Function
+                            (Decode.field "args" (Decode.list Decode.string))
+                            (Decode.field "body" exprDecoder)
+
+                    "TrackedFunction" ->
+                        Decode.map2 TrackedFunction
                             (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
                             (Decode.field "body" exprDecoder)
 
@@ -816,7 +860,11 @@ exprDecoder =
                             (Decode.field "fields" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
 
                     "Record" ->
-                        Decode.map2 Record
+                        Decode.map Record
+                            (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
+
+                    "TrackedRecord" ->
+                        Decode.map2 TrackedRecord
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "value" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
 

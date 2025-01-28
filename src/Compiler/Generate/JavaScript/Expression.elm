@@ -68,7 +68,10 @@ generate mode parentModule expression =
                     else
                         String.fromFloat float
 
-        Opt.VarLocal (A.Region startPos _) name ->
+        Opt.VarLocal name ->
+            JsExpr <| JS.ExprRef (JsName.fromLocal name)
+
+        Opt.TrackedVarLocal (A.Region startPos _) name ->
             JsExpr <| JS.ExprTrackedRef parentModule startPos (JsName.fromLocalHumanReadable name) (JsName.fromLocal name)
 
         Opt.VarGlobal (A.Region startPos _) (Opt.Global home name) ->
@@ -112,6 +115,9 @@ generate mode parentModule expression =
                             ]
 
         Opt.Function args body ->
+            generateFunction (List.map JsName.fromLocal args) (generate mode parentModule body)
+
+        Opt.TrackedFunction args body ->
             let
                 argNames : List (A.Located JsName.Name)
                 argNames =
@@ -157,11 +163,14 @@ generate mode parentModule expression =
             JsExpr <|
                 JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "update"))
                     [ generateJsExpr mode parentModule record
-                    , generateRecord mode parentModule region fields
+                    , generateTrackedRecord mode parentModule region fields
                     ]
 
-        Opt.Record region fields ->
-            JsExpr <| generateRecord mode parentModule region fields
+        Opt.Record fields ->
+            JsExpr <| generateRecord mode parentModule fields
+
+        Opt.TrackedRecord region fields ->
+            JsExpr <| generateTrackedRecord mode parentModule region fields
 
         Opt.Unit ->
             case mode of
@@ -171,7 +180,7 @@ generate mode parentModule expression =
                 Mode.Prod _ ->
                     JsExpr <| JS.ExprInt 0
 
-        Opt.Tuple region a b maybeC ->
+        Opt.Tuple _ a b maybeC ->
             JsExpr <|
                 case maybeC of
                     Nothing ->
@@ -306,8 +315,18 @@ ctorToInt home name index =
 -- RECORDS
 
 
-generateRecord : Mode.Mode -> IO.Canonical -> A.Region -> Dict String (A.Located Name.Name) Opt.Expr -> JS.Expr
-generateRecord mode parentModule region fields =
+generateRecord : Mode.Mode -> IO.Canonical -> Dict String Name.Name Opt.Expr -> JS.Expr
+generateRecord mode parentModule fields =
+    let
+        toPair : ( Name.Name, Opt.Expr ) -> ( JsName.Name, JS.Expr )
+        toPair ( field, value ) =
+            ( generateField mode field, generateJsExpr mode parentModule value )
+    in
+    JS.ExprObject (List.map toPair (Dict.toList compare fields))
+
+
+generateTrackedRecord : Mode.Mode -> IO.Canonical -> A.Region -> Dict String (A.Located Name.Name) Opt.Expr -> JS.Expr
+generateTrackedRecord mode parentModule region fields =
     let
         toPair : ( A.Located Name.Name, Opt.Expr ) -> ( A.Located JsName.Name, JS.Expr )
         toPair ( A.At fieldRegion field, value ) =
@@ -780,7 +799,10 @@ exprRegion expr =
         Opt.Float region _ ->
             Just region
 
-        Opt.VarLocal region _ ->
+        Opt.VarLocal _ ->
+            Nothing
+
+        Opt.TrackedVarLocal region _ ->
             Just region
 
         Opt.VarGlobal region _ ->
@@ -805,6 +827,9 @@ exprRegion expr =
             Just region
 
         Opt.Function _ _ ->
+            Nothing
+
+        Opt.TrackedFunction _ _ ->
             Nothing
 
         Opt.Call region _ _ ->
@@ -834,7 +859,10 @@ exprRegion expr =
         Opt.Update region _ _ ->
             Just region
 
-        Opt.Record region _ ->
+        Opt.Record _ ->
+            Nothing
+
+        Opt.TrackedRecord region _ ->
             Just region
 
         Opt.Unit ->

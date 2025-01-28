@@ -83,6 +83,7 @@ generateSourceMaps sourceMaps leadingLines state =
 
         SourceMaps moduleSources ->
             let
+                kernelLeadingLines : Int
                 kernelLeadingLines =
                     stateKernels state
                         |> List.map (String.length << String.filter ((==) '\n'))
@@ -285,7 +286,11 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
             List.foldl (flip (addGlobal mode graph)) someState sortedDeps
     in
     case Utils.find Opt.toComparableGlobal global graph of
-        Opt.Define region expr deps ->
+        Opt.Define expr deps ->
+            addStmt (addDeps deps state)
+                (var global (Expr.generate mode home expr))
+
+        Opt.TrackedDefine region expr deps ->
             addStmt (addDeps deps state)
                 (trackedVar region global (Expr.generate mode home expr))
 

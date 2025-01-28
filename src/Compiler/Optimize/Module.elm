@@ -94,19 +94,15 @@ addAlias home name (Can.Alias _ tipe) ((Opt.LocalGraph main nodes fieldCounts) a
     case tipe of
         Can.TRecord fields Nothing ->
             let
-                region =
-                    -- FIXME: This is a hack to get the region of the alias
-                    A.zero
-
                 function : Opt.Expr
                 function =
-                    Opt.Function (List.map (Tuple.first >> A.At A.zero) (Can.fieldsToList fields)) <|
-                        Opt.Record region <|
-                            Dict.map (\field _ -> Opt.VarLocal A.zero (A.toValue field)) (Utils.mapMapKeys A.toValue compare (A.At A.zero) fields)
+                    Opt.Function (List.map Tuple.first (Can.fieldsToList fields)) <|
+                        Opt.Record <|
+                            Dict.map (\field _ -> Opt.VarLocal field) fields
 
                 node : Opt.Node
                 node =
-                    Opt.Define region function EverySet.empty
+                    Opt.Define function EverySet.empty
             in
             Opt.LocalGraph
                 main
@@ -345,12 +341,12 @@ addDefNode home region name args body mainDeps graph =
                                     Expr.optimize EverySet.empty body
                                         |> Names.fmap
                                             (\obody ->
-                                                Opt.Function argNames <|
+                                                Opt.TrackedFunction argNames <|
                                                     List.foldr Opt.Destruct obody destructors
                                             )
                                 )
     in
-    addToGraph (Opt.Global home name) (Opt.Define region def (EverySet.union deps mainDeps)) fields graph
+    addToGraph (Opt.Global home name) (Opt.TrackedDefine region def (EverySet.union deps mainDeps)) fields graph
 
 
 

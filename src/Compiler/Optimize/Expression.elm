@@ -31,7 +31,7 @@ optimize : Cycle -> Can.Expr -> Names.Tracker Opt.Expr
 optimize cycle (A.At region expression) =
     case expression of
         Can.VarLocal name ->
-            Names.pure (Opt.VarLocal region name)
+            Names.pure (Opt.TrackedVarLocal region name)
 
         Can.VarTopLevel home name ->
             if EverySet.member identity name cycle then
@@ -104,7 +104,7 @@ optimize cycle (A.At region expression) =
                         optimize cycle body
                             |> Names.fmap
                                 (\obody ->
-                                    Opt.Function argNames (List.foldr Opt.Destruct obody destructors)
+                                    Opt.TrackedFunction argNames (List.foldr Opt.Destruct obody destructors)
                                 )
                     )
 
@@ -192,7 +192,11 @@ optimize cycle (A.At region expression) =
                             |> Names.bind
                                 (\oexpr ->
                                     case oexpr of
-                                        Opt.VarLocal _ root ->
+                                        Opt.VarLocal root ->
+                                            Names.traverse (optimizeBranch root) branches
+                                                |> Names.fmap (Case.optimize temp root)
+
+                                        Opt.TrackedVarLocal _ root ->
                                             Names.traverse (optimizeBranch root) branches
                                                 |> Names.fmap (Case.optimize temp root)
 
@@ -230,7 +234,7 @@ optimize cycle (A.At region expression) =
             Names.mapTraverse A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (optimize cycle) fields
                 |> Names.bind
                     (\optFields ->
-                        Names.registerFieldDict (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue fields) (Opt.Record region optFields)
+                        Names.registerFieldDict (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue fields) (Opt.TrackedRecord region optFields)
                     )
 
         Can.Unit ->
@@ -301,7 +305,7 @@ optimizeDefHelp cycle region name args expr body =
                                     let
                                         ofunc : Opt.Expr
                                         ofunc =
-                                            Opt.Function argNames (List.foldr Opt.Destruct oexpr destructors)
+                                            Opt.TrackedFunction argNames (List.foldr Opt.Destruct oexpr destructors)
                                     in
                                     Opt.Let (Opt.Def region name ofunc) body
                                 )
@@ -613,7 +617,11 @@ optimizeTail cycle rootName argNames ((A.At region expression) as locExpr) =
                             |> Names.bind
                                 (\oexpr ->
                                     case oexpr of
-                                        Opt.VarLocal _ root ->
+                                        Opt.VarLocal root ->
+                                            Names.traverse (optimizeBranch root) branches
+                                                |> Names.fmap (Case.optimize temp root)
+
+                                        Opt.TrackedVarLocal _ root ->
                                             Names.traverse (optimizeBranch root) branches
                                                 |> Names.fmap (Case.optimize temp root)
 
@@ -640,7 +648,7 @@ toTailDef region name argNames destructors body =
         Opt.TailDef region name argNames (List.foldr Opt.Destruct body destructors)
 
     else
-        Opt.Def region name (Opt.Function argNames (List.foldr Opt.Destruct body destructors))
+        Opt.Def region name (Opt.TrackedFunction argNames (List.foldr Opt.Destruct body destructors))
 
 
 hasTailCall : Opt.Expr -> Bool

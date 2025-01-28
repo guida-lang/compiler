@@ -18,7 +18,10 @@ hasDebugUses (Opt.LocalGraph _ graph _) =
 nodeHasDebug : Opt.Node -> Bool
 nodeHasDebug node =
     case node of
-        Opt.Define _ expr _ ->
+        Opt.Define expr _ ->
+            hasDebug expr
+
+        Opt.TrackedDefine _ expr _ ->
             hasDebug expr
 
         Opt.DefineTailFunc _ _ expr _ ->
@@ -70,7 +73,10 @@ hasDebug expression =
         Opt.Float _ _ ->
             False
 
-        Opt.VarLocal _ _ ->
+        Opt.VarLocal _ ->
+            False
+
+        Opt.TrackedVarLocal _ _ ->
             False
 
         Opt.VarGlobal _ _ ->
@@ -95,6 +101,9 @@ hasDebug expression =
             List.any hasDebug exprs
 
         Opt.Function _ expr ->
+            hasDebug expr
+
+        Opt.TrackedFunction _ expr ->
             hasDebug expr
 
         Opt.Call _ e es ->
@@ -124,7 +133,10 @@ hasDebug expression =
         Opt.Update _ r fs ->
             hasDebug r || List.any hasDebug (Dict.values (\a b -> compare (A.toValue a) (A.toValue b)) fs)
 
-        Opt.Record _ fs ->
+        Opt.Record fs ->
+            List.any hasDebug (Dict.values compare fs)
+
+        Opt.TrackedRecord _ fs ->
             List.any hasDebug (Dict.values (\a b -> compare (A.toValue a) (A.toValue b)) fs)
 
         Opt.Unit ->
