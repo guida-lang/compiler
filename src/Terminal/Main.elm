@@ -15,6 +15,7 @@ import Terminal.Terminal as Terminal
 import Terminal.Terminal.Chomp as Chomp
 import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
+import Terminal.Test as Test
 
 
 main : IO.Program
@@ -34,6 +35,7 @@ app =
         , diff
         , publish
         , format
+        , test
         ]
 
 
@@ -499,6 +501,52 @@ output =
         , suggest = \_ -> IO.pure []
         , examples = \_ -> IO.pure []
         }
+
+
+
+-- TEST
+
+
+test : Terminal.Command
+test =
+    let
+        details : String
+        details =
+            "The `test` command runs tests."
+
+        example : D.Doc
+        example =
+            stack
+                [ reflow "For example:"
+                , D.indent 4 <| D.green (D.fromChars "guida test")
+                , reflow "Run tests in the tests/ folder."
+                , D.indent 4 <| D.green (D.fromChars "guida test src/Main.guida")
+                , reflow "Run tests in files matching the glob."
+                ]
+
+        testArgs : Terminal.Args
+        testArgs =
+            Terminal.zeroOrMore Terminal.filePath
+
+        testFlags : Terminal.Flags
+        testFlags =
+            Terminal.noFlags
+    in
+    Terminal.Command "test" Terminal.Uncommon details example testArgs testFlags <|
+        \chunks ->
+            Chomp.chomp Nothing
+                chunks
+                [ Chomp.chompMultiple (Chomp.pure identity) Terminal.filePath Terminal.parseFilePath
+                ]
+                (Chomp.pure ()
+                    |> Chomp.bind
+                        (\value ->
+                            Chomp.checkForUnknownFlags testFlags
+                                |> Chomp.fmap (\_ -> value)
+                        )
+                )
+                |> Tuple.second
+                |> Result.map (\( args, flags ) -> Test.run args flags)
 
 
 
