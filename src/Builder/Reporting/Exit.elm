@@ -1259,11 +1259,7 @@ type Uninstall
     | UninstallNoArgs
     | UninstallNoOnlineAppSolution Pkg.Name
     | UninstallNoOfflineAppSolution Pkg.Name
-    | UninstallNoOnlinePkgSolution Pkg.Name
-    | UninstallNoOfflinePkgSolution Pkg.Name
     | UninstallHadSolverTrouble Solver
-    | UninstallUnknownPackageOnline Pkg.Name (List Pkg.Name)
-    | UninstallUnknownPackageOffline Pkg.Name (List Pkg.Name)
     | UninstallBadDetails Details
 
 
@@ -1299,7 +1295,6 @@ uninstallToReport exit =
                 ]
 
         UninstallNoOnlineAppSolution pkg ->
-            -- FIXME
             Help.report "CANNOT FIND COMPATIBLE VERSION"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
@@ -1312,7 +1307,6 @@ uninstallToReport exit =
                 ]
 
         UninstallNoOfflineAppSolution pkg ->
-            -- FIXME
             Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
@@ -1322,72 +1316,8 @@ uninstallToReport exit =
                     "Try again later when you have internet!"
                 ]
 
-        UninstallNoOnlinePkgSolution pkg ->
-            -- FIXME don't think it makes sense to check package registry
-            Help.report "CANNOT FIND COMPATIBLE VERSION"
-                (Just "elm.json")
-                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
-                [ D.reflow <|
-                    "With applications, I try to broaden the constraints to see if anything works, but messing with package constraints is much more delicate business. E.g. making your constraints stricter may make it harder for applications to find compatible dependencies. So fixing something here may break it for a lot of other people!"
-                , D.reflow <|
-                    "So I recommend making an application with the same dependencies as your package. See if there is a solution at all. From there it may be easier to figure out how to proceed in a way that will disrupt your users as little as possible. And the solution may be to help other package authors to get their packages updated, or to drop a dependency entirely."
-                ]
-
-        UninstallNoOfflinePkgSolution pkg ->
-            -- FIXME don't think it makes sense to check package registry
-            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
-                (Just "elm.json")
-                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
-                [ D.reflow <|
-                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
-                , D.reflow <|
-                    "Try again later when you have internet!"
-                ]
-
         UninstallHadSolverTrouble solver ->
             toSolverReport solver
-
-        UninstallUnknownPackageOnline pkg suggestions ->
-            Help.docReport "UNKNOWN PACKAGE"
-                Nothing
-                (D.fillSep
-                    [ D.fromChars "I"
-                    , D.fromChars "cannot"
-                    , D.fromChars "find"
-                    , D.fromChars "a"
-                    , D.fromChars "package"
-                    , D.fromChars "named"
-                    , D.red (D.fromPackage pkg)
-                        |> D.a (D.fromChars ".")
-                    ]
-                )
-                [ D.reflow <|
-                    -- FIXME we should instead list only the installed packages as suggestions!
-                    "I looked through https://package.elm-lang.org for packages with similar names and found these:"
-                , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
-                ]
-
-        UninstallUnknownPackageOffline pkg suggestions ->
-            Help.docReport "UNKNOWN PACKAGE"
-                Nothing
-                (D.fillSep
-                    [ D.fromChars "I"
-                    , D.fromChars "cannot"
-                    , D.fromChars "find"
-                    , D.fromChars "a"
-                    , D.fromChars "package"
-                    , D.fromChars "named"
-                    , D.red (D.fromPackage pkg)
-                        |> D.a (D.fromChars ".")
-                    ]
-                )
-                [ D.reflow <|
-                    -- FIXME we should instead list only the installed packages as suggestions!
-                    "Looking through the locally cached names, the closest ones are:"
-                , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
-                ]
 
         UninstallBadDetails details ->
             toDetailsReport details
