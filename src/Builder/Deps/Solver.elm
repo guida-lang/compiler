@@ -10,6 +10,7 @@ module Builder.Deps.Solver exposing
     , envDecoder
     , envEncoder
     , initEnv
+    , removeFromApp
     , verify
     )
 
@@ -119,15 +120,46 @@ noSolution connection =
 
 
 
--- ADD TO APP - used in Install
+-- APP SOLUTION
 
 
 type AppSolution
     = AppSolution (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) Outline.AppOutline
 
 
+getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.Name, V.Version ) Constraints -> Dict ( String, String ) Pkg.Name V.Version -> List ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version
+getTransitive constraints solution unvisited visited =
+    case unvisited of
+        [] ->
+            visited
+
+        (( pkg, vsn ) as info) :: infos ->
+            if Dict.member identity pkg visited then
+                getTransitive constraints solution infos visited
+
+            else
+                let
+                    (Constraints _ newDeps) =
+                        Utils.find (Tuple.mapSecond V.toComparable) info constraints
+
+                    newUnvisited : List ( Pkg.Name, V.Version )
+                    newUnvisited =
+                        Dict.toList compare (Dict.intersection Pkg.compareName solution (Dict.diff newDeps visited))
+
+                    newVisited : Dict ( String, String ) Pkg.Name V.Version
+                    newVisited =
+                        Dict.insert identity pkg vsn visited
+                in
+                getTransitive constraints solution infos <|
+                    getTransitive constraints solution newUnvisited newVisited
+
+
+
+-- ADD TO APP - used in Install
+
+
 addToApp : Stuff.PackageCache -> Connection -> Registry.Registry -> Pkg.Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
-addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect testDirect testIndirect) as outline) =
+addToApp cache connection registry pkg (Outline.AppOutline elm srcDirs direct indirect testDirect testIndirect) =
     Stuff.withRegistryLock cache <|
         let
             allIndirects : Dict ( String, String ) Pkg.Name V.Version
@@ -160,8 +192,25 @@ addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect 
                     |> IO.fmap
                         (\result ->
                             case result of
-                                ISOk s a ->
-                                    SolverOk (toApp s pkg outline allDeps a)
+                                ISOk (State _ _ _ constraints) new ->
+                                    let
+                                        d : Dict ( String, String ) Pkg.Name V.Version
+                                        d =
+                                            Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
+
+                                        i : Dict ( String, String ) Pkg.Name V.Version
+                                        i =
+                                            Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
+
+                                        td : Dict ( String, String ) Pkg.Name V.Version
+                                        td =
+                                            Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
+
+                                        ti : Dict ( String, String ) Pkg.Name V.Version
+                                        ti =
+                                            Dict.diff new (Utils.mapUnions [ d, i, td ])
+                                    in
+                                    SolverOk (AppSolution allDeps new (Outline.AppOutline elm srcDirs d i td ti))
 
                                 ISBack _ ->
                                     noSolution connection
@@ -171,53 +220,58 @@ addToApp cache connection registry pkg ((Outline.AppOutline _ _ direct indirect 
                         )
 
 
-toApp : State -> Pkg.Name -> Outline.AppOutline -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> AppSolution
-toApp (State _ _ _ constraints) pkg (Outline.AppOutline elm srcDirs direct _ testDirect _) old new =
-    let
-        d : Dict ( String, String ) Pkg.Name V.Version
-        d =
-            Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
 
-        i : Dict ( String, String ) Pkg.Name V.Version
-        i =
-            Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
-
-        td : Dict ( String, String ) Pkg.Name V.Version
-        td =
-            Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
-
-        ti : Dict ( String, String ) Pkg.Name V.Version
-        ti =
-            Dict.diff new (Utils.mapUnions [ d, i, td ])
-    in
-    AppSolution old new (Outline.AppOutline elm srcDirs d i td ti)
+-- REMOVE FROM APP - used in Uninstall
 
 
-getTransitive : Dict ( ( String, String ), ( Int, Int, Int ) ) ( Pkg.Name, V.Version ) Constraints -> Dict ( String, String ) Pkg.Name V.Version -> List ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version
-getTransitive constraints solution unvisited visited =
-    case unvisited of
-        [] ->
-            visited
+removeFromApp : Stuff.PackageCache -> Connection -> Registry.Registry -> Pkg.Name -> Outline.AppOutline -> IO (SolverResult AppSolution)
+removeFromApp cache connection registry pkg (Outline.AppOutline elm srcDirs direct indirect testDirect testIndirect) =
+    Stuff.withRegistryLock cache <|
+        let
+            allDirects : Dict ( String, String ) Pkg.Name V.Version
+            allDirects =
+                Dict.union direct testDirect
+        in
+        case try (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
+            Solver solver ->
+                solver (State cache connection registry Dict.empty)
+                    |> IO.fmap
+                        (\result ->
+                            case result of
+                                ISOk (State _ _ _ constraints) new ->
+                                    let
+                                        allIndirects : Dict ( String, String ) Pkg.Name V.Version
+                                        allIndirects =
+                                            Dict.union indirect testIndirect
 
-        (( pkg, vsn ) as info) :: infos ->
-            if Dict.member identity pkg visited then
-                getTransitive constraints solution infos visited
+                                        allDeps : Dict ( String, String ) Pkg.Name V.Version
+                                        allDeps =
+                                            Dict.union allDirects allIndirects
 
-            else
-                let
-                    (Constraints _ newDeps) =
-                        Utils.find (Tuple.mapSecond V.toComparable) info constraints
+                                        d : Dict ( String, String ) Pkg.Name V.Version
+                                        d =
+                                            Dict.remove identity pkg direct
 
-                    newUnvisited : List ( Pkg.Name, V.Version )
-                    newUnvisited =
-                        Dict.toList compare (Dict.intersection Pkg.compareName solution (Dict.diff newDeps visited))
+                                        i : Dict ( String, String ) Pkg.Name V.Version
+                                        i =
+                                            Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
 
-                    newVisited : Dict ( String, String ) Pkg.Name V.Version
-                    newVisited =
-                        Dict.insert identity pkg vsn visited
-                in
-                getTransitive constraints solution infos <|
-                    getTransitive constraints solution newUnvisited newVisited
+                                        td : Dict ( String, String ) Pkg.Name V.Version
+                                        td =
+                                            Dict.remove identity pkg testDirect
+
+                                        ti : Dict ( String, String ) Pkg.Name V.Version
+                                        ti =
+                                            Dict.diff new (Utils.mapUnions [ d, i, td ])
+                                    in
+                                    SolverOk (AppSolution allDeps new (Outline.AppOutline elm srcDirs d i td ti))
+
+                                ISBack _ ->
+                                    noSolution connection
+
+                                ISErr e ->
+                                    SolverErr e
+                        )
 
 
 

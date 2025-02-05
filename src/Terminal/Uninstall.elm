@@ -5,7 +5,6 @@ module Terminal.Uninstall exposing
     )
 
 import Builder.BackgroundWriter as BW
-import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
 import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
@@ -64,7 +63,7 @@ run args (Flags autoYes) =
                                                                             |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes autoYes)
 
                                                                     Outline.Pkg outline ->
-                                                                        makePkgPlan env pkg outline
+                                                                        makePkgPlan pkg outline
                                                                             |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes autoYes)
                                                             )
                                                 )
@@ -78,7 +77,7 @@ run args (Flags autoYes) =
 
 
 type Changes vsn
-    = AlreadyUninstalled
+    = AlreadyNotPresent
     | Changes (Dict ( String, String ) Pkg.Name (Change vsn)) Outline.Outline
 
 
@@ -89,8 +88,8 @@ type alias Task a =
 attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Bool -> Task ()
 attemptChanges root env oldOutline toChars changes autoYes =
     case changes of
-        AlreadyUninstalled ->
-            Task.io (IO.putStrLn "It is already uninstalled!")
+        AlreadyNotPresent ->
+            Task.io (IO.putStrLn "It is not currently installed!")
 
         Changes changeDict newOutline ->
             let
@@ -155,120 +154,64 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
 
 
 makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg (Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) =
-    if Dict.member identity pkg direct then
-        let
-            constraints : Dict ( String, String ) Pkg.Name C.Constraint
-            constraints =
-                Dict.remove identity pkg direct
-                    |> Dict.map (\_ -> C.exactly)
-        in
-        Task.io (Solver.verify cache connection registry constraints)
-            |> Task.bind
-                (\result ->
-                    case result of
-                        Solver.SolverOk details ->
-                            let
-                                solution : Dict ( String, String ) Pkg.Name V.Version
-                                solution =
-                                    Dict.map (\_ (Solver.Details vsn _) -> vsn) details
+makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline _ _ direct _ testDirect _) as outline) =
+    case Dict.get identity pkg (Dict.union direct testDirect) of
+        Just _ ->
+            Task.io (Solver.removeFromApp cache connection registry pkg outline)
+                |> Task.bind
+                    (\result ->
+                        case result of
+                            Solver.SolverOk (Solver.AppSolution old new app) ->
+                                Task.pure (Changes (detectChanges old new) (Outline.App app))
 
-                                newDirect : Dict ( String, String ) Pkg.Name V.Version
-                                newDirect =
-                                    Dict.intersection compare solution constraints
+                            Solver.NoSolution ->
+                                Task.throw (Exit.UninstallNoOnlineAppSolution pkg)
 
-                                newIndirect : Dict ( String, String ) Pkg.Name V.Version
-                                newIndirect =
-                                    Dict.diff solution constraints
+                            Solver.NoOfflineSolution ->
+                                Task.throw (Exit.UninstallNoOfflineAppSolution pkg)
 
-                                old : Dict ( String, String ) Pkg.Name V.Version
-                                old =
-                                    Dict.union direct indirect
+                            Solver.SolverErr exit ->
+                                Task.throw (Exit.UninstallHadSolverTrouble exit)
+                    )
 
-                                new : Dict ( String, String ) Pkg.Name V.Version
-                                new =
-                                    Dict.union (Dict.remove identity pkg direct) indirect
-                            in
-                            Task.pure (Changes (detectChanges old new) (Outline.App (Outline.AppOutline elmVersion sourceDirs newDirect newIndirect testDirect testIndirect)))
-
-                        Solver.NoSolution ->
-                            Task.throw (Exit.UninstallNoOnlineAppSolution pkg)
-
-                        Solver.NoOfflineSolution ->
-                            Task.throw (Exit.UninstallNoOfflineAppSolution pkg)
-
-                        Solver.SolverErr exit ->
-                            Task.throw (Exit.UninstallHadSolverTrouble exit)
-                )
-
-    else
-        Task.pure AlreadyUninstalled
+        Nothing ->
+            Task.pure AlreadyNotPresent
 
 
 
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
-makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
+makePkgPlan : Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
+makePkgPlan pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
     if Dict.member identity pkg deps then
-        case Registry.getVersions_ pkg registry of
-            Err suggestions ->
-                case connection of
-                    Solver.Online _ ->
-                        Task.throw (Exit.UninstallUnknownPackageOnline pkg suggestions)
+        let
+            old : Dict ( String, String ) Pkg.Name C.Constraint
+            old =
+                Dict.union deps test
 
-                    Solver.Offline ->
-                        Task.throw (Exit.UninstallUnknownPackageOffline pkg suggestions)
+            new : Dict ( String, String ) Pkg.Name C.Constraint
+            new =
+                Dict.remove identity pkg old
 
-            Ok (Registry.KnownVersions _ _) ->
-                let
-                    old : Dict ( String, String ) Pkg.Name C.Constraint
-                    old =
-                        Dict.union deps test
-
-                    cons : Dict ( String, String ) Pkg.Name C.Constraint
-                    cons =
-                        Dict.remove identity pkg old
-                in
-                Task.io (Solver.verify cache connection registry cons)
-                    |> Task.bind
-                        (\result ->
-                            case result of
-                                Solver.SolverOk _ ->
-                                    let
-                                        new : Dict ( String, String ) Pkg.Name C.Constraint
-                                        new =
-                                            Dict.remove identity pkg old
-
-                                        changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
-                                        changes =
-                                            detectChanges old new
-                                    in
-                                    Task.pure <|
-                                        Changes changes <|
-                                            Outline.Pkg <|
-                                                Outline.PkgOutline name
-                                                    summary
-                                                    license
-                                                    version
-                                                    exposed
-                                                    (Dict.remove identity pkg deps)
-                                                    test
-                                                    elmVersion
-
-                                Solver.NoSolution ->
-                                    Task.throw (Exit.UninstallNoOnlinePkgSolution pkg)
-
-                                Solver.NoOfflineSolution ->
-                                    Task.throw (Exit.UninstallNoOfflinePkgSolution pkg)
-
-                                Solver.SolverErr exit ->
-                                    Task.throw (Exit.UninstallHadSolverTrouble exit)
-                        )
+            changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
+            changes =
+                detectChanges old new
+        in
+        Task.pure <|
+            Changes changes <|
+                Outline.Pkg <|
+                    Outline.PkgOutline name
+                        summary
+                        license
+                        version
+                        exposed
+                        (Dict.remove identity pkg deps)
+                        (Dict.remove identity pkg test)
+                        elmVersion
 
     else
-        Task.pure AlreadyUninstalled
+        Task.pure AlreadyNotPresent
 
 
 
