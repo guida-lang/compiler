@@ -35,8 +35,8 @@ toEncoder tipe =
         Can.TUnit ->
             Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
 
-        Can.TTuple a b c ->
-            encodeTuple a b c
+        Can.TTuple a b cs ->
+            encodeTuple a b cs
 
         Can.TType _ name args ->
             case args of
@@ -90,7 +90,7 @@ toEncoder tipe =
                                     value =
                                         Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal Name.dollar) A.zero name ]
                                 in
-                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value Nothing
+                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value []
                             )
             in
             encode "object"
@@ -153,8 +153,8 @@ encodeArray tipe =
             )
 
 
-encodeTuple : Can.Type -> Can.Type -> Maybe Can.Type -> Names.Tracker Opt.Expr
-encodeTuple a b maybeC =
+encodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+encodeTuple a b cs =
     let
         let_ : Name -> Index.ZeroBased -> Opt.Expr -> Opt.Expr
         let_ arg index body =
@@ -175,8 +175,8 @@ encodeTuple a b maybeC =
                                 (\arg1 ->
                                     Names.bind
                                         (\arg2 ->
-                                            case maybeC of
-                                                Nothing ->
+                                            case cs of
+                                                [] ->
                                                     Names.pure
                                                         (Opt.Function [ Name.dollar ]
                                                             (let_ "a"
@@ -193,7 +193,7 @@ encodeTuple a b maybeC =
                                                             )
                                                         )
 
-                                                Just c ->
+                                                c :: [] ->
                                                     Names.fmap
                                                         (\arg3 ->
                                                             Opt.Function [ Name.dollar ]
@@ -214,6 +214,9 @@ encodeTuple a b maybeC =
                                                                 )
                                                         )
                                                         (encodeArg "c" c)
+
+                                                _ ->
+                                                    Debug.todo "FIXME missing more than 3 tuple elements"
                                         )
                                         (encodeArg "b" b)
                                 )
@@ -256,8 +259,8 @@ toDecoder tipe =
         Can.TUnit ->
             decodeTuple0
 
-        Can.TTuple a b c ->
-            decodeTuple a b c
+        Can.TTuple a b cs ->
+            decodeTuple a b cs
 
         Can.TType _ name args ->
             case ( name, args ) of
@@ -372,29 +375,32 @@ decodeTuple0 =
         (decode "null")
 
 
-decodeTuple : Can.Type -> Can.Type -> Maybe Can.Type -> Names.Tracker Opt.Expr
-decodeTuple a b maybeC =
+decodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+decodeTuple a b cs =
     Names.bind
         (\succeed ->
-            case maybeC of
-                Nothing ->
+            case cs of
+                [] ->
                     let
                         tuple : Opt.Expr
                         tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) Nothing
+                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) []
                     in
                     indexAndThen 1 b (Opt.Call A.zero succeed [ tuple ])
                         |> Names.bind (indexAndThen 0 a)
 
-                Just c ->
+                c :: [] ->
                     let
                         tuple : Opt.Expr
                         tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) (Just (toLocal 2))
+                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) [ toLocal 2 ]
                     in
                     indexAndThen 2 c (Opt.Call A.zero succeed [ tuple ])
                         |> Names.bind (indexAndThen 1 b)
                         |> Names.bind (indexAndThen 0 a)
+
+                _ ->
+                    Debug.todo "FIXME missing more than 3 tuple elements"
         )
         (decode "succeed")
 

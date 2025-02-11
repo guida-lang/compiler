@@ -233,8 +233,8 @@ canToDoc localizer context tipe =
         Can.TUnit ->
             D.fromChars "()"
 
-        Can.TTuple a b maybeC ->
-            tuple (canToDoc localizer None a) (canToDoc localizer None b) (List.map (canToDoc localizer None) (Maybe.toList maybeC))
+        Can.TTuple a b cs ->
+            tuple (canToDoc localizer None a) (canToDoc localizer None b) (List.map (canToDoc localizer None) cs)
 
         Can.TAlias home name args _ ->
             apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App << Tuple.second) args)

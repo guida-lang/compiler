@@ -232,18 +232,10 @@ checkPayload tipe =
         Can.TUnit ->
             Ok ()
 
-        Can.TTuple a b maybeC ->
+        Can.TTuple a b cs ->
             checkPayload a
                 |> Result.andThen (\_ -> checkPayload b)
-                |> Result.andThen
-                    (\_ ->
-                        case maybeC of
-                            Nothing ->
-                                Ok ()
-
-                            Just c ->
-                                checkPayload c
-                    )
+                |> Result.andThen (\_ -> checkPayloadTupleCs cs)
 
         Can.TVar name ->
             Err ( tipe, Error.TypeVariable name )
@@ -259,6 +251,17 @@ checkPayload tipe =
                 (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
                 (Ok ())
                 fields
+
+
+checkPayloadTupleCs : List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayloadTupleCs types =
+    case types of
+        [] ->
+            Ok ()
+
+        tipe :: rest ->
+            checkPayload tipe
+                |> Result.andThen (\_ -> checkPayloadTupleCs rest)
 
 
 checkFieldPayload : Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()

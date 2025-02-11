@@ -83,7 +83,7 @@ canonicalize env (A.At region pattern) =
                 R.ok Can.PTuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
-                    |> R.apply (canonicalizeTuple region env cs)
+                    |> R.apply (canonicalizeTuple env cs)
 
             Src.PCtor nameRegion name patterns ->
                 Env.findCtor nameRegion env name
@@ -144,17 +144,9 @@ canonicalizeCtor env region name patterns ctor =
             R.throw (Error.PatternHasRecordCtor region name)
 
 
-canonicalizeTuple : A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (Maybe Can.Pattern)
-canonicalizeTuple tupleRegion env extras =
-    case extras of
-        [] ->
-            R.ok Nothing
-
-        [ three ] ->
-            R.fmap Just (canonicalize env three)
-
-        _ ->
-            R.throw (Error.TupleLargerThanThree tupleRegion)
+canonicalizeTuple : Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeTuple env =
+    R.traverse (canonicalize env)
 
 
 canonicalizeList : Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)

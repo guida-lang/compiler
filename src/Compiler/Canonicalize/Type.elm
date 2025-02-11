@@ -4,6 +4,7 @@ module Compiler.Canonicalize.Type exposing
     , toAnnotation
     )
 
+import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
@@ -74,16 +75,8 @@ canonicalize env (A.At typeRegion tipe) =
                 |> R.bind (\tTuple -> R.fmap tTuple (canonicalize env b))
                 |> R.bind
                     (\tTuple ->
-                        case cs of
-                            [] ->
-                                R.ok (tTuple Nothing)
-
-                            [ c ] ->
-                                canonicalize env c
-                                    |> R.fmap (tTuple << Just)
-
-                            _ ->
-                                R.throw <| Error.TupleLargerThanThree typeRegion
+                        R.traverse (canonicalize env) cs
+                            |> R.fmap tTuple
                     )
 
 
@@ -156,13 +149,8 @@ addFreeVars freeVars tipe =
         Can.TUnit ->
             freeVars
 
-        Can.TTuple a b maybeC ->
-            case maybeC of
-                Nothing ->
-                    addFreeVars (addFreeVars freeVars a) b
-
-                Just c ->
-                    addFreeVars (addFreeVars (addFreeVars freeVars a) b) c
+        Can.TTuple a b cs ->
+            List.foldl (flip addFreeVars) (addFreeVars (addFreeVars freeVars a) b) cs
 
         Can.TAlias _ _ args _ ->
             List.foldl (\( _, arg ) fvs -> addFreeVars fvs arg) freeVars args

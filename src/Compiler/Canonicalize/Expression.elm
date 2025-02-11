@@ -170,23 +170,15 @@ canonicalize env (A.At region expression) =
                 R.pure Can.Tuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
-                    |> R.apply (canonicalizeTupleExtras region env cs)
+                    |> R.apply (canonicalizeTupleExtras env cs)
 
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)
 
 
-canonicalizeTupleExtras : A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (Maybe Can.Expr)
-canonicalizeTupleExtras region env extras =
-    case extras of
-        [] ->
-            R.ok Nothing
-
-        [ three ] ->
-            R.fmap Just <| canonicalize env three
-
-        _ ->
-            R.throw (Error.TupleLargerThanThree region)
+canonicalizeTupleExtras : Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
+canonicalizeTupleExtras env extras =
+    R.traverse (canonicalize env) extras
 
 
 

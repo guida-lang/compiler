@@ -196,6 +196,20 @@ subUnify var1 var2 =
     guardedUnify var1 var2
 
 
+subUnifyTuple : List IO.Variable -> List IO.Variable -> Context -> IO.Content -> Unify ()
+subUnifyTuple cs zs context otherContent =
+    case ( cs, zs ) of
+        ( [], [] ) ->
+            merge context otherContent
+
+        ( c :: restCs, z :: restZs ) ->
+            subUnify c z
+                |> bind (\_ -> subUnifyTuple restCs restZs context otherContent)
+
+        _ ->
+            mismatch
+
+
 actuallyUnify : Context -> Unify ()
 actuallyUnify ((Context _ (IO.Descriptor firstContent _ _ _) _ (IO.Descriptor secondContent _ _ _)) as context) =
     case firstContent of
@@ -446,7 +460,7 @@ unifyFlexSuperStructure context super flatType =
             else
                 mismatch
 
-        IO.Tuple1 a b maybeC ->
+        IO.Tuple1 a b cs ->
             case super of
                 IO.Number ->
                     mismatch
@@ -455,18 +469,7 @@ unifyFlexSuperStructure context super flatType =
                     mismatch
 
                 IO.Comparable ->
-                    comparableOccursCheck context
-                        |> bind (\_ -> unifyComparableRecursive a)
-                        |> bind (\_ -> unifyComparableRecursive b)
-                        |> bind
-                            (\_ ->
-                                case maybeC of
-                                    Nothing ->
-                                        pure ()
-
-                                    Just c ->
-                                        unifyComparableRecursive c
-                            )
+                    List.foldl (\var _ -> unifyComparableRecursive var) (comparableOccursCheck context) (a :: b :: cs)
                         |> bind (\_ -> merge context (IO.Structure flatType))
 
                 IO.CompAppend ->
@@ -679,16 +682,10 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                                     )
                         )
 
-                ( IO.Tuple1 a b Nothing, IO.Tuple1 x y Nothing ) ->
+                ( IO.Tuple1 a b cs, IO.Tuple1 x y zs ) ->
                     subUnify a x
                         |> bind (\_ -> subUnify b y)
-                        |> bind (\_ -> merge context otherContent)
-
-                ( IO.Tuple1 a b (Just c), IO.Tuple1 x y (Just z) ) ->
-                    subUnify a x
-                        |> bind (\_ -> subUnify b y)
-                        |> bind (\_ -> subUnify c z)
-                        |> bind (\_ -> merge context otherContent)
+                        |> bind (\_ -> subUnifyTuple cs zs context otherContent)
 
                 ( IO.Unit1, IO.Unit1 ) ->
                     merge context otherContent

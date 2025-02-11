@@ -180,21 +180,25 @@ generate mode parentModule expression =
                 Mode.Prod _ ->
                     JsExpr <| JS.ExprInt 0
 
-        Opt.Tuple _ a b maybeC ->
+        Opt.Tuple _ a b cs ->
             JsExpr <|
-                case maybeC of
-                    Nothing ->
+                case cs of
+                    [] ->
                         JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "Tuple2"))
                             [ generateJsExpr mode parentModule a
                             , generateJsExpr mode parentModule b
                             ]
 
-                    Just c ->
+                    [ c ] ->
                         JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "Tuple3"))
                             [ generateJsExpr mode parentModule a
                             , generateJsExpr mode parentModule b
                             , generateJsExpr mode parentModule c
                             ]
+
+                    _ ->
+                        JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "Tuple"))
+                            (List.map (generateJsExpr mode parentModule) (a :: b :: cs))
 
         Opt.Shader src attributes uniforms ->
             let

@@ -584,20 +584,14 @@ adjustRankContent youngMark visitMark groupRank content =
                     -- THEORY: a unit never needs to get generalized
                     IO.pure Type.outermostRank
 
-                IO.Tuple1 a b maybeC ->
+                IO.Tuple1 a b cs ->
                     go a
                         |> IO.bind
                             (\ma ->
                                 go b
                                     |> IO.bind
                                         (\mb ->
-                                            case maybeC of
-                                                Nothing ->
-                                                    IO.pure (max ma mb)
-
-                                                Just c ->
-                                                    go c
-                                                        |> IO.fmap (max (max ma mb))
+                                            IO.foldM (\rank -> IO.fmap (max rank) << go) (max ma mb) cs
                                         )
                             )
 
@@ -708,17 +702,17 @@ typeToVar rank pools aliasDict tipe =
         Type.UnitN ->
             register rank pools unit1
 
-        Type.TupleN a b c ->
+        Type.TupleN a b cs ->
             go a
                 |> IO.bind
                     (\aVar ->
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    IO.traverseMaybe go c
+                                    IO.traverseList go cs
                                         |> IO.bind
-                                            (\cVar ->
-                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
+                                            (\cVars ->
+                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVars))
                                             )
                                 )
                     )
@@ -829,17 +823,17 @@ srcTypeToVar rank pools flexVars srcType =
         Can.TUnit ->
             register rank pools unit1
 
-        Can.TTuple a b c ->
+        Can.TTuple a b cs ->
             go a
                 |> IO.bind
                     (\aVar ->
                         go b
                             |> IO.bind
                                 (\bVar ->
-                                    IO.traverseMaybe go c
+                                    IO.traverseList go cs
                                         |> IO.bind
-                                            (\cVar ->
-                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVar))
+                                            (\cVars ->
+                                                register rank pools (IO.Structure (IO.Tuple1 aVar bVar cVars))
                                             )
                                 )
                     )
@@ -1012,18 +1006,9 @@ restoreContent content =
                 IO.Unit1 ->
                     IO.pure ()
 
-                IO.Tuple1 a b maybeC ->
-                    restore a
-                        |> IO.bind (\_ -> restore b)
-                        |> IO.bind
-                            (\_ ->
-                                case maybeC of
-                                    Nothing ->
-                                        IO.pure ()
-
-                                    Just c ->
-                                        restore c
-                            )
+                IO.Tuple1 a b cs ->
+                    IO.traverseList restore (a :: b :: cs)
+                        |> IO.fmap (\_ -> ())
 
         IO.Alias _ _ args var ->
             IO.mapM_ restore (List.map Tuple.second args)
@@ -1063,4 +1048,4 @@ traverseFlatType f flatType =
             IO.pure IO.Tuple1
                 |> IO.apply (f a)
                 |> IO.apply (f b)
-                |> IO.apply (IO.traverseMaybe f cs)
+                |> IO.apply (IO.traverseList f cs)

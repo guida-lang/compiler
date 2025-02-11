@@ -195,15 +195,11 @@ flatten (( path, A.At region pattern ) as pathPattern) otherPathPatterns =
             else
                 pathPattern :: otherPathPatterns
 
-        Can.PTuple a b maybeC ->
-            flatten ( Index Index.first path, a ) <|
-                flatten ( Index Index.second path, b ) <|
-                    case maybeC of
-                        Nothing ->
-                            otherPathPatterns
-
-                        Just c ->
-                            flatten ( Index Index.third path, c ) otherPathPatterns
+        Can.PTuple a b cs ->
+            (a :: b :: cs)
+                |> List.foldl (\x ( index, acc ) -> ( Index.next index, flatten ( Index index path, x ) acc ))
+                    ( Index.first, otherPathPatterns )
+                |> Tuple.second
 
         Can.PUnit ->
             otherPathPatterns
@@ -500,17 +496,11 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                 Can.PUnit ->
                     Just (Branch goal (start ++ end))
 
-                Can.PTuple a b maybeC ->
+                Can.PTuple a b cs ->
                     Just
                         (Branch goal
                             (start
-                                ++ subPositions path
-                                    (a
-                                        :: b
-                                        :: (Maybe.map List.singleton maybeC
-                                                |> Maybe.withDefault []
-                                           )
-                                    )
+                                ++ subPositions path (a :: b :: cs)
                                 ++ end
                             )
                         )

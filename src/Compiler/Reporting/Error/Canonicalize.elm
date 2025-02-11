@@ -74,7 +74,6 @@ type Error
     | RecursiveDecl A.Region Name (List Name)
     | RecursiveLet (A.Located Name) (List Name)
     | Shadowing Name A.Region A.Region
-    | TupleLargerThanThree A.Region
     | TypeVarsUnboundInUnion A.Region Name (List Name) ( Name, A.Region ) (List ( Name, A.Region ))
     | TypeVarsMessedUpInAlias A.Region Name (List Name) (List ( Name, A.Region )) (List ( Name, A.Region ))
 
@@ -860,18 +859,6 @@ toReport source err =
                     , advice
                     )
 
-        TupleLargerThanThree region ->
-            Report.Report "BAD TUPLE" region [] <|
-                Code.toSnippet source
-                    region
-                    Nothing
-                    ( D.fromChars "I only accept tuples with two or three items. This has too many:"
-                    , D.stack
-                        [ D.reflow <| "I recommend switching to records. Each item will be named, and you can use the `point.x` syntax to access them."
-                        , D.link "Note" "Read" "tuples" "for more comprehensive advice on working with large chunks of data in Elm."
-                        ]
-                    )
-
         TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
             unboundTypeVars source unionRegion [ D.fromChars "type" ] typeName allVars unbound unbounds
 
@@ -1596,12 +1583,6 @@ errorEncoder error =
                 , ( "r2", A.regionEncoder r2 )
                 ]
 
-        TupleLargerThanThree region ->
-            Encode.object
-                [ ( "type", Encode.string "TupleLargerThanThree" )
-                , ( "region", A.regionEncoder region )
-                ]
-
         TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
             Encode.object
                 [ ( "type", Encode.string "TypeVarsUnboundInUnion" )
@@ -1853,9 +1834,6 @@ errorDecoder =
                             (Decode.field "name" Decode.string)
                             (Decode.field "r1" A.regionDecoder)
                             (Decode.field "r2" A.regionDecoder)
-
-                    "TupleLargerThanThree" ->
-                        Decode.map TupleLargerThanThree (Decode.field "region" A.regionDecoder)
 
                     "TypeVarsUnboundInUnion" ->
                         Decode.map5 TypeVarsUnboundInUnion
