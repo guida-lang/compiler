@@ -41,7 +41,7 @@ number toExpectation toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation
 
             else
                 let
@@ -50,7 +50,7 @@ number toExpectation toError =
                         String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
                 in
                 if not (isDecimalDigit word) then
-                    Err (P.PErr P.Empty row col toExpectation)
+                    P.Eerr row col toExpectation
 
                 else
                     let
@@ -69,7 +69,7 @@ number toExpectation toError =
                                 newCol =
                                     col + (newPos - pos)
                             in
-                            Err (P.PErr P.Consumed row newCol (toError problem))
+                            P.Cerr row newCol (toError problem)
 
                         OkInt newPos n ->
                             let
@@ -85,7 +85,7 @@ number toExpectation toError =
                                 newState =
                                     P.State src newPos end indent row newCol
                             in
-                            Ok (P.POk P.Consumed integer newState)
+                            P.Cok integer newState
 
                         OkFloat newPos ->
                             let
@@ -110,7 +110,7 @@ number toExpectation toError =
                                 newState =
                                     P.State src newPos end indent row newCol
                             in
-                            Ok (P.POk P.Consumed float newState)
+                            P.Cok float newState
 
 
 
@@ -349,7 +349,7 @@ precedence toExpectation =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation
 
             else
                 let
@@ -358,11 +358,9 @@ precedence toExpectation =
                         String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
                 in
                 if isDecimalDigit word then
-                    Ok
-                        (P.POk P.Consumed
-                            (Char.toCode word - Char.toCode '0')
-                            (P.State src (pos + 1) end indent row (col + 1))
-                        )
+                    P.Cok
+                        (Char.toCode word - Char.toCode '0')
+                        (P.State src (pos + 1) end indent row (col + 1))
 
                 else
-                    Err (P.PErr P.Empty row col toExpectation)
+                    P.Eerr row col toExpectation

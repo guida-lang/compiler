@@ -275,7 +275,7 @@ makeLevel level oldTabs =
                 oldTabs
 
             else
-                String.repeat (String.length oldTabs * 2) "\t"
+                oldTabs ++ oldTabs
     in
     Level (String.left level tabs) (\_ -> makeLevel (level + 1) tabs)
 

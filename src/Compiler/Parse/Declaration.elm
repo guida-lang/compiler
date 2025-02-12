@@ -141,15 +141,26 @@ chompMatchingName expectedName =
     in
     P.Parser <|
         \((P.State _ _ _ _ sr sc) as state) ->
-            Result.andThen
-                (\(P.POk status name ((P.State _ _ _ _ er ec) as newState)) ->
+            case parserL state of
+                P.Cok name ((P.State _ _ _ _ er ec) as newState) ->
                     if expectedName == name then
-                        Ok (P.POk status (A.At (A.Region (A.Position sr sc) (A.Position er ec)) name) newState)
+                        P.Cok (A.At (A.Region (A.Position sr sc) (A.Position er ec)) name) newState
 
                     else
-                        Err (P.PErr status sr sc (E.DeclDefNameMatch name))
-                )
-                (parserL state)
+                        P.Cerr sr sc (E.DeclDefNameMatch name)
+
+                P.Eok name ((P.State _ _ _ _ er ec) as newState) ->
+                    if expectedName == name then
+                        P.Eok (A.At (A.Region (A.Position sr sc) (A.Position er ec)) name) newState
+
+                    else
+                        P.Eerr sr sc (E.DeclDefNameMatch name)
+
+                P.Cerr r c t ->
+                    P.Cerr r c t
+
+                P.Eerr r c t ->
+                    P.Eerr r c t
 
 
 

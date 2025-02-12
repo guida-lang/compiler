@@ -181,7 +181,7 @@ numberParser =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col Tuple.pair)
+                P.Eerr row col Tuple.pair
 
             else
                 let
@@ -195,7 +195,7 @@ numberParser =
                         newState =
                             P.State src (pos + 1) end indent row (col + 1)
                     in
-                    Ok (P.POk P.Consumed 0 newState)
+                    P.Cok 0 newState
 
                 else if isDigit word then
                     let
@@ -206,10 +206,10 @@ numberParser =
                         newState =
                             P.State src newPos end indent row (col + (newPos - pos))
                     in
-                    Ok (P.POk P.Consumed total newState)
+                    P.Cok total newState
 
                 else
-                    Err (P.PErr P.Empty row col Tuple.pair)
+                    P.Eerr row col Tuple.pair
 
 
 chompWord16 : String -> Int -> Int -> Int -> ( Int, Int )

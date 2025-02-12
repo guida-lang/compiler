@@ -527,10 +527,10 @@ boundParser bound tooLong =
                     col + len
             in
             if len < bound then
-                Ok (P.POk P.Consumed (String.slice pos end src) (P.State src end end indent row newCol))
+                P.Cok (String.slice pos end src) (P.State src end end indent row newCol)
 
             else
-                Err (P.PErr P.Consumed row newCol (\_ _ -> tooLong))
+                P.Cerr row newCol (\_ _ -> tooLong)
 
 
 srcDirEncoder : SrcDir -> Encode.Value

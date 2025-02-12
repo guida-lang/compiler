@@ -80,7 +80,7 @@ termHelp syntaxVersion start =
                                                         String.fromFloat float
                                                             |> String.length
                                                 in
-                                                Err (P.PErr P.Consumed row (col - width) (E.PFloat width))
+                                                P.Cerr row (col - width) (E.PFloat width)
                             )
                 )
         , String.string E.PStart E.PString
@@ -99,7 +99,7 @@ wildcard syntaxVersion =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos == end || P.unsafeIndex src pos /= '_' then
-                Err (P.PErr P.Empty row col E.PStart)
+                P.Eerr row col E.PStart
 
             else
                 let
@@ -118,7 +118,7 @@ wildcard syntaxVersion =
                                 ( badPos, badCol ) =
                                     Var.chompInnerChars src newPos end newCol
                             in
-                            Err (P.PErr P.Consumed row col (E.PWildcardNotVar (Name.fromPtr src pos badPos) (badCol - col)))
+                            P.Cerr row col (E.PWildcardNotVar (Name.fromPtr src pos badPos) (badCol - col))
 
                         SV.Guida ->
                             let
@@ -130,7 +130,7 @@ wildcard syntaxVersion =
                                     Name.fromPtr src newPos lowerPos
                             in
                             if Var.isReservedWord name then
-                                Err (P.PErr P.Consumed row col (E.PWildcardReservedWord (Name.fromPtr src newPos lowerPos) (lowerCol - col)))
+                                P.Cerr row col (E.PWildcardReservedWord (Name.fromPtr src newPos lowerPos) (lowerCol - col))
 
                             else
                                 let
@@ -138,7 +138,7 @@ wildcard syntaxVersion =
                                     newState =
                                         P.State src lowerPos end indent row lowerCol
                                 in
-                                Ok (P.POk P.Consumed name newState)
+                                P.Cok name newState
 
                 else
                     let
@@ -146,7 +146,7 @@ wildcard syntaxVersion =
                         newState =
                             P.State src newPos end indent row newCol
                     in
-                    Ok (P.POk P.Consumed "" newState)
+                    P.Cok "" newState
 
 
 

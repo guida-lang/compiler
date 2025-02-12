@@ -41,13 +41,13 @@ chomp toError =
                         newState =
                             P.State src newPos end indent newRow newCol
                     in
-                    Ok (P.POk P.Consumed () newState)
+                    P.Cok () newState
 
                 HasTab ->
-                    Err (P.PErr P.Consumed newRow newCol (toError E.HasTab))
+                    P.Cerr newRow newCol (toError E.HasTab)
 
                 EndlessMultiComment ->
-                    Err (P.PErr P.Consumed newRow newCol (toError E.EndlessMultiComment))
+                    P.Cerr newRow newCol (toError E.EndlessMultiComment)
 
 
 
@@ -59,10 +59,10 @@ checkIndent (A.Position endRow endCol) toError =
     P.Parser <|
         \((P.State _ _ _ indent _ col) as state) ->
             if col > indent && col > 1 then
-                Ok (P.POk P.Empty () state)
+                P.Eok () state
 
             else
-                Err (P.PErr P.Empty endRow endCol toError)
+                P.Eerr endRow endCol toError
 
 
 checkAligned : (Int -> Int -> Int -> x) -> P.Parser x ()
@@ -70,10 +70,10 @@ checkAligned toError =
     P.Parser <|
         \((P.State _ _ _ indent row col) as state) ->
             if col == indent then
-                Ok (P.POk P.Empty () state)
+                P.Eok () state
 
             else
-                Err (P.PErr P.Empty row col (toError indent))
+                P.Eerr row col (toError indent)
 
 
 checkFreshLine : (Row -> Col -> x) -> P.Parser x ()
@@ -81,10 +81,10 @@ checkFreshLine toError =
     P.Parser <|
         \((P.State _ _ _ _ row col) as state) ->
             if col == 1 then
-                Ok (P.POk P.Empty () state)
+                P.Eok () state
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 
@@ -107,16 +107,16 @@ chompAndCheckIndent toSpaceError toIndentError =
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        Ok (P.POk P.Consumed () newState)
+                        P.Cok () newState
 
                     else
-                        Err (P.PErr P.Consumed row col toIndentError)
+                        P.Cerr row col toIndentError
 
                 HasTab ->
-                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.HasTab))
+                    P.Cerr newRow newCol (toSpaceError E.HasTab)
 
                 EndlessMultiComment ->
-                    Err (P.PErr P.Consumed newRow newCol (toSpaceError E.EndlessMultiComment))
+                    P.Cerr newRow newCol (toSpaceError E.EndlessMultiComment)
 
 
 
@@ -336,13 +336,13 @@ docComment toExpectation toSpaceError =
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        Ok (P.POk P.Consumed comment newState)
+                        P.Cok comment newState
 
                     MultiTab ->
-                        Err (P.PErr P.Consumed newRow newCol (toSpaceError E.HasTab))
+                        P.Cerr newRow newCol (toSpaceError E.HasTab)
 
                     MultiEndless ->
-                        Err (P.PErr P.Consumed row col (toSpaceError E.EndlessMultiComment))
+                        P.Cerr row col (toSpaceError E.EndlessMultiComment)
 
             else
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation

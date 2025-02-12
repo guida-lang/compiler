@@ -192,10 +192,10 @@ subscription_ toError =
                     s =
                         P.State src pos12 end indent row (col + 12)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 
@@ -222,10 +222,10 @@ k2 w1 w2 toError =
                     s =
                         P.State src pos2 end indent row (col + 2)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k3 : Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -249,10 +249,10 @@ k3 w1 w2 w3 toError =
                     s =
                         P.State src pos3 end indent row (col + 3)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k4 : Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -277,10 +277,10 @@ k4 w1 w2 w3 w4 toError =
                     s =
                         P.State src pos4 end indent row (col + 4)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k5 : Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -306,10 +306,10 @@ k5 w1 w2 w3 w4 w5 toError =
                     s =
                         P.State src pos5 end indent row (col + 5)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k6 : Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -336,10 +336,10 @@ k6 w1 w2 w3 w4 w5 w6 toError =
                     s =
                         P.State src pos6 end indent row (col + 6)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k7 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -367,10 +367,10 @@ k7 w1 w2 w3 w4 w5 w6 w7 toError =
                     s =
                         P.State src pos7 end indent row (col + 7)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
 
 k8 : Char -> Char -> Char -> Char -> Char -> Char -> Char -> Char -> (Row -> Col -> x) -> Parser x ()
@@ -399,7 +399,7 @@ k8 w1 w2 w3 w4 w5 w6 w7 w8 toError =
                     s =
                         P.State src pos8 end indent row (col + 8)
                 in
-                Ok (P.POk P.Consumed () s)
+                P.Cok () s
 
             else
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError

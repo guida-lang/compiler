@@ -289,7 +289,7 @@ parseName isGoodStart isGoodInner =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col Tuple.pair)
+                P.Eerr row col Tuple.pair
 
             else
                 let
@@ -298,7 +298,7 @@ parseName isGoodStart isGoodInner =
                         P.unsafeIndex src pos
                 in
                 if not (isGoodStart word) then
-                    Err (P.PErr P.Empty row col Tuple.pair)
+                    P.Eerr row col Tuple.pair
 
                 else
                     let
@@ -319,10 +319,10 @@ parseName isGoodStart isGoodInner =
                             newState =
                                 P.State src newPos end indent row newCol
                         in
-                        Ok (P.POk P.Consumed (String.slice pos newPos src) newState)
+                        P.Cok (String.slice pos newPos src) newState
 
                     else
-                        Err (P.PErr P.Consumed row newCol Tuple.pair)
+                        P.Cerr row newCol Tuple.pair
 
 
 isLower : Char -> Bool
