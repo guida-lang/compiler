@@ -27,7 +27,6 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Maybe.Extra as Maybe
 import Prelude
 import System.TypeCheck.IO as IO
 

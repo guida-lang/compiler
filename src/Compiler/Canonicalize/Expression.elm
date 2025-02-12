@@ -20,6 +20,7 @@ import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -170,15 +171,29 @@ canonicalize env (A.At region expression) =
                 R.pure Can.Tuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
-                    |> R.apply (canonicalizeTupleExtras env cs)
+                    |> R.apply (canonicalizeTupleExtras region env cs)
 
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)
 
 
-canonicalizeTupleExtras : Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
-canonicalizeTupleExtras env extras =
-    R.traverse (canonicalize env) extras
+canonicalizeTupleExtras : A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
+canonicalizeTupleExtras region env extras =
+    case extras of
+        [] ->
+            R.ok []
+
+        [ three ] ->
+            R.fmap List.singleton <| canonicalize env three
+
+        _ ->
+            -- FIXME
+            case SV.Guida of
+                SV.Elm ->
+                    R.throw (Error.TupleLargerThanThree region)
+
+                SV.Guida ->
+                    R.traverse (canonicalize env) extras
 
 
 

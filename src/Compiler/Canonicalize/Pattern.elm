@@ -13,6 +13,7 @@ import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -83,7 +84,7 @@ canonicalize env (A.At region pattern) =
                 R.ok Can.PTuple
                     |> R.apply (canonicalize env a)
                     |> R.apply (canonicalize env b)
-                    |> R.apply (canonicalizeTuple env cs)
+                    |> R.apply (canonicalizeTuple region env cs)
 
             Src.PCtor nameRegion name patterns ->
                 Env.findCtor nameRegion env name
@@ -144,9 +145,23 @@ canonicalizeCtor env region name patterns ctor =
             R.throw (Error.PatternHasRecordCtor region name)
 
 
-canonicalizeTuple : Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
-canonicalizeTuple env =
-    R.traverse (canonicalize env)
+canonicalizeTuple : A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeTuple tupleRegion env extras =
+    case extras of
+        [] ->
+            R.ok []
+
+        [ three ] ->
+            R.fmap List.singleton (canonicalize env three)
+
+        _ ->
+            -- FIXME
+            case SV.Guida of
+                SV.Elm ->
+                    R.throw (Error.TupleLargerThanThree tupleRegion)
+
+                SV.Guida ->
+                    R.traverse (canonicalize env) extras
 
 
 canonicalizeList : Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)

@@ -65,8 +65,16 @@ simplify (A.At _ pattern) =
         Can.PUnit ->
             Ctor unit unitName []
 
+        Can.PTuple a b [] ->
+            Ctor pair pairName [ simplify a, simplify b ]
+
+        Can.PTuple a b [ c ] ->
+            Ctor triple tripleName [ simplify a, simplify b, simplify c ]
+
         Can.PTuple a b cs ->
-            Ctor triple tripleName (List.map simplify (a :: b :: cs))
+            -- FIXME this is a hack to make sure that the triple ctor is used
+            -- Ctor triple tripleName (List.map simplify (a :: b :: cs))
+            Debug.todo "Nitpick: simplify tuple with more than 3 elements"
 
         Can.PCtor { union, name, args } ->
             Ctor union name <|
@@ -125,6 +133,16 @@ unit =
     Can.Union [] [ ctor ] 1 Can.Normal
 
 
+pair : Can.Union
+pair =
+    let
+        ctor : Can.Ctor
+        ctor =
+            Can.Ctor pairName Index.first 2 [ Can.TVar "a", Can.TVar "b" ]
+    in
+    Can.Union [ "a", "b" ] [ ctor ] 1 Can.Normal
+
+
 triple : Can.Union
 triple =
     let
@@ -157,6 +175,11 @@ list =
 unitName : Name.Name
 unitName =
     "#0"
+
+
+pairName : Name.Name
+pairName =
+    "#2"
 
 
 tripleName : Name.Name

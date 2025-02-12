@@ -1002,12 +1002,12 @@ pattern_Encoder pattern_ =
                 [ ( "type", Encode.string "PUnit" )
                 ]
 
-        PTuple pattern1 pattern2 patterns3 ->
+        PTuple pattern1 pattern2 otherPatterns ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 , ( "pattern1", patternEncoder pattern1 )
                 , ( "pattern2", patternEncoder pattern2 )
-                , ( "patterns3", Encode.list patternEncoder patterns3 )
+                , ( "otherPatterns", Encode.list patternEncoder otherPatterns )
                 ]
 
         PList patterns ->
@@ -1089,7 +1089,7 @@ pattern_Decoder =
                         Decode.map3 PTuple
                             (Decode.field "pattern1" patternDecoder)
                             (Decode.field "pattern2" patternDecoder)
-                            (Decode.field "patterns3" (Decode.list patternDecoder))
+                            (Decode.field "otherPatterns" (Decode.list patternDecoder))
 
                     "PList" ->
                         Decode.map PList

@@ -10,6 +10,7 @@ import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Name as Name
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -75,8 +76,22 @@ canonicalize env (A.At typeRegion tipe) =
                 |> R.bind (\tTuple -> R.fmap tTuple (canonicalize env b))
                 |> R.bind
                     (\tTuple ->
-                        R.traverse (canonicalize env) cs
-                            |> R.fmap tTuple
+                        case cs of
+                            [] ->
+                                R.ok (tTuple [])
+
+                            [ c ] ->
+                                canonicalize env c
+                                    |> R.fmap (tTuple << List.singleton)
+
+                            _ ->
+                                case SV.Guida of
+                                    SV.Elm ->
+                                        R.throw <| Error.TupleLargerThanThree typeRegion
+
+                                    SV.Guida ->
+                                        R.traverse (canonicalize env) cs
+                                            |> R.fmap tTuple
                     )
 
 
