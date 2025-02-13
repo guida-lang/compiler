@@ -7,6 +7,7 @@ import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -59,7 +60,7 @@ addVars module_ env =
 
 
 collectVars : Src.Module -> LResult i w (Dict String Name.Name Env.Var)
-collectVars (Src.Module _ _ _ _ values _ _ _ effects) =
+collectVars (Src.Module _ _ _ _ _ values _ _ _ effects) =
     let
         addDecl : A.Located Src.Value -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
         addDecl (A.At _ (Src.Value (A.At region name) _ _ _)) =
@@ -102,7 +103,7 @@ toEffectDups effects =
 
 
 addTypes : Src.Module -> Env.Env -> LResult i w Env.Env
-addTypes (Src.Module _ _ _ _ _ unions aliases _ _) env =
+addTypes (Src.Module syntaxVersion _ _ _ _ _ unions aliases _ _) env =
     let
         addAliasDups : A.Located Src.Alias -> Dups.Tracker () -> Dups.Tracker ()
         addAliasDups (A.At _ (Src.Alias (A.At region name) _ _)) =
@@ -120,7 +121,7 @@ addTypes (Src.Module _ _ _ _ _ unions aliases _ _) env =
         |> R.bind
             (\_ ->
                 Utils.foldM (addUnion env.home) env.types unions
-                    |> R.bind (\ts1 -> addAliases aliases <| { env | types = ts1 })
+                    |> R.bind (\ts1 -> addAliases syntaxVersion aliases <| { env | types = ts1 })
             )
 
 
@@ -142,8 +143,8 @@ addUnion home types ((A.At _ (Src.Union (A.At _ name) _ _)) as union) =
 -- ADD TYPE ALIASES
 
 
-addAliases : List (A.Located Src.Alias) -> Env.Env -> LResult i w Env.Env
-addAliases aliases env =
+addAliases : SyntaxVersion -> List (A.Located Src.Alias) -> Env.Env -> LResult i w Env.Env
+addAliases syntaxVersion aliases env =
     let
         nodes : List ( A.Located Src.Alias, Name, List Name )
         nodes =
@@ -153,17 +154,17 @@ addAliases aliases env =
         sccs =
             Graph.stronglyConnComp nodes
     in
-    Utils.foldM addAlias env sccs
+    Utils.foldM (addAlias syntaxVersion) env sccs
 
 
-addAlias : Env.Env -> Graph.SCC (A.Located Src.Alias) -> LResult i w Env.Env
-addAlias ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env) scc =
+addAlias : SyntaxVersion -> Env.Env -> Graph.SCC (A.Located Src.Alias) -> LResult i w Env.Env
+addAlias syntaxVersion ({ home, vars, types, ctors, binops, q_vars, q_types, q_ctors } as env) scc =
     case scc of
         Graph.AcyclicSCC ((A.At _ (Src.Alias (A.At _ name) _ tipe)) as alias) ->
             checkAliasFreeVars alias
                 |> R.bind
                     (\args ->
-                        Type.canonicalize env tipe
+                        Type.canonicalize syntaxVersion env tipe
                             |> R.bind
                                 (\ctype ->
                                     let
@@ -334,11 +335,11 @@ addFreeVars (A.At region tipe) freeVars =
 
 
 addCtors : Src.Module -> Env.Env -> LResult i w ( Env.Env, Unions, Aliases )
-addCtors (Src.Module _ _ _ _ _ unions aliases _ _) env =
-    R.traverse (canonicalizeUnion env) unions
+addCtors (Src.Module syntaxVersion _ _ _ _ _ unions aliases _ _) env =
+    R.traverse (canonicalizeUnion syntaxVersion env) unions
         |> R.bind
             (\unionInfo ->
-                R.traverse (canonicalizeAlias env) aliases
+                R.traverse (canonicalizeAlias syntaxVersion env) aliases
                     |> R.bind
                         (\aliasInfo ->
                             (Dups.detect Error.DuplicateCtor <|
@@ -371,14 +372,14 @@ type alias CtorDups =
 -- CANONICALIZE ALIAS
 
 
-canonicalizeAlias : Env.Env -> A.Located Src.Alias -> LResult i w ( ( Name.Name, Can.Alias ), CtorDups )
-canonicalizeAlias ({ home } as env) (A.At _ (Src.Alias (A.At region name) args tipe)) =
+canonicalizeAlias : SyntaxVersion -> Env.Env -> A.Located Src.Alias -> LResult i w ( ( Name.Name, Can.Alias ), CtorDups )
+canonicalizeAlias syntaxVersion ({ home } as env) (A.At _ (Src.Alias (A.At region name) args tipe)) =
     let
         vars : List Name
         vars =
             List.map A.toValue args
     in
-    Type.canonicalize env tipe
+    Type.canonicalize syntaxVersion env tipe
         |> R.bind
             (\ctipe ->
                 R.ok
@@ -414,9 +415,9 @@ toRecordCtor home name vars fields =
 -- CANONICALIZE UNION
 
 
-canonicalizeUnion : Env.Env -> A.Located Src.Union -> LResult i w ( ( Name.Name, Can.Union ), CtorDups )
-canonicalizeUnion ({ home } as env) (A.At _ (Src.Union (A.At _ name) avars ctors)) =
-    R.indexedTraverse (canonicalizeCtor env) ctors
+canonicalizeUnion : SyntaxVersion -> Env.Env -> A.Located Src.Union -> LResult i w ( ( Name.Name, Can.Union ), CtorDups )
+canonicalizeUnion syntaxVersion ({ home } as env) (A.At _ (Src.Union (A.At _ name) avars ctors)) =
+    R.indexedTraverse (canonicalizeCtor syntaxVersion env) ctors
         |> R.bind
             (\cctors ->
                 let
@@ -436,9 +437,9 @@ canonicalizeUnion ({ home } as env) (A.At _ (Src.Union (A.At _ name) avars ctors
             )
 
 
-canonicalizeCtor : Env.Env -> Index.ZeroBased -> ( A.Located Name.Name, List Src.Type ) -> LResult i w (A.Located Can.Ctor)
-canonicalizeCtor env index ( A.At region ctor, tipes ) =
-    R.traverse (Type.canonicalize env) tipes
+canonicalizeCtor : SyntaxVersion -> Env.Env -> Index.ZeroBased -> ( A.Located Name.Name, List Src.Type ) -> LResult i w (A.Located Can.Ctor)
+canonicalizeCtor syntaxVersion env index ( A.At region ctor, tipes ) =
+    R.traverse (Type.canonicalize syntaxVersion env) tipes
         |> R.bind
             (\ctipes ->
                 R.ok <|

@@ -447,7 +447,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                     Err err ->
                         IO.pure <| SBadSyntax path time source err
 
-                    Ok ((Src.Module maybeActualName _ _ imports values _ _ _ _) as modul) ->
+                    Ok ((Src.Module _ maybeActualName _ _ imports values _ _ _ _) as modul) ->
                         case maybeActualName of
                             Nothing ->
                                 IO.pure <| SBadSyntax path time source (Syntax.ModuleNameUnspecified expectedName)
@@ -543,7 +543,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                             RProblem <|
                                                                 Error.Module name path time source <|
                                                                     case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
-                                                                        Ok (Src.Module _ _ _ imports _ _ _ _ _) ->
+                                                                        Ok (Src.Module _ _ _ _ imports _ _ _ _ _) ->
                                                                             Error.BadImports (toImportErrors env results imports problems)
 
                                                                         Err err ->
@@ -552,7 +552,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                 )
                     )
 
-        SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
+        SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
             Utils.readMVar resultDictDecoder resultsMVar
                 |> IO.bind
                     (\results ->
@@ -1298,7 +1298,7 @@ fromRepl root details source =
                     Err syntaxError ->
                         IO.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
-                    Ok ((Src.Module _ _ _ imports _ _ _ _ _) as modul) ->
+                    Ok ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
                         Details.loadInterfaces root details
                             |> IO.bind
                                 (\dmvar ->
@@ -1358,7 +1358,7 @@ fromRepl root details source =
 
 
 finalizeReplArtifacts : Env -> String -> Src.Module -> DepsStatus -> ResultDict -> Dict String ModuleName.Raw BResult -> IO (Result Exit.Repl ReplArtifacts)
-finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Module _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
+finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
     let
         pkg : Pkg.Name
         pkg =
@@ -1635,7 +1635,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                             |> IO.bind
                                 (\source ->
                                     case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
-                                        Ok ((Src.Module _ _ _ imports values _ _ _ _) as modul) ->
+                                        Ok ((Src.Module _ _ _ _ imports values _ _ _ _) as modul) ->
                                             let
                                                 deps : List Name.Name
                                                 deps =
@@ -1675,7 +1675,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
         SOutsideErr err ->
             IO.pure (ROutsideErr err)
 
-        SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ imports _ _ _ _ _) as modul) ->
+        SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
             checkDeps root results deps lastCompile
                 |> IO.bind
                     (\depsStatus ->

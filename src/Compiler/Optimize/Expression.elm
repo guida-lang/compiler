@@ -372,9 +372,11 @@ destructHelp path (A.At region pattern) revDs =
         Can.PTuple a b cs ->
             case path of
                 Opt.Root _ ->
-                    List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.Index index path) arg))
-                        (Names.pure revDs)
-                        (Index.indexedMap Tuple.pair (a :: b :: cs))
+                    List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.ArrayIndex index (Opt.Field "cs" path)) arg))
+                        (destructHelp (Opt.Index Index.first path) a revDs
+                            |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+                        )
+                        (List.indexedMap Tuple.pair cs)
 
                 _ ->
                     Names.generate
@@ -385,9 +387,11 @@ destructHelp path (A.At region pattern) revDs =
                                     newRoot =
                                         Opt.Root name
                                 in
-                                List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.Index index newRoot) arg))
-                                    (Names.pure (Opt.Destructor name path :: revDs))
-                                    (Index.indexedMap Tuple.pair (a :: b :: cs))
+                                List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.ArrayIndex index (Opt.Field "cs" newRoot)) arg))
+                                    (destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
+                                        |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
+                                    )
+                                    (List.indexedMap Tuple.pair cs)
                             )
 
         Can.PList [] ->

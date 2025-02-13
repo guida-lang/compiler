@@ -83,4 +83,12 @@ function A9(fun, a, b, c, d, e, f, g, h, i) {
   return fun.a === 9 ? fun.f(a, b, c, d, e, f, g, h, i) : fun(a)(b)(c)(d)(e)(f)(g)(h)(i);
 }
 
+// EXTRA GUIDA CORE
+
+console.warn("FIXME: EXTRA GUIDA CORE");
+
+function _Utils_TupleN(a, b, ...cs) {
+  return { $: '#N', a: a, b: b, cs: cs };
+}
+
 """

@@ -844,7 +844,7 @@ crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
         |> IO.bind
             (\bytes ->
                 case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
-                    Ok ((Src.Module (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
+                    Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports
                                 |> IO.fmap (\deps -> Just (SLocal docsStatus deps modul))

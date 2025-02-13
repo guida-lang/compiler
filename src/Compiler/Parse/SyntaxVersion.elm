@@ -1,12 +1,15 @@
 module Compiler.Parse.SyntaxVersion exposing
     ( SyntaxVersion(..)
+    , decoder
+    , encoder
     , fileSyntaxVersion
     )
 
 {-| Compiler.Parse.SyntaxVersion
 -}
 
-import Utils.Main as Utils exposing (FilePath)
+import Json.Decode as Decode
+import Json.Encode as Encode
 
 
 {-| The `SyntaxVersion` type is used to specify which syntax version to work
@@ -24,11 +27,41 @@ type SyntaxVersion
 
 {-| Returns the syntax version based on a filepath.
 -}
-fileSyntaxVersion : FilePath -> SyntaxVersion
+fileSyntaxVersion : String -> SyntaxVersion
 fileSyntaxVersion path =
-    case Utils.fpTakeExtension path of
-        ".guida" ->
-            Guida
+    if String.endsWith ".elm" path then
+        Elm
 
-        _ ->
-            Elm
+    else
+        Guida
+
+
+
+-- ENCODERS and DECODERS
+
+
+encoder : SyntaxVersion -> Encode.Value
+encoder syntaxVersion =
+    case syntaxVersion of
+        Elm ->
+            Encode.string "Elm"
+
+        Guida ->
+            Encode.string "Guida"
+
+
+decoder : Decode.Decoder SyntaxVersion
+decoder =
+    Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                case type_ of
+                    "Elm" ->
+                        Decode.succeed Elm
+
+                    "Guida" ->
+                        Decode.succeed Guida
+
+                    _ ->
+                        Decode.fail ("Failed to decode SyntaxVersion's type: " ++ type_)
+            )

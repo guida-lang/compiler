@@ -116,6 +116,7 @@ type Destructor
 
 type Path
     = Index Index.ZeroBased Path
+    | ArrayIndex Int Path
     | Field Name Path
     | Unbox Path
     | Root Name
@@ -1045,6 +1046,13 @@ pathEncoder path =
                 , ( "subPath", pathEncoder subPath )
                 ]
 
+        ArrayIndex index subPath ->
+            Encode.object
+                [ ( "type", Encode.string "ArrayIndex" )
+                , ( "index", Encode.int index )
+                , ( "subPath", pathEncoder subPath )
+                ]
+
         Field field subPath ->
             Encode.object
                 [ ( "type", Encode.string "Field" )
@@ -1074,6 +1082,11 @@ pathDecoder =
                     "Index" ->
                         Decode.map2 Index
                             (Decode.field "index" Index.zeroBasedDecoder)
+                            (Decode.field "subPath" pathDecoder)
+
+                    "ArrayIndex" ->
+                        Decode.map2 ArrayIndex
+                            (Decode.field "index" Decode.int)
                             (Decode.field "subPath" pathDecoder)
 
                     "Field" ->

@@ -197,9 +197,15 @@ flatten (( path, A.At region pattern ) as pathPattern) otherPathPatterns =
 
         Can.PTuple a b cs ->
             (a :: b :: cs)
-                |> List.foldl (\x ( index, acc ) -> ( Index.next index, flatten ( Index index path, x ) acc ))
-                    ( Index.first, otherPathPatterns )
+                |> List.foldl
+                    (\x ( index, acc ) ->
+                        ( Index.next index
+                        , ( Index index path, x ) :: acc
+                        )
+                    )
+                    ( Index.first, [] )
                 |> Tuple.second
+                |> List.foldl flatten otherPathPatterns
 
         Can.PUnit ->
             otherPathPatterns

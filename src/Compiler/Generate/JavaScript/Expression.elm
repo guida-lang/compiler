@@ -197,7 +197,7 @@ generate mode parentModule expression =
                             ]
 
                     _ ->
-                        JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "Tuple"))
+                        JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.utils "TupleN"))
                             (List.map (generateJsExpr mode parentModule) (a :: b :: cs))
 
         Opt.Shader src attributes uniforms ->
@@ -1083,6 +1083,9 @@ generatePath mode path =
     case path of
         Opt.Index index subPath ->
             JS.ExprAccess (generatePath mode subPath) (JsName.fromIndex index)
+
+        Opt.ArrayIndex index subPath ->
+            JS.ExprIndex (generatePath mode subPath) (JS.ExprInt index)
 
         Opt.Root name ->
             JS.ExprRef (JsName.fromLocal name)

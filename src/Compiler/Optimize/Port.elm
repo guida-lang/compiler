@@ -193,7 +193,7 @@ encodeTuple a b cs =
                                                             )
                                                         )
 
-                                                c :: [] ->
+                                                [ c ] ->
                                                     Names.fmap
                                                         (\arg3 ->
                                                             Opt.Function [ Name.dollar ]
@@ -389,7 +389,7 @@ decodeTuple a b cs =
                     indexAndThen 1 b (Opt.Call A.zero succeed [ tuple ])
                         |> Names.bind (indexAndThen 0 a)
 
-                c :: [] ->
+                [ c ] ->
                     let
                         tuple : Opt.Expr
                         tuple =
