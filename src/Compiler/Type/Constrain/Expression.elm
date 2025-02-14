@@ -701,7 +701,7 @@ constrainTuple rtv region a b cs expected =
                                         constrain rtv b (NoExpectation bType)
                                             |> IO.bind
                                                 (\bCon ->
-                                                    List.foldl
+                                                    List.foldr
                                                         (\c ->
                                                             IO.bind
                                                                 (\( cons, vars ) ->

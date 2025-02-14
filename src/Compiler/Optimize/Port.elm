@@ -4,12 +4,14 @@ module Compiler.Optimize.Port exposing
     , toFlagsDecoder
     )
 
+import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -160,6 +162,10 @@ encodeTuple a b cs =
         let_ arg index body =
             Opt.Destruct (Opt.Destructor arg (Opt.Index index (Opt.Root Name.dollar))) body
 
+        letCs_ : Name -> Int -> Opt.Expr -> Opt.Expr
+        letCs_ arg index body =
+            Opt.Destruct (Opt.Destructor arg (Opt.ArrayIndex index (Opt.Field "cs" (Opt.Root Name.dollar)))) body
+
         encodeArg : Name -> Can.Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
             toEncoder tipe
@@ -175,48 +181,34 @@ encodeTuple a b cs =
                                 (\arg1 ->
                                     Names.bind
                                         (\arg2 ->
-                                            case cs of
-                                                [] ->
-                                                    Names.pure
-                                                        (Opt.Function [ Name.dollar ]
+                                            let
+                                                ( _, indexedCs ) =
+                                                    List.foldl (\( i, c ) ( index, acc ) -> ( Index.next index, ( i, index, c ) :: acc ))
+                                                        ( Index.third, [] )
+                                                        (List.indexedMap Tuple.pair cs)
+                                                        |> Tuple.mapSecond List.reverse
+                                            in
+                                            List.foldl
+                                                (\( _, i, tipe ) acc ->
+                                                    Names.bind (\encodedArg -> Names.fmap (flip (++) [ encodedArg ]) acc)
+                                                        (encodeArg (JsName.fromIndex i) tipe)
+                                                )
+                                                (Names.pure [ arg1, arg2 ])
+                                                indexedCs
+                                                |> Names.fmap
+                                                    (\args ->
+                                                        Opt.Function [ Name.dollar ]
                                                             (let_ "a"
                                                                 Index.first
                                                                 (let_ "b"
                                                                     Index.second
-                                                                    (Opt.Call A.zero
-                                                                        list
-                                                                        [ identity
-                                                                        , Opt.List A.zero [ arg1, arg2 ]
-                                                                        ]
+                                                                    (List.foldr (\( i, index, _ ) -> letCs_ (JsName.fromIndex index) i)
+                                                                        (Opt.Call A.zero list [ identity, Opt.List A.zero args ])
+                                                                        indexedCs
                                                                     )
                                                                 )
                                                             )
-                                                        )
-
-                                                [ c ] ->
-                                                    Names.fmap
-                                                        (\arg3 ->
-                                                            Opt.Function [ Name.dollar ]
-                                                                (let_ "a"
-                                                                    Index.first
-                                                                    (let_ "b"
-                                                                        Index.second
-                                                                        (let_ "c"
-                                                                            Index.third
-                                                                            (Opt.Call A.zero
-                                                                                list
-                                                                                [ identity
-                                                                                , Opt.List A.zero [ arg1, arg2, arg3 ]
-                                                                                ]
-                                                                            )
-                                                                        )
-                                                                    )
-                                                                )
-                                                        )
-                                                        (encodeArg "c" c)
-
-                                                _ ->
-                                                    Debug.todo "FIXME missing more than 3 tuple elements"
+                                                    )
                                         )
                                         (encodeArg "b" b)
                                 )
@@ -379,28 +371,22 @@ decodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
 decodeTuple a b cs =
     Names.bind
         (\succeed ->
-            case cs of
-                [] ->
-                    let
-                        tuple : Opt.Expr
-                        tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) []
-                    in
-                    indexAndThen 1 b (Opt.Call A.zero succeed [ tuple ])
-                        |> Names.bind (indexAndThen 0 a)
+            let
+                ( allElems, lastElem ) =
+                    case List.reverse cs of
+                        c :: rest ->
+                            ( a :: b :: List.reverse rest, c )
 
-                [ c ] ->
-                    let
-                        tuple : Opt.Expr
-                        tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) [ toLocal 2 ]
-                    in
-                    indexAndThen 2 c (Opt.Call A.zero succeed [ tuple ])
-                        |> Names.bind (indexAndThen 1 b)
-                        |> Names.bind (indexAndThen 0 a)
+                        _ ->
+                            ( [ a ], b )
 
-                _ ->
-                    Debug.todo "FIXME missing more than 3 tuple elements"
+                tuple : Opt.Expr
+                tuple =
+                    Opt.Tuple A.zero (toLocal 0) (toLocal 1) (List.indexedMap (\i _ -> toLocal (i + 2)) cs)
+            in
+            List.foldr (\( i, c ) -> Names.bind (indexAndThen i c))
+                (indexAndThen (List.length cs + 1) lastElem (Opt.Call A.zero succeed [ tuple ]))
+                (List.indexedMap Tuple.pair allElems)
         )
         (decode "succeed")
 
