@@ -241,10 +241,10 @@ parser =
                                                                                                                 P.Parser <|
                                                                                                                     \((P.State _ _ _ _ row col) as state) ->
                                                                                                                         if V.compare lower higher == LT then
-                                                                                                                            Ok (P.POk P.Empty (Range lower loOp hiOp higher) state)
+                                                                                                                            P.Eok (Range lower loOp hiOp higher) state
 
                                                                                                                         else
-                                                                                                                            Err (P.PErr P.Empty row col (\_ _ -> InvalidRange lower higher))
+                                                                                                                            P.Eerr row col (\_ _ -> InvalidRange lower higher)
                                                                                                             )
                                                                                                 )
                                                                                     )

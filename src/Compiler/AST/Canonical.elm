@@ -784,13 +784,13 @@ expr_Encoder expr_ =
                 [ ( "type", Encode.string "Update" )
                 , ( "name", Encode.string name )
                 , ( "record", exprEncoder record )
-                , ( "updates", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.toValue >> Encode.string) fieldUpdateEncoder updates )
+                , ( "updates", E.assocListDict A.compareLocated (A.toValue >> Encode.string) fieldUpdateEncoder updates )
                 ]
 
         Record fields ->
             Encode.object
                 [ ( "type", Encode.string "Record" )
-                , ( "fields", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.toValue >> Encode.string) exprEncoder fields )
+                , ( "fields", E.assocListDict A.compareLocated (A.toValue >> Encode.string) exprEncoder fields )
                 ]
 
         Unit ->

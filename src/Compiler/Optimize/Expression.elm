@@ -220,21 +220,21 @@ optimize cycle (A.At region expression) =
                     )
 
         Can.Update _ record updates ->
-            Names.mapTraverse A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (optimizeUpdate cycle) updates
+            Names.mapTraverse A.toValue A.compareLocated (optimizeUpdate cycle) updates
                 |> Names.bind
                     (\optUpdates ->
                         optimize cycle record
                             |> Names.bind
                                 (\optRecord ->
-                                    Names.registerFieldDict (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue updates) (Opt.Update region optRecord optUpdates)
+                                    Names.registerFieldDict (Utils.mapMapKeys identity A.compareLocated A.toValue updates) (Opt.Update region optRecord optUpdates)
                                 )
                     )
 
         Can.Record fields ->
-            Names.mapTraverse A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (optimize cycle) fields
+            Names.mapTraverse A.toValue A.compareLocated (optimize cycle) fields
                 |> Names.bind
                     (\optFields ->
-                        Names.registerFieldDict (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue fields) (Opt.TrackedRecord region optFields)
+                        Names.registerFieldDict (Utils.mapMapKeys identity A.compareLocated A.toValue fields) (Opt.TrackedRecord region optFields)
                     )
 
         Can.Unit ->

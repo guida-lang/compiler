@@ -3,6 +3,7 @@ module Compiler.Reporting.Annotation exposing
     , Position(..)
     , Region(..)
     , at
+    , compareLocated
     , locatedDecoder
     , locatedEncoder
     , merge
@@ -27,6 +28,11 @@ import System.TypeCheck.IO as IO exposing (IO)
 
 type Located a
     = At Region a -- PERF see if unpacking region is helpful
+
+
+compareLocated : Located comparable -> Located comparable -> Order
+compareLocated (At _ a) (At _ b) =
+    compare a b
 
 
 traverse : (a -> IO b) -> Located a -> IO (Located b)

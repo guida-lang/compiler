@@ -560,7 +560,7 @@ constrainCaseBranch rtv (Can.CaseBranch pattern expr) pExpect bExpect =
 
 constrainRecord : RTV -> A.Region -> Dict String (A.Located Name.Name) Can.Expr -> Expected Type -> IO Constraint
 constrainRecord rtv region fields expected =
-    IO.traverseMap A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (constrainField rtv) fields
+    IO.traverseMap A.toValue A.compareLocated (constrainField rtv) fields
         |> IO.fmap
             (\dict ->
                 let
@@ -570,7 +570,7 @@ constrainRecord rtv region fields expected =
 
                     recordType : Type
                     recordType =
-                        RecordN (Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue (Dict.map getType dict)) EmptyRecordN
+                        RecordN (Utils.mapMapKeys identity A.compareLocated A.toValue (Dict.map getType dict)) EmptyRecordN
 
                     recordCon : Constraint
                     recordCon =
@@ -578,11 +578,11 @@ constrainRecord rtv region fields expected =
 
                     vars : List IO.Variable
                     vars =
-                        Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ ( v, _, _ ) vs -> v :: vs) [] dict
+                        Dict.foldr A.compareLocated (\_ ( v, _, _ ) vs -> v :: vs) [] dict
 
                     cons : List Constraint
                     cons =
-                        Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
+                        Dict.foldr A.compareLocated (\_ ( _, _, c ) cs -> c :: cs) [ recordCon ] dict
                 in
                 Type.exists vars (CAnd cons)
             )
@@ -618,7 +618,7 @@ constrainUpdate rtv region name expr locatedFields expected =
                 let
                     fields : Dict String Name.Name Can.FieldUpdate
                     fields =
-                        Utils.mapMapKeys identity (\a b -> compare (A.toValue a) (A.toValue b)) A.toValue locatedFields
+                        Utils.mapMapKeys identity A.compareLocated A.toValue locatedFields
                 in
                 IO.traverseMapWithKey identity compare (constrainUpdateField rtv region) fields
                     |> IO.bind

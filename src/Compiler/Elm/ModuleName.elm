@@ -118,13 +118,13 @@ parser =
                     newState =
                         P.State src newPos end indent row newCol
                 in
-                Ok (P.POk P.Consumed (String.slice pos newPos src) newState)
+                P.Cok (String.slice pos newPos src) newState
 
             else if col == newCol then
-                Err (P.PErr P.Empty row newCol Tuple.pair)
+                P.Eerr row newCol Tuple.pair
 
             else
-                Err (P.PErr P.Consumed row newCol Tuple.pair)
+                P.Cerr row newCol Tuple.pair
         )
 
 

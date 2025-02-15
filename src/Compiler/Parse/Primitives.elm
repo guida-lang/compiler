@@ -1,12 +1,10 @@
 module Compiler.Parse.Primitives exposing
     ( Col
-    , PErr(..)
-    , POk(..)
+    , PStep(..)
     , Parser(..)
     , Row
     , Snippet(..)
     , State(..)
-    , Status(..)
     , Step(..)
     , addEnd
     , addLocation
@@ -43,20 +41,14 @@ import Utils.Crash exposing (crash)
 
 
 type Parser x a
-    = Parser (State -> Result (PErr x) (POk a))
+    = Parser (State -> PStep x a)
 
 
-type POk a
-    = POk Status a State
-
-
-type PErr x
-    = PErr Status Row Col (Row -> Col -> x)
-
-
-type Status
-    = Consumed
-    | Empty
+type PStep x a
+    = Cok a State
+    | Eok a State
+    | Cerr Row Col (Row -> Col -> x)
+    | Eerr Row Col (Row -> Col -> x)
 
 
 type State
@@ -80,11 +72,18 @@ fmap : (a -> b) -> Parser x a -> Parser x b
 fmap f (Parser parser) =
     Parser
         (\state ->
-            Result.map
-                (\(POk status a s) ->
-                    POk status (f a) s
-                )
-                (parser state)
+            case parser state of
+                Cok a s ->
+                    Cok (f a) s
+
+                Eok a s ->
+                    Eok (f a) s
+
+                Cerr r c t ->
+                    Cerr r c t
+
+                Eerr r c t ->
+                    Eerr r c t
         )
 
 
@@ -100,12 +99,12 @@ oneOf toError parsers =
         )
 
 
-oneOfHelp : State -> (Row -> Col -> x) -> List (Parser x a) -> Result (PErr x) (POk a)
+oneOfHelp : State -> (Row -> Col -> x) -> List (Parser x a) -> PStep x a
 oneOfHelp state toError parsers =
     case parsers of
         (Parser parser) :: remainingParsers ->
             case parser state of
-                Err (PErr Empty _ _ _) ->
+                Eerr _ _ _ ->
                     oneOfHelp state toError remainingParsers
 
                 result ->
@@ -116,7 +115,7 @@ oneOfHelp state toError parsers =
                 (State _ _ _ _ row col) =
                     state
             in
-            Err (PErr Empty row col toError)
+            Eerr row col toError
 
 
 
@@ -128,15 +127,15 @@ oneOfWithFallback parsers fallback =
     Parser (\state -> oowfHelp state parsers fallback)
 
 
-oowfHelp : State -> List (Parser x a) -> a -> Result (PErr x) (POk a)
+oowfHelp : State -> List (Parser x a) -> a -> PStep x a
 oowfHelp state parsers fallback =
     case parsers of
         [] ->
-            Ok (POk Empty fallback state)
+            Eok fallback state
 
         (Parser parser) :: remainingParsers ->
             case parser state of
-                Err (PErr Empty _ _ _) ->
+                Eerr _ _ _ ->
                     oowfHelp state remainingParsers fallback
 
                 result ->
@@ -149,20 +148,37 @@ oowfHelp state parsers fallback =
 
 pure : a -> Parser x a
 pure value =
-    Parser (\state -> Ok (POk Empty value state))
+    Parser (\state -> Eok value state)
 
 
 bind : (a -> Parser x b) -> Parser x a -> Parser x b
 bind callback (Parser parserA) =
     Parser
         (\state ->
-            Result.andThen
-                (\(POk _ a s) ->
+            case parserA state of
+                Cok a s ->
+                    case callback a of
+                        Parser parserB ->
+                            case parserB s of
+                                Eok a_ s_ ->
+                                    Cok a_ s_
+
+                                Eerr r c t ->
+                                    Cerr r c t
+
+                                result ->
+                                    result
+
+                Eok a s ->
                     case callback a of
                         Parser parserB ->
                             parserB s
-                )
-                (parserA state)
+
+                Cerr r c t ->
+                    Cerr r c t
+
+                Eerr r c t ->
+                    Eerr r c t
         )
 
 
@@ -178,10 +194,16 @@ fromByteString (Parser parser) toBadEnd src =
             State src 0 (String.length src) 0 1 1
     in
     case parser initialState of
-        Ok (POk _ a state) ->
+        Cok a state ->
             toOk toBadEnd a state
 
-        Err (PErr _ row col toError) ->
+        Eok a state ->
+            toOk toBadEnd a state
+
+        Cerr row col toError ->
+            toErr row col toError
+
+        Eerr row col toError ->
             toErr row col toError
 
 
@@ -221,10 +243,16 @@ fromSnippet (Parser parser) toBadEnd (Snippet { fptr, offset, length, offRow, of
             State fptr offset (offset + length) 0 offRow offCol
     in
     case parser initialState of
-        Ok (POk _ a state) ->
+        Cok a state ->
             toOk toBadEnd a state
 
-        Err (PErr _ row col toError) ->
+        Eok a state ->
+            toOk toBadEnd a state
+
+        Cerr row col toError ->
+            toErr row col toError
+
+        Eerr row col toError ->
             toErr row col toError
 
 
@@ -236,7 +264,7 @@ getPosition : Parser x A.Position
 getPosition =
     Parser
         (\((State _ _ _ _ row col) as state) ->
-            Ok (POk Empty (A.Position row col) state)
+            Eok (A.Position row col) state
         )
 
 
@@ -245,11 +273,17 @@ addLocation (Parser parser) =
     Parser
         (\((State _ _ _ _ sr sc) as state) ->
             case parser state of
-                Ok (POk status a ((State _ _ _ _ er ec) as s)) ->
-                    Ok (POk status (A.At (A.Region (A.Position sr sc) (A.Position er ec)) a) s)
+                Cok a ((State _ _ _ _ er ec) as s) ->
+                    Cok (A.At (A.Region (A.Position sr sc) (A.Position er ec)) a) s
 
-                Err err ->
-                    Err err
+                Eok a ((State _ _ _ _ er ec) as s) ->
+                    Eok (A.At (A.Region (A.Position sr sc) (A.Position er ec)) a) s
+
+                Cerr r c t ->
+                    Cerr r c t
+
+                Eerr r c t ->
+                    Eerr r c t
         )
 
 
@@ -257,7 +291,7 @@ addEnd : A.Position -> a -> Parser x (A.Located a)
 addEnd start value =
     Parser
         (\((State _ _ _ _ row col) as state) ->
-            Ok (POk Empty (A.at start (A.Position row col) value) state)
+            Eok (A.at start (A.Position row col) value) state
         )
 
 
@@ -270,11 +304,14 @@ withIndent (Parser parser) =
     Parser
         (\(State src pos end oldIndent row col) ->
             case parser (State src pos end col row col) of
-                Ok (POk status a (State s p e _ r c)) ->
-                    Ok (POk status a (State s p e oldIndent r c))
+                Cok a (State s p e _ r c) ->
+                    Cok a (State s p e oldIndent r c)
 
-                Err err ->
-                    Err err
+                Eok a (State s p e _ r c) ->
+                    Eok a (State s p e oldIndent r c)
+
+                err ->
+                    err
         )
 
 
@@ -283,11 +320,14 @@ withBacksetIndent backset (Parser parser) =
     Parser
         (\(State src pos end oldIndent row col) ->
             case parser (State src pos end (col - backset) row col) of
-                Ok (POk status a (State s p e _ r c)) ->
-                    Ok (POk status a (State s p e oldIndent r c))
+                Cok a (State s p e _ r c) ->
+                    Cok a (State s p e oldIndent r c)
 
-                Err err ->
-                    Err err
+                Eok a (State s p e _ r c) ->
+                    Eok a (State s p e oldIndent r c)
+
+                err ->
+                    err
         )
 
 
@@ -298,31 +338,60 @@ withBacksetIndent backset (Parser parser) =
 inContext : (x -> Row -> Col -> y) -> Parser y start -> Parser x a -> Parser y a
 inContext addContext (Parser parserStart) (Parser parserA) =
     Parser
-        (\state ->
+        (\((State _ _ _ _ row col) as state) ->
             case parserStart state of
-                Ok (POk _ _ okState) ->
-                    case parserA okState of
-                        Ok res ->
-                            Ok res
+                Cok _ s ->
+                    case parserA s of
+                        Cok a s_ ->
+                            Cok a s_
 
-                        Err (PErr status r c tx) ->
-                            Err (PErr status r c (addContext (tx r c)))
+                        Eok a s_ ->
+                            Cok a s_
 
-                Err err ->
-                    Err err
+                        Cerr r c tx ->
+                            Cerr row col (addContext (tx r c))
+
+                        Eerr r c tx ->
+                            Cerr row col (addContext (tx r c))
+
+                Eok _ s ->
+                    case parserA s of
+                        Cok a s_ ->
+                            Cok a s_
+
+                        Eok a s_ ->
+                            Eok a s_
+
+                        Cerr r c tx ->
+                            Cerr row col (addContext (tx r c))
+
+                        Eerr r c tx ->
+                            Eerr row col (addContext (tx r c))
+
+                Cerr r c t ->
+                    Cerr r c t
+
+                Eerr r c t ->
+                    Eerr r c t
         )
 
 
 specialize : (x -> Row -> Col -> y) -> Parser x a -> Parser y a
 specialize addContext (Parser parser) =
     Parser
-        (\state ->
+        (\((State _ _ _ _ row col) as state) ->
             case parser state of
-                Ok res ->
-                    Ok res
+                Cok a s ->
+                    Cok a s
 
-                Err (PErr status r c tx) ->
-                    Err (PErr status r c (addContext (tx r c)))
+                Eok a s ->
+                    Eok a s
+
+                Cerr r c tx ->
+                    Cerr row col (addContext (tx r c))
+
+                Eerr r c tx ->
+                    Eerr row col (addContext (tx r c))
         )
 
 
@@ -340,10 +409,10 @@ word1 word toError =
                     newState =
                         State src (pos + 1) end indent row (col + 1)
                 in
-                Ok (POk Consumed () newState)
+                Cok () newState
 
             else
-                Err (PErr Empty row col toError)
+                Eerr row col toError
         )
 
 
@@ -356,16 +425,16 @@ word2 w1 w2 toError =
                 pos1 =
                     pos + 1
             in
-            if pos < end && unsafeIndex src pos == w1 && unsafeIndex src pos1 == w2 then
+            if pos1 < end && unsafeIndex src pos == w1 && unsafeIndex src pos1 == w2 then
                 let
                     newState : State
                     newState =
                         State src (pos + 2) end indent row (col + 2)
                 in
-                Ok (POk Consumed () newState)
+                Cok () newState
 
             else
-                Err (PErr Empty row col toError)
+                Eerr row col toError
         )
 
 
@@ -445,7 +514,7 @@ loop : (state -> Parser x (Step state a)) -> state -> Parser x a
 loop callback loopState =
     Parser
         (\state ->
-            loopHelp callback state loopState (\a s -> Ok (POk Empty a s)) (\row col toError -> Err (PErr Empty row col toError))
+            loopHelp callback state loopState Eok Eerr
         )
 
 
@@ -453,31 +522,27 @@ loopHelp :
     (state -> Parser x (Step state a))
     -> State
     -> state
-    -> (a -> State -> Result (PErr x) (POk a))
-    -> (Row -> Col -> (Row -> Col -> x) -> Result (PErr x) (POk a))
-    -> Result (PErr x) (POk a)
+    -> (a -> State -> PStep x a)
+    -> (Row -> Col -> (Row -> Col -> x) -> PStep x a)
+    -> PStep x a
 loopHelp callback state loopState eok eerr =
     case callback loopState of
         Parser parser ->
             case parser state of
-                Ok (POk Consumed (Loop newLoopState) newState) ->
-                    loopHelp callback
-                        newState
-                        newLoopState
-                        (\a s -> Ok (POk Consumed a s))
-                        (\row col toError -> Err (PErr Consumed row col toError))
+                Cok (Loop newLoopState) newState ->
+                    loopHelp callback newState newLoopState Cok Cerr
 
-                Ok (POk Consumed (Done a) newState) ->
-                    Ok (POk Consumed a newState)
+                Cok (Done a) newState ->
+                    Cok a newState
 
-                Ok (POk Empty (Loop newLoopState) newState) ->
+                Eok (Loop newLoopState) newState ->
                     loopHelp callback newState newLoopState eok eerr
 
-                Ok (POk Empty (Done a) newState) ->
+                Eok (Done a) newState ->
                     eok a newState
 
-                Err (PErr Consumed r c t) ->
-                    Err (PErr Consumed r c t)
+                Cerr r c t ->
+                    Cerr r c t
 
-                Err (PErr Empty r c t) ->
+                Eerr r c t ->
                     eerr r c t

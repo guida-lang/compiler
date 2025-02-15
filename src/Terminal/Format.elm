@@ -25,12 +25,7 @@ type Flags
 
 
 run : List String -> Flags -> IO ()
-run paths flags =
-    runHelp paths flags
-
-
-runHelp : List String -> Flags -> IO ()
-runHelp paths ((Flags _ autoYes _ _) as flags) =
+run paths ((Flags _ autoYes _ _) as flags) =
     resolveElmFiles paths
         |> IO.bind
             (\resolvedInputFiles ->

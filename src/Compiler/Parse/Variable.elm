@@ -33,7 +33,7 @@ upper toError =
                     chompUpper src pos end col
             in
             if newPos == pos then
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
             else
                 let
@@ -41,7 +41,7 @@ upper toError =
                     name =
                         Name.fromPtr src pos newPos
                 in
-                Ok (P.POk P.Consumed name (P.State src newPos end indent row newCol))
+                P.Cok name (P.State src newPos end indent row newCol)
 
 
 
@@ -57,7 +57,7 @@ lower toError =
                     chompLower src pos end col
             in
             if newPos == pos then
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
             else
                 let
@@ -66,7 +66,7 @@ lower toError =
                         Name.fromPtr src pos newPos
                 in
                 if isReservedWord name then
-                    Err (P.PErr P.Empty row col toError)
+                    P.Eerr row col toError
 
                 else
                     let
@@ -74,7 +74,7 @@ lower toError =
                         newState =
                             P.State src newPos end indent row newCol
                     in
-                    Ok (P.POk P.Consumed name newState)
+                    P.Cok name newState
 
 
 isReservedWord : Name.Name -> Bool
@@ -115,7 +115,7 @@ moduleName toError =
                     chompUpper src pos end col
             in
             if pos == pos1 then
-                Err (P.PErr P.Empty row col toError)
+                P.Eerr row col toError
 
             else
                 let
@@ -133,10 +133,10 @@ moduleName toError =
                             newState =
                                 P.State src newPos end indent row newCol
                         in
-                        Ok (P.POk P.Consumed name newState)
+                        P.Cok name newState
 
                     Bad ->
-                        Err (P.PErr P.Consumed row newCol toError)
+                        P.Cerr row newCol toError
 
 
 type ModuleNameStatus
@@ -183,7 +183,7 @@ foreignUpper toError =
                     foreignUpperHelp src pos end col
             in
             if upperStart == upperEnd then
-                Err (P.PErr P.Empty row newCol toError)
+                P.Eerr row newCol toError
 
             else
                 let
@@ -208,7 +208,7 @@ foreignUpper toError =
                             in
                             Qualified home name
                 in
-                Ok (P.POk P.Consumed upperName newState)
+                P.Cok upperName newState
 
 
 foreignUpperHelp : String -> Int -> Int -> Col -> ( Int, Int, Col )
@@ -240,7 +240,7 @@ foreignAlpha toError =
                     foreignAlphaHelp src pos end col
             in
             if alphaStart == alphaEnd then
-                Err (P.PErr P.Empty row newCol toError)
+                P.Eerr row newCol toError
 
             else
                 let
@@ -254,10 +254,10 @@ foreignAlpha toError =
                 in
                 if alphaStart == pos then
                     if isReservedWord name then
-                        Err (P.PErr P.Empty row col toError)
+                        P.Eerr row col toError
 
                     else
-                        Ok (P.POk P.Consumed (Src.Var varType name) newState)
+                        P.Cok (Src.Var varType name) newState
 
                 else
                     let
@@ -265,7 +265,7 @@ foreignAlpha toError =
                         home =
                             Name.fromPtr src pos (alphaStart + -1)
                     in
-                    Ok (P.POk P.Consumed (Src.VarQual varType home name) newState)
+                    P.Cok (Src.VarQual varType home name) newState
 
 
 foreignAlphaHelp : String -> Int -> Int -> Col -> ( ( Int, Int ), ( Col, Src.VarType ) )

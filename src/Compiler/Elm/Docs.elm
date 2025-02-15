@@ -438,7 +438,7 @@ chompUntilDocs =
                 newState =
                     P.State src newPos end indent newRow newCol
             in
-            Ok (P.POk P.Consumed isDocs newState)
+            P.Cok isDocs newState
         )
 
 

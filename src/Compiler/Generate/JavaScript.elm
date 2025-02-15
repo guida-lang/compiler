@@ -51,7 +51,7 @@ type SourceMaps
 
 firstGeneratedLineNumber : Mode.Mode -> Int
 firstGeneratedLineNumber mode =
-    String.length (String.filter ((==) '\n') (prelude mode)) + 1
+    List.length (String.lines (prelude mode))
 
 
 prelude : Mode.Mode -> String

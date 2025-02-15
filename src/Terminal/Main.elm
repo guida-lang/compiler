@@ -16,6 +16,7 @@ import Terminal.Terminal.Chomp as Chomp
 import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
 import Terminal.Test as Test
+import Terminal.Uninstall as Uninstall
 
 
 main : IO.Program
@@ -31,6 +32,7 @@ app =
         , init
         , make
         , install
+        , uninstall
         , bump
         , diff
         , publish
@@ -90,17 +92,23 @@ init =
         example =
             reflow
                 "It will ask permission to create an elm.json file, the one thing common to all Elm projects. It also provides a link explaining what to do from there."
+
+        initFlags : Terminal.Flags
+        initFlags =
+            Terminal.flags
+                |> Terminal.more (Terminal.onOff "package" "Creates a starter elm.json file for a package project.")
     in
-    Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs Terminal.noFlags <|
+    Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs initFlags <|
         \chunks ->
             Chomp.chomp Nothing
                 chunks
                 [ Chomp.chompExactly (Chomp.pure ())
                 ]
-                (Chomp.pure ()
+                (Chomp.pure Init.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "package")
                     |> Chomp.bind
                         (\value ->
-                            Chomp.checkForUnknownFlags Terminal.noFlags
+                            Chomp.checkForUnknownFlags initFlags
                                 |> Chomp.fmap (\_ -> value)
                         )
                 )
@@ -253,6 +261,7 @@ install =
         installFlags : Terminal.Flags
         installFlags =
             Terminal.flags
+                |> Terminal.more (Terminal.onOff "test" "Install as a test-dependency.")
                 |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
     in
     Terminal.Command "install" Terminal.Uncommon details example installArgs installFlags <|
@@ -270,6 +279,7 @@ install =
                     )
                 ]
                 (Chomp.pure Install.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "test")
                     |> Chomp.apply (Chomp.chompOnOffFlag "yes")
                     |> Chomp.bind
                         (\value ->
@@ -279,6 +289,68 @@ install =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Install.run args flags)
+
+
+
+-- UNINSTALL
+
+
+uninstall : Terminal.Command
+uninstall =
+    let
+        details : String
+        details =
+            "The `uninstall` command removes packages your project:"
+
+        example : D.Doc
+        example =
+            stack
+                [ reflow
+                    "For example, if you want to remove the HTTP and JSON packages, you would say:"
+                , D.indent 4 <|
+                    D.green <|
+                        D.vcat <|
+                            [ D.fromChars "guida uninstall elm/http"
+                            , D.fromChars "guida uninstall elm/json"
+                            ]
+                ]
+
+        uninstallArgs : Terminal.Args
+        uninstallArgs =
+            Terminal.oneOf
+                [ Terminal.require0
+                , Terminal.require1 Terminal.package
+                ]
+
+        uninstallFlags : Terminal.Flags
+        uninstallFlags =
+            Terminal.flags
+                |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
+    in
+    Terminal.Command "uninstall" Terminal.Uncommon details example uninstallArgs uninstallFlags <|
+        \chunks ->
+            Chomp.chomp Nothing
+                chunks
+                [ Chomp.chompExactly (Chomp.pure Uninstall.NoArgs)
+                , Chomp.chompExactly
+                    (Chomp.pure Uninstall.Uninstall
+                        |> Chomp.bind
+                            (\func ->
+                                Chomp.chompArg (List.length chunks) Terminal.package Terminal.parsePackage
+                                    |> Chomp.fmap (\arg -> func arg)
+                            )
+                    )
+                ]
+                (Chomp.pure Uninstall.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "yes")
+                    |> Chomp.bind
+                        (\value ->
+                            Chomp.checkForUnknownFlags uninstallFlags
+                                |> Chomp.fmap (\_ -> value)
+                        )
+                )
+                |> Tuple.second
+                |> Result.map (\( args, flags ) -> Uninstall.run args flags)
 
 
 

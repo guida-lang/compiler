@@ -35,24 +35,24 @@ operator toExpectation toError =
                     chompOps src pos end
             in
             if pos == newPos then
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation
 
             else
                 case String.slice pos newPos src of
                     "." ->
-                        Err (P.PErr P.Empty row col (toError BadDot))
+                        P.Eerr row col (toError BadDot)
 
                     "|" ->
-                        Err (P.PErr P.Consumed row col (toError BadPipe))
+                        P.Cerr row col (toError BadPipe)
 
                     "->" ->
-                        Err (P.PErr P.Consumed row col (toError BadArrow))
+                        P.Cerr row col (toError BadArrow)
 
                     "=" ->
-                        Err (P.PErr P.Consumed row col (toError BadEquals))
+                        P.Cerr row col (toError BadEquals)
 
                     ":" ->
-                        Err (P.PErr P.Consumed row col (toError BadHasType))
+                        P.Cerr row col (toError BadHasType)
 
                     op ->
                         let
@@ -64,7 +64,7 @@ operator toExpectation toError =
                             newState =
                                 P.State src newPos end indent row newCol
                         in
-                        Ok (P.POk P.Consumed op newState)
+                        P.Cok op newState
 
 
 chompOps : String -> Int -> Int -> Int

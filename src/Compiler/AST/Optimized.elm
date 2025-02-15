@@ -680,7 +680,7 @@ exprEncoder expr =
                 [ ( "type", Encode.string "Update" )
                 , ( "region", A.regionEncoder region )
                 , ( "record", exprEncoder record )
-                , ( "fields", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder fields )
+                , ( "fields", E.assocListDict A.compareLocated (A.locatedEncoder Encode.string) exprEncoder fields )
                 ]
 
         Record value ->
@@ -693,7 +693,7 @@ exprEncoder expr =
             Encode.object
                 [ ( "type", Encode.string "TrackedRecord" )
                 , ( "region", A.regionEncoder region )
-                , ( "value", E.assocListDict (\a b -> compare (A.toValue a) (A.toValue b)) (A.locatedEncoder Encode.string) exprEncoder value )
+                , ( "value", E.assocListDict A.compareLocated (A.locatedEncoder Encode.string) exprEncoder value )
                 ]
 
         Unit ->

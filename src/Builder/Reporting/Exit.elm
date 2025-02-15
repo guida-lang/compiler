@@ -17,6 +17,7 @@ module Builder.Reporting.Exit exposing
     , RegistryProblem(..)
     , Repl(..)
     , Solver(..)
+    , Uninstall(..)
     , buildProblemDecoder
     , buildProblemEncoder
     , buildProjectProblemDecoder
@@ -35,6 +36,7 @@ module Builder.Reporting.Exit exposing
     , replToReport
     , toJson
     , toStderr
+    , uninstallToReport
     )
 
 import Builder.File as File
@@ -1243,6 +1245,81 @@ installToReport exit =
                 ]
 
         InstallBadDetails details ->
+            toDetailsReport details
+
+
+
+-- UNINSTALL
+
+
+type Uninstall
+    = UninstallNoOutline
+    | UninstallBadOutline Outline
+    | UninstallBadRegistry RegistryProblem
+    | UninstallNoArgs
+    | UninstallNoOnlineAppSolution Pkg.Name
+    | UninstallNoOfflineAppSolution Pkg.Name
+    | UninstallHadSolverTrouble Solver
+    | UninstallBadDetails Details
+
+
+uninstallToReport : Uninstall -> Help.Report
+uninstallToReport exit =
+    case exit of
+        UninstallNoOutline ->
+            Help.report "NEW PROJECT?"
+                Nothing
+                "Are you trying to start a new project? Try this command instead:"
+                [ D.indent 4 <| D.green (D.fromChars "guida init")
+                , D.reflow "It will help you get started!"
+                ]
+
+        UninstallBadOutline outline ->
+            toOutlineReport outline
+
+        UninstallBadRegistry problem ->
+            toRegistryProblemReport "PROBLEM LOADING PACKAGE LIST" problem <|
+                "I need the list of published packages to figure out how to uninstall things"
+
+        UninstallNoArgs ->
+            Help.report "UNINSTALL WHAT?"
+                Nothing
+                "I am expecting commands like:"
+                [ D.green <|
+                    D.indent 4 <|
+                        D.vcat <|
+                            [ D.fromChars "guida uninstall elm/http"
+                            , D.fromChars "guida uninstall elm/json"
+                            , D.fromChars "guida uninstall elm/random"
+                            ]
+                ]
+
+        UninstallNoOnlineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
+                , D.reflow <|
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Elm came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://elm-lang.org/community to learn what might be going on with this package."
+                , D.toSimpleNote <|
+                    "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
+                ]
+
+        UninstallNoOfflineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        UninstallHadSolverTrouble solver ->
+            toSolverReport solver
+
+        UninstallBadDetails details ->
             toDetailsReport details
 
 

@@ -141,10 +141,10 @@ parseChunks vtable enums fields =
                     chompChunks vtable enums fields src pos end row col pos []
             in
             if newPos == end then
-                Ok (P.POk P.Consumed chunks (P.State src newPos end indent newRow newCol))
+                P.Cok chunks (P.State src newPos end indent newRow newCol)
 
             else
-                Err (P.PErr P.Consumed row col toError)
+                P.Cerr row col toError
         )
 
 

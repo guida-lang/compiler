@@ -709,13 +709,13 @@ pString start =
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        Ok (P.POk P.Consumed snp newState)
+                        P.Cok snp newState
 
                     BadString problem ->
-                        Err (P.PErr P.Consumed newRow newCol (StringProblem problem))
+                        P.Cerr newRow newCol (StringProblem problem)
 
             else
-                Err (P.PErr P.Empty row col start)
+                P.Eerr row col start
 
 
 type StringStatus
@@ -838,7 +838,7 @@ spaces =
                     eatSpaces src pos end row col
             in
             if pos == newPos then
-                Ok (P.POk P.Empty () state)
+                P.Eok () state
 
             else
                 let
@@ -846,7 +846,7 @@ spaces =
                     newState =
                         P.State src newPos end indent newRow newCol
                 in
-                Ok (P.POk P.Consumed () newState)
+                P.Cok () newState
 
 
 eatSpaces : String -> Int -> Int -> Row -> Col -> ( Int, Row, Col )
@@ -882,7 +882,7 @@ pInt =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col Start)
+                P.Eerr row col Start
 
             else
                 let
@@ -891,7 +891,7 @@ pInt =
                         P.unsafeIndex src pos
                 in
                 if not (isDecimalDigit word) then
-                    Err (P.PErr P.Empty row col Start)
+                    P.Eerr row col Start
 
                 else if word == '0' then
                     let
@@ -910,16 +910,16 @@ pInt =
                                 P.unsafeIndex src pos1
                         in
                         if isDecimalDigit word1 then
-                            Err (P.PErr P.Consumed row (col + 1) NoLeadingZeros)
+                            P.Cerr row (col + 1) NoLeadingZeros
 
                         else if word1 == '.' then
-                            Err (P.PErr P.Consumed row (col + 1) NoFloats)
+                            P.Cerr row (col + 1) NoFloats
 
                         else
-                            Ok (P.POk P.Consumed (Int 0) newState)
+                            P.Cok (Int 0) newState
 
                     else
-                        Ok (P.POk P.Consumed (Int 0) newState)
+                        P.Cok (Int 0) newState
 
                 else
                     let
@@ -937,10 +937,10 @@ pInt =
                                 newState =
                                     P.State src newPos end indent row (col + len)
                             in
-                            Ok (P.POk P.Consumed (Int n) newState)
+                            P.Cok (Int n) newState
 
                         BadIntEnd ->
-                            Err (P.PErr P.Consumed row (col + len) NoFloats)
+                            P.Cerr row (col + len) NoFloats
 
 
 type IntStatus

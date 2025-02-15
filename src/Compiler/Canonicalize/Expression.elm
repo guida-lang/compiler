@@ -154,13 +154,13 @@ canonicalize env (A.At region expression) =
                 in
                 R.pure (Can.Update name)
                     |> R.apply (R.fmap (A.At reg) (findVar reg env name))
-                    |> R.apply (R.bind (Utils.sequenceADict A.toValue (\a b -> compare (A.toValue a) (A.toValue b))) makeCanFields)
+                    |> R.apply (R.bind (Utils.sequenceADict A.toValue A.compareLocated) makeCanFields)
 
             Src.Record fields ->
                 Dups.checkLocatedFields fields
                     |> R.bind
                         (\fieldDict ->
-                            R.fmap Can.Record (R.traverseDict A.toValue (\a b -> compare (A.toValue a) (A.toValue b)) (canonicalize env) fieldDict)
+                            R.fmap Can.Record (R.traverseDict A.toValue A.compareLocated (canonicalize env) fieldDict)
                         )
 
             Src.Unit ->

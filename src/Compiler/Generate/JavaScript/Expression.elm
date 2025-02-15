@@ -332,7 +332,7 @@ generateTrackedRecord mode parentModule region fields =
         toPair ( A.At fieldRegion field, value ) =
             ( A.At fieldRegion (generateField mode field), generateJsExpr mode parentModule value )
     in
-    JS.ExprTrackedObject parentModule region (List.map toPair (Dict.toList (\a b -> compare (A.toValue a) (A.toValue b)) fields))
+    JS.ExprTrackedObject parentModule region (List.map toPair (Dict.toList A.compareLocated fields))
 
 
 generateField : Mode.Mode -> Name.Name -> JsName.Name

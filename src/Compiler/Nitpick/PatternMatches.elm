@@ -341,10 +341,10 @@ checkExpr (A.At region expression) errors =
             checkExpr record errors
 
         Can.Update _ record fields ->
-            checkExpr record <| Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ -> checkField) errors fields
+            checkExpr record <| Dict.foldr A.compareLocated (\_ -> checkField) errors fields
 
         Can.Record fields ->
-            Dict.foldr (\a b -> compare (A.toValue a) (A.toValue b)) (\_ -> checkExpr) errors fields
+            Dict.foldr A.compareLocated (\_ -> checkExpr) errors fields
 
         Can.Unit ->
             errors

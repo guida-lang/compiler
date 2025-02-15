@@ -18,13 +18,13 @@ character toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
             if pos >= end || P.unsafeIndex src pos /= '\'' then
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation
 
             else
                 case chompChar src (pos + 1) end row (col + 1) 0 placeholder of
                     Good newPos newCol numChars mostRecent ->
                         if numChars /= 1 then
-                            Err (P.PErr P.Consumed row col (toError (E.CharNotString (newCol - col))))
+                            P.Cerr row col (toError (E.CharNotString (newCol - col)))
 
                         else
                             let
@@ -36,13 +36,13 @@ character toExpectation toError =
                                 char =
                                     ES.fromChunks src [ mostRecent ]
                             in
-                            Ok (P.POk P.Consumed char newState)
+                            P.Cok char newState
 
                     CharEndless newCol ->
-                        Err (P.PErr P.Consumed row newCol (toError E.CharEndless))
+                        P.Cerr row newCol (toError E.CharEndless)
 
                     CharEscape r c escape ->
-                        Err (P.PErr P.Consumed r c (toError (E.CharEscape escape)))
+                        P.Cerr r c (toError (E.CharEscape escape))
         )
 
 
@@ -144,13 +144,13 @@ string toExpectation toError =
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        Ok (P.POk P.Consumed utf8 newState)
+                        P.Cok utf8 newState
 
                     SRErr r c x ->
-                        Err (P.PErr P.Consumed r c (toError x))
+                        P.Cerr r c (toError x)
 
             else
-                Err (P.PErr P.Empty row col toExpectation)
+                P.Eerr row col toExpectation
         )
 
 

@@ -310,15 +310,20 @@ hang =
 
 hcat : List Doc -> Doc
 hcat docs =
+    hcatHelp docs empty
+
+
+hcatHelp : List Doc -> Doc -> Doc
+hcatHelp docs acc =
     case docs of
         [] ->
-            empty
+            acc
 
         [ doc ] ->
             doc
 
         doc :: ds ->
-            P.append doc (hcat ds)
+            hcatHelp ds (P.append doc acc)
 
 
 hsep : List Doc -> Doc

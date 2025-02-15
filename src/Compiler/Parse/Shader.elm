@@ -77,13 +77,13 @@ parseBlock =
                             newState =
                                 P.State src (newPos + 2) end indent newRow (newCol + 2)
                         in
-                        Ok (P.POk P.Consumed block newState)
+                        P.Cok block newState
 
                     Unending ->
-                        Err (P.PErr P.Consumed row col E.EndlessShader)
+                        P.Cerr row col E.EndlessShader
 
             else
-                Err (P.PErr P.Empty row col E.Start)
+                P.Eerr row col E.Start
 
 
 type Status
@@ -172,7 +172,7 @@ failure : Row -> Col -> String -> Parser E.Expr a
 failure row col msg =
     P.Parser <|
         \_ ->
-            Err (P.PErr P.Consumed row col (E.ShaderProblem msg))
+            P.Cerr row col (E.ShaderProblem msg)
 
 
 

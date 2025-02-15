@@ -131,13 +131,13 @@ hasDebug expression =
             hasDebug r
 
         Opt.Update _ r fs ->
-            hasDebug r || List.any hasDebug (Dict.values (\a b -> compare (A.toValue a) (A.toValue b)) fs)
+            hasDebug r || List.any hasDebug (Dict.values A.compareLocated fs)
 
         Opt.Record fs ->
             List.any hasDebug (Dict.values compare fs)
 
         Opt.TrackedRecord _ fs ->
-            List.any hasDebug (Dict.values (\a b -> compare (A.toValue a) (A.toValue b)) fs)
+            List.any hasDebug (Dict.values A.compareLocated fs)
 
         Opt.Unit ->
             False

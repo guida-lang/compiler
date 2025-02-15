@@ -79,7 +79,7 @@ type alias Project =
 
 isKernel : Name -> Bool
 isKernel ( author, _ ) =
-    author == elm || author == elm_explorations
+    author == elm || author == elmExplorations
 
 
 toChars : Name -> String
@@ -153,12 +153,12 @@ url =
 
 webgl : Name
 webgl =
-    toName elm_explorations "webgl"
+    toName elmExplorations "webgl"
 
 
 linearAlgebra : Name
 linearAlgebra =
-    toName elm_explorations "linear-algebra"
+    toName elmExplorations "linear-algebra"
 
 
 elm : Author
@@ -166,8 +166,8 @@ elm =
     "elm"
 
 
-elm_explorations : Author
-elm_explorations =
+elmExplorations : Author
+elmExplorations =
     "elm-explorations"
 
 
@@ -232,7 +232,7 @@ nearbyNames ( author1, project1 ) possibleNames =
 
 authorDistance : String -> Author -> Int
 authorDistance given possibility =
-    if possibility == elm || possibility == elm_explorations then
+    if possibility == elm || possibility == elmExplorations then
         0
 
     else
@@ -289,7 +289,7 @@ parseName isGoodStart isGoodInner =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             if pos >= end then
-                Err (P.PErr P.Empty row col Tuple.pair)
+                P.Eerr row col Tuple.pair
 
             else
                 let
@@ -298,7 +298,7 @@ parseName isGoodStart isGoodInner =
                         P.unsafeIndex src pos
                 in
                 if not (isGoodStart word) then
-                    Err (P.PErr P.Empty row col Tuple.pair)
+                    P.Eerr row col Tuple.pair
 
                 else
                     let
@@ -319,10 +319,10 @@ parseName isGoodStart isGoodInner =
                             newState =
                                 P.State src newPos end indent row newCol
                         in
-                        Ok (P.POk P.Consumed (String.slice pos newPos src) newState)
+                        P.Cok (String.slice pos newPos src) newState
 
                     else
-                        Err (P.PErr P.Consumed row newCol Tuple.pair)
+                        P.Cerr row newCol Tuple.pair
 
 
 isLower : Char -> Bool
