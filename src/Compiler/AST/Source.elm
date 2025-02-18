@@ -65,7 +65,7 @@ type Expr_
     | Case Expr (List ( Pattern, Expr ))
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update (A.Located Name) (List ( A.Located Name, Expr ))
+    | Update (A.Located ( Maybe Name, Name )) (List ( A.Located Name, Expr ))
     | Record (List ( A.Located Name, Expr ))
     | Unit
     | Tuple Expr Expr (List Expr)
@@ -1033,7 +1033,7 @@ expr_Encoder expr_ =
         Update name fields ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
-                , ( "name", A.locatedEncoder Encode.string name )
+                , ( "name", A.locatedEncoder (E.jsonPair (E.maybe Encode.string) Encode.string) name )
                 , ( "fields", Encode.list (E.jsonPair (A.locatedEncoder Encode.string) exprEncoder) fields )
                 ]
 
@@ -1163,7 +1163,7 @@ expr_Decoder =
 
                     "Update" ->
                         Decode.map2 Update
-                            (Decode.field "name" (A.locatedDecoder Decode.string))
+                            (Decode.field "name" (A.locatedDecoder (jsonPair (Decode.maybe Decode.string) Decode.string)))
                             (Decode.field "fields"
                                 (Decode.list
                                     (Decode.map2 Tuple.pair
@@ -1201,6 +1201,15 @@ expr_Decoder =
                     _ ->
                         Decode.fail ("Failed to decode Expr_'s type: " ++ type_)
             )
+
+
+{-| FIXME copied from Compiler.Json.Decode (cycle error)
+-}
+jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )
+jsonPair firstDecoder secondDecoder =
+    Decode.map2 Tuple.pair
+        (Decode.field "a" firstDecoder)
+        (Decode.field "b" secondDecoder)
 
 
 varTypeEncoder : VarType -> Encode.Value

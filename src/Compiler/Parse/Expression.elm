@@ -1,11 +1,11 @@
 module Compiler.Parse.Expression exposing (expression)
 
 import Compiler.AST.Source as Src
-import Compiler.Data.Name as Name
+import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Keyword as Keyword
 import Compiler.Parse.Number as Number
 import Compiler.Parse.Pattern as Pattern
-import Compiler.Parse.Primitives as P
+import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Parse.Shader as Shader
 import Compiler.Parse.Space as Space
 import Compiler.Parse.String as String
@@ -272,33 +272,99 @@ record syntaxVersion start =
                     P.oneOf E.RecordOpen
                         [ P.word1 '}' E.RecordOpen
                             |> P.bind (\_ -> P.addEnd start (Src.Record []))
+                        , P.addLocation (foreignAlpha E.RecordField)
+                            |> P.bind
+                                (\starter ->
+                                    Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
+                                        |> P.bind (\_ -> P.word1 '|' E.RecordEquals)
+                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
+                                        |> P.bind (\_ -> chompField syntaxVersion)
+                                        |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
+                                        |> P.bind (\fields -> P.addEnd start (Src.Update starter fields))
+                                )
                         , P.addLocation (Var.lower E.RecordField)
                             |> P.bind
                                 (\starter ->
                                     Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
+                                        |> P.bind (\_ -> P.word1 '=' E.RecordEquals)
+                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
+                                        |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
                                         |> P.bind
-                                            (\_ ->
-                                                P.oneOf E.RecordEquals
-                                                    [ P.word1 '|' E.RecordEquals
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-                                                        |> P.bind (\_ -> chompField syntaxVersion)
-                                                        |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
-                                                        |> P.bind (\fields -> P.addEnd start (Src.Update starter fields))
-                                                    , P.word1 '=' E.RecordEquals
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                                                        |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
-                                                        |> P.bind
-                                                            (\( value, end ) ->
-                                                                Space.checkIndent end E.RecordIndentEnd
-                                                                    |> P.bind (\_ -> chompFields syntaxVersion [ ( starter, value ) ])
-                                                                    |> P.bind (\fields -> P.addEnd start (Src.Record fields))
-                                                            )
-                                                    ]
+                                            (\( value, end ) ->
+                                                Space.checkIndent end E.RecordIndentEnd
+                                                    |> P.bind (\_ -> chompFields syntaxVersion [ ( starter, value ) ])
+                                                    |> P.bind (\fields -> P.addEnd start (Src.Record fields))
                                             )
                                 )
                         ]
                 )
         )
+
+
+foreignAlpha : (Row -> Col -> x) -> P.Parser x ( Maybe Name, Name )
+foreignAlpha toError =
+    P.Parser <|
+        \(P.State src pos end indent row col) ->
+            let
+                ( ( alphaStart, alphaEnd ), ( newCol, varType ) ) =
+                    foreignAlphaHelp src pos end col
+            in
+            if alphaStart == alphaEnd then
+                P.Eerr row newCol toError
+
+            else
+                case varType of
+                    Src.LowVar ->
+                        let
+                            name : Name
+                            name =
+                                Name.fromPtr src alphaStart alphaEnd
+
+                            newState : P.State
+                            newState =
+                                P.State src alphaEnd end indent row newCol
+                        in
+                        if alphaStart == pos then
+                            if Var.isReservedWord name then
+                                P.Eerr row col toError
+
+                            else
+                                P.Cok ( Nothing, name ) newState
+
+                        else
+                            let
+                                home : Name
+                                home =
+                                    Name.fromPtr src pos (alphaStart + -1)
+                            in
+                            P.Cok ( Just home, name ) newState
+
+                    Src.CapVar ->
+                        P.Eerr row col toError
+
+
+foreignAlphaHelp : String -> Int -> Int -> Col -> ( ( Int, Int ), ( Col, Src.VarType ) )
+foreignAlphaHelp src pos end col =
+    let
+        ( lowerPos, lowerCol ) =
+            Var.chompLower src pos end col
+    in
+    if pos < lowerPos then
+        ( ( pos, lowerPos ), ( lowerCol, Src.LowVar ) )
+
+    else
+        let
+            ( upperPos, upperCol ) =
+                Var.chompUpper src pos end col
+        in
+        if pos == upperPos then
+            ( ( pos, pos ), ( col, Src.CapVar ) )
+
+        else if Var.isDot src upperPos end then
+            foreignAlphaHelp src (upperPos + 1) end (upperCol + 1)
+
+        else
+            ( ( pos, upperPos ), ( upperCol, Src.CapVar ) )
 
 
 type alias Field =

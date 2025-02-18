@@ -160,11 +160,11 @@ bind callback (Parser parserA) =
                     case callback a of
                         Parser parserB ->
                             case parserB s of
-                                Eok a_ s_ ->
+                                Cok a_ s_ ->
                                     Cok a_ s_
 
-                                Eerr r c t ->
-                                    Cerr r c t
+                                Eok a_ s_ ->
+                                    Cok a_ s_
 
                                 result ->
                                     result

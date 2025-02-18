@@ -109,7 +109,7 @@ type Expr_
     | Case Expr (List CaseBranch)
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Name Expr (Dict String (A.Located Name) FieldUpdate)
+    | Update (Maybe Name) Name Expr (Dict String (A.Located Name) FieldUpdate)
     | Record (Dict String (A.Located Name) Expr)
     | Unit
     | Tuple Expr Expr (Maybe Expr)
@@ -779,9 +779,10 @@ expr_Encoder expr_ =
                 , ( "field", A.locatedEncoder Encode.string field )
                 ]
 
-        Update name record updates ->
+        Update namespace name record updates ->
             Encode.object
                 [ ( "type", Encode.string "Update" )
+                , ( "namespace", E.maybe Encode.string namespace )
                 , ( "name", Encode.string name )
                 , ( "record", exprEncoder record )
                 , ( "updates", E.assocListDict A.compareLocated (A.toValue >> Encode.string) fieldUpdateEncoder updates )
@@ -932,7 +933,8 @@ expr_Decoder =
                             (Decode.field "field" (A.locatedDecoder Decode.string))
 
                     "Update" ->
-                        Decode.map3 Update
+                        Decode.map4 Update
+                            (Decode.field "namespace" (Decode.maybe Decode.string))
                             (Decode.field "name" Decode.string)
                             (Decode.field "record" exprDecoder)
                             (Decode.field "updates" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) fieldUpdateDecoder))

@@ -340,7 +340,7 @@ checkExpr (A.At region expression) errors =
         Can.Access record _ ->
             checkExpr record errors
 
-        Can.Update _ record fields ->
+        Can.Update _ _ record fields ->
             checkExpr record <| Dict.foldr A.compareLocated (\_ -> checkField) errors fields
 
         Can.Record fields ->
