@@ -219,7 +219,7 @@ optimize cycle (A.At region expression) =
                         Names.registerField field (Opt.Access optRecord fieldPosition field)
                     )
 
-        Can.Update _ record updates ->
+        Can.Update _ _ record updates ->
             Names.mapTraverse A.toValue A.compareLocated (optimizeUpdate cycle) updates
                 |> Names.bind
                     (\optUpdates ->

@@ -90,17 +90,23 @@ init =
         example =
             reflow
                 "It will ask permission to create an elm.json file, the one thing common to all Elm projects. It also provides a link explaining what to do from there."
+
+        initFlags : Terminal.Flags
+        initFlags =
+            Terminal.flags
+                |> Terminal.more (Terminal.onOff "package" "Creates a starter elm.json file for a package project.")
     in
-    Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs Terminal.noFlags <|
+    Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs initFlags <|
         \chunks ->
             Chomp.chomp Nothing
                 chunks
                 [ Chomp.chompExactly (Chomp.pure ())
                 ]
-                (Chomp.pure ()
+                (Chomp.pure Init.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "package")
                     |> Chomp.bind
                         (\value ->
-                            Chomp.checkForUnknownFlags Terminal.noFlags
+                            Chomp.checkForUnknownFlags initFlags
                                 |> Chomp.fmap (\_ -> value)
                         )
                 )

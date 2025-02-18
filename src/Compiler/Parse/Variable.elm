@@ -2,11 +2,13 @@ module Compiler.Parse.Variable exposing
     ( Upper(..)
     , chompInnerChars
     , chompLower
+    , chompUpper
     , foreignAlpha
     , foreignUpper
     , getInnerWidth
     , getInnerWidthHelp
     , getUpperWidth
+    , isDot
     , isReservedWord
     , lower
     , moduleName

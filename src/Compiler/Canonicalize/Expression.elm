@@ -147,14 +147,23 @@ canonicalize syntaxVersion env (A.At region expression) =
                     |> R.apply (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
-            Src.Update (A.At reg name) fields ->
+            Src.Update (A.At reg ( maybeNamespace, name )) fields ->
                 let
+                    expr : EResult FreeLocals w Can.Expr_
+                    expr =
+                        case maybeNamespace of
+                            Nothing ->
+                                findVar reg env name
+
+                            Just namespace ->
+                                findVarQual reg env namespace name
+
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
                         Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize syntaxVersion env t)) fields
                 in
-                R.pure (Can.Update name)
-                    |> R.apply (R.fmap (A.At reg) (findVar reg env name))
+                R.pure (Can.Update maybeNamespace name)
+                    |> R.apply (R.fmap (A.At reg) expr)
                     |> R.apply (R.bind (Utils.sequenceADict A.toValue A.compareLocated) makeCanFields)
 
             Src.Record fields ->

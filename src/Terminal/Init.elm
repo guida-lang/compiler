@@ -1,4 +1,7 @@
-module Terminal.Init exposing (run)
+module Terminal.Init exposing
+    ( Flags(..)
+    , run
+    )
 
 import Builder.Deps.Solver as Solver
 import Builder.Elm.Outline as Outline
@@ -6,6 +9,7 @@ import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Constraint as Con
+import Compiler.Elm.Licenses as Licenses
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
@@ -18,8 +22,12 @@ import Utils.Main as Utils
 -- RUN
 
 
-run : () -> () -> IO ()
-run () () =
+type Flags
+    = Flags Bool
+
+
+run : () -> Flags -> IO ()
+run () (Flags package) =
     Reporting.attempt Exit.initToReport <|
         (Utils.dirDoesFileExist "elm.json"
             |> IO.bind
@@ -32,7 +40,7 @@ run () () =
                             |> IO.bind
                                 (\approved ->
                                     if approved then
-                                        init
+                                        init package
 
                                     else
                                         IO.putStrLn "Okay, I did not make any changes!"
@@ -78,8 +86,8 @@ question =
 -- INIT
 
 
-init : IO (Result Exit.Init ())
-init =
+init : Bool -> IO (Result Exit.Init ())
+init package =
     Solver.initEnv
         |> IO.bind
             (\eitherEnv ->
@@ -102,25 +110,59 @@ init =
                                             IO.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare defaults)))
 
                                         Solver.SolverOk details ->
-                                            let
-                                                solution : Dict ( String, String ) Pkg.Name V.Version
-                                                solution =
-                                                    Dict.map (\_ (Solver.Details vsn _) -> vsn) details
-
-                                                directs : Dict ( String, String ) Pkg.Name V.Version
-                                                directs =
-                                                    Dict.intersection compare solution defaults
-
-                                                indirects : Dict ( String, String ) Pkg.Name V.Version
-                                                indirects =
-                                                    Dict.diff solution defaults
-                                            in
                                             Utils.dirCreateDirectoryIfMissing True "src"
                                                 |> IO.bind
                                                     (\_ ->
-                                                        Outline.write "." <|
-                                                            Outline.App <|
-                                                                Outline.AppOutline V.elmCompiler (NE.Nonempty (Outline.RelativeSrcDir "src") []) directs indirects Dict.empty Dict.empty
+                                                        let
+                                                            outline : Outline.Outline
+                                                            outline =
+                                                                if package then
+                                                                    let
+                                                                        directs : Dict ( String, String ) Pkg.Name Con.Constraint
+                                                                        directs =
+                                                                            Dict.map
+                                                                                (\pkg _ ->
+                                                                                    let
+                                                                                        (Solver.Details vsn _) =
+                                                                                            Utils.find identity pkg details
+                                                                                    in
+                                                                                    Con.untilNextMajor vsn
+                                                                                )
+                                                                                packageDefaults
+                                                                    in
+                                                                    Outline.Pkg <|
+                                                                        Outline.PkgOutline ( "author", "project" )
+                                                                            "Update this with a brief description before publishing."
+                                                                            Licenses.bsd3
+                                                                            V.one
+                                                                            (Outline.ExposedList [])
+                                                                            directs
+                                                                            Dict.empty
+                                                                            Con.defaultElm
+
+                                                                else
+                                                                    let
+                                                                        solution : Dict ( String, String ) Pkg.Name V.Version
+                                                                        solution =
+                                                                            Dict.map (\_ (Solver.Details vsn _) -> vsn) details
+
+                                                                        directs : Dict ( String, String ) Pkg.Name V.Version
+                                                                        directs =
+                                                                            Dict.intersection compare solution defaults
+
+                                                                        indirects : Dict ( String, String ) Pkg.Name V.Version
+                                                                        indirects =
+                                                                            Dict.diff solution defaults
+                                                                    in
+                                                                    Outline.App <|
+                                                                        Outline.AppOutline V.elmCompiler
+                                                                            (NE.Nonempty (Outline.RelativeSrcDir "src") [])
+                                                                            directs
+                                                                            indirects
+                                                                            Dict.empty
+                                                                            Dict.empty
+                                                        in
+                                                        Outline.write "." outline
                                                     )
                                                 |> IO.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
                                                 |> IO.fmap (\_ -> Ok ())
@@ -134,4 +176,11 @@ defaults =
         [ ( Pkg.core, Con.anything )
         , ( Pkg.browser, Con.anything )
         , ( Pkg.html, Con.anything )
+        ]
+
+
+packageDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
+packageDefaults =
+    Dict.fromList identity
+        [ ( Pkg.core, Con.anything )
         ]

@@ -182,7 +182,7 @@ constrain rtv (A.At region expression) expected =
                                 )
                     )
 
-        Can.Update name expr fields ->
+        Can.Update _ name expr fields ->
             constrainUpdate rtv region name expr fields expected
 
         Can.Record fields ->

@@ -79,7 +79,7 @@ type alias Project =
 
 isKernel : Name -> Bool
 isKernel ( author, _ ) =
-    author == elm || author == elm_explorations
+    author == elm || author == elmExplorations
 
 
 toChars : Name -> String
@@ -153,12 +153,12 @@ url =
 
 webgl : Name
 webgl =
-    toName elm_explorations "webgl"
+    toName elmExplorations "webgl"
 
 
 linearAlgebra : Name
 linearAlgebra =
-    toName elm_explorations "linear-algebra"
+    toName elmExplorations "linear-algebra"
 
 
 elm : Author
@@ -166,8 +166,8 @@ elm =
     "elm"
 
 
-elm_explorations : Author
-elm_explorations =
+elmExplorations : Author
+elmExplorations =
     "elm-explorations"
 
 
@@ -232,7 +232,7 @@ nearbyNames ( author1, project1 ) possibleNames =
 
 authorDistance : String -> Author -> Int
 authorDistance given possibility =
-    if possibility == elm || possibility == elm_explorations then
+    if possibility == elm || possibility == elmExplorations then
         0
 
     else
