@@ -369,6 +369,14 @@ destructHelp path (A.At region pattern) revDs =
         Can.PUnit ->
             Names.pure revDs
 
+        Can.PTuple a b [] ->
+            destructTwo path a b revDs
+
+        Can.PTuple a b [ c ] ->
+            destructHelp (Opt.Index Index.first path) a revDs
+                |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+                |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+
         Can.PTuple a b cs ->
             case path of
                 Opt.Root _ ->
