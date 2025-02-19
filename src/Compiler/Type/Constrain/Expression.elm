@@ -191,8 +191,8 @@ constrain rtv (A.At region expression) expected =
         Can.Unit ->
             IO.pure (CEqual region Unit UnitN expected)
 
-        Can.Tuple a b maybeC ->
-            constrainTuple rtv region a b maybeC expected
+        Can.Tuple a b cs ->
+            constrainTuple rtv region a b cs expected
 
         Can.Shader _ types ->
             constrainShader region types expected
@@ -678,8 +678,8 @@ constrainUpdateField rtv region field (Can.FieldUpdate _ expr) =
 -- CONSTRAIN TUPLE
 
 
-constrainTuple : RTV -> A.Region -> Can.Expr -> Can.Expr -> Maybe Can.Expr -> Expected Type -> IO Constraint
-constrainTuple rtv region a b maybeC expected =
+constrainTuple : RTV -> A.Region -> Can.Expr -> Can.Expr -> List Can.Expr -> Expected Type -> IO Constraint
+constrainTuple rtv region a b cs expected =
     Type.mkFlexVar
         |> IO.bind
             (\aVar ->
@@ -701,43 +701,33 @@ constrainTuple rtv region a b maybeC expected =
                                         constrain rtv b (NoExpectation bType)
                                             |> IO.bind
                                                 (\bCon ->
-                                                    case maybeC of
-                                                        Nothing ->
-                                                            let
-                                                                tupleType : Type
-                                                                tupleType =
-                                                                    TupleN aType bType Nothing
+                                                    List.foldr
+                                                        (\c ->
+                                                            IO.bind
+                                                                (\( cons, vars ) ->
+                                                                    Type.mkFlexVar
+                                                                        |> IO.bind
+                                                                            (\cVar ->
+                                                                                constrain rtv c (NoExpectation (VarN cVar))
+                                                                                    |> IO.fmap (\cCon -> ( cCon :: cons, cVar :: vars ))
+                                                                            )
+                                                                )
+                                                        )
+                                                        (IO.pure ( [], [] ))
+                                                        cs
+                                                        |> IO.fmap
+                                                            (\( cons, vars ) ->
+                                                                let
+                                                                    tupleType : Type
+                                                                    tupleType =
+                                                                        TupleN aType bType (List.map VarN vars)
 
-                                                                tupleCon : Constraint
-                                                                tupleCon =
-                                                                    CEqual region Tuple tupleType expected
-                                                            in
-                                                            IO.pure (Type.exists [ aVar, bVar ] (CAnd [ aCon, bCon, tupleCon ]))
-
-                                                        Just c ->
-                                                            Type.mkFlexVar
-                                                                |> IO.bind
-                                                                    (\cVar ->
-                                                                        let
-                                                                            cType : Type
-                                                                            cType =
-                                                                                VarN cVar
-                                                                        in
-                                                                        constrain rtv c (NoExpectation cType)
-                                                                            |> IO.fmap
-                                                                                (\cCon ->
-                                                                                    let
-                                                                                        tupleType : Type
-                                                                                        tupleType =
-                                                                                            TupleN aType bType (Just cType)
-
-                                                                                        tupleCon : Constraint
-                                                                                        tupleCon =
-                                                                                            CEqual region Tuple tupleType expected
-                                                                                    in
-                                                                                    Type.exists [ aVar, bVar, cVar ] (CAnd [ aCon, bCon, cCon, tupleCon ])
-                                                                                )
-                                                                    )
+                                                                    tupleCon : Constraint
+                                                                    tupleCon =
+                                                                        CEqual region Tuple tupleType expected
+                                                                in
+                                                                Type.exists (aVar :: bVar :: vars) (CAnd (aCon :: bCon :: cons ++ [ tupleCon ]))
+                                                            )
                                                 )
                                     )
                         )

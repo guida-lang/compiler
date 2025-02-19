@@ -29,7 +29,7 @@ fromByteString : SyntaxVersion -> ProjectType -> String -> Result E.Error Src.Mo
 fromByteString syntaxVersion projectType source =
     case P.fromByteString (chompModule syntaxVersion projectType) E.ModuleBadEnd source of
         Ok modul ->
-            checkModule projectType modul
+            checkModule syntaxVersion projectType modul
 
         Err err ->
             Err (E.ParseError err)
@@ -116,8 +116,8 @@ chompModule syntaxVersion projectType =
 -- CHECK MODULE
 
 
-checkModule : ProjectType -> Module -> Result E.Error Src.Module
-checkModule projectType module_ =
+checkModule : SyntaxVersion -> ProjectType -> Module -> Result E.Error Src.Module
+checkModule syntaxVersion projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
             categorizeDecls [] [] [] [] module_.decls
@@ -126,7 +126,7 @@ checkModule projectType module_ =
         Just { name, effects, exports, docs } ->
             checkEffects projectType ports effects
                 |> Result.map
-                    (Src.Module
+                    (Src.Module syntaxVersion
                         (Just name)
                         exports
                         (toDocs docs module_.decls)
@@ -139,7 +139,7 @@ checkModule projectType module_ =
 
         Nothing ->
             Ok
-                (Src.Module
+                (Src.Module syntaxVersion
                     Nothing
                     (A.At A.one Src.Open)
                     (Src.NoDocs A.one)

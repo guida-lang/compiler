@@ -112,7 +112,7 @@ type Expr_
     | Update (Maybe Name) Name Expr (Dict String (A.Located Name) FieldUpdate)
     | Record (Dict String (A.Located Name) Expr)
     | Unit
-    | Tuple Expr Expr (Maybe Expr)
+    | Tuple Expr Expr (List Expr)
     | Shader Shader.Source Shader.Types
 
 
@@ -153,7 +153,7 @@ type Pattern_
     | PRecord (List Name)
     | PAlias Pattern Name
     | PUnit
-    | PTuple Pattern Pattern (Maybe Pattern)
+    | PTuple Pattern Pattern (List Pattern)
     | PList (List Pattern)
     | PCons Pattern Pattern
     | PBool Union Bool
@@ -201,7 +201,7 @@ type Type
     | TType IO.Canonical Name (List Type)
     | TRecord (Dict String Name FieldType) (Maybe Name)
     | TUnit
-    | TTuple Type Type (Maybe Type)
+    | TTuple Type Type (List Type)
     | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
 
 
@@ -396,12 +396,12 @@ typeEncoder type_ =
                 [ ( "type", Encode.string "TUnit" )
                 ]
 
-        TTuple a b maybeC ->
+        TTuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "TTuple" )
                 , ( "a", typeEncoder a )
                 , ( "b", typeEncoder b )
-                , ( "maybeC", E.maybe typeEncoder maybeC )
+                , ( "cs", Encode.list typeEncoder cs )
                 ]
 
         TAlias home name args tipe ->
@@ -447,7 +447,7 @@ typeDecoder =
                         Decode.map3 TTuple
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
-                            (Decode.field "maybeC" (Decode.maybe typeDecoder))
+                            (Decode.field "cs" (Decode.list typeDecoder))
 
                     "TAlias" ->
                         Decode.map4 TAlias
@@ -799,12 +799,12 @@ expr_Encoder expr_ =
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        Tuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", exprEncoder a )
                 , ( "b", exprEncoder b )
-                , ( "maybeC", E.maybe exprEncoder maybeC )
+                , ( "cs", Encode.list exprEncoder cs )
                 ]
 
         Shader src types ->
@@ -950,7 +950,7 @@ expr_Decoder =
                         Decode.map3 Tuple
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
-                            (Decode.field "maybeC" (Decode.maybe exprDecoder))
+                            (Decode.field "cs" (Decode.list exprDecoder))
 
                     "Shader" ->
                         Decode.map2 Shader
@@ -1004,12 +1004,12 @@ pattern_Encoder pattern_ =
                 [ ( "type", Encode.string "PUnit" )
                 ]
 
-        PTuple pattern1 pattern2 maybePattern3 ->
+        PTuple pattern1 pattern2 otherPatterns ->
             Encode.object
                 [ ( "type", Encode.string "PTuple" )
                 , ( "pattern1", patternEncoder pattern1 )
                 , ( "pattern2", patternEncoder pattern2 )
-                , ( "pattern3", E.maybe patternEncoder maybePattern3 )
+                , ( "otherPatterns", Encode.list patternEncoder otherPatterns )
                 ]
 
         PList patterns ->
@@ -1091,7 +1091,7 @@ pattern_Decoder =
                         Decode.map3 PTuple
                             (Decode.field "pattern1" patternDecoder)
                             (Decode.field "pattern2" patternDecoder)
-                            (Decode.field "pattern3" (Decode.maybe patternDecoder))
+                            (Decode.field "otherPatterns" (Decode.list patternDecoder))
 
                     "PList" ->
                         Decode.map PList

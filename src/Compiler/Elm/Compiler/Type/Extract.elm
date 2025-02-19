@@ -24,7 +24,6 @@ import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Maybe.Extra as Maybe
 import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
@@ -60,11 +59,11 @@ extract astType =
         Can.TUnit ->
             pure T.Unit
 
-        Can.TTuple a b maybeC ->
+        Can.TTuple a b cs ->
             pure T.Tuple
                 |> apply (extract a)
                 |> apply (extract b)
-                |> apply (traverse extract (Maybe.toList maybeC))
+                |> apply (traverse extract cs)
 
         Can.TAlias home name args aliasType ->
             addAlias (Opt.Global home name) ()

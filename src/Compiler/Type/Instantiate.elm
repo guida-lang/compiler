@@ -56,7 +56,7 @@ fromSrcType freeVars sourceType =
             IO.pure TupleN
                 |> IO.apply (fromSrcType freeVars a)
                 |> IO.apply (fromSrcType freeVars b)
-                |> IO.apply (IO.traverseMaybe (fromSrcType freeVars) maybeC)
+                |> IO.apply (IO.traverseList (fromSrcType freeVars) maybeC)
 
         Can.TUnit ->
             IO.pure UnitN
