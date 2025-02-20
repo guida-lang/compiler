@@ -173,8 +173,18 @@ then_ (RResult ka) (RResult kb) =
 
 
 traverse : (a -> RResult i w x b) -> List a -> RResult i w x (List b)
-traverse func =
-    List.foldr (\a -> bind (\acc -> fmap (\b -> b :: acc) (func a))) (ok [])
+traverse func list =
+    loop (traverseHelp func) ( list, [] )
+
+
+traverseHelp : (a -> RResult i w e b) -> ( List a, List b ) -> RResult i w e (Step ( List a, List b ) (List b))
+traverseHelp callback ( list, result ) =
+    case list of
+        [] ->
+            pure (Done (List.reverse result))
+
+        a :: rest ->
+            fmap (\b -> Loop ( rest, b :: result )) (callback a)
 
 
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> RResult i w x b) -> Dict comparable k a -> RResult i w x (Dict comparable k b)
