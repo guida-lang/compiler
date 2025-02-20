@@ -478,7 +478,7 @@ addDefNodes env nodes (A.At _ def) =
                                 case canonicalize env body of
                                     R.RResult k ->
                                         case k Dict.empty ws of
-                                            Ok (R.ROk freeLocals warnings cbody) ->
+                                            R.ROk freeLocals warnings cbody ->
                                                 let
                                                     names : List (A.Located Name)
                                                     names =
@@ -492,15 +492,13 @@ addDefNodes env nodes (A.At _ def) =
                                                     node =
                                                         ( Destruct cpattern cbody, name, Dict.keys compare freeLocals )
                                                 in
-                                                Ok
-                                                    (R.ROk
-                                                        (Utils.mapUnionWith identity compare combineUses fs freeLocals)
-                                                        warnings
-                                                        (List.foldl (addEdge [ name ]) (node :: nodes) names)
-                                                    )
+                                                R.ROk
+                                                    (Utils.mapUnionWith identity compare combineUses fs freeLocals)
+                                                    warnings
+                                                    (List.foldl (addEdge [ name ]) (node :: nodes) names)
 
-                                            Err (R.RErr freeLocals warnings errors) ->
-                                                Err (R.RErr (Utils.mapUnionWith identity compare combineUses freeLocals fs) warnings errors)
+                                            R.RErr freeLocals warnings errors ->
+                                                R.RErr (Utils.mapUnionWith identity compare combineUses freeLocals fs) warnings errors
                             )
                     )
 
@@ -509,23 +507,21 @@ logLetLocals : List arg -> FreeLocals -> value -> EResult FreeLocals w value
 logLetLocals args letLocals value =
     R.RResult
         (\freeLocals warnings ->
-            Ok
-                (R.ROk
-                    (Utils.mapUnionWith identity
-                        compare
-                        combineUses
-                        freeLocals
-                        (case args of
-                            [] ->
-                                letLocals
+            R.ROk
+                (Utils.mapUnionWith identity
+                    compare
+                    combineUses
+                    freeLocals
+                    (case args of
+                        [] ->
+                            letLocals
 
-                            _ ->
-                                Dict.map (\_ -> delayUse) letLocals
-                        )
+                        _ ->
+                            Dict.map (\_ -> delayUse) letLocals
                     )
-                    warnings
-                    value
                 )
+                warnings
+                value
         )
 
 
@@ -701,7 +697,7 @@ logVar : Name.Name -> a -> EResult FreeLocals w a
 logVar name value =
     R.RResult <|
         \freeLocals warnings ->
-            Ok (R.ROk (Utils.mapInsertWith identity combineUses name oneDirectUse freeLocals) warnings value)
+            R.ROk (Utils.mapInsertWith identity combineUses name oneDirectUse freeLocals) warnings value
 
 
 oneDirectUse : Uses
@@ -741,7 +737,7 @@ verifyBindings context bindings (R.RResult k) =
     R.RResult
         (\info warnings ->
             case k Dict.empty warnings of
-                Ok (R.ROk freeLocals warnings1 value) ->
+                R.ROk freeLocals warnings1 value ->
                     let
                         outerFreeLocals : Dict String Name Uses
                         outerFreeLocals =
@@ -758,10 +754,10 @@ verifyBindings context bindings (R.RResult k) =
                                 Dict.foldl compare (addUnusedWarning context) warnings1 <|
                                     Dict.diff bindings freeLocals
                     in
-                    Ok (R.ROk info warnings2 ( value, outerFreeLocals ))
+                    R.ROk info warnings2 ( value, outerFreeLocals )
 
-                Err (R.RErr _ warnings1 err) ->
-                    Err (R.RErr info warnings1 err)
+                R.RErr _ warnings1 err ->
+                    R.RErr info warnings1 err
         )
 
 
@@ -775,11 +771,11 @@ directUsage (R.RResult k) =
     R.RResult
         (\freeLocals warnings ->
             case k () warnings of
-                Ok (R.ROk () ws ( value, newFreeLocals )) ->
-                    Ok (R.ROk (Utils.mapUnionWith identity compare combineUses freeLocals newFreeLocals) ws value)
+                R.ROk () ws ( value, newFreeLocals ) ->
+                    R.ROk (Utils.mapUnionWith identity compare combineUses freeLocals newFreeLocals) ws value
 
-                Err (R.RErr () ws es) ->
-                    Err (R.RErr freeLocals ws es)
+                R.RErr () ws es ->
+                    R.RErr freeLocals ws es
         )
 
 
@@ -788,16 +784,16 @@ delayedUsage (R.RResult k) =
     R.RResult
         (\freeLocals warnings ->
             case k () warnings of
-                Ok (R.ROk () ws ( value, newFreeLocals )) ->
+                R.ROk () ws ( value, newFreeLocals ) ->
                     let
                         delayedLocals : Dict String Name Uses
                         delayedLocals =
                             Dict.map (\_ -> delayUse) newFreeLocals
                     in
-                    Ok (R.ROk (Utils.mapUnionWith identity compare combineUses freeLocals delayedLocals) ws value)
+                    R.ROk (Utils.mapUnionWith identity compare combineUses freeLocals delayedLocals) ws value
 
-                Err (R.RErr () ws es) ->
-                    Err (R.RErr freeLocals ws es)
+                R.RErr () ws es ->
+                    R.RErr freeLocals ws es
         )
 
 
