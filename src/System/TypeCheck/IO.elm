@@ -1,10 +1,11 @@
 module System.TypeCheck.IO exposing
     ( unsafePerformIO
-    , IO(..), State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
+    , IO, State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
     , foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
     , Point(..), PointInfo(..)
     , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
     , Canonical(..)
+    , Step(..), loop
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -40,7 +41,7 @@ import Data.Map as Dict exposing (Dict)
 
 
 unsafePerformIO : IO a -> a
-unsafePerformIO (IO ioA) =
+unsafePerformIO ioA =
     { ioRefsWeight = Array.empty
     , ioRefsPointInfo = Array.empty
     , ioRefsDescriptor = Array.empty
@@ -51,11 +52,30 @@ unsafePerformIO (IO ioA) =
 
 
 
+-- LOOP
+
+
+type Step state a
+    = Loop state
+    | Done a
+
+
+loop : (state -> IO (Step state a)) -> state -> IO a
+loop callback loopState ioState =
+    case callback loopState ioState of
+        ( newIOState, Loop newLoopState ) ->
+            loop callback newLoopState newIOState
+
+        ( newIOState, Done a ) ->
+            ( newIOState, a )
+
+
+
 -- The IO monad
 
 
-type IO a
-    = IO (State -> ( State, a ))
+type alias IO a =
+    State -> ( State, a )
 
 
 type alias State =
@@ -68,7 +88,7 @@ type alias State =
 
 pure : a -> IO a
 pure x =
-    IO (\s -> ( s, x ))
+    \s -> ( s, x )
 
 
 apply : IO a -> IO (a -> b) -> IO b
@@ -82,18 +102,13 @@ fmap fn ma =
 
 
 bind : (a -> IO b) -> IO a -> IO b
-bind f (IO ma) =
-    IO
-        (\s0 ->
-            let
-                ( s1, a ) =
-                    ma s0
-
-                (IO fa) =
-                    f a
-            in
-            fa s1
-        )
+bind f ma =
+    \s0 ->
+        let
+            ( s1, a ) =
+                ma s0
+        in
+        f a s1
 
 
 foldrM : (a -> b -> IO b) -> b -> List a -> IO b
@@ -107,8 +122,18 @@ foldrM f z0 xs =
 
 
 foldM : (b -> a -> IO b) -> b -> List a -> IO b
-foldM f b =
-    List.foldl (\a -> bind (\acc -> f acc a)) (pure b)
+foldM f b list =
+    loop (foldMHelp f) ( List.reverse list, b )
+
+
+foldMHelp : (b -> a -> IO b) -> ( List a, b ) -> IO (Step ( List a, b ) b)
+foldMHelp callback ( list, result ) =
+    case list of
+        [] ->
+            pure (Done result)
+
+        a :: rest ->
+            fmap (\b -> Loop ( rest, b )) (callback result a)
 
 
 traverseMap : (k -> comparable) -> (k -> k -> Order) -> (a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
