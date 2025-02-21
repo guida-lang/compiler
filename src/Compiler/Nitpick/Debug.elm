@@ -142,8 +142,8 @@ hasDebug expression =
         Opt.Unit ->
             False
 
-        Opt.Tuple _ a b c ->
-            hasDebug a || hasDebug b || Maybe.withDefault False (Maybe.map hasDebug c)
+        Opt.Tuple _ a b cs ->
+            hasDebug a || hasDebug b || List.any hasDebug cs
 
         Opt.Shader _ _ _ ->
             False

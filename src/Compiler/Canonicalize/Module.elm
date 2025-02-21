@@ -15,6 +15,7 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -38,7 +39,7 @@ type alias MResult i w a =
 
 
 canonicalize : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
-canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops effects) as modul) =
+canonicalize pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values _ _ binops effects) as modul) =
     let
         home : IO.Canonical
         home =
@@ -52,10 +53,10 @@ canonicalize pkg ifaces ((Src.Module _ exports docs imports values _ _ binops ef
         |> R.bind (Local.add modul)
         |> R.bind
             (\( env, cunions, caliases ) ->
-                canonicalizeValues env values
+                canonicalizeValues syntaxVersion env values
                     |> R.bind
                         (\cvalues ->
-                            Effects.canonicalize env values cunions effects
+                            Effects.canonicalize syntaxVersion env values cunions effects
                                 |> R.bind
                                     (\ceffects ->
                                         canonicalizeExports values cunions caliases cbinops ceffects exports
@@ -86,9 +87,9 @@ canonicalizeBinop (A.At _ (Src.Infix op associativity precedence func)) =
 -- 2. Detect cycles using DIRECT dependencies => nonterminating recursion
 
 
-canonicalizeValues : Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
-canonicalizeValues env values =
-    R.traverse (toNodeOne env) values
+canonicalizeValues : SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
+canonicalizeValues syntaxVersion env values =
+    R.traverse (toNodeOne syntaxVersion env) values
         |> R.bind (\nodes -> detectCycles (Graph.stronglyConnComp nodes))
 
 
@@ -169,18 +170,18 @@ type alias NodeTwo =
     ( Can.Def, Name, List Name )
 
 
-toNodeOne : Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType)) =
+toNodeOne : SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
+toNodeOne syntaxVersion env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
-                (R.traverse (Pattern.canonicalize env) srcArgs)
+                (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
                 |> R.bind
                     (\( args, argBindings ) ->
                         Env.addLocals argBindings env
                             |> R.bind
                                 (\newEnv ->
-                                    Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize newEnv body)
+                                    Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize syntaxVersion newEnv body)
                                         |> R.fmap
                                             (\( cbody, freeLocals ) ->
                                                 let
@@ -197,17 +198,17 @@ toNodeOne env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType
                     )
 
         Just srcType ->
-            Type.toAnnotation env srcType
+            Type.toAnnotation syntaxVersion env srcType
                 |> R.bind
                     (\(Can.Forall freeVars tipe) ->
                         Pattern.verify (Error.DPFuncArgs name)
-                            (Expr.gatherTypedArgs env name srcArgs tipe Index.first [])
+                            (Expr.gatherTypedArgs syntaxVersion env name srcArgs tipe Index.first [])
                             |> R.bind
                                 (\( ( args, resultType ), argBindings ) ->
                                     Env.addLocals argBindings env
                                         |> R.bind
                                             (\newEnv ->
-                                                Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize newEnv body)
+                                                Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize syntaxVersion newEnv body)
                                                     |> R.fmap
                                                         (\( cbody, freeLocals ) ->
                                                             let

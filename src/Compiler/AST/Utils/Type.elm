@@ -62,11 +62,11 @@ dealiasHelp typeTable tipe =
         TUnit ->
             TUnit
 
-        TTuple a b maybeC ->
+        TTuple a b cs ->
             TTuple
                 (dealiasHelp typeTable a)
                 (dealiasHelp typeTable b)
-                (Maybe.map (dealiasHelp typeTable) maybeC)
+                (List.map (dealiasHelp typeTable) cs)
 
 
 dealiasField : Dict String Name Type -> FieldType -> FieldType
@@ -99,8 +99,8 @@ deepDealias tipe =
         TUnit ->
             TUnit
 
-        TTuple a b c ->
-            TTuple (deepDealias a) (deepDealias b) (Maybe.map deepDealias c)
+        TTuple a b cs ->
+            TTuple (deepDealias a) (deepDealias b) (List.map deepDealias cs)
 
 
 deepDealiasField : FieldType -> FieldType

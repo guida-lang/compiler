@@ -260,7 +260,7 @@ type FlatType
     | EmptyRecord1
     | Record1 (Dict String String Variable) Variable
     | Unit1
-    | Tuple1 Variable Variable (Maybe Variable)
+    | Tuple1 Variable Variable (List Variable)
 
 
 

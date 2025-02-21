@@ -65,11 +65,14 @@ simplify (A.At _ pattern) =
         Can.PUnit ->
             Ctor unit unitName []
 
-        Can.PTuple a b Nothing ->
+        Can.PTuple a b [] ->
             Ctor pair pairName [ simplify a, simplify b ]
 
-        Can.PTuple a b (Just c) ->
+        Can.PTuple a b [ c ] ->
             Ctor triple tripleName [ simplify a, simplify b, simplify c ]
+
+        Can.PTuple a b cs ->
+            Ctor nTuple nTupleName (List.map simplify (a :: b :: cs))
 
         Can.PCtor { union, name, args } ->
             Ctor union name <|
@@ -148,6 +151,16 @@ triple =
     Can.Union [ "a", "b", "c" ] [ ctor ] 1 Can.Normal
 
 
+nTuple : Can.Union
+nTuple =
+    let
+        ctor : Can.Ctor
+        ctor =
+            Can.Ctor nTupleName Index.first 3 [ Can.TVar "a", Can.TVar "b", Can.TVar "cs" ]
+    in
+    Can.Union [ "a", "b", "cs" ] [ ctor ] 1 Can.Normal
+
+
 list : Can.Union
 list =
     let
@@ -180,6 +193,11 @@ pairName =
 tripleName : Name.Name
 tripleName =
     "#3"
+
+
+nTupleName : Name.Name
+nTupleName =
+    "#N"
 
 
 consName : Name.Name
@@ -349,16 +367,10 @@ checkExpr (A.At region expression) errors =
         Can.Unit ->
             errors
 
-        Can.Tuple a b maybeC ->
+        Can.Tuple a b cs ->
             checkExpr a
                 (checkExpr b
-                    (case maybeC of
-                        Nothing ->
-                            errors
-
-                        Just c ->
-                            checkExpr c errors
-                    )
+                    (List.foldr checkExpr errors cs)
                 )
 
         Can.Shader _ _ ->

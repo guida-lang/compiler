@@ -240,24 +240,15 @@ optimize cycle (A.At region expression) =
         Can.Unit ->
             Names.registerKernel Name.utils Opt.Unit
 
-        Can.Tuple a b maybeC ->
+        Can.Tuple a b cs ->
             optimize cycle a
                 |> Names.bind
                     (\optA ->
                         optimize cycle b
                             |> Names.bind
                                 (\optB ->
-                                    case maybeC of
-                                        Just c ->
-                                            optimize cycle c
-                                                |> Names.bind
-                                                    (\optC ->
-                                                        Names.registerKernel Name.utils
-                                                            (Opt.Tuple region optA optB (Just optC))
-                                                    )
-
-                                        Nothing ->
-                                            Names.registerKernel Name.utils (Opt.Tuple region optA optB Nothing)
+                                    Names.traverse (optimize cycle) cs
+                                        |> Names.bind (Names.registerKernel Name.utils << Opt.Tuple region optA optB)
                                 )
                     )
 
@@ -378,15 +369,22 @@ destructHelp path (A.At region pattern) revDs =
         Can.PUnit ->
             Names.pure revDs
 
-        Can.PTuple a b Nothing ->
+        Can.PTuple a b [] ->
             destructTwo path a b revDs
 
-        Can.PTuple a b (Just c) ->
+        Can.PTuple a b [ c ] ->
+            destructHelp (Opt.Index Index.first path) a revDs
+                |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+                |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+
+        Can.PTuple a b cs ->
             case path of
                 Opt.Root _ ->
-                    destructHelp (Opt.Index Index.first path) a revDs
-                        |> Names.bind (destructHelp (Opt.Index Index.second path) b)
-                        |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+                    List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.ArrayIndex index (Opt.Field "cs" path)) arg))
+                        (destructHelp (Opt.Index Index.first path) a revDs
+                            |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+                        )
+                        (List.indexedMap Tuple.pair cs)
 
                 _ ->
                     Names.generate
@@ -397,9 +395,11 @@ destructHelp path (A.At region pattern) revDs =
                                     newRoot =
                                         Opt.Root name
                                 in
-                                destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
-                                    |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
-                                    |> Names.bind (destructHelp (Opt.Index Index.third newRoot) c)
+                                List.foldl (\( index, arg ) -> Names.bind (destructHelp (Opt.ArrayIndex index (Opt.Field "cs" newRoot)) arg))
+                                    (destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
+                                        |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
+                                    )
+                                    (List.indexedMap Tuple.pair cs)
                             )
 
         Can.PList [] ->

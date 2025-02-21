@@ -4,12 +4,14 @@ module Compiler.Optimize.Port exposing
     , toFlagsDecoder
     )
 
+import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -35,8 +37,8 @@ toEncoder tipe =
         Can.TUnit ->
             Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
 
-        Can.TTuple a b c ->
-            encodeTuple a b c
+        Can.TTuple a b cs ->
+            encodeTuple a b cs
 
         Can.TType _ name args ->
             case args of
@@ -90,7 +92,7 @@ toEncoder tipe =
                                     value =
                                         Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal Name.dollar) A.zero name ]
                                 in
-                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value Nothing
+                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value []
                             )
             in
             encode "object"
@@ -153,12 +155,16 @@ encodeArray tipe =
             )
 
 
-encodeTuple : Can.Type -> Can.Type -> Maybe Can.Type -> Names.Tracker Opt.Expr
-encodeTuple a b maybeC =
+encodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+encodeTuple a b cs =
     let
         let_ : Name -> Index.ZeroBased -> Opt.Expr -> Opt.Expr
         let_ arg index body =
             Opt.Destruct (Opt.Destructor arg (Opt.Index index (Opt.Root Name.dollar))) body
+
+        letCs_ : Name -> Int -> Opt.Expr -> Opt.Expr
+        letCs_ arg index body =
+            Opt.Destruct (Opt.Destructor arg (Opt.ArrayIndex index (Opt.Field "cs" (Opt.Root Name.dollar)))) body
 
         encodeArg : Name -> Can.Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
@@ -175,45 +181,34 @@ encodeTuple a b maybeC =
                                 (\arg1 ->
                                     Names.bind
                                         (\arg2 ->
-                                            case maybeC of
-                                                Nothing ->
-                                                    Names.pure
-                                                        (Opt.Function [ Name.dollar ]
+                                            let
+                                                ( _, indexedCs ) =
+                                                    List.foldl (\( i, c ) ( index, acc ) -> ( Index.next index, ( i, index, c ) :: acc ))
+                                                        ( Index.third, [] )
+                                                        (List.indexedMap Tuple.pair cs)
+                                                        |> Tuple.mapSecond List.reverse
+                                            in
+                                            List.foldl
+                                                (\( _, i, tipe ) acc ->
+                                                    Names.bind (\encodedArg -> Names.fmap (flip (++) [ encodedArg ]) acc)
+                                                        (encodeArg (JsName.fromIndex i) tipe)
+                                                )
+                                                (Names.pure [ arg1, arg2 ])
+                                                indexedCs
+                                                |> Names.fmap
+                                                    (\args ->
+                                                        Opt.Function [ Name.dollar ]
                                                             (let_ "a"
                                                                 Index.first
                                                                 (let_ "b"
                                                                     Index.second
-                                                                    (Opt.Call A.zero
-                                                                        list
-                                                                        [ identity
-                                                                        , Opt.List A.zero [ arg1, arg2 ]
-                                                                        ]
+                                                                    (List.foldr (\( i, index, _ ) -> letCs_ (JsName.fromIndex index) i)
+                                                                        (Opt.Call A.zero list [ identity, Opt.List A.zero args ])
+                                                                        indexedCs
                                                                     )
                                                                 )
                                                             )
-                                                        )
-
-                                                Just c ->
-                                                    Names.fmap
-                                                        (\arg3 ->
-                                                            Opt.Function [ Name.dollar ]
-                                                                (let_ "a"
-                                                                    Index.first
-                                                                    (let_ "b"
-                                                                        Index.second
-                                                                        (let_ "c"
-                                                                            Index.third
-                                                                            (Opt.Call A.zero
-                                                                                list
-                                                                                [ identity
-                                                                                , Opt.List A.zero [ arg1, arg2, arg3 ]
-                                                                                ]
-                                                                            )
-                                                                        )
-                                                                    )
-                                                                )
-                                                        )
-                                                        (encodeArg "c" c)
+                                                    )
                                         )
                                         (encodeArg "b" b)
                                 )
@@ -256,8 +251,8 @@ toDecoder tipe =
         Can.TUnit ->
             decodeTuple0
 
-        Can.TTuple a b c ->
-            decodeTuple a b c
+        Can.TTuple a b cs ->
+            decodeTuple a b cs
 
         Can.TType _ name args ->
             case ( name, args ) of
@@ -372,29 +367,26 @@ decodeTuple0 =
         (decode "null")
 
 
-decodeTuple : Can.Type -> Can.Type -> Maybe Can.Type -> Names.Tracker Opt.Expr
-decodeTuple a b maybeC =
+decodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+decodeTuple a b cs =
     Names.bind
         (\succeed ->
-            case maybeC of
-                Nothing ->
-                    let
-                        tuple : Opt.Expr
-                        tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) Nothing
-                    in
-                    indexAndThen 1 b (Opt.Call A.zero succeed [ tuple ])
-                        |> Names.bind (indexAndThen 0 a)
+            let
+                ( allElems, lastElem ) =
+                    case List.reverse cs of
+                        c :: rest ->
+                            ( a :: b :: List.reverse rest, c )
 
-                Just c ->
-                    let
-                        tuple : Opt.Expr
-                        tuple =
-                            Opt.Tuple A.zero (toLocal 0) (toLocal 1) (Just (toLocal 2))
-                    in
-                    indexAndThen 2 c (Opt.Call A.zero succeed [ tuple ])
-                        |> Names.bind (indexAndThen 1 b)
-                        |> Names.bind (indexAndThen 0 a)
+                        _ ->
+                            ( [ a ], b )
+
+                tuple : Opt.Expr
+                tuple =
+                    Opt.Tuple A.zero (toLocal 0) (toLocal 1) (List.indexedMap (\i _ -> toLocal (i + 2)) cs)
+            in
+            List.foldr (\( i, c ) -> Names.bind (indexAndThen i c))
+                (indexAndThen (List.length cs + 1) lastElem (Opt.Call A.zero succeed [ tuple ]))
+                (List.indexedMap Tuple.pair allElems)
         )
         (decode "succeed")
 

@@ -34,6 +34,7 @@ import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -133,11 +134,11 @@ type Type_
 
 
 type Module
-    = Module (Maybe (A.Located Name)) (A.Located Exposing) Docs (List Import) (List (A.Located Value)) (List (A.Located Union)) (List (A.Located Alias)) (List (A.Located Infix)) Effects
+    = Module SyntaxVersion (Maybe (A.Located Name)) (A.Located Exposing) Docs (List Import) (List (A.Located Value)) (List (A.Located Union)) (List (A.Located Alias)) (List (A.Located Infix)) Effects
 
 
 getName : Module -> Name
-getName (Module maybeName _ _ _ _ _ _ _ _) =
+getName (Module _ maybeName _ _ _ _ _ _ _ _) =
     case maybeName of
         Just (A.At _ name) ->
             name
@@ -338,9 +339,10 @@ internalTypeDecoder =
 
 
 moduleEncoder : Module -> Encode.Value
-moduleEncoder (Module maybeName exports docs imports values unions aliases binops effects) =
+moduleEncoder (Module syntaxVersion maybeName exports docs imports values unions aliases binops effects) =
     Encode.object
         [ ( "type", Encode.string "Module" )
+        , ( "syntaxVersion", SV.encoder syntaxVersion )
         , ( "maybeName", E.maybe (A.locatedEncoder Encode.string) maybeName )
         , ( "exports", A.locatedEncoder exposingEncoder exports )
         , ( "docs", docsEncoder docs )
@@ -355,12 +357,15 @@ moduleEncoder (Module maybeName exports docs imports values unions aliases binop
 
 moduleDecoder : Decode.Decoder Module
 moduleDecoder =
-    Decode.map8 (\( maybeName, exports ) -> Module maybeName exports)
+    Decode.map8 (\( syntaxVersion, maybeName ) ( exports, docs ) -> Module syntaxVersion maybeName exports docs)
         (Decode.map2 Tuple.pair
+            (Decode.field "syntaxVersion" SV.decoder)
             (Decode.field "maybeName" (Decode.maybe (A.locatedDecoder Decode.string)))
-            (Decode.field "exports" (A.locatedDecoder exposingDecoder))
         )
-        (Decode.field "docs" docsDecoder)
+        (Decode.map2 Tuple.pair
+            (Decode.field "exports" (A.locatedDecoder exposingDecoder))
+            (Decode.field "docs" docsDecoder)
+        )
         (Decode.field "imports" (Decode.list importDecoder))
         (Decode.field "values" (Decode.list (A.locatedDecoder valueDecoder)))
         (Decode.field "unions" (Decode.list (A.locatedDecoder unionDecoder)))
