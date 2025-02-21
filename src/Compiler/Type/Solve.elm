@@ -208,32 +208,31 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
 
         CLet [] flexs _ headerCon CTrue ->
             introduce rank pools flexs
-                |> IO.bind (\_ -> IO.pure <| IO.Loop ( ( env, rank ), ( pools, state ), ( headerCon, cont ) ))
+                |> IO.fmap (\_ -> IO.Loop ( ( env, rank ), ( pools, state ), ( headerCon, cont ) ))
 
         CLet [] [] header headerCon subCon ->
             solve env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
                         IO.traverseMap identity compare (A.traverse (typeToVariable rank pools)) header
-                            |> IO.bind
+                            |> IO.fmap
                                 (\locals ->
                                     let
                                         newEnv : Env
                                         newEnv =
                                             Dict.union env (Dict.map (\_ -> A.toValue) locals)
                                     in
-                                    IO.pure <|
-                                        IO.Loop
-                                            ( ( newEnv, rank )
-                                            , ( pools, state1 )
-                                            , ( subCon
-                                              , IO.bind
-                                                    (\state2 ->
-                                                        IO.foldM occurs state2 (Dict.toList compare locals)
-                                                    )
-                                                    >> cont
-                                              )
-                                            )
+                                    IO.Loop
+                                        ( ( newEnv, rank )
+                                        , ( pools, state1 )
+                                        , ( subCon
+                                          , IO.bind
+                                                (\state2 ->
+                                                    IO.foldM occurs state2 (Dict.toList compare locals)
+                                                )
+                                                >> cont
+                                          )
+                                        )
                                 )
                     )
 
@@ -301,7 +300,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
                                                                                                             IO.mapM_ isGeneric rigids
-                                                                                                                |> IO.bind
+                                                                                                                |> IO.fmap
                                                                                                                     (\_ ->
                                                                                                                         let
                                                                                                                             newEnv : Env
@@ -312,18 +311,17 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                                                                                             tempState =
                                                                                                                                 State savedEnv finalMark errors
                                                                                                                         in
-                                                                                                                        IO.pure <|
-                                                                                                                            IO.Loop
-                                                                                                                                ( ( newEnv, rank )
-                                                                                                                                , ( nextPools, tempState )
-                                                                                                                                , ( subCon
-                                                                                                                                  , IO.bind
-                                                                                                                                        (\newState ->
-                                                                                                                                            IO.foldM occurs newState (Dict.toList compare locals)
-                                                                                                                                        )
-                                                                                                                                        >> cont
-                                                                                                                                  )
-                                                                                                                                )
+                                                                                                                        IO.Loop
+                                                                                                                            ( ( newEnv, rank )
+                                                                                                                            , ( nextPools, tempState )
+                                                                                                                            , ( subCon
+                                                                                                                              , IO.bind
+                                                                                                                                    (\newState ->
+                                                                                                                                        IO.foldM occurs newState (Dict.toList compare locals)
+                                                                                                                                    )
+                                                                                                                                    >> cont
+                                                                                                                              )
+                                                                                                                            )
                                                                                                                     )
                                                                                                         )
                                                                                             )

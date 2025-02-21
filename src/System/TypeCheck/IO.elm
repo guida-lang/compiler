@@ -2,10 +2,10 @@ module System.TypeCheck.IO exposing
     ( unsafePerformIO
     , IO, State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
     , foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
+    , Step(..), loop
     , Point(..), PointInfo(..)
     , Descriptor(..), Content(..), SuperType(..), Mark(..), Variable, FlatType(..)
     , Canonical(..)
-    , Step(..), loop
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -17,6 +17,11 @@ module System.TypeCheck.IO exposing
 
 @docs IO, State, pure, apply, fmap, bind, foldrM, foldM, traverseMap, traverseMapWithKey, forM_, mapM_
 @docs foldMDict, indexedForA, mapM, traverseIndexed, traverseList, traverseMaybe, traverseTuple
+
+
+# Loop
+
+@docs Step, loop
 
 
 # Point
@@ -97,8 +102,12 @@ apply ma mf =
 
 
 fmap : (a -> b) -> IO a -> IO b
-fmap fn ma =
-    bind (pure << fn) ma
+fmap fn ma s0 =
+    let
+        ( s1, a ) =
+            ma s0
+    in
+    ( s1, fn a )
 
 
 bind : (a -> IO b) -> IO a -> IO b
@@ -113,12 +122,17 @@ bind f ma =
 
 foldrM : (a -> b -> IO b) -> b -> List a -> IO b
 foldrM f z0 xs =
-    let
-        c : a -> (b -> IO c) -> b -> IO c
-        c x k z =
-            bind k (f x z)
-    in
-    List.foldl c pure xs z0
+    loop (foldrMHelp f) ( xs, z0 )
+
+
+foldrMHelp : (a -> b -> IO b) -> ( List a, b ) -> IO (Step ( List a, b ) b)
+foldrMHelp callback ( list, result ) =
+    case list of
+        [] ->
+            pure (Done result)
+
+        a :: rest ->
+            fmap (\b -> Loop ( rest, b )) (callback a result)
 
 
 foldM : (b -> a -> IO b) -> b -> List a -> IO b
@@ -142,20 +156,33 @@ traverseMap toComparable keyComparison f =
 
 
 traverseMapWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
-traverseMapWithKey toComparable keyComparison f =
-    Dict.foldl keyComparison
-        (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (f k a)))
-        (pure Dict.empty)
+traverseMapWithKey toComparable keyComparison f dict =
+    loop (traverseWithKeyHelp toComparable f) ( Dict.toList keyComparison dict, Dict.empty )
+
+
+traverseWithKeyHelp : (k -> comparable) -> (k -> a -> IO b) -> ( List ( k, a ), Dict comparable k b ) -> IO (Step ( List ( k, a ), Dict comparable k b ) (Dict comparable k b))
+traverseWithKeyHelp toComparable callback ( pairs, result ) =
+    case pairs of
+        [] ->
+            pure (Done result)
+
+        ( k, a ) :: rest ->
+            fmap (\b -> Loop ( rest, Dict.insert toComparable k b result )) (callback k a)
 
 
 mapM_ : (a -> IO b) -> List a -> IO ()
-mapM_ f =
-    let
-        c : a -> IO () -> IO ()
-        c x k =
-            bind (\_ -> k) (f x)
-    in
-    List.foldr c (pure ())
+mapM_ f list =
+    loop (mapMHelp_ f) ( List.reverse list, pure () )
+
+
+mapMHelp_ : (a -> IO b) -> ( List a, IO () ) -> IO (Step ( List a, IO () ) ())
+mapMHelp_ callback ( list, result ) =
+    case list of
+        [] ->
+            fmap Done result
+
+        a :: rest ->
+            fmap (\_ -> Loop ( rest, result )) (callback a)
 
 
 forM_ : List a -> (a -> IO b) -> IO ()

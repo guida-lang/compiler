@@ -22,6 +22,7 @@ type SCC vertex
 stronglyConnComp : List ( node, comparable, List comparable ) -> List (SCC node)
 stronglyConnComp edges0 =
     let
+        get_node : SCC ( a, b, c ) -> SCC a
         get_node scc =
             case scc of
                 AcyclicSCC ( n, _, _ ) ->
@@ -155,12 +156,15 @@ visit graph =
 
                     else
                         let
+                            neighbors : List Vertex
                             neighbors =
                                 Dict.get identity vertex graph |> Maybe.withDefault []
 
+                            newTasks : List VisitTask
                             newTasks =
                                 check neighbors ++ (Output vertex :: rest)
 
+                            newVisited : EverySet Vertex Vertex
                             newVisited =
                                 EverySet.insert identity vertex visited
                         in
@@ -214,9 +218,11 @@ assign graph orderedVertices =
 
                     else
                         let
+                            neighborTasks : List AssignTask
                             neighborTasks =
                                 Dict.get identity vertex graph |> Maybe.withDefault [] |> check
 
+                            finishTasks : List AssignTask
                             finishTasks =
                                 case scc of
                                     [] ->
@@ -225,12 +231,15 @@ assign graph orderedVertices =
                                     _ ->
                                         []
 
+                            newTasks : List AssignTask
                             newTasks =
                                 neighborTasks ++ finishTasks ++ rest
 
+                            newAssigned : EverySet Vertex Vertex
                             newAssigned =
                                 EverySet.insert identity vertex assigned
 
+                            newScc : List Vertex
                             newScc =
                                 vertex :: scc
                         in

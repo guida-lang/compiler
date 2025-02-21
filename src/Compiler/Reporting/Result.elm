@@ -188,10 +188,18 @@ traverseHelp callback ( list, result ) =
 
 
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> RResult i w x b) -> Dict comparable k a -> RResult i w x (Dict comparable k b)
-mapTraverseWithKey toComparable keyComparison f =
-    Dict.foldr keyComparison
-        (\k a -> bind (\c -> fmap (\va -> Dict.insert toComparable k va c) (f k a)))
-        (pure Dict.empty)
+mapTraverseWithKey toComparable keyComparison f dict =
+    loop (mapTraverseWithKeyHelp toComparable f) ( Dict.toList keyComparison dict, Dict.empty )
+
+
+mapTraverseWithKeyHelp : (k -> comparable) -> (k -> a -> RResult i w x b) -> ( List ( k, a ), Dict comparable k b ) -> RResult i w x (Step ( List ( k, a ), Dict comparable k b ) (Dict comparable k b))
+mapTraverseWithKeyHelp toComparable f ( pairs, result ) =
+    case pairs of
+        [] ->
+            pure (Done result)
+
+        ( k, a ) :: rest ->
+            fmap (\b -> Loop ( rest, Dict.insert toComparable k b result )) (f k a)
 
 
 traverseDict : (k -> comparable) -> (k -> k -> Order) -> (a -> RResult i w x b) -> Dict comparable k a -> RResult i w x (Dict comparable k b)
