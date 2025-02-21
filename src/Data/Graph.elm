@@ -1,4 +1,4 @@
-module Graph exposing
+module Data.Graph exposing
     ( SCC(..)
     , stronglyConnComp
     )
@@ -45,7 +45,7 @@ stronglyConnCompR edges0 =
     let
         lt : ( node, comparable, List comparable ) -> ( node, comparable, List comparable ) -> Order
         lt ( _, v, _ ) ( _, w, _ ) =
-            compare v w
+            compare w v
 
         sorted : List ( Int, ( node, comparable, List comparable ) )
         sorted =

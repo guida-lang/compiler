@@ -46,9 +46,9 @@ import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
+import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Graph
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
