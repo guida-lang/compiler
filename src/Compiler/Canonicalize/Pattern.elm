@@ -41,18 +41,18 @@ verify context (R.RResult k) =
     R.RResult <|
         \info warnings ->
             case k Dups.none warnings of
-                Err (R.RErr _ warnings1 errors) ->
-                    Err (R.RErr info warnings1 errors)
+                R.RErr _ warnings1 errors ->
+                    R.RErr info warnings1 errors
 
-                Ok (R.ROk bindings warnings1 value) ->
+                R.ROk bindings warnings1 value ->
                     case Dups.detect (Error.DuplicatePattern context) bindings of
                         R.RResult k1 ->
                             case k1 () () of
-                                Err (R.RErr () () errs) ->
-                                    Err (R.RErr info warnings1 errs)
+                                R.RErr () () errs ->
+                                    R.RErr info warnings1 errs
 
-                                Ok (R.ROk () () dict) ->
-                                    Ok (R.ROk info warnings1 ( value, dict ))
+                                R.ROk () () dict ->
+                                    R.ROk info warnings1 ( value, dict )
 
 
 
@@ -177,7 +177,7 @@ logVar : Name.Name -> A.Region -> a -> PResult DupsDict w a
 logVar name region value =
     R.RResult <|
         \bindings warnings ->
-            Ok (R.ROk (Dups.insert name region region bindings) warnings value)
+            R.ROk (Dups.insert name region region bindings) warnings value
 
 
 logFields : List (A.Located Name.Name) -> a -> PResult DupsDict w a
@@ -189,4 +189,4 @@ logFields fields value =
     in
     R.RResult <|
         \bindings warnings ->
-            Ok (R.ROk (List.foldl addField bindings fields) warnings value)
+            R.ROk (List.foldl addField bindings fields) warnings value

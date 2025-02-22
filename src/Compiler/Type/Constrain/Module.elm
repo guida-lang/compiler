@@ -50,15 +50,20 @@ constrain (Can.Module home _ _ decls _ _ _ effects) =
 
 constrainDecls : Can.Decls -> Constraint -> IO Constraint
 constrainDecls decls finalConstraint =
+    constrainDeclsHelp decls finalConstraint identity
+
+
+constrainDeclsHelp : Can.Decls -> Type.Constraint -> (IO Type.Constraint -> IO Type.Constraint) -> IO Type.Constraint
+constrainDeclsHelp decls finalConstraint cont =
     case decls of
         Can.Declare def otherDecls ->
-            IO.bind (Expr.constrainDef Dict.empty def) (constrainDecls otherDecls finalConstraint)
+            constrainDeclsHelp otherDecls finalConstraint (IO.bind (Expr.constrainDef Dict.empty def) >> cont)
 
         Can.DeclareRec def defs otherDecls ->
-            IO.bind (Expr.constrainRecursiveDefs Dict.empty (def :: defs)) (constrainDecls otherDecls finalConstraint)
+            constrainDeclsHelp otherDecls finalConstraint (IO.bind (Expr.constrainRecursiveDefs Dict.empty (def :: defs)) >> cont)
 
         Can.SaveTheEnvironment ->
-            IO.pure finalConstraint
+            cont (IO.pure finalConstraint)
 
 
 

@@ -63,13 +63,13 @@ chompChunks src pos end start revChunks =
         in
         case word of
             '\n' ->
-                chompEscape src 'n' pos end start revChunks
+                chompChunks src (pos + 1) end (pos + 1) (Escape 'n' :: addSlice start pos revChunks)
 
             '"' ->
-                chompEscape src '"' pos end start revChunks
+                chompChunks src (pos + 1) end (pos + 1) (Escape '"' :: addSlice start pos revChunks)
 
             '\\' ->
-                chompEscape src '\\' pos end start revChunks
+                chompChunks src (pos + 1) end (pos + 1) (Escape '\\' :: addSlice start pos revChunks)
 
             {- \r -}
             '\u{000D}' ->
@@ -91,16 +91,6 @@ chompChunks src pos end start revChunks =
                         pos + width
                 in
                 chompChunks src newPos end start revChunks
-
-
-chompEscape : String -> Char -> Int -> Int -> Int -> List Chunk -> List Chunk
-chompEscape src escape pos end start revChunks =
-    let
-        pos1 : Int
-        pos1 =
-            pos + 1
-    in
-    chompChunks src pos1 end pos1 (Escape escape :: addSlice start pos revChunks)
 
 
 addSlice : Int -> Int -> List Chunk -> List Chunk
@@ -127,24 +117,32 @@ fromChunks snippet chunks =
 
 
 writeChunks : P.Snippet -> List Chunk -> String
-writeChunks ((P.Snippet { fptr }) as snippet) chunks =
+writeChunks snippet chunks =
+    writeChunksHelp snippet chunks ""
+
+
+writeChunksHelp : P.Snippet -> List Chunk -> String -> String
+writeChunksHelp ((P.Snippet { fptr }) as snippet) chunks acc =
     case chunks of
         [] ->
-            ""
+            acc
 
         chunk :: chunks_ ->
-            case chunk of
-                Slice offset len ->
-                    String.left len (String.dropLeft offset fptr) ++ writeChunks snippet chunks_
+            writeChunksHelp snippet
+                chunks_
+                (case chunk of
+                    Slice offset len ->
+                        acc ++ String.left len (String.dropLeft offset fptr)
 
-                Escape 'n' ->
-                    String.fromChar '\n' ++ writeChunks snippet chunks_
+                    Escape 'n' ->
+                        acc ++ String.fromChar '\n'
 
-                Escape '"' ->
-                    String.fromChar '"' ++ writeChunks snippet chunks_
+                    Escape '"' ->
+                        acc ++ String.fromChar '"'
 
-                Escape '\\' ->
-                    String.fromChar '\\' ++ writeChunks snippet chunks_
+                    Escape '\\' ->
+                        acc ++ String.fromChar '\\'
 
-                Escape word ->
-                    String.fromList [ '\\', word ] ++ writeChunks snippet chunks_
+                    Escape word ->
+                        acc ++ String.fromList [ '\\', word ]
+                )

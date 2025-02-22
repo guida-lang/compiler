@@ -213,7 +213,7 @@ type Context
 
 check : Can.Module -> Result (NE.Nonempty Error) ()
 check (Can.Module _ _ _ decls _ _ _ _) =
-    case checkDecls decls [] of
+    case checkDecls decls [] identity of
         [] ->
             Ok ()
 
@@ -225,17 +225,17 @@ check (Can.Module _ _ _ decls _ _ _ _) =
 -- CHECK DECLS
 
 
-checkDecls : Can.Decls -> List Error -> List Error
-checkDecls decls errors =
+checkDecls : Can.Decls -> List Error -> (List Error -> List Error) -> List Error
+checkDecls decls errors cont =
     case decls of
         Can.Declare def subDecls ->
-            checkDef def (checkDecls subDecls errors)
+            checkDecls subDecls errors (checkDef def >> cont)
 
         Can.DeclareRec def defs subDecls ->
-            checkDef def (List.foldr checkDef (checkDecls subDecls errors) defs)
+            List.foldr checkDef (checkDecls subDecls errors (checkDef def >> cont)) defs
 
         Can.SaveTheEnvironment ->
-            errors
+            cont errors
 
 
 

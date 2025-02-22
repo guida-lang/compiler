@@ -68,13 +68,18 @@ type State
 
 
 solve : Env -> Int -> Pools -> State -> Constraint -> IO State
-solve env rank pools ((State _ sMark sErrors) as state) constraint =
+solve env rank pools state constraint =
+    IO.loop solveHelp ( ( env, rank ), ( pools, state ), ( constraint, identity ) )
+
+
+solveHelp : ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) -> IO (IO.Step ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) State)
+solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constraint, cont ) ) =
     case constraint of
         CTrue ->
-            IO.pure state
+            IO.fmap IO.Done <| cont <| IO.pure state
 
         CSaveTheEnvironment ->
-            IO.pure (State env sMark sErrors)
+            IO.fmap IO.Done <| cont <| IO.pure (State env sMark sErrors)
 
         CEqual region category tipe expectation ->
             typeToVariable rank pools tipe
@@ -89,15 +94,18 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                 case answer of
                                                     Unify.AnswerOk vars ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap (\_ -> state)
+                                                            |> IO.bind (\_ -> IO.fmap IO.Done <| cont <| IO.pure state)
 
                                                     Unify.AnswerErr vars actualType expectedType ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap
+                                                            |> IO.bind
                                                                 (\_ ->
-                                                                    addError state <|
-                                                                        Error.BadExpr region category actualType <|
-                                                                            Error.typeReplace expectation expectedType
+                                                                    IO.fmap IO.Done <|
+                                                                        cont <|
+                                                                            IO.pure <|
+                                                                                addError state <|
+                                                                                    Error.BadExpr region category actualType <|
+                                                                                        Error.typeReplace expectation expectedType
                                                                 )
                                             )
                                 )
@@ -116,15 +124,18 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                 case answer of
                                                     Unify.AnswerOk vars ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap (\_ -> state)
+                                                            |> IO.bind (\_ -> IO.fmap IO.Done <| cont <| IO.pure state)
 
                                                     Unify.AnswerErr vars actualType expectedType ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap
+                                                            |> IO.bind
                                                                 (\_ ->
-                                                                    addError state <|
-                                                                        Error.BadExpr region (Error.Local name) actualType <|
-                                                                            Error.typeReplace expectation expectedType
+                                                                    IO.fmap IO.Done <|
+                                                                        cont <|
+                                                                            IO.pure <|
+                                                                                addError state <|
+                                                                                    Error.BadExpr region (Error.Local name) actualType <|
+                                                                                        Error.typeReplace expectation expectedType
                                                                 )
                                             )
                                 )
@@ -143,15 +154,18 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                 case answer of
                                                     Unify.AnswerOk vars ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap (\_ -> state)
+                                                            |> IO.bind (\_ -> IO.fmap IO.Done <| cont <| IO.pure state)
 
                                                     Unify.AnswerErr vars actualType expectedType ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap
+                                                            |> IO.bind
                                                                 (\_ ->
-                                                                    addError state <|
-                                                                        Error.BadExpr region (Error.Foreign name) actualType <|
-                                                                            Error.typeReplace expectation expectedType
+                                                                    IO.fmap IO.Done <|
+                                                                        cont <|
+                                                                            IO.pure <|
+                                                                                addError state <|
+                                                                                    Error.BadExpr region (Error.Foreign name) actualType <|
+                                                                                        Error.typeReplace expectation expectedType
                                                                 )
                                             )
                                 )
@@ -170,46 +184,55 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                 case answer of
                                                     Unify.AnswerOk vars ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap (\_ -> state)
+                                                            |> IO.bind (\_ -> IO.fmap IO.Done <| cont <| IO.pure state)
 
                                                     Unify.AnswerErr vars actualType expectedType ->
                                                         introduce rank pools vars
-                                                            |> IO.fmap
+                                                            |> IO.bind
                                                                 (\_ ->
-                                                                    addError state <|
-                                                                        Error.BadPattern region
-                                                                            category
-                                                                            actualType
-                                                                            (Error.ptypeReplace expectation expectedType)
+                                                                    IO.fmap IO.Done <|
+                                                                        cont <|
+                                                                            IO.pure <|
+                                                                                addError state <|
+                                                                                    Error.BadPattern region
+                                                                                        category
+                                                                                        actualType
+                                                                                        (Error.ptypeReplace expectation expectedType)
                                                                 )
                                             )
                                 )
                     )
 
         CAnd constraints ->
-            IO.foldM (solve env rank pools) state constraints
+            IO.fmap IO.Done <| cont <| IO.foldM (solve env rank pools) state constraints
 
         CLet [] flexs _ headerCon CTrue ->
             introduce rank pools flexs
-                |> IO.bind (\_ -> solve env rank pools state headerCon)
+                |> IO.fmap (\_ -> IO.Loop ( ( env, rank ), ( pools, state ), ( headerCon, cont ) ))
 
         CLet [] [] header headerCon subCon ->
             solve env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
                         IO.traverseMap identity compare (A.traverse (typeToVariable rank pools)) header
-                            |> IO.bind
+                            |> IO.fmap
                                 (\locals ->
                                     let
                                         newEnv : Env
                                         newEnv =
                                             Dict.union env (Dict.map (\_ -> A.toValue) locals)
                                     in
-                                    solve newEnv rank pools state1 subCon
-                                        |> IO.bind
-                                            (\state2 ->
-                                                IO.foldM occurs state2 (Dict.toList compare locals)
-                                            )
+                                    IO.Loop
+                                        ( ( newEnv, rank )
+                                        , ( pools, state1 )
+                                        , ( subCon
+                                          , IO.bind
+                                                (\state2 ->
+                                                    IO.foldM occurs state2 (Dict.toList compare locals)
+                                                )
+                                                >> cont
+                                          )
+                                        )
                                 )
                     )
 
@@ -277,7 +300,7 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
                                                                                                             IO.mapM_ isGeneric rigids
-                                                                                                                |> IO.bind
+                                                                                                                |> IO.fmap
                                                                                                                     (\_ ->
                                                                                                                         let
                                                                                                                             newEnv : Env
@@ -288,11 +311,17 @@ solve env rank pools ((State _ sMark sErrors) as state) constraint =
                                                                                                                             tempState =
                                                                                                                                 State savedEnv finalMark errors
                                                                                                                         in
-                                                                                                                        solve newEnv rank nextPools tempState subCon
-                                                                                                                            |> IO.bind
-                                                                                                                                (\newState ->
-                                                                                                                                    IO.foldM occurs newState (Dict.toList compare locals)
-                                                                                                                                )
+                                                                                                                        IO.Loop
+                                                                                                                            ( ( newEnv, rank )
+                                                                                                                            , ( nextPools, tempState )
+                                                                                                                            , ( subCon
+                                                                                                                              , IO.bind
+                                                                                                                                    (\newState ->
+                                                                                                                                        IO.foldM occurs newState (Dict.toList compare locals)
+                                                                                                                                    )
+                                                                                                                                    >> cont
+                                                                                                                              )
+                                                                                                                            )
                                                                                                                     )
                                                                                                         )
                                                                                             )
