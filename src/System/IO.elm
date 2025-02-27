@@ -84,7 +84,9 @@ import Array exposing (Array)
 import Cmd.Extra as Cmd
 import Codec.Archive.Zip as Zip
 import Dict exposing (Dict)
+import Http
 import Json.Encode as Encode
+import Task exposing (Task)
 import Utils.Crash exposing (crash)
 
 
@@ -121,9 +123,7 @@ run app =
         , subscriptions =
             \_ ->
                 Sub.batch
-                    [ recvGetLine (\{ index, value } -> GetLineMsg index value)
-                    , recvHPutStr HPutLineMsg
-                    , recvWriteString WriteStringMsg
+                    [ recvWriteString WriteStringMsg
                     , recvRead (\{ index, value } -> ReadMsg index value)
                     , recvReadStdin (\{ index, value } -> ReadStdinMsg index value)
                     , recvHttpFetch (\{ index, value } -> HttpFetchMsg index value)
@@ -160,9 +160,7 @@ type alias Model =
 
 
 type Next
-    = GetLineNext (String -> IO ())
-    | HPutLineNext (() -> IO ())
-    | WriteStringNext (() -> IO ())
+    = WriteStringNext (() -> IO ())
     | ReadNext (String -> IO ())
     | ReadStdinNext (String -> IO ())
     | HttpFetchNext (String -> IO ())
@@ -199,8 +197,6 @@ type Next
 
 type Msg
     = PureMsg Int (IO ())
-    | GetLineMsg Int String
-    | HPutLineMsg Int
     | WriteStringMsg Int
     | ReadMsg Int String
     | ReadStdinMsg Int String
@@ -248,6 +244,12 @@ update msg model =
                         Cmd.none
                     )
 
+                ( newRealWorld, ImpureCmd cmd ) ->
+                    ( newRealWorld, Cmd.map (PureMsg index) cmd )
+
+                ( newRealWorld, ImpureTask task ) ->
+                    ( newRealWorld, Task.perform (PureMsg index) task )
+
                 ( newRealWorld, ForkIO next forkIO ) ->
                     ( { newRealWorld | count = newRealWorld.count + 1 }
                     , Cmd.batch
@@ -255,12 +257,6 @@ update msg model =
                         , Cmd.perform (PureMsg newRealWorld.count forkIO)
                         ]
                     )
-
-                ( newRealWorld, GetLine next ) ->
-                    ( { newRealWorld | next = Dict.insert index (GetLineNext next) model.next }, sendGetLine index )
-
-                ( newRealWorld, HPutStr next (Handle fd) content ) ->
-                    ( { newRealWorld | next = Dict.insert index (HPutLineNext next) model.next }, sendHPutStr { index = index, fd = fd, content = content } )
 
                 ( newRealWorld, WriteString next path content ) ->
                     ( { newRealWorld | next = Dict.insert index (WriteStringNext next) model.next }, sendWriteString { index = index, path = path, content = content } )
@@ -396,22 +392,6 @@ update msg model =
 
                 ( newRealWorld, PutMVar next _ Nothing ) ->
                     update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }
-
-        GetLineMsg index input ->
-            case Dict.get index model.next of
-                Just (GetLineNext fn) ->
-                    update (PureMsg index (fn input)) model
-
-                _ ->
-                    crash "GetLineMsg"
-
-        HPutLineMsg index ->
-            case Dict.get index model.next of
-                Just (HPutLineNext fn) ->
-                    update (PureMsg index (fn ())) model
-
-                _ ->
-                    crash "HPutLineMsg"
 
         WriteStringMsg index ->
             case Dict.get index model.next of
@@ -676,18 +656,6 @@ updatePutIndex maybePutIndex ( model, cmd ) =
             ( model, cmd )
 
 
-port sendGetLine : Int -> Cmd msg
-
-
-port recvGetLine : ({ index : Int, value : String } -> msg) -> Sub msg
-
-
-port sendHPutStr : { index : Int, fd : Int, content : String } -> Cmd msg
-
-
-port recvHPutStr : (Int -> msg) -> Sub msg
-
-
 port sendWriteString : { index : Int, path : FilePath, content : String } -> Cmd msg
 
 
@@ -869,9 +837,9 @@ type IO a
 
 type ION a
     = Pure a
+    | ImpureCmd (Cmd (IO a))
+    | ImpureTask (Task Never (IO a))
     | ForkIO (() -> IO a) (IO ())
-    | HPutStr (() -> IO a) Handle String
-    | GetLine (String -> IO a)
     | WriteString (() -> IO a) FilePath String
     | Read (String -> IO a) FilePath
     | ReadStdin (String -> IO a)
@@ -956,14 +924,14 @@ bind f (IO ma) =
                 ( s1, Pure a ) ->
                     unIO (f a) index s1
 
+                ( s1, ImpureCmd cmd ) ->
+                    ( s1, ImpureCmd (Cmd.map (bind f) cmd) )
+
+                ( s1, ImpureTask task ) ->
+                    ( s1, ImpureTask (Task.map (bind f) task) )
+
                 ( s1, ForkIO next forkIO ) ->
                     ( s1, ForkIO (\() -> bind f (next ())) forkIO )
-
-                ( s1, GetLine next ) ->
-                    ( s1, GetLine (\input -> bind f (next input)) )
-
-                ( s1, HPutStr next handle content ) ->
-                    ( s1, HPutStr (\() -> bind f (next ())) handle content )
 
                 ( s1, WriteString next path content ) ->
                     ( s1, WriteString (\() -> bind f (next ())) path content )
@@ -1161,8 +1129,28 @@ hIsTerminalDevice _ =
 
 
 hPutStr : Handle -> String -> IO ()
-hPutStr handle content =
-    IO (\_ s -> ( s, HPutStr pure handle content ))
+hPutStr (Handle fd) content =
+    IO
+        (\_ s ->
+            ( s
+            , ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "hPutStr"
+                    , body =
+                        Http.jsonBody
+                            (Encode.object
+                                [ ( "fd", Encode.int fd )
+                                , ( "content", Encode.string content )
+                                ]
+                            )
+                    , resolver = Http.stringResolver (\_ -> Ok (pure ()))
+                    , timeout = Nothing
+                    }
+                )
+            )
+        )
 
 
 hPutStrLn : Handle -> String -> IO ()
@@ -1186,7 +1174,30 @@ putStrLn s =
 
 getLine : IO String
 getLine =
-    IO (\_ s -> ( s, GetLine pure ))
+    IO
+        (\_ s ->
+            ( s
+            , ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "getLine"
+                    , body = Http.emptyBody
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        Ok (pure body)
+
+                                    _ ->
+                                        Ok (pure "")
+                            )
+                    , timeout = Nothing
+                    }
+                )
+            )
+        )
 
 
 

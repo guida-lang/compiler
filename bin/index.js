@@ -1,5 +1,34 @@
 #!/usr/bin/env node
 
+const { newMockXhr } = require('mock-xmlhttprequest');
+const MockXhr = newMockXhr();
+
+// Mock JSON response
+MockXhr.onSend = (request) => {
+  switch (request.url) {
+    case "getLine":
+  rl.on("line", (value) => {
+    request.respond(200, {}, value);
+  });
+      break;
+    case "hPutStr":
+      const { fd, content } = JSON.parse(request.body);
+      fs.write(fd, content, (err) => {
+        if (err) throw err;
+        request.respond(200, {}, "");
+      });
+      break;
+  }
+};
+
+// const savedXMLHttpRequest = globalThis.XMLHttpRequest;
+// Install in the global context so "new XMLHttpRequest()" creates MockXhr instances
+globalThis.XMLHttpRequest = MockXhr;
+
+// Do something that send()s an XMLHttpRequest to '/my/url' and returns a Promise
+// that resolves to the parsed JSON response
+
+
 const fs = require("node:fs");
 const child_process = require("node:child_process");
 const readline = require("node:readline");
@@ -70,18 +99,6 @@ const app = Elm.Terminal.Main.init({
   }
 });
 
-app.ports.sendGetLine.subscribe(function (index) {
-  rl.on("line", (value) => {
-    app.ports.recvGetLine.send({ index, value });
-  });
-});
-
-app.ports.sendHPutStr.subscribe(function ({ index, fd, content }) {
-  fs.write(fd, content, (err) => {
-    if (err) throw err;
-    app.ports.recvHPutStr.send(index);
-  });
-});
 
 app.ports.sendWriteString.subscribe(function ({ index, path, content }) {
   fs.writeFile(path, content, (err) => {

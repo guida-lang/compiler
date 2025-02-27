@@ -1167,8 +1167,8 @@ writeChan encoder (Chan _ writeVar) val =
 
 
 builderHPutBuilder : IO.Handle -> String -> IO ()
-builderHPutBuilder handle str =
-    IO (\_ s -> ( s, IO.HPutStr IO.pure handle str ))
+builderHPutBuilder =
+    IO.hPutStr
 
 
 
