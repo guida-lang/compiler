@@ -5,7 +5,9 @@ module System.Exit exposing
     , exitWith
     )
 
+import Http
 import System.IO as IO exposing (IO(..))
+import Utils.Crash exposing (crash)
 
 
 type ExitCode
@@ -27,7 +29,18 @@ exitWith exitCode =
                         ExitFailure int ->
                             int
             in
-            ( s, IO.ExitWith IO.pure code )
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "exitWith"
+                    , body = Http.stringBody "text/plain" (String.fromInt code)
+                    , resolver = Http.stringResolver (\_ -> crash "exitWith")
+                    , timeout = Nothing
+                    }
+                )
+            )
         )
 
 

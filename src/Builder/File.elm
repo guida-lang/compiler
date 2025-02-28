@@ -16,6 +16,7 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO(..))
@@ -95,8 +96,8 @@ readBinary decoder path =
 
 
 writeUtf8 : FilePath -> String -> IO ()
-writeUtf8 path content =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path content ))
+writeUtf8 =
+    IO.writeString
 
 
 
@@ -105,12 +106,58 @@ writeUtf8 path content =
 
 readUtf8 : FilePath -> IO String
 readUtf8 path =
-    IO (\_ s -> ( s, IO.Read IO.pure path ))
+    IO
+        (\_ s ->
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "read"
+                    , body = Http.stringBody "text/plain" path
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        Ok (IO.pure body)
+
+                                    _ ->
+                                        Ok (IO.pure "")
+                            )
+                    , timeout = Nothing
+                    }
+                )
+            )
+        )
 
 
 readStdin : IO String
 readStdin =
-    IO (\_ s -> ( s, IO.ReadStdin IO.pure ))
+    IO
+        (\_ s ->
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "readStdin"
+                    , body = Http.emptyBody
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        Ok (IO.pure body)
+
+                                    _ ->
+                                        Ok (IO.pure "")
+                            )
+                    , timeout = Nothing
+                    }
+                )
+            )
+        )
 
 
 
@@ -118,8 +165,8 @@ readStdin =
 
 
 writeBuilder : FilePath -> String -> IO ()
-writeBuilder path builder =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path builder ))
+writeBuilder =
+    IO.writeString
 
 
 
