@@ -1549,7 +1549,7 @@ binaryEncodeFile encoder path value =
                 (Http.task
                     { method = "POST"
                     , headers = []
-                    , url = "binaryEncodeFile"
+                    , url = "write"
                     , body =
                         Http.jsonBody
                             (Encode.object
@@ -1565,7 +1565,7 @@ binaryEncodeFile encoder path value =
                                         Ok (IO.pure ())
 
                                     _ ->
-                                        crash "binaryEncodeFile"
+                                        crash "write"
                             )
                     , timeout = Nothing
                     }

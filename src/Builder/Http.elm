@@ -191,6 +191,7 @@ getArchive _ url _ _ onSuccess =
                                 case response of
                                     Http.GoodStatus_ _ body ->
                                         let
+                                            shaAndArchiveResult : Result Decode.Error ( String, List Zip.Entry )
                                             shaAndArchiveResult =
                                                 Decode.decodeString
                                                     (Decode.map2 Tuple.pair

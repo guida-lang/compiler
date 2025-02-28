@@ -79,6 +79,11 @@ module System.IO exposing
 
 @docs RealWorldMVar, MVarSubscriber
 
+
+# Internal helpers
+
+@docs writeString
+
 -}
 
 import Array exposing (Array)

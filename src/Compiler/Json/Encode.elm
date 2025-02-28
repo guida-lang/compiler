@@ -29,7 +29,7 @@ import Compiler.Data.OneOrMore exposing (OneOrMore(..))
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 
 
 
