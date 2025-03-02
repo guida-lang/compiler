@@ -1,6 +1,6 @@
 module System.IO exposing
     ( Program, Flags, Model, Msg, run
-    , IO(..), ION(..), RealWorld, pure, apply, fmap, bind, mapM
+    , IO, ION(..), RealWorld, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -11,7 +11,6 @@ module System.IO exposing
     , hPutStr, hPutStrLn
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
-    , RealWorldMVar, MVarSubscriber(..)
     , writeString
     )
 
@@ -75,11 +74,6 @@ module System.IO exposing
 @docs ReplState, initialReplState
 
 
-# MVars
-
-@docs RealWorldMVar, MVarSubscriber
-
-
 # Internal helpers
 
 @docs writeString
@@ -113,7 +107,7 @@ run app =
     Platform.worker
         { init =
             \flags ->
-                update (PureMsg 0 app)
+                update ( 0, app )
                     { count = 1
                     , args = flags.args
                     , currentDirectory = flags.currentDirectory
@@ -131,38 +125,36 @@ type alias Model =
     RealWorld
 
 
-type Msg
-    = PureMsg Int (IO ())
+type alias Msg =
+    ( Int, IO () )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case msg of
-        PureMsg index (IO fn) ->
-            case fn index model of
-                ( newRealWorld, Pure () ) ->
-                    ( newRealWorld
-                    , if index == 0 then
-                        Http.post
-                            { url = "exitWith"
-                            , body = Http.stringBody "text/plain" "0"
-                            , expect = Http.expectString (\_ -> crash "exitWith")
-                            }
+update ( index, fn ) model =
+    case fn model of
+        ( newRealWorld, Pure () ) ->
+            ( newRealWorld
+            , if index == 0 then
+                Http.post
+                    { url = "exitWith"
+                    , body = Http.stringBody "text/plain" "0"
+                    , expect = Http.expectString (\_ -> crash "exitWith")
+                    }
 
-                      else
-                        Cmd.none
-                    )
+              else
+                Cmd.none
+            )
 
-                ( newRealWorld, ImpureTask task ) ->
-                    ( newRealWorld, Task.perform (PureMsg index) task )
+        ( newRealWorld, ImpureTask task ) ->
+            ( newRealWorld, Task.perform (Tuple.pair index) task )
 
-                ( newRealWorld, ForkIO next forkIO ) ->
-                    ( { newRealWorld | count = newRealWorld.count + 1 }
-                    , Cmd.batch
-                        [ Cmd.perform (PureMsg index (next ()))
-                        , Cmd.perform (PureMsg newRealWorld.count forkIO)
-                        ]
-                    )
+        ( newRealWorld, ForkIO next forkIO ) ->
+            ( { newRealWorld | count = newRealWorld.count + 1 }
+            , Cmd.batch
+                [ Cmd.perform ( index, next () )
+                , Cmd.perform ( newRealWorld.count, forkIO )
+                ]
+            )
 
 
 
@@ -171,25 +163,23 @@ update msg model =
 
 writeString : FilePath -> String -> IO ()
 writeString path content =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "writeString"
-                    , body =
-                        Http.jsonBody
-                            (Encode.object
-                                [ ( "path", Encode.string path )
-                                , ( "content", Encode.string content )
-                                ]
-                            )
-                    , resolver = Http.stringResolver (\_ -> Ok (pure ()))
-                    , timeout = Nothing
-                    }
-                )
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "writeString"
+                , body =
+                    Http.jsonBody
+                        (Encode.object
+                            [ ( "path", Encode.string path )
+                            , ( "content", Encode.string content )
+                            ]
+                        )
+                , resolver = Http.stringResolver (\_ -> Ok (pure ()))
+                , timeout = Nothing
+                }
             )
         )
 
@@ -198,8 +188,8 @@ writeString path content =
 -- The IO monad
 
 
-type IO a
-    = IO (Int -> RealWorld -> ( RealWorld, ION a ))
+type alias IO a =
+    RealWorld -> ( RealWorld, ION a )
 
 
 type ION a
@@ -219,21 +209,9 @@ type alias RealWorld =
     }
 
 
-type alias RealWorldMVar =
-    { subscribers : List MVarSubscriber
-    , value : Maybe Encode.Value
-    }
-
-
-type MVarSubscriber
-    = ReadSubscriber Int
-    | TakeSubscriber Int
-    | PutSubscriber Int Encode.Value
-
-
 pure : a -> IO a
 pure x =
-    IO (\_ s -> ( s, Pure x ))
+    \s -> ( s, Pure x )
 
 
 apply : IO a -> IO (a -> b) -> IO b
@@ -247,23 +225,21 @@ fmap fn ma =
 
 
 bind : (a -> IO b) -> IO a -> IO b
-bind f (IO ma) =
-    IO
-        (\index s0 ->
-            case ma index s0 of
-                ( s1, Pure a ) ->
-                    unIO (f a) index s1
+bind f ma =
+    \s0 ->
+        case ma s0 of
+            ( s1, Pure a ) ->
+                unIO (f a) s1
 
-                ( s1, ImpureTask task ) ->
-                    ( s1, ImpureTask (Task.map (bind f) task) )
+            ( s1, ImpureTask task ) ->
+                ( s1, ImpureTask (Task.map (bind f) task) )
 
-                ( s1, ForkIO next forkIO ) ->
-                    ( s1, ForkIO (\() -> bind f (next ())) forkIO )
-        )
+            ( s1, ForkIO next forkIO ) ->
+                ( s1, ForkIO (\() -> bind f (next ())) forkIO )
 
 
-unIO : IO a -> (Int -> RealWorld -> ( RealWorld, ION a ))
-unIO (IO a) =
+unIO : IO a -> (RealWorld -> ( RealWorld, ION a ))
+unIO a =
     a
 
 
@@ -305,54 +281,52 @@ stderr =
 
 withFile : String -> IOMode -> (Handle -> IO a) -> IO a
 withFile path mode callback =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "withFile"
-                    , body =
-                        Http.jsonBody
-                            (Encode.object
-                                [ ( "path", Encode.string path )
-                                , ( "mode"
-                                  , Encode.string
-                                        (case mode of
-                                            ReadMode ->
-                                                "r"
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "withFile"
+                , body =
+                    Http.jsonBody
+                        (Encode.object
+                            [ ( "path", Encode.string path )
+                            , ( "mode"
+                              , Encode.string
+                                    (case mode of
+                                        ReadMode ->
+                                            "r"
 
-                                            WriteMode ->
-                                                "w"
+                                        WriteMode ->
+                                            "w"
 
-                                            AppendMode ->
-                                                "a"
+                                        AppendMode ->
+                                            "a"
 
-                                            ReadWriteMode ->
-                                                "w+"
-                                        )
-                                  )
-                                ]
-                            )
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ body ->
-                                        case Decode.decodeString Decode.int body of
-                                            Ok fd ->
-                                                Ok (callback (Handle fd))
+                                        ReadWriteMode ->
+                                            "w+"
+                                    )
+                              )
+                            ]
+                        )
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ body ->
+                                    case Decode.decodeString Decode.int body of
+                                        Ok fd ->
+                                            Ok (callback (Handle fd))
 
-                                            Err _ ->
-                                                crash "withFile"
+                                        Err _ ->
+                                            crash "withFile"
 
-                                    _ ->
-                                        crash "withFile"
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    crash "withFile"
+                        )
+                , timeout = Nothing
+                }
             )
         )
 
@@ -370,28 +344,26 @@ type IOMode
 
 hClose : Handle -> IO ()
 hClose (Handle handle) =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "hFileSize"
-                    , body = Http.stringBody "text/plain" (String.fromInt handle)
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ _ ->
-                                        Ok (pure ())
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "hFileSize"
+                , body = Http.stringBody "text/plain" (String.fromInt handle)
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ _ ->
+                                    Ok (pure ())
 
-                                    _ ->
-                                        crash "hClose"
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    crash "hClose"
+                        )
+                , timeout = Nothing
+                }
             )
         )
 
@@ -402,33 +374,31 @@ hClose (Handle handle) =
 
 hFileSize : Handle -> IO Int
 hFileSize (Handle handle) =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "hFileSize"
-                    , body = Http.stringBody "text/plain" (String.fromInt handle)
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ body ->
-                                        case Decode.decodeString Decode.int body of
-                                            Ok fd ->
-                                                Ok (pure fd)
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "hFileSize"
+                , body = Http.stringBody "text/plain" (String.fromInt handle)
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ body ->
+                                    case Decode.decodeString Decode.int body of
+                                        Ok fd ->
+                                            Ok (pure fd)
 
-                                            Err _ ->
-                                                crash "hFileSize"
+                                        Err _ ->
+                                            crash "hFileSize"
 
-                                    _ ->
-                                        crash "hFileSize"
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    crash "hFileSize"
+                        )
+                , timeout = Nothing
+                }
             )
         )
 
@@ -457,25 +427,23 @@ hIsTerminalDevice _ =
 
 hPutStr : Handle -> String -> IO ()
 hPutStr (Handle fd) content =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "hPutStr"
-                    , body =
-                        Http.jsonBody
-                            (Encode.object
-                                [ ( "fd", Encode.int fd )
-                                , ( "content", Encode.string content )
-                                ]
-                            )
-                    , resolver = Http.stringResolver (\_ -> Ok (pure ()))
-                    , timeout = Nothing
-                    }
-                )
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "hPutStr"
+                , body =
+                    Http.jsonBody
+                        (Encode.object
+                            [ ( "fd", Encode.int fd )
+                            , ( "content", Encode.string content )
+                            ]
+                        )
+                , resolver = Http.stringResolver (\_ -> Ok (pure ()))
+                , timeout = Nothing
+                }
             )
         )
 
@@ -501,28 +469,26 @@ putStrLn s =
 
 getLine : IO String
 getLine =
-    IO
-        (\_ s ->
-            ( s
-            , ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "getLine"
-                    , body = Http.emptyBody
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ body ->
-                                        Ok (pure body)
+    \s ->
+        ( s
+        , ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "getLine"
+                , body = Http.emptyBody
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ body ->
+                                    Ok (pure body)
 
-                                    _ ->
-                                        Ok (pure "")
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    Ok (pure "")
+                        )
+                , timeout = Nothing
+                }
             )
         )
 

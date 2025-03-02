@@ -308,7 +308,6 @@ const handlers = {
   }
 };
 
-const savedXMLHttpRequest = globalThis.XMLHttpRequest;
 MockXhr.onSend = (request) => {
   const handler = handlers[request.url];
 

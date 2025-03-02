@@ -19,7 +19,7 @@ import Codec.Archive.Zip as Zip
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 import Time
 import Utils.Main as Utils exposing (FilePath)
 
@@ -106,56 +106,52 @@ writeUtf8 =
 
 readUtf8 : FilePath -> IO String
 readUtf8 path =
-    IO
-        (\_ s ->
-            ( s
-            , IO.ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "read"
-                    , body = Http.stringBody "text/plain" path
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ body ->
-                                        Ok (IO.pure body)
+    \s ->
+        ( s
+        , IO.ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "read"
+                , body = Http.stringBody "text/plain" path
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ body ->
+                                    Ok (IO.pure body)
 
-                                    _ ->
-                                        Ok (IO.pure "")
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    Ok (IO.pure "")
+                        )
+                , timeout = Nothing
+                }
             )
         )
 
 
 readStdin : IO String
 readStdin =
-    IO
-        (\_ s ->
-            ( s
-            , IO.ImpureTask
-                (Http.task
-                    { method = "POST"
-                    , headers = []
-                    , url = "readStdin"
-                    , body = Http.emptyBody
-                    , resolver =
-                        Http.stringResolver
-                            (\response ->
-                                case response of
-                                    Http.GoodStatus_ _ body ->
-                                        Ok (IO.pure body)
+    \s ->
+        ( s
+        , IO.ImpureTask
+            (Http.task
+                { method = "POST"
+                , headers = []
+                , url = "readStdin"
+                , body = Http.emptyBody
+                , resolver =
+                    Http.stringResolver
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ _ body ->
+                                    Ok (IO.pure body)
 
-                                    _ ->
-                                        Ok (IO.pure "")
-                            )
-                    , timeout = Nothing
-                    }
-                )
+                                _ ->
+                                    Ok (IO.pure "")
+                        )
+                , timeout = Nothing
+                }
             )
         )
 

@@ -10,7 +10,7 @@ module Control.Monad.State.Strict exposing
 {-| Lazy state monads, passing an updatable state through a computation.
 -}
 
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 
 
 {-| newtype StateT s m a
@@ -64,10 +64,10 @@ pure value =
 
 get : StateT s IO.ReplState
 get =
-    IO (\_ s -> ( s, IO.Pure s.state ))
+    (\s -> ( s, IO.Pure s.state ))
         |> liftIO
 
 
 put : IO.ReplState -> IO ()
 put state =
-    IO (\_ s -> ( { s | state = state }, IO.Pure () ))
+    \s -> ( { s | state = state }, IO.Pure () )
