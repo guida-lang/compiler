@@ -1,5 +1,5 @@
 module System.IO exposing
-    ( Program, Flags, Model, Msg, Next, run
+    ( Program, Flags, Model, Msg, run
     , IO(..), ION(..), RealWorld, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
@@ -17,7 +17,7 @@ module System.IO exposing
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
 
-@docs Program, Flags, Model, Msg, Next, run
+@docs Program, Flags, Model, Msg, run
 
 
 # The IO monad
@@ -86,7 +86,6 @@ module System.IO exposing
 
 -}
 
-import Array exposing (Array)
 import Cmd.Extra as Cmd
 import Dict exposing (Dict)
 import Http
@@ -122,8 +121,6 @@ run app =
                     , homedir = flags.homedir
                     , progName = flags.progName
                     , state = initialReplState
-                    , mVars = Array.empty
-                    , next = Dict.empty
                     }
         , update = update
         , subscriptions = \_ -> Sub.none
@@ -134,18 +131,8 @@ type alias Model =
     RealWorld
 
 
-type Next
-    = NewEmptyMVarNext (Int -> IO ())
-    | ReadMVarNext (Encode.Value -> IO ())
-    | TakeMVarNext (Encode.Value -> IO ())
-    | PutMVarNext (() -> IO ())
-
-
 type Msg
     = PureMsg Int (IO ())
-    | NewEmptyMVarMsg Int Int
-    | ReadMVarMsg Int Encode.Value
-    | PutMVarMsg Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -154,7 +141,7 @@ update msg model =
         PureMsg index (IO fn) ->
             case fn index model of
                 ( newRealWorld, Pure () ) ->
-                    ( { newRealWorld | next = Dict.remove index newRealWorld.next }
+                    ( newRealWorld
                     , if index == 0 then
                         Http.post
                             { url = "exitWith"
@@ -176,74 +163,6 @@ update msg model =
                         , Cmd.perform (PureMsg newRealWorld.count forkIO)
                         ]
                     )
-
-                -- MVars
-                ( newRealWorld, NewEmptyMVar next value ) ->
-                    update (NewEmptyMVarMsg index value) { newRealWorld | next = Dict.insert index (NewEmptyMVarNext next) model.next }
-
-                ( newRealWorld, ReadMVar next (Just value) ) ->
-                    update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }
-
-                ( newRealWorld, ReadMVar next Nothing ) ->
-                    ( { newRealWorld | next = Dict.insert index (ReadMVarNext next) model.next }, Cmd.none )
-
-                ( newRealWorld, TakeMVar next (Just value) maybePutIndex ) ->
-                    update (ReadMVarMsg index value) { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }
-                        |> updatePutIndex maybePutIndex
-
-                ( newRealWorld, TakeMVar next Nothing maybePutIndex ) ->
-                    ( { newRealWorld | next = Dict.insert index (TakeMVarNext next) model.next }, Cmd.none )
-                        |> updatePutIndex maybePutIndex
-
-                ( newRealWorld, PutMVar next readIndexes (Just value) ) ->
-                    ( { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }
-                    , Cmd.batch
-                        (List.foldl (\readIndex -> (::) (Cmd.perform (ReadMVarMsg readIndex value)))
-                            [ Cmd.perform (PutMVarMsg index) ]
-                            readIndexes
-                        )
-                    )
-
-                ( newRealWorld, PutMVar next _ Nothing ) ->
-                    update (PutMVarMsg index) { newRealWorld | next = Dict.insert index (PutMVarNext next) model.next }
-
-        NewEmptyMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (NewEmptyMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "NewEmptyMVarMsg"
-
-        ReadMVarMsg index value ->
-            case Dict.get index model.next of
-                Just (ReadMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                Just (TakeMVarNext fn) ->
-                    update (PureMsg index (fn value)) model
-
-                _ ->
-                    crash "ReadMVarMsg"
-
-        PutMVarMsg index ->
-            case Dict.get index model.next of
-                Just (PutMVarNext fn) ->
-                    update (PureMsg index (fn ())) model
-
-                _ ->
-                    crash "PutMVarMsg"
-
-
-updatePutIndex : Maybe Int -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-updatePutIndex maybePutIndex ( model, cmd ) =
-    case maybePutIndex of
-        Just putIndex ->
-            update (PutMVarMsg putIndex) model
-                |> Tuple.mapSecond (\putCmd -> Cmd.batch [ cmd, putCmd ])
-
-        Nothing ->
-            ( model, cmd )
 
 
 
@@ -287,11 +206,6 @@ type ION a
     = Pure a
     | ImpureTask (Task Never (IO a))
     | ForkIO (() -> IO a) (IO ())
-      -- MVars
-    | NewEmptyMVar (Int -> IO a) Int
-    | ReadMVar (Encode.Value -> IO a) (Maybe Encode.Value)
-    | TakeMVar (Encode.Value -> IO a) (Maybe Encode.Value) (Maybe Int)
-    | PutMVar (() -> IO a) (List Int) (Maybe Encode.Value)
 
 
 type alias RealWorld =
@@ -302,8 +216,6 @@ type alias RealWorld =
     , homedir : FilePath
     , progName : String
     , state : ReplState
-    , mVars : Array RealWorldMVar
-    , next : Dict Int Next
     }
 
 
@@ -347,18 +259,6 @@ bind f (IO ma) =
 
                 ( s1, ForkIO next forkIO ) ->
                     ( s1, ForkIO (\() -> bind f (next ())) forkIO )
-
-                ( s1, NewEmptyMVar next newValue ) ->
-                    ( s1, NewEmptyMVar (\value -> bind f (next value)) newValue )
-
-                ( s1, ReadMVar next mVarValue ) ->
-                    ( s1, ReadMVar (\value -> bind f (next value)) mVarValue )
-
-                ( s1, TakeMVar next mVarValue maybePutIndex ) ->
-                    ( s1, TakeMVar (\value -> bind f (next value)) mVarValue maybePutIndex )
-
-                ( s1, PutMVar next readIndexes value ) ->
-                    ( s1, PutMVar (\() -> bind f (next ())) readIndexes value )
         )
 
 

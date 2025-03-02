@@ -127,7 +127,6 @@ module Utils.Main exposing
     , zipWithM
     )
 
-import Array
 import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
@@ -1304,30 +1303,34 @@ newMVar encoder value =
 readMVar : Decode.Decoder a -> MVar a -> IO a
 readMVar decoder (MVar ref) =
     IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            ( s, IO.ReadMVar IO.pure (Just value) )
+        (\_ s ->
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "readMVar"
+                    , body = Http.stringBody "text/plain" (String.fromInt ref)
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        case Decode.decodeString decoder body of
+                                            Ok value ->
+                                                Ok (IO.pure value)
 
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadSubscriber index ] } s.mVars }
-                            , IO.ReadMVar IO.pure Nothing
+                                            Err _ ->
+                                                crash "readMVar"
+
+                                    _ ->
+                                        crash "readMVar"
                             )
-
-                Nothing ->
-                    crash "Utils.Main.readMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.readMVar: invalid value"
+                    , timeout = Nothing
+                    }
+                )
             )
+        )
 
 
 modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
@@ -1344,82 +1347,67 @@ modifyMVar decoder encoder m io =
 takeMVar : Decode.Decoder a -> MVar a -> IO a
 takeMVar decoder (MVar ref) =
     IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (IO.PutSubscriber putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars }
-                                    , IO.TakeMVar IO.pure (Just value) (Just putIndex)
-                                    )
+        (\_ s ->
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "takeMVar"
+                    , body = Http.stringBody "text/plain" (String.fromInt ref)
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        case Decode.decodeString decoder body of
+                                            Ok value ->
+                                                Ok (IO.pure value)
 
-                                _ ->
-                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
-                                    , IO.TakeMVar IO.pure (Just value) Nothing
-                                    )
+                                            Err _ ->
+                                                crash "takeMVar"
 
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber index ] } s.mVars }
-                            , IO.TakeMVar IO.pure Nothing Nothing
+                                    _ ->
+                                        crash "takeMVar"
                             )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.takeMVar: invalid value"
+                    , timeout = Nothing
+                    }
+                )
             )
+        )
 
 
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
 putMVar encoder (MVar ref) value =
     IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    let
-                        encodedValue : Encode.Value
-                        encodedValue =
-                            encoder value
-                    in
-                    case mVar.value of
-                        Just _ ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index encodedValue ] } s.mVars }
-                            , IO.PutMVar IO.pure [] Nothing
+        (\_ s ->
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "putMVar"
+                    , body =
+                        Http.jsonBody
+                            (Encode.object
+                                [ ( "id", Encode.int ref )
+                                , ( "value", encoder value )
+                                ]
                             )
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ _ ->
+                                        Ok (IO.pure ())
 
-                        Nothing ->
-                            let
-                                ( filteredSubscribers, readIndexes ) =
-                                    List.foldr
-                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                IO.ReadSubscriber readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                IO.TakeSubscriber takeIndex ->
-                                                    ( filteredSubscribersAcc, takeIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
-                                        )
-                                        ( [], [] )
-                                        mVar.subscribers
-                            in
-                            ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just encodedValue } s.mVars }
-                            , IO.PutMVar IO.pure readIndexes (Just encodedValue)
+                                    _ ->
+                                        crash "putMVar"
                             )
-
-                _ ->
-                    crash "Utils.Main.putMVar: invalid ref"
+                    , timeout = Nothing
+                    }
+                )
+            )
         )
 
 
@@ -1427,11 +1415,33 @@ newEmptyMVar : IO (MVar a)
 newEmptyMVar =
     IO
         (\_ s ->
-            ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
-            , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
+            ( s
+            , IO.ImpureTask
+                (Http.task
+                    { method = "POST"
+                    , headers = []
+                    , url = "newEmptyMVar"
+                    , body = Http.emptyBody
+                    , resolver =
+                        Http.stringResolver
+                            (\response ->
+                                case response of
+                                    Http.GoodStatus_ _ body ->
+                                        case Decode.decodeString Decode.int body of
+                                            Ok value ->
+                                                Ok (IO.pure (MVar value))
+
+                                            Err _ ->
+                                                crash "newEmptyMVar"
+
+                                    _ ->
+                                        crash "newEmptyMVar"
+                            )
+                    , timeout = Nothing
+                    }
+                )
             )
         )
-        |> IO.fmap MVar
 
 
 

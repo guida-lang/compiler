@@ -243,6 +243,68 @@ const handlers = {
     } catch (err) {
       console.error(`chdir: ${err}`);
     }
+  },
+  // MVARS
+  newEmptyMVar: (request) => {
+    nextCounter += 1;
+    mVars[nextCounter] = { subscribers: [], value: undefined };
+    request.respond(200, null, nextCounter);
+  },
+  readMVar: (request) => {
+    const id = request.body;
+    if (typeof mVars[id].value === "undefined") {
+      mVars[id].subscribers.push({ action: "read", request });
+    } else {
+      request.respond(200, null, JSON.stringify(mVars[id].value));
+    }
+  },
+  takeMVar: (request) => {
+    const id = request.body;
+    if (typeof mVars[id].value === "undefined") {
+      mVars[id].subscribers.push({ action: "take", request });
+    } else {
+      const value = mVars[id].value;
+      mVars[id].value = undefined;
+
+      if (
+        mVars[id].subscribers.length > 0 &&
+        mVars[id].subscribers[0].action === "put"
+      ) {
+        const subscriber = mVars[id].subscribers.shift();
+        mVars[id].value = subscriber.value;
+        request.respond(200);
+      }
+
+      request.respond(200, null, JSON.stringify(value));
+    }
+  },
+  putMVar: (request) => {
+    const { id, value } = JSON.parse(request.body);
+    if (typeof mVars[id].value === "undefined") {
+      mVars[id].value = value;
+
+      mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
+        if (subscriber.action === "read") {
+          subscriber.request.respond(200, null, JSON.stringify(value));
+        }
+
+        return subscriber.action !== "read";
+      });
+
+      const subscriber = mVars[id].subscribers.shift();
+
+      if (subscriber) {
+        subscriber.request.respond(200, null, JSON.stringify(value));
+
+        if (subscriber.action === "take") {
+          mVars[id].value = undefined;
+        }
+      }
+
+      request.respond(200);
+    } else {
+      mVars[id].subscribers.push({ action: "put", request, value });
+    }
   }
 };
 
@@ -318,6 +380,7 @@ const rl = readline.createInterface({
 });
 
 let nextCounter = 0;
+const mVars = {};
 const lockedFiles = {};
 const processes = {};
 
