@@ -84,9 +84,9 @@ import Cmd.Extra as Cmd
 import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Task exposing (Task)
 import Utils.Crash exposing (crash)
+import Utils.Impure as Impure
 
 
 type alias Flags =
@@ -162,26 +162,15 @@ update ( index, fn ) model =
 
 
 writeString : FilePath -> String -> IO ()
-writeString path content =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "writeString"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "path", Encode.string path )
-                            , ( "content", Encode.string content )
-                            ]
-                        )
-                , resolver = Http.stringResolver (\_ -> Ok (pure ()))
-                , timeout = Nothing
-                }
-            )
+writeString path content s =
+    ( s
+    , ImpureTask
+        (Impure.task "writeString"
+            [ Http.header "path" path ]
+            (Impure.StringBody content)
+            (Impure.Always (pure ()))
         )
+    )
 
 
 
@@ -210,8 +199,8 @@ type alias RealWorld =
 
 
 pure : a -> IO a
-pure x =
-    \s -> ( s, Pure x )
+pure x s =
+    ( s, Pure x )
 
 
 apply : IO a -> IO (a -> b) -> IO b
@@ -225,22 +214,16 @@ fmap fn ma =
 
 
 bind : (a -> IO b) -> IO a -> IO b
-bind f ma =
-    \s0 ->
-        case ma s0 of
-            ( s1, Pure a ) ->
-                unIO (f a) s1
+bind f ma s0 =
+    case ma s0 of
+        ( s1, Pure a ) ->
+            f a s1
 
-            ( s1, ImpureTask task ) ->
-                ( s1, ImpureTask (Task.map (bind f) task) )
+        ( s1, ImpureTask task ) ->
+            ( s1, ImpureTask (Task.map (bind f) task) )
 
-            ( s1, ForkIO next forkIO ) ->
-                ( s1, ForkIO (\() -> bind f (next ())) forkIO )
-
-
-unIO : IO a -> (RealWorld -> ( RealWorld, ION a ))
-unIO a =
-    a
+        ( s1, ForkIO next forkIO ) ->
+            ( s1, ForkIO (\() -> bind f (next ())) forkIO )
 
 
 mapM : (a -> IO b) -> List a -> IO (List b)
@@ -280,55 +263,29 @@ stderr =
 
 
 withFile : String -> IOMode -> (Handle -> IO a) -> IO a
-withFile path mode callback =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "withFile"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "path", Encode.string path )
-                            , ( "mode"
-                              , Encode.string
-                                    (case mode of
-                                        ReadMode ->
-                                            "r"
+withFile path mode callback s =
+    ( s
+    , ImpureTask
+        (Impure.task "withFile"
+            [ Http.header "mode"
+                (case mode of
+                    ReadMode ->
+                        "r"
 
-                                        WriteMode ->
-                                            "w"
+                    WriteMode ->
+                        "w"
 
-                                        AppendMode ->
-                                            "a"
+                    AppendMode ->
+                        "a"
 
-                                        ReadWriteMode ->
-                                            "w+"
-                                    )
-                              )
-                            ]
-                        )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.int body of
-                                        Ok fd ->
-                                            Ok (callback (Handle fd))
-
-                                        Err _ ->
-                                            crash "withFile"
-
-                                _ ->
-                                    crash "withFile"
-                        )
-                , timeout = Nothing
-                }
-            )
+                    ReadWriteMode ->
+                        "w+"
+                )
+            ]
+            (Impure.StringBody path)
+            (Impure.DecoderResolver (Decode.map (callback << Handle) Decode.int))
         )
+    )
 
 
 type IOMode
@@ -343,29 +300,8 @@ type IOMode
 
 
 hClose : Handle -> IO ()
-hClose (Handle handle) =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "hFileSize"
-                , body = Http.stringBody "text/plain" (String.fromInt handle)
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (pure ())
-
-                                _ ->
-                                    crash "hClose"
-                        )
-                , timeout = Nothing
-                }
-            )
-        )
+hClose (Handle handle) s =
+    ( s, ImpureTask (Impure.task "hClose" [] (Impure.StringBody (String.fromInt handle)) (Impure.Always (pure ()))) )
 
 
 
@@ -373,34 +309,15 @@ hClose (Handle handle) =
 
 
 hFileSize : Handle -> IO Int
-hFileSize (Handle handle) =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "hFileSize"
-                , body = Http.stringBody "text/plain" (String.fromInt handle)
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.int body of
-                                        Ok fd ->
-                                            Ok (pure fd)
-
-                                        Err _ ->
-                                            crash "hFileSize"
-
-                                _ ->
-                                    crash "hFileSize"
-                        )
-                , timeout = Nothing
-                }
-            )
+hFileSize (Handle handle) s =
+    ( s
+    , ImpureTask
+        (Impure.task "hFileSize"
+            []
+            (Impure.StringBody (String.fromInt handle))
+            (Impure.DecoderResolver (Decode.map pure Decode.int))
         )
+    )
 
 
 
@@ -426,26 +343,15 @@ hIsTerminalDevice _ =
 
 
 hPutStr : Handle -> String -> IO ()
-hPutStr (Handle fd) content =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "hPutStr"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "fd", Encode.int fd )
-                            , ( "content", Encode.string content )
-                            ]
-                        )
-                , resolver = Http.stringResolver (\_ -> Ok (pure ()))
-                , timeout = Nothing
-                }
-            )
+hPutStr (Handle fd) content s =
+    ( s
+    , ImpureTask
+        (Impure.task "hPutStr"
+            [ Http.header "fd" (String.fromInt fd) ]
+            (Impure.StringBody content)
+            (Impure.Always (pure ()))
         )
+    )
 
 
 hPutStrLn : Handle -> String -> IO ()
@@ -468,29 +374,8 @@ putStrLn s =
 
 
 getLine : IO String
-getLine =
-    \s ->
-        ( s
-        , ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "getLine"
-                , body = Http.emptyBody
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    Ok (pure body)
-
-                                _ ->
-                                    Ok (pure "")
-                        )
-                , timeout = Nothing
-                }
-            )
-        )
+getLine s =
+    ( s, ImpureTask (Impure.task "getLine" [] Impure.EmptyBody (Impure.StringResolver pure)) )
 
 
 

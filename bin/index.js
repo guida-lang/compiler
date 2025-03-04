@@ -5,20 +5,20 @@ const MockXhr = newMockXhr();
 
 const handlers = {
   getLine: (request) => {
-  rl.on("line", (value) => {
-    request.respond(200, {}, value);
-  });
+    rl.on("line", (value) => {
+      request.respond(200, {}, value);
+    });
   },
   hPutStr: (request) => {
-      const { fd, content } = JSON.parse(request.body);
-      fs.write(fd, content, (err) => {
-        if (err) throw err;
+    const fd = parseInt(request.requestHeaders.getHeader("fd"));
+    fs.write(fd, request.body, (err) => {
+      if (err) throw err;
       request.respond(200);
-      });
+    });
   },
   writeString: (request) => {
-    let { path, content } = JSON.parse(request.body);
-    fs.writeFile(path, content, (err) => {
+    const path = request.requestHeaders.getHeader("path");
+    fs.writeFile(path, request.body, (err) => {
       if (err) throw err;
       request.respond(200);
     });
@@ -88,8 +88,9 @@ const handlers = {
     });
   },
   withFile: (request) => {
-    let { filename, mode } = JSON.parse(request.body);
-    fs.open(filename, mode, (err, fd) => {
+    const mode = request.requestHeaders.getHeader("mode");
+
+    fs.open(request.body, mode, (err, fd) => {
       if (err) throw err;
       request.respond(200, null, fd);
     });

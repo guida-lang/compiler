@@ -8,12 +8,11 @@ module System.Process exposing
     , withCreateProcess
     )
 
-import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
-import Utils.Crash exposing (crash)
+import Utils.Impure as Impure
 
 
 type CmdSpec
@@ -53,83 +52,73 @@ withCreateProcess createProcess f =
     \s ->
         ( s
         , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "withCreateProcess"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "cmdspec"
-                              , case createProcess.cmdspec of
-                                    RawCommand cmd args ->
-                                        Encode.object
-                                            [ ( "type", Encode.string "RawCommand" )
-                                            , ( "cmd", Encode.string cmd )
-                                            , ( "args", Encode.list Encode.string args )
-                                            ]
-                              )
-                            , ( "stdin"
-                              , case createProcess.std_in of
-                                    Inherit ->
-                                        Encode.string "inherit"
+            (Impure.task "withCreateProcess"
+                []
+                (Impure.JsonBody
+                    (Encode.object
+                        [ ( "cmdspec"
+                          , case createProcess.cmdspec of
+                                RawCommand cmd args ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "RawCommand" )
+                                        , ( "cmd", Encode.string cmd )
+                                        , ( "args", Encode.list Encode.string args )
+                                        ]
+                          )
+                        , ( "stdin"
+                          , case createProcess.std_in of
+                                Inherit ->
+                                    Encode.string "inherit"
 
-                                    UseHandle (IO.Handle handle) ->
-                                        Encode.int handle
+                                UseHandle (IO.Handle handle) ->
+                                    Encode.int handle
 
-                                    CreatePipe ->
-                                        Encode.string "pipe"
+                                CreatePipe ->
+                                    Encode.string "pipe"
 
-                                    NoStream ->
-                                        Encode.string "ignore"
-                              )
-                            , ( "stdout"
-                              , case createProcess.std_out of
-                                    Inherit ->
-                                        Encode.string "inherit"
+                                NoStream ->
+                                    Encode.string "ignore"
+                          )
+                        , ( "stdout"
+                          , case createProcess.std_out of
+                                Inherit ->
+                                    Encode.string "inherit"
 
-                                    UseHandle (IO.Handle handle) ->
-                                        Encode.int handle
+                                UseHandle (IO.Handle handle) ->
+                                    Encode.int handle
 
-                                    CreatePipe ->
-                                        Encode.string "pipe"
+                                CreatePipe ->
+                                    Encode.string "pipe"
 
-                                    NoStream ->
-                                        Encode.string "ignore"
-                              )
-                            , ( "stderr"
-                              , case createProcess.std_err of
-                                    Inherit ->
-                                        Encode.string "inherit"
+                                NoStream ->
+                                    Encode.string "ignore"
+                          )
+                        , ( "stderr"
+                          , case createProcess.std_err of
+                                Inherit ->
+                                    Encode.string "inherit"
 
-                                    UseHandle (IO.Handle handle) ->
-                                        Encode.int handle
+                                UseHandle (IO.Handle handle) ->
+                                    Encode.int handle
 
-                                    CreatePipe ->
-                                        Encode.string "pipe"
+                                CreatePipe ->
+                                    Encode.string "pipe"
 
-                                    NoStream ->
-                                        Encode.string "ignore"
-                              )
-                            ]
+                                NoStream ->
+                                    Encode.string "ignore"
+                          )
+                        ]
+                    )
+                )
+                (Impure.DecoderResolver
+                    (Decode.map2
+                        (\stdinHandle ph ->
+                            f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
                         )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString (Decode.map2 Tuple.pair (Decode.field "stdinHandle" (Decode.maybe Decode.int)) (Decode.field "ph" Decode.int)) body of
-                                        Ok ( stdinHandle, ph ) ->
-                                            Ok (f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph))
-
-                                        Err _ ->
-                                            crash "withFile"
-
-                                _ ->
-                                    crash "withFile"
-                        )
-                , timeout = Nothing
-                }
+                        (Decode.field "stdinHandle" (Decode.maybe Decode.int))
+                        (Decode.field "ph" Decode.int)
+                    )
+                )
             )
         )
 
@@ -139,31 +128,22 @@ waitForProcess (ProcessHandle ph) =
     \s ->
         ( s
         , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "waitForProcess"
-                , body =
-                    Http.stringBody "text/plain" (String.fromInt ph)
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.int body of
-                                        Ok 0 ->
-                                            Ok (IO.pure Exit.ExitSuccess)
+            (Impure.task "waitForProcess"
+                []
+                (Impure.StringBody (String.fromInt ph))
+                (Impure.DecoderResolver
+                    (Decode.map
+                        (\int ->
+                            IO.pure
+                                (if int == 0 then
+                                    Exit.ExitSuccess
 
-                                        Ok int ->
-                                            Ok (IO.pure (Exit.ExitFailure int))
-
-                                        Err _ ->
-                                            crash "waitForProcess"
-
-                                _ ->
-                                    crash "waitForProcess"
+                                 else
+                                    Exit.ExitFailure int
+                                )
                         )
-                , timeout = Nothing
-                }
+                        Decode.int
+                    )
+                )
             )
         )

@@ -29,7 +29,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Url.Builder
-import Utils.Crash exposing (crash)
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (SomeException)
 
 
@@ -105,29 +105,16 @@ post =
 
 
 fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
-fetch method _ url headers _ onSuccess =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = method
-                , headers = List.map (\( a, b ) -> Http.header a b) (addDefaultHeaders headers)
-                , url = url
-                , body = Http.emptyBody
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    Ok (onSuccess body)
-
-                                _ ->
-                                    Ok (onSuccess "")
-                        )
-                , timeout = Nothing
-                }
-            )
+fetch method _ url headers _ onSuccess s =
+    ( s
+    , IO.ImpureTask
+        (Impure.customTask method
+            url
+            (List.map (\( a, b ) -> Http.header a b) (addDefaultHeaders headers))
+            Impure.EmptyBody
+            (Impure.StringResolver onSuccess)
         )
+    )
 
 
 addDefaultHeaders : List Header -> List Header
@@ -173,51 +160,27 @@ shaToChars =
 
 
 getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
-getArchive _ url _ _ onSuccess =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "getArchive"
-                , body = Http.stringBody "text/plain" url
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    let
-                                        shaAndArchiveResult : Result Decode.Error ( String, List Zip.Entry )
-                                        shaAndArchiveResult =
-                                            Decode.decodeString
-                                                (Decode.map2 Tuple.pair
-                                                    (Decode.field "sha" Decode.string)
-                                                    (Decode.field "archive"
-                                                        (Decode.list
-                                                            (Decode.map2 Zip.Entry
-                                                                (Decode.field "eRelativePath" Decode.string)
-                                                                (Decode.field "eData" Decode.string)
-                                                            )
-                                                        )
-                                                    )
-                                                )
-                                                body
-                                    in
-                                    case shaAndArchiveResult of
-                                        Ok shaAndArchive ->
-                                            Ok (onSuccess shaAndArchive)
-
-                                        Err _ ->
-                                            crash "getArchive"
-
-                                _ ->
-                                    crash "getArchive"
+getArchive _ url _ _ onSuccess s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "getArchive"
+            []
+            (Impure.StringBody url)
+            (Impure.DecoderResolver
+                (Decode.map2 (\sha archive -> onSuccess ( sha, archive ))
+                    (Decode.field "sha" Decode.string)
+                    (Decode.field "archive"
+                        (Decode.list
+                            (Decode.map2 Zip.Entry
+                                (Decode.field "eRelativePath" Decode.string)
+                                (Decode.field "eData" Decode.string)
+                            )
                         )
-                , timeout = Nothing
-                }
+                    )
+                )
             )
         )
+    )
 
 
 
@@ -231,65 +194,49 @@ type MultiPart
 
 
 upload : Manager -> String -> List MultiPart -> IO (Result Error ())
-upload _ url parts =
-    (\s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "httpUpload"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "urlStr", Encode.string url )
-                            , ( "headers", Encode.object (List.map (Tuple.mapSecond Encode.string) (addDefaultHeaders [])) )
-                            , ( "parts"
-                              , Encode.list
-                                    (\part ->
-                                        case part of
-                                            FilePart name filePath ->
-                                                Encode.object
-                                                    [ ( "type", Encode.string "FilePart" )
-                                                    , ( "name", Encode.string name )
-                                                    , ( "filePath", Encode.string filePath )
-                                                    ]
+upload _ url parts s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "httpUpload"
+            []
+            (Impure.JsonBody
+                (Encode.object
+                    [ ( "urlStr", Encode.string url )
+                    , ( "headers", Encode.object (List.map (Tuple.mapSecond Encode.string) (addDefaultHeaders [])) )
+                    , ( "parts"
+                      , Encode.list
+                            (\part ->
+                                case part of
+                                    FilePart name filePath ->
+                                        Encode.object
+                                            [ ( "type", Encode.string "FilePart" )
+                                            , ( "name", Encode.string name )
+                                            , ( "filePath", Encode.string filePath )
+                                            ]
 
-                                            JsonPart name filePath value ->
-                                                Encode.object
-                                                    [ ( "type", Encode.string "JsonPart" )
-                                                    , ( "name", Encode.string name )
-                                                    , ( "filePath", Encode.string filePath )
-                                                    , ( "value", value )
-                                                    ]
+                                    JsonPart name filePath value ->
+                                        Encode.object
+                                            [ ( "type", Encode.string "JsonPart" )
+                                            , ( "name", Encode.string name )
+                                            , ( "filePath", Encode.string filePath )
+                                            , ( "value", value )
+                                            ]
 
-                                            StringPart name string ->
-                                                Encode.object
-                                                    [ ( "type", Encode.string "StringPart" )
-                                                    , ( "name", Encode.string name )
-                                                    , ( "string", Encode.string string )
-                                                    ]
-                                    )
-                                    parts
-                              )
-                            ]
-                        )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "httpUpload"
-                        )
-                , timeout = Nothing
-                }
+                                    StringPart name string ->
+                                        Encode.object
+                                            [ ( "type", Encode.string "StringPart" )
+                                            , ( "name", Encode.string name )
+                                            , ( "string", Encode.string string )
+                                            ]
+                            )
+                            parts
+                      )
+                    ]
+                )
             )
+            (Impure.Always (IO.pure (Ok ())))
         )
     )
-        |> IO.fmap Ok
 
 
 filePart : String -> String -> MultiPart

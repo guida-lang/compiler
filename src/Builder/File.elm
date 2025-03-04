@@ -16,11 +16,11 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
-import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Time
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -105,55 +105,13 @@ writeUtf8 =
 
 
 readUtf8 : FilePath -> IO String
-readUtf8 path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "read"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    Ok (IO.pure body)
-
-                                _ ->
-                                    Ok (IO.pure "")
-                        )
-                , timeout = Nothing
-                }
-            )
-        )
+readUtf8 path s =
+    ( s, IO.ImpureTask (Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver IO.pure)) )
 
 
 readStdin : IO String
-readStdin =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "readStdin"
-                , body = Http.emptyBody
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    Ok (IO.pure body)
-
-                                _ ->
-                                    Ok (IO.pure "")
-                        )
-                , timeout = Nothing
-                }
-            )
-        )
+readStdin s =
+    ( s, IO.ImpureTask (Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver IO.pure)) )
 
 
 

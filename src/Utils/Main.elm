@@ -147,6 +147,7 @@ import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import Time
 import Utils.Crash exposing (crash)
+import Utils.Impure as Impure
 
 
 liftInputT : IO () -> ReplInputT ()
@@ -747,55 +748,27 @@ lockWithFileLock path mode ioFunc =
 
 
 lockFile : FilePath -> IO ()
-lockFile path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "lockFile"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "lockFile"
-                        )
-                , timeout = Nothing
-                }
-            )
+lockFile path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "lockFile"
+            []
+            (Impure.StringBody path)
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 unlockFile : FilePath -> IO ()
-unlockFile path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "unlockFile"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "lockFile"
-                        )
-                , timeout = Nothing
-                }
-            )
+unlockFile path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "unlockFile"
+            []
+            (Impure.StringBody path)
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 
@@ -803,247 +776,115 @@ unlockFile path =
 
 
 dirDoesFileExist : FilePath -> IO Bool
-dirDoesFileExist filename =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirDoesFileExist"
-                , body = Http.stringBody "text/plain" filename
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.bool body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "dirDoesFileExist"
-
-                                _ ->
-                                    crash "dirDoesFileExist"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirDoesFileExist filename s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirDoesFileExist"
+            []
+            (Impure.StringBody filename)
+            (Impure.DecoderResolver (Decode.map IO.pure Decode.bool))
         )
+    )
 
 
 dirFindExecutable : FilePath -> IO (Maybe FilePath)
-dirFindExecutable filename =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirFindExecutable"
-                , body = Http.stringBody "text/plain" filename
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString (Decode.maybe Decode.string) body of
-                                        Ok name ->
-                                            Ok (IO.pure name)
-
-                                        Err _ ->
-                                            crash "dirFindExecutable"
-
-                                _ ->
-                                    crash "dirFindExecutable"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirFindExecutable filename s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirFindExecutable"
+            []
+            (Impure.StringBody filename)
+            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
         )
+    )
 
 
 dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
-dirCreateDirectoryIfMissing createParents filename =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirCreateDirectoryIfMissing"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "createParents", Encode.bool createParents )
-                            , ( "filename", Encode.string filename )
-                            ]
-                        )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "dirCreateDirectoryIfMissing"
-                        )
-                , timeout = Nothing
-                }
+dirCreateDirectoryIfMissing createParents filename s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirCreateDirectoryIfMissing"
+            []
+            (Impure.JsonBody
+                (Encode.object
+                    [ ( "createParents", Encode.bool createParents )
+                    , ( "filename", Encode.string filename )
+                    ]
+                )
             )
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 dirGetCurrentDirectory : IO String
-dirGetCurrentDirectory =
-    \s -> ( s, IO.Pure s.currentDirectory )
+dirGetCurrentDirectory s =
+    ( s, IO.Pure s.currentDirectory )
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
-dirGetAppUserDataDirectory filename =
-    \s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) )
+dirGetAppUserDataDirectory filename s =
+    ( s, IO.Pure (s.homedir ++ "/." ++ filename) )
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
-dirGetModificationTime filename =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirGetModificationTime"
-                , body = Http.stringBody "text/plain" filename
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.int body of
-                                        Ok value ->
-                                            Ok (IO.pure (Time.millisToPosix value))
-
-                                        Err _ ->
-                                            crash "dirGetModificationTime"
-
-                                _ ->
-                                    crash "dirGetModificationTime"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirGetModificationTime filename s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirGetModificationTime"
+            []
+            (Impure.StringBody filename)
+            (Impure.DecoderResolver (Decode.map (IO.pure << Time.millisToPosix) Decode.int))
         )
+    )
 
 
 dirRemoveFile : FilePath -> IO ()
-dirRemoveFile path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirRemoveFile"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "dirRemoveFile"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirRemoveFile path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirRemoveFile"
+            []
+            (Impure.StringBody path)
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
-dirRemoveDirectoryRecursive path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirRemoveDirectoryRecursive"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "dirRemoveDirectoryRecursive"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirRemoveDirectoryRecursive path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirRemoveDirectoryRecursive"
+            []
+            (Impure.StringBody path)
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
-dirDoesDirectoryExist path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirDoesDirectoryExist"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.bool body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "dirDoesDirectoryExist"
-
-                                _ ->
-                                    crash "dirDoesDirectoryExist"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirDoesDirectoryExist path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirDoesDirectoryExist"
+            []
+            (Impure.StringBody path)
+            (Impure.DecoderResolver (Decode.map IO.pure Decode.bool))
         )
+    )
 
 
 dirCanonicalizePath : FilePath -> IO FilePath
-dirCanonicalizePath path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirCanonicalizePath"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    Ok (IO.pure body)
-
-                                _ ->
-                                    crash "dirCanonicalizePath"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirCanonicalizePath path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirCanonicalizePath"
+            []
+            (Impure.StringBody path)
+            (Impure.StringResolver IO.pure)
         )
+    )
 
 
 dirWithCurrentDirectory : FilePath -> IO a -> IO a
@@ -1055,46 +896,20 @@ dirWithCurrentDirectory dir action =
                     (\s ->
                         ( s
                         , IO.ImpureTask
-                            (Http.task
-                                { method = "POST"
-                                , headers = []
-                                , url = "dirWithCurrentDirectory"
-                                , body = Http.stringBody "text/plain" dir
-                                , resolver =
-                                    Http.stringResolver
-                                        (\response ->
-                                            case response of
-                                                Http.GoodStatus_ _ _ ->
-                                                    Ok (IO.pure ())
-
-                                                _ ->
-                                                    crash "dirWithCurrentDirectory"
-                                        )
-                                , timeout = Nothing
-                                }
+                            (Impure.task "dirWithCurrentDirectory"
+                                []
+                                (Impure.StringBody dir)
+                                (Impure.Always (IO.pure ()))
                             )
                         )
                     )
                     (\s ->
                         ( s
                         , IO.ImpureTask
-                            (Http.task
-                                { method = "POST"
-                                , headers = []
-                                , url = "dirWithCurrentDirectory"
-                                , body = Http.stringBody "text/plain" currentDir
-                                , resolver =
-                                    Http.stringResolver
-                                        (\response ->
-                                            case response of
-                                                Http.GoodStatus_ _ _ ->
-                                                    Ok (IO.pure ())
-
-                                                _ ->
-                                                    crash "dirWithCurrentDirectory"
-                                        )
-                                , timeout = Nothing
-                                }
+                            (Impure.task "dirWithCurrentDirectory"
+                                []
+                                (Impure.StringBody currentDir)
+                                (Impure.Always (IO.pure ()))
                             )
                         )
                     )
@@ -1103,34 +918,15 @@ dirWithCurrentDirectory dir action =
 
 
 dirListDirectory : FilePath -> IO (List FilePath)
-dirListDirectory path =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "dirListDirectory"
-                , body = Http.stringBody "text/plain" path
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString (Decode.list Decode.string) body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "dirListDirectory"
-
-                                _ ->
-                                    crash "dirListDirectory"
-                        )
-                , timeout = Nothing
-                }
-            )
+dirListDirectory path s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirListDirectory"
+            []
+            (Impure.StringBody path)
+            (Impure.DecoderResolver (Decode.map IO.pure (Decode.list Decode.string)))
         )
+    )
 
 
 
@@ -1138,18 +934,18 @@ dirListDirectory path =
 
 
 envLookupEnv : String -> IO (Maybe String)
-envLookupEnv name =
-    \s -> ( s, IO.Pure (Dict.get name s.envVars) )
+envLookupEnv name s =
+    ( s, IO.Pure (Dict.get name s.envVars) )
 
 
 envGetProgName : IO String
-envGetProgName =
-    \s -> ( s, IO.Pure s.progName )
+envGetProgName s =
+    ( s, IO.Pure s.progName )
 
 
 envGetArgs : IO (List String)
-envGetArgs =
-    \s -> ( s, IO.Pure s.args )
+envGetArgs s =
+    ( s, IO.Pure s.args )
 
 
 
@@ -1252,8 +1048,8 @@ type ThreadId
 
 
 forkIO : IO () -> IO ThreadId
-forkIO ioArg =
-    \s -> ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg )
+forkIO ioArg s =
+    ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg )
 
 
 
@@ -1275,34 +1071,15 @@ newMVar encoder value =
 
 
 readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "readMVar"
-                , body = Http.stringBody "text/plain" (String.fromInt ref)
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString decoder body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "readMVar"
-
-                                _ ->
-                                    crash "readMVar"
-                        )
-                , timeout = Nothing
-                }
-            )
+readMVar decoder (MVar ref) s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "readMVar"
+            []
+            (Impure.StringBody (String.fromInt ref))
+            (Impure.DecoderResolver (Decode.map IO.pure decoder))
         )
+    )
 
 
 modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
@@ -1317,97 +1094,45 @@ modifyMVar decoder encoder m io =
 
 
 takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "takeMVar"
-                , body = Http.stringBody "text/plain" (String.fromInt ref)
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString decoder body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "takeMVar"
-
-                                _ ->
-                                    crash "takeMVar"
-                        )
-                , timeout = Nothing
-                }
-            )
+takeMVar decoder (MVar ref) s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "takeMVar"
+            []
+            (Impure.StringBody (String.fromInt ref))
+            (Impure.DecoderResolver (Decode.map IO.pure decoder))
         )
+    )
 
 
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "putMVar"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "id", Encode.int ref )
-                            , ( "value", encoder value )
-                            ]
-                        )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "putMVar"
-                        )
-                , timeout = Nothing
-                }
+putMVar encoder (MVar ref) value s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "putMVar"
+            []
+            (Impure.JsonBody
+                (Encode.object
+                    [ ( "id", Encode.int ref )
+                    , ( "value", encoder value )
+                    ]
+                )
             )
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 newEmptyMVar : IO (MVar a)
-newEmptyMVar =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "newEmptyMVar"
-                , body = Http.emptyBody
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString Decode.int body of
-                                        Ok value ->
-                                            Ok (IO.pure (MVar value))
-
-                                        Err _ ->
-                                            crash "newEmptyMVar"
-
-                                _ ->
-                                    crash "newEmptyMVar"
-                        )
-                , timeout = Nothing
-                }
-            )
+newEmptyMVar s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "newEmptyMVar"
+            []
+            Impure.EmptyBody
+            (Impure.DecoderResolver (Decode.map (IO.pure << MVar) Decode.int))
         )
+    )
 
 
 
@@ -1484,66 +1209,33 @@ builderHPutBuilder =
 
 
 binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
-binaryDecodeFileOrFail decoder filename =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "binaryDecodeFileOrFail"
-                , body = Http.stringBody "text/plain" filename
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString decoder body of
-                                        Ok value ->
-                                            Ok (IO.pure (Ok value))
-
-                                        Err _ ->
-                                            Ok (IO.pure (Err ( 0, "Could not find file " ++ filename )))
-
-                                _ ->
-                                    crash "binaryDecodeFileOrFail"
-                        )
-                , timeout = Nothing
-                }
-            )
+binaryDecodeFileOrFail decoder filename s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "binaryDecodeFileOrFail"
+            []
+            (Impure.StringBody filename)
+            (Impure.DecoderResolver (Decode.map (IO.pure << Ok) decoder))
         )
+    )
 
 
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "write"
-                , body =
-                    Http.jsonBody
-                        (Encode.object
-                            [ ( "fd", Encode.string path )
-                            , ( "content", encoder value )
-                            ]
-                        )
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ _ ->
-                                    Ok (IO.pure ())
-
-                                _ ->
-                                    crash "write"
-                        )
-                , timeout = Nothing
-                }
+binaryEncodeFile encoder path value s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "write"
+            []
+            (Impure.JsonBody
+                (Encode.object
+                    [ ( "fd", Encode.string path )
+                    , ( "content", encoder value )
+                    ]
+                )
             )
+            (Impure.Always (IO.pure ()))
         )
+    )
 
 
 
@@ -1587,34 +1279,15 @@ replCompleteWord _ _ _ =
 
 
 replGetInputLine : String -> ReplInputT (Maybe String)
-replGetInputLine prompt =
-    \s ->
-        ( s
-        , IO.ImpureTask
-            (Http.task
-                { method = "POST"
-                , headers = []
-                , url = "replGetInputLine"
-                , body = Http.stringBody "text/plain" prompt
-                , resolver =
-                    Http.stringResolver
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ _ body ->
-                                    case Decode.decodeString (Decode.maybe Decode.string) body of
-                                        Ok value ->
-                                            Ok (IO.pure value)
-
-                                        Err _ ->
-                                            crash "replGetInputLine"
-
-                                _ ->
-                                    crash "replGetInputLine"
-                        )
-                , timeout = Nothing
-                }
-            )
+replGetInputLine prompt s =
+    ( s
+    , IO.ImpureTask
+        (Impure.task "replGetInputLine"
+            []
+            (Impure.StringBody prompt)
+            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
         )
+    )
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
