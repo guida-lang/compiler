@@ -69,5 +69,5 @@ get =
 
 
 put : IO.ReplState -> IO ()
-put state =
-    \s -> ( { s | state = state }, IO.Pure () )
+put state s =
+    ( { s | state = state }, IO.Pure () )

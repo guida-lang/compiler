@@ -138,7 +138,6 @@ import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Dict
-import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
