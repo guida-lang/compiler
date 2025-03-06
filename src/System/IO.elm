@@ -1,5 +1,5 @@
 module System.IO exposing
-    ( Program, Flags, Model, Msg, run
+    ( Program, Model, Msg, run
     , IO, ION(..), RealWorld, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
@@ -16,7 +16,7 @@ module System.IO exposing
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
 
-@docs Program, Flags, Model, Msg, run
+@docs Program, Model, Msg, run
 
 
 # The IO monad
@@ -89,31 +89,17 @@ import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
 
 
-type alias Flags =
-    { args : List String
-    , currentDirectory : String
-    , envVars : List ( String, String )
-    , homedir : FilePath
-    , progName : String
-    }
-
-
 type alias Program =
-    Platform.Program Flags Model Msg
+    Platform.Program () Model Msg
 
 
 run : IO () -> Program
 run app =
     Platform.worker
         { init =
-            \flags ->
+            \() ->
                 update ( 0, app )
                     { count = 1
-                    , args = flags.args
-                    , currentDirectory = flags.currentDirectory
-                    , envVars = Dict.fromList flags.envVars
-                    , homedir = flags.homedir
-                    , progName = flags.progName
                     , state = initialReplState
                     }
         , update = update
@@ -189,11 +175,6 @@ type ION a
 
 type alias RealWorld =
     { count : Int
-    , args : List String
-    , currentDirectory : String
-    , envVars : Dict String String
-    , homedir : FilePath
-    , progName : String
     , state : ReplState
     }
 

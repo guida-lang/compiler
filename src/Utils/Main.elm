@@ -137,7 +137,6 @@ import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Dict
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
@@ -453,9 +452,8 @@ mapTraverseWithKeyResult toComparable keyComparison f =
 
 
 listTraverse : (a -> IO b) -> List a -> IO (List b)
-listTraverse f =
-    List.foldr (\a -> IO.bind (\c -> IO.fmap (\va -> va :: c) (f a)))
-        (IO.pure [])
+listTraverse =
+    IO.mapM
 
 
 listMaybeTraverse : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -818,12 +816,26 @@ dirCreateDirectoryIfMissing createParents filename s =
 
 dirGetCurrentDirectory : IO String
 dirGetCurrentDirectory s =
-    ( s, IO.Pure s.currentDirectory )
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirGetCurrentDirectory"
+            []
+            Impure.EmptyBody
+            (Impure.StringResolver IO.pure)
+        )
+    )
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
 dirGetAppUserDataDirectory filename s =
-    ( s, IO.Pure (s.homedir ++ "/." ++ filename) )
+    ( s
+    , IO.ImpureTask
+        (Impure.task "dirGetAppUserDataDirectory"
+            []
+            (Impure.StringBody filename)
+            (Impure.StringResolver IO.pure)
+        )
+    )
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
@@ -934,17 +946,35 @@ dirListDirectory path s =
 
 envLookupEnv : String -> IO (Maybe String)
 envLookupEnv name s =
-    ( s, IO.Pure (Dict.get name s.envVars) )
+    ( s
+    , IO.ImpureTask
+        (Impure.task "envLookupEnv"
+            []
+            (Impure.StringBody name)
+            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
+        )
+    )
 
 
 envGetProgName : IO String
-envGetProgName s =
-    ( s, IO.Pure s.progName )
+envGetProgName =
+    IO.pure "guida"
 
 
 envGetArgs : IO (List String)
 envGetArgs s =
-    ( s, IO.Pure s.args )
+    ( s
+    , IO.ImpureTask
+        (Impure.task "envGetArgs"
+            []
+            Impure.EmptyBody
+            (Impure.DecoderResolver
+                (Decode.map IO.pure
+                    (Decode.list Decode.string)
+                )
+            )
+        )
+    )
 
 
 
