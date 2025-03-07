@@ -91,7 +91,7 @@ printWelcomeMessage =
 
         title : D.Doc
         title =
-            D.fromChars "Elm"
+            D.fromChars "Guida"
                 |> D.plus (D.fromChars vsn)
 
         dashes : String

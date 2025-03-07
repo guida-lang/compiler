@@ -141,6 +141,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import Process
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import Time
@@ -745,27 +746,19 @@ lockWithFileLock path mode ioFunc =
 
 
 lockFile : FilePath -> IO ()
-lockFile path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "lockFile"
-            []
-            (Impure.StringBody path)
-            (Impure.Always (IO.pure ()))
-        )
-    )
+lockFile path =
+    Impure.task "lockFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 unlockFile : FilePath -> IO ()
-unlockFile path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "unlockFile"
-            []
-            (Impure.StringBody path)
-            (Impure.Always (IO.pure ()))
-        )
-    )
+unlockFile path =
+    Impure.task "unlockFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 
@@ -773,129 +766,89 @@ unlockFile path s =
 
 
 dirDoesFileExist : FilePath -> IO Bool
-dirDoesFileExist filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirDoesFileExist"
-            []
-            (Impure.StringBody filename)
-            (Impure.DecoderResolver (Decode.map IO.pure Decode.bool))
-        )
-    )
+dirDoesFileExist filename =
+    Impure.task "dirDoesFileExist"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver Decode.bool)
 
 
 dirFindExecutable : FilePath -> IO (Maybe FilePath)
-dirFindExecutable filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirFindExecutable"
-            []
-            (Impure.StringBody filename)
-            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
-        )
-    )
+dirFindExecutable filename =
+    Impure.task "dirFindExecutable"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
-dirCreateDirectoryIfMissing createParents filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirCreateDirectoryIfMissing"
-            []
-            (Impure.JsonBody
-                (Encode.object
-                    [ ( "createParents", Encode.bool createParents )
-                    , ( "filename", Encode.string filename )
-                    ]
-                )
+dirCreateDirectoryIfMissing createParents filename =
+    Impure.task "dirCreateDirectoryIfMissing"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "createParents", Encode.bool createParents )
+                , ( "filename", Encode.string filename )
+                ]
             )
-            (Impure.Always (IO.pure ()))
         )
-    )
+        (Impure.Always ())
 
 
 dirGetCurrentDirectory : IO String
-dirGetCurrentDirectory s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirGetCurrentDirectory"
-            []
-            Impure.EmptyBody
-            (Impure.StringResolver IO.pure)
-        )
-    )
+dirGetCurrentDirectory =
+    Impure.task "dirGetCurrentDirectory"
+        []
+        Impure.EmptyBody
+        (Impure.StringResolver identity)
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
-dirGetAppUserDataDirectory filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirGetAppUserDataDirectory"
-            []
-            (Impure.StringBody filename)
-            (Impure.StringResolver IO.pure)
-        )
-    )
+dirGetAppUserDataDirectory filename =
+    Impure.task "dirGetAppUserDataDirectory"
+        []
+        (Impure.StringBody filename)
+        (Impure.StringResolver identity)
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
-dirGetModificationTime filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirGetModificationTime"
-            []
-            (Impure.StringBody filename)
-            (Impure.DecoderResolver (Decode.map (IO.pure << Time.millisToPosix) Decode.int))
-        )
-    )
+dirGetModificationTime filename =
+    Impure.task "dirGetModificationTime"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver (Decode.map Time.millisToPosix Decode.int))
 
 
 dirRemoveFile : FilePath -> IO ()
-dirRemoveFile path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirRemoveFile"
-            []
-            (Impure.StringBody path)
-            (Impure.Always (IO.pure ()))
-        )
-    )
+dirRemoveFile path =
+    Impure.task "dirRemoveFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
-dirRemoveDirectoryRecursive path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirRemoveDirectoryRecursive"
-            []
-            (Impure.StringBody path)
-            (Impure.Always (IO.pure ()))
-        )
-    )
+dirRemoveDirectoryRecursive path =
+    Impure.task "dirRemoveDirectoryRecursive"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
-dirDoesDirectoryExist path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirDoesDirectoryExist"
-            []
-            (Impure.StringBody path)
-            (Impure.DecoderResolver (Decode.map IO.pure Decode.bool))
-        )
-    )
+dirDoesDirectoryExist path =
+    Impure.task "dirDoesDirectoryExist"
+        []
+        (Impure.StringBody path)
+        (Impure.DecoderResolver Decode.bool)
 
 
 dirCanonicalizePath : FilePath -> IO FilePath
-dirCanonicalizePath path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirCanonicalizePath"
-            []
-            (Impure.StringBody path)
-            (Impure.StringResolver IO.pure)
-        )
-    )
+dirCanonicalizePath path =
+    Impure.task "dirCanonicalizePath"
+        []
+        (Impure.StringBody path)
+        (Impure.StringResolver identity)
 
 
 dirWithCurrentDirectory : FilePath -> IO a -> IO a
@@ -904,40 +857,26 @@ dirWithCurrentDirectory dir action =
         |> IO.bind
             (\currentDir ->
                 bracket_
-                    (\s ->
-                        ( s
-                        , IO.ImpureTask
-                            (Impure.task "dirWithCurrentDirectory"
-                                []
-                                (Impure.StringBody dir)
-                                (Impure.Always (IO.pure ()))
-                            )
-                        )
+                    (Impure.task "dirWithCurrentDirectory"
+                        []
+                        (Impure.StringBody dir)
+                        (Impure.Always ())
                     )
-                    (\s ->
-                        ( s
-                        , IO.ImpureTask
-                            (Impure.task "dirWithCurrentDirectory"
-                                []
-                                (Impure.StringBody currentDir)
-                                (Impure.Always (IO.pure ()))
-                            )
-                        )
+                    (Impure.task "dirWithCurrentDirectory"
+                        []
+                        (Impure.StringBody currentDir)
+                        (Impure.Always ())
                     )
                     action
             )
 
 
 dirListDirectory : FilePath -> IO (List FilePath)
-dirListDirectory path s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "dirListDirectory"
-            []
-            (Impure.StringBody path)
-            (Impure.DecoderResolver (Decode.map IO.pure (Decode.list Decode.string)))
-        )
-    )
+dirListDirectory path =
+    Impure.task "dirListDirectory"
+        []
+        (Impure.StringBody path)
+        (Impure.DecoderResolver (Decode.list Decode.string))
 
 
 
@@ -945,15 +884,11 @@ dirListDirectory path s =
 
 
 envLookupEnv : String -> IO (Maybe String)
-envLookupEnv name s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "envLookupEnv"
-            []
-            (Impure.StringBody name)
-            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
-        )
-    )
+envLookupEnv name =
+    Impure.task "envLookupEnv"
+        []
+        (Impure.StringBody name)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 envGetProgName : IO String
@@ -962,19 +897,11 @@ envGetProgName =
 
 
 envGetArgs : IO (List String)
-envGetArgs s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "envGetArgs"
-            []
-            Impure.EmptyBody
-            (Impure.DecoderResolver
-                (Decode.map IO.pure
-                    (Decode.list Decode.string)
-                )
-            )
-        )
-    )
+envGetArgs =
+    Impure.task "envGetArgs"
+        []
+        Impure.EmptyBody
+        (Impure.DecoderResolver (Decode.list Decode.string))
 
 
 
@@ -1072,13 +999,13 @@ bracket_ before after thing =
 -- Control.Concurrent
 
 
-type ThreadId
-    = ThreadId
+type alias ThreadId =
+    Process.Id
 
 
 forkIO : IO () -> IO ThreadId
-forkIO ioArg s =
-    ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg )
+forkIO =
+    Process.spawn
 
 
 
@@ -1100,15 +1027,11 @@ newMVar encoder value =
 
 
 readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "readMVar"
-            []
-            (Impure.StringBody (String.fromInt ref))
-            (Impure.DecoderResolver (Decode.map IO.pure decoder))
-        )
-    )
+readMVar decoder (MVar ref) =
+    Impure.task "readMVar"
+        []
+        (Impure.StringBody (String.fromInt ref))
+        (Impure.DecoderResolver decoder)
 
 
 modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
@@ -1123,45 +1046,33 @@ modifyMVar decoder encoder m io =
 
 
 takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "takeMVar"
-            []
-            (Impure.StringBody (String.fromInt ref))
-            (Impure.DecoderResolver (Decode.map IO.pure decoder))
-        )
-    )
+takeMVar decoder (MVar ref) =
+    Impure.task "takeMVar"
+        []
+        (Impure.StringBody (String.fromInt ref))
+        (Impure.DecoderResolver decoder)
 
 
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "putMVar"
-            []
-            (Impure.JsonBody
-                (Encode.object
-                    [ ( "id", Encode.int ref )
-                    , ( "value", encoder value )
-                    ]
-                )
+putMVar encoder (MVar ref) value =
+    Impure.task "putMVar"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "id", Encode.int ref )
+                , ( "value", encoder value )
+                ]
             )
-            (Impure.Always (IO.pure ()))
         )
-    )
+        (Impure.Always ())
 
 
 newEmptyMVar : IO (MVar a)
-newEmptyMVar s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "newEmptyMVar"
-            []
-            Impure.EmptyBody
-            (Impure.DecoderResolver (Decode.map (IO.pure << MVar) Decode.int))
-        )
-    )
+newEmptyMVar =
+    Impure.task "newEmptyMVar"
+        []
+        Impure.EmptyBody
+        (Impure.DecoderResolver (Decode.map MVar Decode.int))
 
 
 
@@ -1238,33 +1149,25 @@ builderHPutBuilder =
 
 
 binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
-binaryDecodeFileOrFail decoder filename s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "binaryDecodeFileOrFail"
-            []
-            (Impure.StringBody filename)
-            (Impure.DecoderResolver (Decode.map (IO.pure << Ok) decoder))
-        )
-    )
+binaryDecodeFileOrFail decoder filename =
+    Impure.task "binaryDecodeFileOrFail"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver (Decode.map Ok decoder))
 
 
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "write"
-            []
-            (Impure.JsonBody
-                (Encode.object
-                    [ ( "fd", Encode.string path )
-                    , ( "content", encoder value )
-                    ]
-                )
+binaryEncodeFile encoder path value =
+    Impure.task "write"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "fd", Encode.string path )
+                , ( "content", encoder value )
+                ]
             )
-            (Impure.Always (IO.pure ()))
         )
-    )
+        (Impure.Always ())
 
 
 
@@ -1308,15 +1211,11 @@ replCompleteWord _ _ _ =
 
 
 replGetInputLine : String -> ReplInputT (Maybe String)
-replGetInputLine prompt s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "replGetInputLine"
-            []
-            (Impure.StringBody prompt)
-            (Impure.DecoderResolver (Decode.map IO.pure (Decode.maybe Decode.string)))
-        )
-    )
+replGetInputLine prompt =
+    Impure.task "replGetInputLine"
+        []
+        (Impure.StringBody prompt)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)

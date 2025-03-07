@@ -1,6 +1,6 @@
 module System.IO exposing
     ( Program, Model, Msg, run
-    , IO, ION(..), RealWorld, pure, apply, fmap, bind, mapM
+    , IO, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -80,12 +80,10 @@ module System.IO exposing
 
 -}
 
-import Cmd.Extra as Cmd
 import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode
 import Task exposing (Task)
-import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
 
 
@@ -98,49 +96,33 @@ run app =
     Platform.worker
         { init =
             \() ->
-                update ( 0, app )
-                    { count = 1
-                    , state = initialReplState
-                    }
+                update
+                    (bind
+                        (\() ->
+                            Impure.task "exitWith"
+                                []
+                                (Impure.StringBody "0")
+                                Impure.Crash
+                        )
+                        app
+                    )
+                    ()
         , update = update
         , subscriptions = \_ -> Sub.none
         }
 
 
 type alias Model =
-    RealWorld
+    ()
 
 
 type alias Msg =
-    ( Int, IO () )
+    IO ()
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update ( index, fn ) model =
-    case fn model of
-        ( newRealWorld, Pure () ) ->
-            ( newRealWorld
-            , if index == 0 then
-                Http.post
-                    { url = "exitWith"
-                    , body = Http.stringBody "text/plain" "0"
-                    , expect = Http.expectString (\_ -> crash "exitWith")
-                    }
-
-              else
-                Cmd.none
-            )
-
-        ( newRealWorld, ImpureTask task ) ->
-            ( newRealWorld, Task.perform (Tuple.pair index) task )
-
-        ( newRealWorld, ForkIO next forkIO ) ->
-            ( { newRealWorld | count = newRealWorld.count + 1 }
-            , Cmd.batch
-                [ Cmd.perform ( index, next () )
-                , Cmd.perform ( newRealWorld.count, forkIO )
-                ]
-            )
+update msg () =
+    ( (), Task.perform Task.succeed msg )
 
 
 
@@ -148,15 +130,11 @@ update ( index, fn ) model =
 
 
 writeString : FilePath -> String -> IO ()
-writeString path content s =
-    ( s
-    , ImpureTask
-        (Impure.task "writeString"
-            [ Http.header "path" path ]
-            (Impure.StringBody content)
-            (Impure.Always (pure ()))
-        )
-    )
+writeString path content =
+    Impure.task "writeString"
+        [ Http.header "path" path ]
+        (Impure.StringBody content)
+        (Impure.Always ())
 
 
 
@@ -164,24 +142,12 @@ writeString path content s =
 
 
 type alias IO a =
-    RealWorld -> ( RealWorld, ION a )
-
-
-type ION a
-    = Pure a
-    | ImpureTask (Task Never (IO a))
-    | ForkIO (() -> IO a) (IO ())
-
-
-type alias RealWorld =
-    { count : Int
-    , state : ReplState
-    }
+    Task Never a
 
 
 pure : a -> IO a
-pure x s =
-    ( s, Pure x )
+pure =
+    Task.succeed
 
 
 apply : IO a -> IO (a -> b) -> IO b
@@ -190,27 +156,18 @@ apply ma mf =
 
 
 fmap : (a -> b) -> IO a -> IO b
-fmap fn ma =
-    bind (pure << fn) ma
+fmap =
+    Task.map
 
 
 bind : (a -> IO b) -> IO a -> IO b
-bind f ma s0 =
-    case ma s0 of
-        ( s1, Pure a ) ->
-            f a s1
-
-        ( s1, ImpureTask task ) ->
-            ( s1, ImpureTask (Task.map (bind f) task) )
-
-        ( s1, ForkIO next forkIO ) ->
-            ( s1, ForkIO (\() -> bind f (next ())) forkIO )
+bind =
+    Task.andThen
 
 
 mapM : (a -> IO b) -> List a -> IO (List b)
 mapM f =
-    List.foldr (\a -> bind (\c -> fmap (\va -> va :: c) (f a)))
-        (pure [])
+    List.map f >> Task.sequence
 
 
 
@@ -244,29 +201,26 @@ stderr =
 
 
 withFile : String -> IOMode -> (Handle -> IO a) -> IO a
-withFile path mode callback s =
-    ( s
-    , ImpureTask
-        (Impure.task "withFile"
-            [ Http.header "mode"
-                (case mode of
-                    ReadMode ->
-                        "r"
+withFile path mode callback =
+    Impure.task "withFile"
+        [ Http.header "mode"
+            (case mode of
+                ReadMode ->
+                    "r"
 
-                    WriteMode ->
-                        "w"
+                WriteMode ->
+                    "w"
 
-                    AppendMode ->
-                        "a"
+                AppendMode ->
+                    "a"
 
-                    ReadWriteMode ->
-                        "w+"
-                )
-            ]
-            (Impure.StringBody path)
-            (Impure.DecoderResolver (Decode.map (callback << Handle) Decode.int))
-        )
-    )
+                ReadWriteMode ->
+                    "w+"
+            )
+        ]
+        (Impure.StringBody path)
+        (Impure.DecoderResolver (Decode.map Handle Decode.int))
+        |> Task.andThen callback
 
 
 type IOMode
@@ -281,8 +235,8 @@ type IOMode
 
 
 hClose : Handle -> IO ()
-hClose (Handle handle) s =
-    ( s, ImpureTask (Impure.task "hClose" [] (Impure.StringBody (String.fromInt handle)) (Impure.Always (pure ()))) )
+hClose (Handle handle) =
+    Impure.task "hClose" [] (Impure.StringBody (String.fromInt handle)) (Impure.Always ())
 
 
 
@@ -290,15 +244,11 @@ hClose (Handle handle) s =
 
 
 hFileSize : Handle -> IO Int
-hFileSize (Handle handle) s =
-    ( s
-    , ImpureTask
-        (Impure.task "hFileSize"
-            []
-            (Impure.StringBody (String.fromInt handle))
-            (Impure.DecoderResolver (Decode.map pure Decode.int))
-        )
-    )
+hFileSize (Handle handle) =
+    Impure.task "hFileSize"
+        []
+        (Impure.StringBody (String.fromInt handle))
+        (Impure.DecoderResolver Decode.int)
 
 
 
@@ -324,15 +274,11 @@ hIsTerminalDevice _ =
 
 
 hPutStr : Handle -> String -> IO ()
-hPutStr (Handle fd) content s =
-    ( s
-    , ImpureTask
-        (Impure.task "hPutStr"
-            [ Http.header "fd" (String.fromInt fd) ]
-            (Impure.StringBody content)
-            (Impure.Always (pure ()))
-        )
-    )
+hPutStr (Handle fd) content =
+    Impure.task "hPutStr"
+        [ Http.header "fd" (String.fromInt fd) ]
+        (Impure.StringBody content)
+        (Impure.Always ())
 
 
 hPutStrLn : Handle -> String -> IO ()
@@ -355,8 +301,8 @@ putStrLn s =
 
 
 getLine : IO String
-getLine s =
-    ( s, ImpureTask (Impure.task "getLine" [] Impure.EmptyBody (Impure.StringResolver pure)) )
+getLine =
+    Impure.task "getLine" [] Impure.EmptyBody (Impure.StringResolver identity)
 
 
 

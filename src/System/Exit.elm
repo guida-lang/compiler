@@ -5,7 +5,7 @@ module System.Exit exposing
     , exitWith
     )
 
-import System.IO as IO exposing (IO)
+import System.IO exposing (IO)
 import Utils.Impure as Impure
 
 
@@ -15,7 +15,7 @@ type ExitCode
 
 
 exitWith : ExitCode -> IO a
-exitWith exitCode s =
+exitWith exitCode =
     let
         code : Int
         code =
@@ -26,14 +26,10 @@ exitWith exitCode s =
                 ExitFailure int ->
                     int
     in
-    ( s
-    , IO.ImpureTask
-        (Impure.task "exitWith"
-            []
-            (Impure.StringBody (String.fromInt code))
-            Impure.Crash
-        )
-    )
+    Impure.task "exitWith"
+        []
+        (Impure.StringBody (String.fromInt code))
+        Impure.Crash
 
 
 exitFailure : IO a

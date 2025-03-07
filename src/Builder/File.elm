@@ -105,13 +105,13 @@ writeUtf8 =
 
 
 readUtf8 : FilePath -> IO String
-readUtf8 path s =
-    ( s, IO.ImpureTask (Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver IO.pure)) )
+readUtf8 path =
+    Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver identity)
 
 
 readStdin : IO String
-readStdin s =
-    ( s, IO.ImpureTask (Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver IO.pure)) )
+readStdin =
+    Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver identity)
 
 
 

@@ -12,6 +12,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
+import Task
 import Utils.Impure as Impure
 
 
@@ -48,100 +49,94 @@ proc cmd args =
 
 
 withCreateProcess : CreateProcess -> (Maybe IO.Handle -> Maybe IO.Handle -> Maybe IO.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
-withCreateProcess createProcess f s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "withCreateProcess"
-            []
-            (Impure.JsonBody
-                (Encode.object
-                    [ ( "cmdspec"
-                      , case createProcess.cmdspec of
-                            RawCommand cmd args ->
-                                Encode.object
-                                    [ ( "type", Encode.string "RawCommand" )
-                                    , ( "cmd", Encode.string cmd )
-                                    , ( "args", Encode.list Encode.string args )
-                                    ]
-                      )
-                    , ( "stdin"
-                      , case createProcess.std_in of
-                            Inherit ->
-                                Encode.string "inherit"
+withCreateProcess createProcess f =
+    Impure.task "withCreateProcess"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "cmdspec"
+                  , case createProcess.cmdspec of
+                        RawCommand cmd args ->
+                            Encode.object
+                                [ ( "type", Encode.string "RawCommand" )
+                                , ( "cmd", Encode.string cmd )
+                                , ( "args", Encode.list Encode.string args )
+                                ]
+                  )
+                , ( "stdin"
+                  , case createProcess.std_in of
+                        Inherit ->
+                            Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
-                                Encode.int handle
+                        UseHandle (IO.Handle handle) ->
+                            Encode.int handle
 
-                            CreatePipe ->
-                                Encode.string "pipe"
+                        CreatePipe ->
+                            Encode.string "pipe"
 
-                            NoStream ->
-                                Encode.string "ignore"
-                      )
-                    , ( "stdout"
-                      , case createProcess.std_out of
-                            Inherit ->
-                                Encode.string "inherit"
+                        NoStream ->
+                            Encode.string "ignore"
+                  )
+                , ( "stdout"
+                  , case createProcess.std_out of
+                        Inherit ->
+                            Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
-                                Encode.int handle
+                        UseHandle (IO.Handle handle) ->
+                            Encode.int handle
 
-                            CreatePipe ->
-                                Encode.string "pipe"
+                        CreatePipe ->
+                            Encode.string "pipe"
 
-                            NoStream ->
-                                Encode.string "ignore"
-                      )
-                    , ( "stderr"
-                      , case createProcess.std_err of
-                            Inherit ->
-                                Encode.string "inherit"
+                        NoStream ->
+                            Encode.string "ignore"
+                  )
+                , ( "stderr"
+                  , case createProcess.std_err of
+                        Inherit ->
+                            Encode.string "inherit"
 
-                            UseHandle (IO.Handle handle) ->
-                                Encode.int handle
+                        UseHandle (IO.Handle handle) ->
+                            Encode.int handle
 
-                            CreatePipe ->
-                                Encode.string "pipe"
+                        CreatePipe ->
+                            Encode.string "pipe"
 
-                            NoStream ->
-                                Encode.string "ignore"
-                      )
-                    ]
-                )
-            )
-            (Impure.DecoderResolver
-                (Decode.map2
-                    (\stdinHandle ph ->
-                        f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
-                    )
-                    (Decode.field "stdinHandle" (Decode.maybe Decode.int))
-                    (Decode.field "ph" Decode.int)
-                )
+                        NoStream ->
+                            Encode.string "ignore"
+                  )
+                ]
             )
         )
-    )
+        (Impure.DecoderResolver
+            (Decode.map2 Tuple.pair
+                -- (\stdinHandle ph ->
+                --     f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
+                -- )
+                (Decode.field "stdinHandle" (Decode.maybe Decode.int))
+                (Decode.field "ph" Decode.int)
+            )
+        )
+        |> Task.andThen
+            (\( stdinHandle, ph ) ->
+                f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
+            )
 
 
 waitForProcess : ProcessHandle -> IO Exit.ExitCode
-waitForProcess (ProcessHandle ph) s =
-    ( s
-    , IO.ImpureTask
-        (Impure.task "waitForProcess"
-            []
-            (Impure.StringBody (String.fromInt ph))
-            (Impure.DecoderResolver
-                (Decode.map
-                    (\int ->
-                        IO.pure
-                            (if int == 0 then
-                                Exit.ExitSuccess
+waitForProcess (ProcessHandle ph) =
+    Impure.task "waitForProcess"
+        []
+        (Impure.StringBody (String.fromInt ph))
+        (Impure.DecoderResolver
+            (Decode.map
+                (\int ->
+                    if int == 0 then
+                        Exit.ExitSuccess
 
-                             else
-                                Exit.ExitFailure int
-                            )
-                    )
-                    Decode.int
+                    else
+                        Exit.ExitFailure int
                 )
+                Decode.int
             )
         )
-    )

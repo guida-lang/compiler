@@ -20,7 +20,8 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let nextCounter = 0;
+let nextCounter = 0, mVarsNextCounter = 0;
+let stateT = { imports: {}, types: {}, decls: {} };
 const mVars = {};
 const lockedFiles = {};
 const processes = {};
@@ -65,7 +66,7 @@ const server = newServer();
 
 server.post("getLine", (request) => {
   rl.on("line", (value) => {
-    request.respond(200, {}, value);
+    request.respond(200, null, value);
   });
 });
 
@@ -80,6 +81,7 @@ server.post("hPutStr", (request) => {
 
 server.post("writeString", (request) => {
   const path = request.requestHeaders.getHeader("path");
+
   fs.writeFile(path, request.body, (err) => {
     if (err) throw err;
     request.respond(200);
@@ -350,11 +352,20 @@ server.post("dirGetAppUserDataDirectory", (request) => {
   request.respond(200, null, `${os.homedir()}/.${request.body}`);
 });
 
+server.post("putStateT", (request) => {
+  stateT = JSON.parse(request.body);
+  request.respond(200);
+});
+
+server.post("getStateT", (request) => {
+  request.respond(200, null, JSON.stringify(stateT));
+});
+
 // MVARS
 server.post("newEmptyMVar", (request) => {
-  nextCounter += 1;
-  mVars[nextCounter] = { subscribers: [], value: undefined };
-  request.respond(200, null, nextCounter);
+  mVarsNextCounter += 1;
+  mVars[mVarsNextCounter] = { subscribers: [], value: undefined };
+  request.respond(200, null, mVarsNextCounter);
 });
 
 server.post("readMVar", (request) => {
@@ -461,8 +472,4 @@ server.install();
 
 const { Elm } = require("./guida.min.js");
 
-Elm.Terminal.Main.init({
-  flags: {
-    progName: "guida"
-  }
-});
+Elm.Terminal.Main.init();
