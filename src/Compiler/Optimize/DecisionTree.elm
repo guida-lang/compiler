@@ -3,10 +3,8 @@ module Compiler.Optimize.DecisionTree exposing
     , Path(..)
     , Test(..)
     , compile
-    , pathDecoder
-    , pathEncoder
-    , testDecoder
-    , testEncoder
+    , pathCodec
+    , testCodec
     )
 
 {- To learn more about how this works, definitely read through:
@@ -26,9 +24,8 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Set as EverySet
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Prelude
+import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
@@ -307,12 +304,12 @@ testsAtPath selectedPath branches =
 
         skipVisited : Test -> ( List Test, EverySet.EverySet String Test ) -> ( List Test, EverySet.EverySet String Test )
         skipVisited test (( uniqueTests, visitedTests ) as curr) =
-            if EverySet.member (Encode.encode 0 << testEncoder) test visitedTests then
+            if EverySet.member (Serialize.encodeToString testCodec) test visitedTests then
                 curr
 
             else
                 ( test :: uniqueTests
-                , EverySet.insert (Encode.encode 0 << testEncoder) test visitedTests
+                , EverySet.insert (Serialize.encodeToString testCodec) test visitedTests
                 )
     in
     Tuple.first (List.foldr skipVisited ( [], EverySet.empty ) allTests)
@@ -695,138 +692,61 @@ smallBranchingFactor branches path =
 -- ENCODERS and DECODERS
 
 
-pathEncoder : Path -> Encode.Value
-pathEncoder path_ =
-    case path_ of
-        Index index path ->
-            Encode.object
-                [ ( "type", Encode.string "Index" )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "path", pathEncoder path )
-                ]
+pathCodec : Codec e Path
+pathCodec =
+    Serialize.customType
+        (\indexEncoder unboxEncoder emptyEncoder value ->
+            case value of
+                Index index path ->
+                    indexEncoder index path
 
-        Unbox path ->
-            Encode.object
-                [ ( "type", Encode.string "Unbox" )
-                , ( "path", pathEncoder path )
-                ]
+                Unbox path ->
+                    unboxEncoder path
 
-        Empty ->
-            Encode.object
-                [ ( "type", Encode.string "Empty" )
-                ]
+                Empty ->
+                    emptyEncoder
+        )
+        |> Serialize.variant2 Index Index.zeroBasedCodec (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant1 Unbox (Serialize.lazy (\() -> pathCodec))
+        |> Serialize.variant0 Empty
+        |> Serialize.finishCustomType
 
 
-pathDecoder : Decode.Decoder Path
-pathDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Index" ->
-                        Decode.map2 Index
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "path" pathDecoder)
+testCodec : Codec e Test
+testCodec =
+    Serialize.customType
+        (\isCtorEncoder isConsEncoder isNilEncoder isTupleEncoder isIntEncoder isChrEncoder isStrEncoder isBoolEncoder test ->
+            case test of
+                IsCtor home name index numAlts opts ->
+                    isCtorEncoder home name index numAlts opts
 
-                    "Unbox" ->
-                        Decode.map Unbox (Decode.field "path" pathDecoder)
+                IsCons ->
+                    isConsEncoder
 
-                    "Empty" ->
-                        Decode.succeed Empty
+                IsNil ->
+                    isNilEncoder
 
-                    _ ->
-                        Decode.fail ("Unknown Path's type: " ++ type_)
-            )
+                IsTuple ->
+                    isTupleEncoder
 
+                IsInt value ->
+                    isIntEncoder value
 
-testEncoder : Test -> Encode.Value
-testEncoder test =
-    case test of
-        IsCtor home name index numAlts opts ->
-            Encode.object
-                [ ( "type", Encode.string "IsCtor" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "numAlts", Encode.int numAlts )
-                , ( "opts", Can.ctorOptsEncoder opts )
-                ]
+                IsChr value ->
+                    isChrEncoder value
 
-        IsCons ->
-            Encode.object
-                [ ( "type", Encode.string "IsCons" )
-                ]
+                IsStr value ->
+                    isStrEncoder value
 
-        IsNil ->
-            Encode.object
-                [ ( "type", Encode.string "IsNil" )
-                ]
-
-        IsTuple ->
-            Encode.object
-                [ ( "type", Encode.string "IsTuple" )
-                ]
-
-        IsInt value ->
-            Encode.object
-                [ ( "type", Encode.string "IsInt" )
-                , ( "value", Encode.int value )
-                ]
-
-        IsChr value ->
-            Encode.object
-                [ ( "type", Encode.string "IsChr" )
-                , ( "value", Encode.string value )
-                ]
-
-        IsStr value ->
-            Encode.object
-                [ ( "type", Encode.string "IsStr" )
-                , ( "value", Encode.string value )
-                ]
-
-        IsBool value ->
-            Encode.object
-                [ ( "type", Encode.string "IsBool" )
-                , ( "value", Encode.bool value )
-                ]
-
-
-testDecoder : Decode.Decoder Test
-testDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "IsCtor" ->
-                        Decode.map5 IsCtor
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "numAlts" Decode.int)
-                            (Decode.field "opts" Can.ctorOptsDecoder)
-
-                    "IsCons" ->
-                        Decode.succeed IsCons
-
-                    "IsNil" ->
-                        Decode.succeed IsNil
-
-                    "IsTuple" ->
-                        Decode.succeed IsTuple
-
-                    "IsInt" ->
-                        Decode.map IsInt (Decode.field "value" Decode.int)
-
-                    "IsChr" ->
-                        Decode.map IsChr (Decode.field "value" Decode.string)
-
-                    "IsStr" ->
-                        Decode.map IsStr (Decode.field "value" Decode.string)
-
-                    "IsBool" ->
-                        Decode.map IsBool (Decode.field "value" Decode.bool)
-
-                    _ ->
-                        Decode.fail ("Unknown Test's type: " ++ type_)
-            )
+                IsBool value ->
+                    isBoolEncoder value
+        )
+        |> Serialize.variant5 IsCtor ModuleName.canonicalCodec Serialize.string Index.zeroBasedCodec Serialize.int Can.ctorOptsCodec
+        |> Serialize.variant0 IsCons
+        |> Serialize.variant0 IsNil
+        |> Serialize.variant0 IsTuple
+        |> Serialize.variant1 IsInt Serialize.int
+        |> Serialize.variant1 IsChr Serialize.string
+        |> Serialize.variant1 IsStr Serialize.string
+        |> Serialize.variant1 IsBool Serialize.bool
+        |> Serialize.finishCustomType

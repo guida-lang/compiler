@@ -24,11 +24,9 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
-import Json.Decode as Decode
-import Json.Encode as CoreEncode
+import Serialize exposing (Codec)
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import Utils.Main as Utils exposing (Chan, MVar)
@@ -56,7 +54,7 @@ json =
 
 terminal : IO Style
 terminal =
-    IO.fmap Terminal (Utils.newMVar (\_ -> CoreEncode.bool True) ())
+    IO.fmap Terminal (Utils.newMVar Serialize.unit ())
 
 
 
@@ -99,7 +97,7 @@ attemptWithStyle style toReport work =
                                     |> IO.bind (\_ -> Exit.exitFailure)
 
                             Terminal mvar ->
-                                Utils.readMVar (Decode.map (\_ -> ()) Decode.bool) mvar
+                                Utils.readMVar Serialize.unit mvar
                                     |> IO.bind (\_ -> Exit.toStderr (toReport x))
                                     |> IO.bind (\_ -> Exit.exitFailure)
             )
@@ -208,25 +206,25 @@ trackDetails style callback =
             callback (Key (\_ -> IO.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan Utils.mVarCodec
                 |> IO.bind
                     (\chan ->
                         Utils.forkIO
-                            (Utils.takeMVar (Decode.succeed ()) mvar
+                            (Utils.takeMVar Serialize.unit mvar
                                 |> IO.bind (\_ -> detailsLoop chan (DState 0 0 0 0 0 0 0))
-                                |> IO.bind (\_ -> Utils.putMVar (\_ -> CoreEncode.bool True) mvar ())
+                                |> IO.bind (\_ -> Utils.putMVar Serialize.unit mvar ())
                             )
                             |> IO.bind
                                 (\_ ->
                                     let
-                                        encoder : Maybe DMsg -> CoreEncode.Value
-                                        encoder =
-                                            Encode.maybe dMsgEncoder
+                                        codec : Codec e (Maybe DMsg)
+                                        codec =
+                                            Serialize.maybe dMsgCodec
                                     in
-                                    callback (Key (Utils.writeChan encoder chan << Just))
+                                    callback (Key (Utils.writeChan codec chan << Just))
                                         |> IO.bind
                                             (\answer ->
-                                                Utils.writeChan encoder chan Nothing
+                                                Utils.writeChan codec chan Nothing
                                                     |> IO.fmap (\_ -> answer)
                                             )
                                 )
@@ -235,7 +233,7 @@ trackDetails style callback =
 
 detailsLoop : Chan (Maybe DMsg) -> DState -> IO ()
 detailsLoop chan ((DState total _ _ _ _ built _) as state) =
-    Utils.readChan (Decode.maybe dMsgDecoder) chan
+    Utils.readChan (Serialize.maybe dMsgCodec) chan
         |> IO.bind
             (\msg ->
                 case msg of
@@ -369,8 +367,8 @@ type alias BResult a =
     Result Exit.BuildProblem a
 
 
-trackBuild : Decode.Decoder a -> (a -> CoreEncode.Value) -> Style -> (BKey -> IO (BResult a)) -> IO (BResult a)
-trackBuild decoder encoder style callback =
+trackBuild : Codec (Serialize.Error e) a -> Style -> (BKey -> IO (BResult a)) -> IO (BResult a)
+trackBuild codec style callback =
     case style of
         Silent ->
             callback (Key (\_ -> IO.pure ()))
@@ -379,24 +377,24 @@ trackBuild decoder encoder style callback =
             callback (Key (\_ -> IO.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan Utils.mVarCodec
                 |> IO.bind
                     (\chan ->
                         let
-                            chanEncoder : Result BMsg (BResult a) -> CoreEncode.Value
-                            chanEncoder =
-                                Encode.result bMsgEncoder (bResultEncoder encoder)
+                            chanCodec : Codec (Serialize.Error e) (Result BMsg (BResult a))
+                            chanCodec =
+                                Serialize.result bMsgCodec (bResultCodec codec)
                         in
                         Utils.forkIO
-                            (Utils.takeMVar (Decode.succeed ()) mvar
+                            (Utils.takeMVar Serialize.unit mvar
                                 |> IO.bind (\_ -> putStrFlush "Compiling ...")
-                                |> IO.bind (\_ -> buildLoop decoder chan 0)
-                                |> IO.bind (\_ -> Utils.putMVar (\_ -> CoreEncode.bool True) mvar ())
+                                |> IO.bind (\_ -> buildLoop codec chan 0)
+                                |> IO.bind (\_ -> Utils.putMVar Serialize.unit mvar ())
                             )
-                            |> IO.bind (\_ -> callback (Key (Utils.writeChan chanEncoder chan << Err)))
+                            |> IO.bind (\_ -> callback (Key (Utils.writeChan chanCodec chan << Err)))
                             |> IO.bind
                                 (\result ->
-                                    Utils.writeChan chanEncoder chan (Ok result)
+                                    Utils.writeChan chanCodec chan (Ok result)
                                         |> IO.fmap (\_ -> result)
                                 )
                     )
@@ -406,9 +404,9 @@ type BMsg
     = BDone
 
 
-buildLoop : Decode.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> IO ()
-buildLoop decoder chan done =
-    Utils.readChan (DecodeX.result bMsgDecoder (bResultDecoder decoder)) chan
+buildLoop : Codec (Serialize.Error e) a -> Chan (Result BMsg (BResult a)) -> Int -> IO ()
+buildLoop codec chan done =
+    Utils.readChan (Serialize.result bMsgCodec (bResultCodec codec)) chan
         |> IO.bind
             (\msg ->
                 case msg of
@@ -419,7 +417,7 @@ buildLoop decoder chan done =
                                 done + 1
                         in
                         putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
-                            |> IO.bind (\_ -> buildLoop decoder chan done1)
+                            |> IO.bind (\_ -> buildLoop codec chan done1)
 
                     Ok result ->
                         let
@@ -482,7 +480,7 @@ reportGenerate style names output =
             IO.pure ()
 
         Terminal mvar ->
-            Utils.readMVar (Decode.map (\_ -> ()) Decode.bool) mvar
+            Utils.readMVar Serialize.unit mvar
                 |> IO.bind
                     (\_ ->
                         let
@@ -570,112 +568,52 @@ putStrFlush str =
 -- ENCODERS and DECODERS
 
 
-dMsgEncoder : DMsg -> CoreEncode.Value
-dMsgEncoder dMsg =
-    case dMsg of
-        DStart numDependencies ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DStart" )
-                , ( "numDependencies", CoreEncode.int numDependencies )
-                ]
+dMsgCodec : Codec e DMsg
+dMsgCodec =
+    Serialize.customType
+        (\dStartEncoder dCachedEncoder dRequestedEncoder dReceivedEncoder dFailedEncoder dBuiltEncoder dBrokenEncoder dMsg ->
+            case dMsg of
+                DStart numDependencies ->
+                    dStartEncoder numDependencies
 
-        DCached ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DCached" )
-                ]
+                DCached ->
+                    dCachedEncoder
 
-        DRequested ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DRequested" )
-                ]
+                DRequested ->
+                    dRequestedEncoder
 
-        DReceived pkg vsn ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DReceived" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                ]
+                DReceived pkg vsn ->
+                    dReceivedEncoder pkg vsn
 
-        DFailed pkg vsn ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DFailed" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                ]
+                DFailed pkg vsn ->
+                    dFailedEncoder pkg vsn
 
-        DBuilt ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DBuilt" )
-                ]
+                DBuilt ->
+                    dBuiltEncoder
 
-        DBroken ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "DBroken" )
-                ]
+                DBroken ->
+                    dBrokenEncoder
+        )
+        |> Serialize.variant1 DStart Serialize.int
+        |> Serialize.variant0 DCached
+        |> Serialize.variant0 DRequested
+        |> Serialize.variant2 DReceived Pkg.nameCodec V.versionCodec
+        |> Serialize.variant2 DFailed Pkg.nameCodec V.versionCodec
+        |> Serialize.variant0 DBuilt
+        |> Serialize.variant0 DBroken
+        |> Serialize.finishCustomType
 
 
-dMsgDecoder : Decode.Decoder DMsg
-dMsgDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DStart" ->
-                        Decode.map DStart (Decode.field "numDependencies" Decode.int)
-
-                    "DCached" ->
-                        Decode.succeed DCached
-
-                    "DRequested" ->
-                        Decode.succeed DRequested
-
-                    "DReceived" ->
-                        Decode.map2 DReceived
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "vsn" V.versionDecoder)
-
-                    "DFailed" ->
-                        Decode.map2 DFailed
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "vsn" V.versionDecoder)
-
-                    "DBuilt" ->
-                        Decode.succeed DBuilt
-
-                    "DBroken" ->
-                        Decode.succeed DBroken
-
-                    _ ->
-                        Decode.fail ("Failed to decode DMsg's type: " ++ type_)
-            )
+bMsgCodec : Codec e BMsg
+bMsgCodec =
+    Serialize.customType
+        (\bMsgCodecEncoder BDone ->
+            bMsgCodecEncoder
+        )
+        |> Serialize.variant0 BDone
+        |> Serialize.finishCustomType
 
 
-bMsgEncoder : BMsg -> CoreEncode.Value
-bMsgEncoder _ =
-    CoreEncode.object
-        [ ( "type", CoreEncode.string "BDone" )
-        ]
-
-
-bMsgDecoder : Decode.Decoder BMsg
-bMsgDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BDone" ->
-                        Decode.succeed BDone
-
-                    _ ->
-                        Decode.fail ("Failed to decode BDone's type: " ++ type_)
-            )
-
-
-bResultEncoder : (a -> CoreEncode.Value) -> BResult a -> CoreEncode.Value
-bResultEncoder encoder bResult =
-    Encode.result Exit.buildProblemEncoder encoder bResult
-
-
-bResultDecoder : Decode.Decoder a -> Decode.Decoder (BResult a)
-bResultDecoder decoder =
-    DecodeX.result Exit.buildProblemDecoder decoder
+bResultCodec : Codec (Serialize.Error e) a -> Codec (Serialize.Error e) (BResult a)
+bResultCodec codec =
+    Serialize.result Exit.buildProblemCodec codec

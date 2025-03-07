@@ -8,8 +8,7 @@ module Compiler.Reporting.Error.Type exposing
     , PContext(..)
     , PExpected(..)
     , SubContext(..)
-    , errorDecoder
-    , errorEncoder
+    , errorCodec
     , ptypeReplace
     , toReport
     , typeReplace
@@ -18,8 +17,6 @@ module Compiler.Reporting.Error.Type exposing
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -27,10 +24,10 @@ import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
+import Compiler.Serialize as S
 import Compiler.Type.Error as T
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -2524,711 +2521,318 @@ toInfiniteReport source localizer region name overallType =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        BadExpr region category actualType expected ->
-            Encode.object
-                [ ( "type", Encode.string "BadExpr" )
-                , ( "region", A.regionEncoder region )
-                , ( "category", categoryEncoder category )
-                , ( "actualType", T.typeEncoder actualType )
-                , ( "expected", expectedEncoder T.typeEncoder expected )
-                ]
-
-        BadPattern region category tipe expected ->
-            Encode.object
-                [ ( "type", Encode.string "BadPattern" )
-                , ( "region", A.regionEncoder region )
-                , ( "category", pCategoryEncoder category )
-                , ( "tipe", T.typeEncoder tipe )
-                , ( "expected", pExpectedEncoder T.typeEncoder expected )
-                ]
-
-        InfiniteType region name overallType ->
-            Encode.object
-                [ ( "type", Encode.string "InfiniteType" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "overallType", T.typeEncoder overallType )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadExpr" ->
-                        Decode.map4 BadExpr
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "category" categoryDecoder)
-                            (Decode.field "actualType" T.typeDecoder)
-                            (Decode.field "expected" (expectedDecoder T.typeDecoder))
-
-                    "BadPattern" ->
-                        Decode.map4 BadPattern
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "category" pCategoryDecoder)
-                            (Decode.field "tipe" T.typeDecoder)
-                            (Decode.field "expected" (pExpectedDecoder T.typeDecoder))
-
-                    "InfiniteType" ->
-                        Decode.map3 InfiniteType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "overallType" T.typeDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
-
-
-categoryEncoder : Category -> Encode.Value
-categoryEncoder category =
-    case category of
-        List ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                ]
-
-        Number ->
-            Encode.object
-                [ ( "type", Encode.string "Number" )
-                ]
-
-        Float ->
-            Encode.object
-                [ ( "type", Encode.string "Float" )
-                ]
-
-        String ->
-            Encode.object
-                [ ( "type", Encode.string "String" )
-                ]
-
-        Char ->
-            Encode.object
-                [ ( "type", Encode.string "Char" )
-                ]
-
-        If ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                ]
-
-        Case ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                ]
-
-        CallResult maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "CallResult" )
-                , ( "maybeName", maybeNameEncoder maybeName )
-                ]
-
-        Lambda ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                ]
-
-        Accessor field ->
-            Encode.object
-                [ ( "type", Encode.string "Accessor" )
-                , ( "field", Encode.string field )
-                ]
-
-        Access field ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "field", Encode.string field )
-                ]
-
-        Record ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                ]
-
-        Tuple ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                ]
-
-        Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
-
-        Shader ->
-            Encode.object
-                [ ( "type", Encode.string "Shader" )
-                ]
-
-        Effects ->
-            Encode.object
-                [ ( "type", Encode.string "Effects" )
-                ]
-
-        Local name ->
-            Encode.object
-                [ ( "type", Encode.string "Local" )
-                , ( "name", Encode.string name )
-                ]
-
-        Foreign name ->
-            Encode.object
-                [ ( "type", Encode.string "Foreign" )
-                , ( "name", Encode.string name )
-                ]
-
-
-categoryDecoder : Decode.Decoder Category
-categoryDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "List" ->
-                        Decode.succeed List
-
-                    "Number" ->
-                        Decode.succeed Number
-
-                    "Float" ->
-                        Decode.succeed Float
-
-                    "String" ->
-                        Decode.succeed String
-
-                    "Char" ->
-                        Decode.succeed Char
-
-                    "If" ->
-                        Decode.succeed If
-
-                    "Case" ->
-                        Decode.succeed Case
-
-                    "CallResult" ->
-                        Decode.map CallResult (Decode.field "maybeName" maybeNameDecoder)
-
-                    "Lambda" ->
-                        Decode.succeed Lambda
-
-                    "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
-
-                    "Access" ->
-                        Decode.map Access (Decode.field "field" Decode.string)
-
-                    "Record" ->
-                        Decode.succeed Record
-
-                    "Tuple" ->
-                        Decode.succeed Tuple
-
-                    "Unit" ->
-                        Decode.succeed Unit
-
-                    "Shader" ->
-                        Decode.succeed Shader
-
-                    "Effects" ->
-                        Decode.succeed Effects
-
-                    "Local" ->
-                        Decode.map Local (Decode.field "name" Decode.string)
-
-                    "Foreign" ->
-                        Decode.map Foreign (Decode.field "name" Decode.string)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Category's type: " ++ type_)
-            )
-
-
-expectedEncoder : (a -> Encode.Value) -> Expected a -> Encode.Value
-expectedEncoder encoder expected =
-    case expected of
-        NoExpectation expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "NoExpectation" )
-                , ( "expectedType", encoder expectedType )
-                ]
-
-        FromContext region context expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "FromContext" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", contextEncoder context )
-                , ( "expectedType", encoder expectedType )
-                ]
-
-        FromAnnotation name arity subContext expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "FromAnnotation" )
-                , ( "name", Encode.string name )
-                , ( "arity", Encode.int arity )
-                , ( "subContext", subContextEncoder subContext )
-                , ( "expectedType", encoder expectedType )
-                ]
-
-
-expectedDecoder : Decode.Decoder a -> Decode.Decoder (Expected a)
-expectedDecoder decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoExpectation" ->
-                        Decode.map NoExpectation
-                            (Decode.field "expectedType" decoder)
-
-                    "FromContext" ->
-                        Decode.map3 FromContext
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" contextDecoder)
-                            (Decode.field "expectedType" decoder)
-
-                    "FromAnnotation" ->
-                        Decode.map4 FromAnnotation
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "arity" Decode.int)
-                            (Decode.field "subContext" subContextDecoder)
-                            (Decode.field "expectedType" decoder)
-
-                    _ ->
-                        Decode.fail ("Unknown Expected's type: " ++ type_)
-            )
-
-
-contextDecoder : Decode.Decoder Context
-contextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ListEntry" ->
-                        Decode.map ListEntry (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "Negate" ->
-                        Decode.succeed Negate
-
-                    "OpLeft" ->
-                        Decode.map OpLeft (Decode.field "op" Decode.string)
-
-                    "OpRight" ->
-                        Decode.map OpRight (Decode.field "op" Decode.string)
-
-                    "IfCondition" ->
-                        Decode.succeed IfCondition
-
-                    "IfBranch" ->
-                        Decode.map IfBranch (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "CaseBranch" ->
-                        Decode.map CaseBranch (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "CallArity" ->
-                        Decode.map2 CallArity
-                            (Decode.field "maybeFuncName" maybeNameDecoder)
-                            (Decode.field "numGivenArgs" Decode.int)
-
-                    "CallArg" ->
-                        Decode.map2 CallArg
-                            (Decode.field "maybeFuncName" maybeNameDecoder)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "RecordAccess" ->
-                        Decode.map4 RecordAccess
-                            (Decode.field "recordRegion" A.regionDecoder)
-                            (Decode.field "maybeName" (Decode.nullable Decode.string))
-                            (Decode.field "fieldRegion" A.regionDecoder)
-                            (Decode.field "field" Decode.string)
-
-                    "RecordUpdateKeys" ->
-                        Decode.map2 RecordUpdateKeys
-                            (Decode.field "record" Decode.string)
-                            (Decode.field "expectedFields" (DecodeX.assocListDict identity Decode.string Can.fieldUpdateDecoder))
-
-                    "RecordUpdateValue" ->
-                        Decode.map RecordUpdateValue (Decode.field "field" Decode.string)
-
-                    "Destructure" ->
-                        Decode.succeed Destructure
-
-                    _ ->
-                        Decode.fail ("Unknown Context's type: " ++ type_)
-            )
-
-
-contextEncoder : Context -> Encode.Value
-contextEncoder context =
-    case context of
-        ListEntry index ->
-            Encode.object
-                [ ( "type", Encode.string "ListEntry" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        Negate ->
-            Encode.object
-                [ ( "type", Encode.string "Negate" )
-                ]
-
-        OpLeft op ->
-            Encode.object
-                [ ( "type", Encode.string "OpLeft" )
-                , ( "op", Encode.string op )
-                ]
-
-        OpRight op ->
-            Encode.object
-                [ ( "type", Encode.string "OpRight" )
-                , ( "op", Encode.string op )
-                ]
-
-        IfCondition ->
-            Encode.object
-                [ ( "type", Encode.string "IfCondition" )
-                ]
-
-        IfBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "IfBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        CaseBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "CaseBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        CallArity maybeFuncName numGivenArgs ->
-            Encode.object
-                [ ( "type", Encode.string "CallArity" )
-                , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
-                , ( "numGivenArgs", Encode.int numGivenArgs )
-                ]
-
-        CallArg maybeFuncName index ->
-            Encode.object
-                [ ( "type", Encode.string "CallArg" )
-                , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        RecordAccess recordRegion maybeName fieldRegion field ->
-            Encode.object
-                [ ( "type", Encode.string "RecordAccess" )
-                , ( "recordRegion", A.regionEncoder recordRegion )
-                , ( "maybeName", EncodeX.maybe Encode.string maybeName )
-                , ( "fieldRegion", A.regionEncoder fieldRegion )
-                , ( "field", Encode.string field )
-                ]
-
-        RecordUpdateKeys record expectedFields ->
-            Encode.object
-                [ ( "type", Encode.string "RecordUpdateKeys" )
-                , ( "record", Encode.string record )
-                , ( "expectedFields", EncodeX.assocListDict compare Encode.string Can.fieldUpdateEncoder expectedFields )
-                ]
-
-        RecordUpdateValue field ->
-            Encode.object
-                [ ( "type", Encode.string "RecordUpdateValue" )
-                , ( "field", Encode.string field )
-                ]
-
-        Destructure ->
-            Encode.object
-                [ ( "type", Encode.string "Destructure" )
-                ]
-
-
-subContextDecoder : Decode.Decoder SubContext
-subContextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TypedIfBranch" ->
-                        Decode.map TypedIfBranch
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "TypedCaseBranch" ->
-                        Decode.map TypedCaseBranch
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "TypedBody" ->
-                        Decode.succeed TypedBody
-
-                    _ ->
-                        Decode.fail ("Unknown SubContext's type: " ++ type_)
-            )
-
-
-subContextEncoder : SubContext -> Encode.Value
-subContextEncoder subContext =
-    case subContext of
-        TypedIfBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "TypedIfBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        TypedCaseBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "TypedCaseBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        TypedBody ->
-            Encode.object
-                [ ( "type", Encode.string "TypedBody" )
-                ]
-
-
-pCategoryEncoder : PCategory -> Encode.Value
-pCategoryEncoder pCategory =
-    case pCategory of
-        PRecord ->
-            Encode.object
-                [ ( "type", Encode.string "PRecord" )
-                ]
-
-        PUnit ->
-            Encode.object
-                [ ( "type", Encode.string "PUnit" )
-                ]
-
-        PTuple ->
-            Encode.object
-                [ ( "type", Encode.string "PTuple" )
-                ]
-
-        PList ->
-            Encode.object
-                [ ( "type", Encode.string "PList" )
-                ]
-
-        PCtor name ->
-            Encode.object
-                [ ( "type", Encode.string "PCtor" )
-                , ( "name", Encode.string name )
-                ]
-
-        PInt ->
-            Encode.object
-                [ ( "type", Encode.string "PInt" )
-                ]
-
-        PStr ->
-            Encode.object
-                [ ( "type", Encode.string "PStr" )
-                ]
-
-        PChr ->
-            Encode.object
-                [ ( "type", Encode.string "PChr" )
-                ]
-
-        PBool ->
-            Encode.object
-                [ ( "type", Encode.string "PBool" )
-                ]
-
-
-pCategoryDecoder : Decode.Decoder PCategory
-pCategoryDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecord" ->
-                        Decode.succeed PRecord
-
-                    "PUnit" ->
-                        Decode.succeed PUnit
-
-                    "PTuple" ->
-                        Decode.succeed PTuple
-
-                    "PList" ->
-                        Decode.succeed PList
-
-                    "PCtor" ->
-                        Decode.map PCtor (Decode.field "name" Decode.string)
-
-                    "PInt" ->
-                        Decode.succeed PInt
-
-                    "PStr" ->
-                        Decode.succeed PStr
-
-                    "PChr" ->
-                        Decode.succeed PChr
-
-                    "PBool" ->
-                        Decode.succeed PBool
-
-                    _ ->
-                        Decode.fail ("Unknown PCategory's type: " ++ type_)
-            )
-
-
-pExpectedEncoder : (a -> Encode.Value) -> PExpected a -> Encode.Value
-pExpectedEncoder encoder pExpected =
-    case pExpected of
-        PNoExpectation expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "PNoExpectation" )
-                , ( "expectedType", encoder expectedType )
-                ]
-
-        PFromContext region context expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "PFromContext" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", pContextEncoder context )
-                , ( "expectedType", encoder expectedType )
-                ]
-
-
-pExpectedDecoder : Decode.Decoder a -> Decode.Decoder (PExpected a)
-pExpectedDecoder decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PNoExpectation" ->
-                        Decode.map PNoExpectation (Decode.field "expectedType" decoder)
-
-                    --     | PFromContext A.Region PContext tipe
-                    "PFromContext" ->
-                        Decode.map3 PFromContext
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" pContextDecoder)
-                            (Decode.field "expectedType" decoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode PExpected's type: " ++ type_)
-            )
-
-
-maybeNameEncoder : MaybeName -> Encode.Value
-maybeNameEncoder maybeName =
-    case maybeName of
-        FuncName name ->
-            Encode.object
-                [ ( "type", Encode.string "FuncName" )
-                , ( "name", Encode.string name )
-                ]
-
-        CtorName name ->
-            Encode.object
-                [ ( "type", Encode.string "CtorName" )
-                , ( "name", Encode.string name )
-                ]
-
-        OpName op ->
-            Encode.object
-                [ ( "type", Encode.string "OpName" )
-                , ( "op", Encode.string op )
-                ]
-
-        NoName ->
-            Encode.object
-                [ ( "type", Encode.string "NoName" )
-                ]
-
-
-maybeNameDecoder : Decode.Decoder MaybeName
-maybeNameDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FuncName" ->
-                        Decode.map FuncName (Decode.field "name" Decode.string)
-
-                    "CtorName" ->
-                        Decode.map CtorName (Decode.field "name" Decode.string)
-
-                    "OpName" ->
-                        Decode.map OpName (Decode.field "op" Decode.string)
-
-                    "NoName" ->
-                        Decode.succeed NoName
-
-                    _ ->
-                        Decode.fail ("Failed to decode MaybeName's type: " ++ type_)
-            )
-
-
-pContextEncoder : PContext -> Encode.Value
-pContextEncoder pContext =
-    case pContext of
-        PTypedArg name index ->
-            Encode.object
-                [ ( "type", Encode.string "PTypedArg" )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        PCaseMatch index ->
-            Encode.object
-                [ ( "type", Encode.string "PCaseMatch" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        PCtorArg name index ->
-            Encode.object
-                [ ( "type", Encode.string "PCtorArg" )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        PListEntry index ->
-            Encode.object
-                [ ( "type", Encode.string "PListEntry" )
-                , ( "index", Index.zeroBasedEncoder index )
-                ]
-
-        PTail ->
-            Encode.object
-                [ ( "type", Encode.string "PTail" )
-                ]
-
-
-pContextDecoder : Decode.Decoder PContext
-pContextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PTypedArg" ->
-                        Decode.map2 PTypedArg
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "PCaseMatch" ->
-                        Decode.map PCaseMatch (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "PCtorArg" ->
-                        Decode.map2 PCtorArg
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "PListEntry" ->
-                        Decode.map PListEntry (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "PTail" ->
-                        Decode.succeed PTail
-
-                    _ ->
-                        Decode.fail ("Failed to decode PContext's type: " ++ type_)
-            )
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\badExprEncoder badPatternEncoder infiniteTypeEncoder value ->
+            case value of
+                BadExpr region category actualType expected ->
+                    badExprEncoder region category actualType expected
+
+                BadPattern region category tipe expected ->
+                    badPatternEncoder region category tipe expected
+
+                InfiniteType region name overallType ->
+                    infiniteTypeEncoder region name overallType
+        )
+        |> Serialize.variant4 BadExpr A.regionCodec categoryCodec T.typeCodec (expectedCodec T.typeCodec)
+        |> Serialize.variant4 BadPattern A.regionCodec pCategoryCodec T.typeCodec (pExpectedCodec T.typeCodec)
+        |> Serialize.variant3 InfiniteType A.regionCodec Serialize.string T.typeCodec
+        |> Serialize.finishCustomType
+
+
+categoryCodec : Codec e Category
+categoryCodec =
+    Serialize.customType
+        (\listEncoder numberEncoder floatEncoder stringEncoder charEncoder ifEncoder caseEncoder callResultEncoder lambdaEncoder accessorEncoder accessEncoder recordEncoder tupleEncoder unitEncoder shaderEncoder effectsEncoder localEncoder foreignEncoder value ->
+            case value of
+                List ->
+                    listEncoder
+
+                Number ->
+                    numberEncoder
+
+                Float ->
+                    floatEncoder
+
+                String ->
+                    stringEncoder
+
+                Char ->
+                    charEncoder
+
+                If ->
+                    ifEncoder
+
+                Case ->
+                    caseEncoder
+
+                CallResult maybeName ->
+                    callResultEncoder maybeName
+
+                Lambda ->
+                    lambdaEncoder
+
+                Accessor field ->
+                    accessorEncoder field
+
+                Access field ->
+                    accessEncoder field
+
+                Record ->
+                    recordEncoder
+
+                Tuple ->
+                    tupleEncoder
+
+                Unit ->
+                    unitEncoder
+
+                Shader ->
+                    shaderEncoder
+
+                Effects ->
+                    effectsEncoder
+
+                Local name ->
+                    localEncoder name
+
+                Foreign name ->
+                    foreignEncoder name
+        )
+        |> Serialize.variant0 List
+        |> Serialize.variant0 Number
+        |> Serialize.variant0 Float
+        |> Serialize.variant0 String
+        |> Serialize.variant0 Char
+        |> Serialize.variant0 If
+        |> Serialize.variant0 Case
+        |> Serialize.variant1 CallResult maybeNameCodec
+        |> Serialize.variant0 Lambda
+        |> Serialize.variant1 Accessor Serialize.string
+        |> Serialize.variant1 Access Serialize.string
+        |> Serialize.variant0 Record
+        |> Serialize.variant0 Tuple
+        |> Serialize.variant0 Unit
+        |> Serialize.variant0 Shader
+        |> Serialize.variant0 Effects
+        |> Serialize.variant1 Local Serialize.string
+        |> Serialize.variant1 Foreign Serialize.string
+        |> Serialize.finishCustomType
+
+
+expectedCodec : Codec e tipe -> Codec e (Expected tipe)
+expectedCodec tipe =
+    Serialize.customType
+        (\noExpectationEncoder fromContextEncoder fromAnnotationEncoder value ->
+            case value of
+                NoExpectation expectedType ->
+                    noExpectationEncoder expectedType
+
+                FromContext region context expectedType ->
+                    fromContextEncoder region context expectedType
+
+                FromAnnotation name arity subContext expectedType ->
+                    fromAnnotationEncoder name arity subContext expectedType
+        )
+        |> Serialize.variant1 NoExpectation tipe
+        |> Serialize.variant3 FromContext A.regionCodec contextCodec tipe
+        |> Serialize.variant4 FromAnnotation Serialize.string Serialize.int subContextCodec tipe
+        |> Serialize.finishCustomType
+
+
+contextCodec : Codec e Context
+contextCodec =
+    Serialize.customType
+        (\listEntryEncoder negateEncoder opLeftEncoder opRightEncoder ifConditionEncoder ifBranchEncoder caseBranchEncoder callArityEncoder callArgEncoder recordAccessEncoder recordUpdateKeysEncoder recordUpdateValueEncoder destructureEncoder value ->
+            case value of
+                ListEntry index ->
+                    listEntryEncoder index
+
+                Negate ->
+                    negateEncoder
+
+                OpLeft op ->
+                    opLeftEncoder op
+
+                OpRight op ->
+                    opRightEncoder op
+
+                IfCondition ->
+                    ifConditionEncoder
+
+                IfBranch index ->
+                    ifBranchEncoder index
+
+                CaseBranch index ->
+                    caseBranchEncoder index
+
+                CallArity maybeFuncName numGivenArgs ->
+                    callArityEncoder maybeFuncName numGivenArgs
+
+                CallArg maybeFuncName index ->
+                    callArgEncoder maybeFuncName index
+
+                RecordAccess recordRegion maybeName fieldRegion field ->
+                    recordAccessEncoder recordRegion maybeName fieldRegion field
+
+                RecordUpdateKeys record expectedFields ->
+                    recordUpdateKeysEncoder record expectedFields
+
+                RecordUpdateValue field ->
+                    recordUpdateValueEncoder field
+
+                Destructure ->
+                    destructureEncoder
+        )
+        |> Serialize.variant1 ListEntry Index.zeroBasedCodec
+        |> Serialize.variant0 Negate
+        |> Serialize.variant1 OpLeft Serialize.string
+        |> Serialize.variant1 OpRight Serialize.string
+        |> Serialize.variant0 IfCondition
+        |> Serialize.variant1 IfBranch Index.zeroBasedCodec
+        |> Serialize.variant1 CaseBranch Index.zeroBasedCodec
+        |> Serialize.variant2 CallArity maybeNameCodec Serialize.int
+        |> Serialize.variant2 CallArg maybeNameCodec Index.zeroBasedCodec
+        |> Serialize.variant4
+            RecordAccess
+            A.regionCodec
+            (Serialize.maybe Serialize.string)
+            A.regionCodec
+            Serialize.string
+        |> Serialize.variant2 RecordUpdateKeys Serialize.string (S.assocListDict identity compare Serialize.string Can.fieldUpdateCodec)
+        |> Serialize.variant1 RecordUpdateValue Serialize.string
+        |> Serialize.variant0 Destructure
+        |> Serialize.finishCustomType
+
+
+subContextCodec : Codec e SubContext
+subContextCodec =
+    Serialize.customType
+        (\typedIfBranchEncoder typedCaseBranchEncoder typedBodyEncoder value ->
+            case value of
+                TypedIfBranch index ->
+                    typedIfBranchEncoder index
+
+                TypedCaseBranch index ->
+                    typedCaseBranchEncoder index
+
+                TypedBody ->
+                    typedBodyEncoder
+        )
+        |> Serialize.variant1 TypedIfBranch Index.zeroBasedCodec
+        |> Serialize.variant1 TypedCaseBranch Index.zeroBasedCodec
+        |> Serialize.variant0 TypedBody
+        |> Serialize.finishCustomType
+
+
+pCategoryCodec : Codec e PCategory
+pCategoryCodec =
+    Serialize.customType
+        (\pRecordEncoder pUnitEncoder pTupleEncoder pListEncoder pCtorEncoder pIntEncoder pStrEncoder pChrEncoder pBoolEncoder value ->
+            case value of
+                PRecord ->
+                    pRecordEncoder
+
+                PUnit ->
+                    pUnitEncoder
+
+                PTuple ->
+                    pTupleEncoder
+
+                PList ->
+                    pListEncoder
+
+                PCtor name ->
+                    pCtorEncoder name
+
+                PInt ->
+                    pIntEncoder
+
+                PStr ->
+                    pStrEncoder
+
+                PChr ->
+                    pChrEncoder
+
+                PBool ->
+                    pBoolEncoder
+        )
+        |> Serialize.variant0 PRecord
+        |> Serialize.variant0 PUnit
+        |> Serialize.variant0 PTuple
+        |> Serialize.variant0 PList
+        |> Serialize.variant1 PCtor Serialize.string
+        |> Serialize.variant0 PInt
+        |> Serialize.variant0 PStr
+        |> Serialize.variant0 PChr
+        |> Serialize.variant0 PBool
+        |> Serialize.finishCustomType
+
+
+pExpectedCodec : Codec e tipe -> Codec e (PExpected tipe)
+pExpectedCodec tipe =
+    Serialize.customType
+        (\pNoExpectationEncoder pFromContextEncoder value ->
+            case value of
+                PNoExpectation expectedType ->
+                    pNoExpectationEncoder expectedType
+
+                PFromContext region context expectedType ->
+                    pFromContextEncoder region context expectedType
+        )
+        |> Serialize.variant1 PNoExpectation tipe
+        |> Serialize.variant3 PFromContext A.regionCodec pContextCodec tipe
+        |> Serialize.finishCustomType
+
+
+maybeNameCodec : Codec e MaybeName
+maybeNameCodec =
+    Serialize.customType
+        (\funcNameEncoder ctorNameEncoder opNameEncoder noNameEncoder value ->
+            case value of
+                FuncName name ->
+                    funcNameEncoder name
+
+                CtorName name ->
+                    ctorNameEncoder name
+
+                OpName op ->
+                    opNameEncoder op
+
+                NoName ->
+                    noNameEncoder
+        )
+        |> Serialize.variant1 FuncName Serialize.string
+        |> Serialize.variant1 CtorName Serialize.string
+        |> Serialize.variant1 OpName Serialize.string
+        |> Serialize.variant0 NoName
+        |> Serialize.finishCustomType
+
+
+pContextCodec : Codec e PContext
+pContextCodec =
+    Serialize.customType
+        (\pTypedArgEncoder pCaseMatchEncoder pCtorArgEncoder pListEntryEncoder pTailEncoder value ->
+            case value of
+                PTypedArg name index ->
+                    pTypedArgEncoder name index
+
+                PCaseMatch index ->
+                    pCaseMatchEncoder index
+
+                PCtorArg name index ->
+                    pCtorArgEncoder name index
+
+                PListEntry index ->
+                    pListEntryEncoder index
+
+                PTail ->
+                    pTailEncoder
+        )
+        |> Serialize.variant2 PTypedArg Serialize.string Index.zeroBasedCodec
+        |> Serialize.variant1 PCaseMatch Index.zeroBasedCodec
+        |> Serialize.variant2 PCtorArg Serialize.string Index.zeroBasedCodec
+        |> Serialize.variant1 PListEntry Index.zeroBasedCodec
+        |> Serialize.variant0 PTail
+        |> Serialize.finishCustomType

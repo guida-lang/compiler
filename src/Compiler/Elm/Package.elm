@@ -14,8 +14,7 @@ module Compiler.Elm.Package exposing
     , kernel
     , keyDecoder
     , linearAlgebra
-    , nameDecoder
-    , nameEncoder
+    , nameCodec
     , nearbyNames
     , parser
     , suggestions
@@ -32,8 +31,7 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -369,16 +367,11 @@ chompName isGoodChar src pos end prevWasDash =
 -- ENCODERS and DECODERS
 
 
-nameEncoder : Name -> Encode.Value
-nameEncoder ( author, project ) =
-    Encode.object
-        [ ( "author", Encode.string author )
-        , ( "project", Encode.string project )
-        ]
-
-
-nameDecoder : Decode.Decoder Name
-nameDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "author" Decode.string)
-        (Decode.field "project" Decode.string)
+nameCodec : Codec e Name
+nameCodec =
+    Serialize.customType
+        (\nameCodecEncoder ( author, project ) ->
+            nameCodecEncoder author project
+        )
+        |> Serialize.variant2 Tuple.pair Serialize.string Serialize.string
+        |> Serialize.finishCustomType

@@ -1,101 +1,22 @@
 module Compiler.Json.Encode exposing
     ( Value(..)
     , array
-    , assocListDict
     , bool
     , chars
     , dict
     , encodeUgly
-    , everySet
     , int
-    , jsonPair
     , list
-    , maybe
     , name
-    , nonempty
     , null
-    , number
     , object
-    , oneOrMore
-    , result
     , string
-    , toJsonValue
     , write
     , writeUgly
     )
 
-import Compiler.Data.NonEmptyList as NE
-import Compiler.Data.OneOrMore exposing (OneOrMore(..))
 import Data.Map as Dict exposing (Dict)
-import Data.Set as EverySet exposing (EverySet)
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
-
-
-
--- CORE HELPERS
-
-
-assocListDict : (k -> k -> Order) -> (k -> Encode.Value) -> (v -> Encode.Value) -> Dict c k v -> Encode.Value
-assocListDict keyComparison keyEncoder valueEncoder =
-    Encode.list (jsonPair keyEncoder valueEncoder) << List.reverse << Dict.toList keyComparison
-
-
-jsonPair : (a -> Encode.Value) -> (b -> Encode.Value) -> ( a, b ) -> Encode.Value
-jsonPair firstEncoder secondEncoder ( a, b ) =
-    Encode.object
-        [ ( "a", firstEncoder a )
-        , ( "b", secondEncoder b )
-        ]
-
-
-everySet : (a -> a -> Order) -> (a -> Encode.Value) -> EverySet c a -> Encode.Value
-everySet keyComparison encoder =
-    Encode.list encoder << List.reverse << EverySet.toList keyComparison
-
-
-result : (x -> Encode.Value) -> (a -> Encode.Value) -> Result x a -> Encode.Value
-result errEncoder successEncoder resultValue =
-    case resultValue of
-        Ok value ->
-            Encode.object
-                [ ( "type", Encode.string "Ok" )
-                , ( "value", successEncoder value )
-                ]
-
-        Err err ->
-            Encode.object
-                [ ( "type", Encode.string "Err" )
-                , ( "value", errEncoder err )
-                ]
-
-
-maybe : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybe encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
-
-
-nonempty : (a -> Encode.Value) -> NE.Nonempty a -> Encode.Value
-nonempty encoder (NE.Nonempty x xs) =
-    Encode.list encoder (x :: xs)
-
-
-oneOrMore : (a -> Encode.Value) -> OneOrMore a -> Encode.Value
-oneOrMore encoder oneOrMore_ =
-    case oneOrMore_ of
-        One value ->
-            Encode.object [ ( "one", encoder value ) ]
-
-        More left right ->
-            Encode.object
-                [ ( "left", oneOrMore encoder left )
-                , ( "right", oneOrMore encoder right )
-                ]
 
 
 
@@ -140,11 +61,6 @@ bool =
 int : Int -> Value
 int =
     Integer
-
-
-number : Float -> Value
-number =
-    Number
 
 
 null : Value
@@ -359,32 +275,3 @@ encodeObject indent first rest =
 encodeField : String -> ( String, Value ) -> String
 encodeField indent ( key, value ) =
     "\"" ++ key ++ "\": " ++ encodeHelp indent value
-
-
-
--- JSON VALUE
-
-
-toJsonValue : Value -> Encode.Value
-toJsonValue value =
-    case value of
-        Array arr ->
-            Encode.list toJsonValue arr
-
-        Object obj ->
-            Encode.object (List.map (Tuple.mapSecond toJsonValue) obj)
-
-        StringVal builder ->
-            Encode.string builder
-
-        Boolean boolean ->
-            Encode.bool boolean
-
-        Integer n ->
-            Encode.int n
-
-        Number scientific ->
-            Encode.float scientific
-
-        Null ->
-            Encode.null

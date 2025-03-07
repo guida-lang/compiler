@@ -7,8 +7,7 @@ module Builder.Deps.Solver exposing
     , SolverResult(..)
     , State
     , addToApp
-    , envDecoder
-    , envEncoder
+    , envCodec
     , initEnv
     , removeFromApp
     , verify
@@ -26,8 +25,7 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
@@ -508,7 +506,7 @@ initEnv =
     Utils.newEmptyMVar
         |> IO.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar Http.managerEncoder mvar) Http.getManager)
+                Utils.forkIO (IO.bind (Utils.putMVar Http.managerCodec mvar) Http.getManager)
                     |> IO.bind
                         (\_ ->
                             Stuff.getPackageCache
@@ -518,7 +516,7 @@ initEnv =
                                             (Registry.read cache
                                                 |> IO.bind
                                                     (\maybeRegistry ->
-                                                        Utils.readMVar Http.managerDecoder mvar
+                                                        Utils.readMVar Http.managerCodec mvar
                                                             |> IO.bind
                                                                 (\manager ->
                                                                     case maybeRegistry of
@@ -646,52 +644,27 @@ foldM f b =
 -- ENCODERS and DECODERS
 
 
-envEncoder : Env -> Encode.Value
-envEncoder (Env cache manager connection registry) =
-    Encode.object
-        [ ( "cache", Stuff.packageCacheEncoder cache )
-        , ( "manager", Http.managerEncoder manager )
-        , ( "connection", connectionEncoder connection )
-        , ( "registry", Registry.registryEncoder registry )
-        ]
+envCodec : Codec e Env
+envCodec =
+    Serialize.customType
+        (\envCodecEncoder (Env cache manager connection registry) ->
+            envCodecEncoder cache manager connection registry
+        )
+        |> Serialize.variant4 Env Stuff.packageCacheCodec Http.managerCodec connectionCodec Registry.registryCodec
+        |> Serialize.finishCustomType
 
 
-envDecoder : Decode.Decoder Env
-envDecoder =
-    Decode.map4 Env
-        (Decode.field "cache" Stuff.packageCacheDecoder)
-        (Decode.field "manager" Http.managerDecoder)
-        (Decode.field "connection" connectionDecoder)
-        (Decode.field "registry" Registry.registryDecoder)
+connectionCodec : Codec e Connection
+connectionCodec =
+    Serialize.customType
+        (\onlineEncoder offlineEncoder value ->
+            case value of
+                Online manager ->
+                    onlineEncoder manager
 
-
-connectionEncoder : Connection -> Encode.Value
-connectionEncoder connection =
-    case connection of
-        Online manager ->
-            Encode.object
-                [ ( "type", Encode.string "Online" )
-                , ( "manager", Http.managerEncoder manager )
-                ]
-
-        Offline ->
-            Encode.object
-                [ ( "type", Encode.string "Offline" )
-                ]
-
-
-connectionDecoder : Decode.Decoder Connection
-connectionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Online" ->
-                        Decode.map Online (Decode.field "manager" Http.managerDecoder)
-
-                    "Offline" ->
-                        Decode.succeed Offline
-
-                    _ ->
-                        Decode.fail ("Failed to decode Connection's type: " ++ type_)
-            )
+                Offline ->
+                    offlineEncoder
+        )
+        |> Serialize.variant1 Online Http.managerCodec
+        |> Serialize.variant0 Offline
+        |> Serialize.finishCustomType
