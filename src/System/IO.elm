@@ -10,9 +10,8 @@ module System.IO exposing
     , hIsTerminalDevice
     , hPutStr, hPutStrLn
     , putStr, putStrLn, getLine
-    , ReplState(..), initialReplState
+    , ReplState(..), initialReplState, replStateCodec
     , writeString
-    , replStateCodec
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -72,7 +71,7 @@ module System.IO exposing
 
 # Repl State
 
-@docs ReplState, initialReplState
+@docs ReplState, initialReplState, replStateCodec
 
 
 # Internal helpers
