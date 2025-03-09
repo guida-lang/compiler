@@ -10,8 +10,7 @@ module Control.Monad.State.Strict exposing
 {-| Lazy state monads, passing an updatable state through a computation.
 -}
 
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize
 import System.IO as IO exposing (IO)
 import Utils.Impure as Impure
 
@@ -71,26 +70,13 @@ get =
         (Impure.task "getStateT"
             []
             Impure.EmptyBody
-            (Impure.DecoderResolver
-                (Decode.map3 (\imports types decls -> IO.ReplState imports types decls)
-                    (Decode.field "imports" (Decode.dict Decode.string))
-                    (Decode.field "types" (Decode.dict Decode.string))
-                    (Decode.field "decls" (Decode.dict Decode.string))
-                )
-            )
+            (Impure.BytesResolver (Serialize.decodeFromBytes IO.replStateCodec))
         )
 
 
 put : IO.ReplState -> IO ()
-put (IO.ReplState imports types decls) =
+put replState =
     Impure.task "putStateT"
         []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "imports", Encode.dict identity Encode.string imports )
-                , ( "types", Encode.dict identity Encode.string types )
-                , ( "decls", Encode.dict identity Encode.string decls )
-                ]
-            )
-        )
+        (Impure.BytesBody (Serialize.encodeToBytes IO.replStateCodec replState))
         (Impure.Always ())

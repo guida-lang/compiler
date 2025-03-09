@@ -12,7 +12,6 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
-import Task
 import Utils.Impure as Impure
 
 
@@ -110,14 +109,11 @@ withCreateProcess createProcess f =
         )
         (Impure.DecoderResolver
             (Decode.map2 Tuple.pair
-                -- (\stdinHandle ph ->
-                --     f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
-                -- )
                 (Decode.field "stdinHandle" (Decode.maybe Decode.int))
                 (Decode.field "ph" Decode.int)
             )
         )
-        |> Task.andThen
+        |> IO.bind
             (\( stdinHandle, ph ) ->
                 f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
             )

@@ -12,6 +12,7 @@ module System.IO exposing
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
     , writeString
+    , replStateCodec
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
@@ -83,6 +84,7 @@ module System.IO exposing
 import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode
+import Serialize exposing (Codec)
 import Task exposing (Task)
 import Utils.Impure as Impure
 
@@ -316,3 +318,16 @@ type ReplState
 initialReplState : ReplState
 initialReplState =
     ReplState Dict.empty Dict.empty Dict.empty
+
+
+replStateCodec : Codec e ReplState
+replStateCodec =
+    Serialize.customType
+        (\replStateEncoder (ReplState imports types decls) ->
+            replStateEncoder imports types decls
+        )
+        |> Serialize.variant3 ReplState
+            (Serialize.dict Serialize.string Serialize.string)
+            (Serialize.dict Serialize.string Serialize.string)
+            (Serialize.dict Serialize.string Serialize.string)
+        |> Serialize.finishCustomType
