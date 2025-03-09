@@ -20,8 +20,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let nextCounter = 0, mVarsNextCounter = 0;
-let stateT = { imports: {}, types: {}, decls: {} };
+let nextCounter = 0, mVarsNextCounter = 0, stateT;
 const mVars = {};
 const lockedFiles = {};
 const processes = {};
@@ -359,7 +358,7 @@ server.post("putStateT", (request) => {
 });
 
 server.post("getStateT", (request) => {
-  request.respond(200, null, stateT);
+  request.respond(200, null, stateT.buffer);
 });
 
 // MVARS
