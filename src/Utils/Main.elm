@@ -130,6 +130,7 @@ import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
@@ -1011,7 +1012,7 @@ readMVar codec (MVar ref) =
     Impure.task "readMVar"
         []
         (Impure.StringBody (String.fromInt ref))
-        (Impure.DecoderResolver (Serialize.getJsonDecoder (\_ -> crash "Utils.Main.readMVar: invalid value") codec))
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
 
 
 modifyMVar : Codec e a -> MVar a -> (a -> IO ( a, b )) -> IO b
@@ -1030,20 +1031,14 @@ takeMVar codec (MVar ref) =
     Impure.task "takeMVar"
         []
         (Impure.StringBody (String.fromInt ref))
-        (Impure.DecoderResolver (Serialize.getJsonDecoder (\_ -> crash "Utils.Main.takeMVar: invalid value") codec))
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
 
 
 putMVar : Codec e a -> MVar a -> a -> IO ()
 putMVar codec (MVar ref) value =
     Impure.task "putMVar"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "id", Encode.int ref )
-                , ( "value", Serialize.encodeToJson codec value )
-                ]
-            )
-        )
+        [ Http.header "id" (String.fromInt ref) ]
+        (Impure.BytesBody (Serialize.encodeToBytes codec value))
         (Impure.Always ())
 
 
@@ -1133,20 +1128,15 @@ binaryDecodeFileOrFail codec filename =
     Impure.task "binaryDecodeFileOrFail"
         []
         (Impure.StringBody filename)
-        (Impure.DecoderResolver (Decode.map Ok (Serialize.getJsonDecoder (\_ -> crash "Utils.Main.binaryDecodeFileOrFail: invalid value") codec)))
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
+        |> IO.fmap Ok
 
 
 binaryEncodeFile : Codec e a -> FilePath -> a -> IO ()
 binaryEncodeFile codec path value =
     Impure.task "write"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "fd", Encode.string path )
-                , ( "content", Serialize.encodeToJson codec value )
-                ]
-            )
-        )
+        [ Http.header "path" path ]
+        (Impure.BytesBody (Serialize.encodeToBytes codec value))
         (Impure.Always ())
 
 
