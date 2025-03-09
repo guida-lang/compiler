@@ -10,7 +10,9 @@ module Control.Monad.State.Strict exposing
 {-| Lazy state monads, passing an updatable state through a computation.
 -}
 
-import System.IO as IO exposing (IO(..))
+import Serialize
+import System.IO as IO exposing (IO)
+import Utils.Impure as Impure
 
 
 {-| newtype StateT s m a
@@ -64,10 +66,17 @@ pure value =
 
 get : StateT s IO.ReplState
 get =
-    IO (\_ s -> ( s, IO.Pure s.state ))
-        |> liftIO
+    liftIO
+        (Impure.task "getStateT"
+            []
+            Impure.EmptyBody
+            (Impure.BytesResolver (Serialize.decodeFromBytes IO.replStateCodec))
+        )
 
 
 put : IO.ReplState -> IO ()
-put state =
-    IO (\_ s -> ( { s | state = state }, IO.Pure () ))
+put replState =
+    Impure.task "putStateT"
+        []
+        (Impure.BytesBody (Serialize.encodeToBytes IO.replStateCodec replState))
+        (Impure.Always ())

@@ -1,6 +1,6 @@
 module Compiler.Generate.JavaScript.SourceMap exposing (generate)
 
-import Base64
+import Base64.Encode as Base64
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.JavaScript.Builder as JS
 import Compiler.Generate.JavaScript.Name as JSName

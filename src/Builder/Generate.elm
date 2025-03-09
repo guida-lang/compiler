@@ -24,7 +24,7 @@ import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
+import Serialize
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
 import Utils.Main as Utils exposing (FilePath, MVar)
@@ -213,14 +213,14 @@ loadObject : FilePath -> Build.Module -> IO ( ModuleName.Raw, MVar (Maybe Opt.Lo
 loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
-            Utils.newMVar (Utils.maybeEncoder Opt.localGraphEncoder) (Just graph)
+            Utils.newMVar (Serialize.maybe Opt.localGraphCodec) (Just graph)
                 |> IO.fmap (\mvar -> ( name, mvar ))
 
         Build.Cached name _ _ ->
             Utils.newEmptyMVar
                 |> IO.bind
                     (\mvar ->
-                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.elmo root name)))
+                        Utils.forkIO (IO.bind (Utils.putMVar (Serialize.maybe Opt.localGraphCodec) mvar) (File.readBinary Opt.localGraphCodec (Stuff.elmo root name)))
                             |> IO.fmap (\_ -> ( name, mvar ))
                     )
 
@@ -236,10 +236,10 @@ type Objects
 finalizeObjects : LoadingObjects -> Task Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
-        (Utils.readMVar (Decode.maybe Opt.globalGraphDecoder) mvar
+        (Utils.readMVar (Serialize.maybe Opt.globalGraphCodec) mvar
             |> IO.bind
                 (\result ->
-                    Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe Opt.localGraphDecoder)) mvars
+                    Utils.mapTraverse identity compare (Utils.readMVar (Serialize.maybe Opt.localGraphCodec)) mvars
                         |> IO.fmap
                             (\results ->
                                 case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
@@ -273,7 +273,7 @@ loadTypes root ifaces modules =
                         foreigns =
                             Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
                     in
-                    Utils.listTraverse (Utils.readMVar (Decode.maybe Extract.typesDecoder)) mvars
+                    Utils.listTraverse (Utils.readMVar (Serialize.maybe Extract.typesCodec)) mvars
                         |> IO.fmap
                             (\results ->
                                 case Utils.sequenceListMaybe results of
@@ -291,10 +291,10 @@ loadTypesHelp : FilePath -> Build.Module -> IO (MVar (Maybe Extract.Types))
 loadTypesHelp root modul =
     case modul of
         Build.Fresh name iface _ ->
-            Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+            Utils.newMVar (Serialize.maybe Extract.typesCodec) (Just (Extract.fromInterface name iface))
 
         Build.Cached name _ ciMVar ->
-            Utils.readMVar Build.cachedInterfaceDecoder ciMVar
+            Utils.readMVar Build.cachedInterfaceCodec ciMVar
                 |> IO.bind
                     (\cachedInterface ->
                         case cachedInterface of
@@ -303,18 +303,18 @@ loadTypesHelp root modul =
                                     |> IO.bind
                                         (\mvar ->
                                             Utils.forkIO
-                                                (File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                                                (File.readBinary I.interfaceCodec (Stuff.elmi root name)
                                                     |> IO.bind
                                                         (\maybeIface ->
-                                                            Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)
+                                                            Utils.putMVar (Serialize.maybe Extract.typesCodec) mvar (Maybe.map (Extract.fromInterface name) maybeIface)
                                                         )
                                                 )
                                                 |> IO.fmap (\_ -> mvar)
                                         )
 
                             Build.Loaded iface ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+                                Utils.newMVar (Serialize.maybe Extract.typesCodec) (Just (Extract.fromInterface name iface))
 
                             Build.Corrupted ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) Nothing
+                                Utils.newMVar (Serialize.maybe Extract.typesCodec) Nothing
                     )

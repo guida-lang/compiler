@@ -12,7 +12,7 @@ module Compiler.Reporting.Doc exposing
     , stack, reflow, commaSep
     , toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
     , link, fancyLink, reflowLink, makeLink, makeNakedLink
-    , args, moreArgs, ordinal, intToOrdinal, cycle
+    , args, ordinal, intToOrdinal, cycle
     )
 
 {-|
@@ -30,7 +30,7 @@ module Compiler.Reporting.Doc exposing
 @docs stack, reflow, commaSep
 @docs toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
 @docs link, fancyLink, reflowLink, makeLink, makeNakedLink
-@docs args, moreArgs, ordinal, intToOrdinal, cycle
+@docs args, ordinal, intToOrdinal, cycle
 
 -}
 
@@ -204,18 +204,6 @@ reflowLink before fileName after =
 args : Int -> String
 args n =
     String.fromInt n
-        ++ (if n == 1 then
-                " argument"
-
-            else
-                " arguments"
-           )
-
-
-moreArgs : Int -> String
-moreArgs n =
-    String.fromInt n
-        ++ " more"
         ++ (if n == 1 then
                 " argument"
 

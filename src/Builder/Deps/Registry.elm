@@ -6,8 +6,7 @@ module Builder.Deps.Registry exposing
     , getVersions_
     , latest
     , read
-    , registryDecoder
-    , registryEncoder
+    , registryCodec
     , update
     )
 
@@ -20,11 +19,10 @@ import Builder.Stuff as Stuff
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.IO as IO exposing (IO)
 
 
@@ -40,19 +38,14 @@ type KnownVersions
     = KnownVersions V.Version (List V.Version)
 
 
-knownVersionsDecoder : Decode.Decoder KnownVersions
-knownVersionsDecoder =
-    Decode.map2 KnownVersions
-        (Decode.field "version" V.jsonDecoder)
-        (Decode.field "versions" (Decode.list V.jsonDecoder))
-
-
-knownVersionsEncoder : KnownVersions -> Encode.Value
-knownVersionsEncoder (KnownVersions version versions) =
-    Encode.object
-        [ ( "version", V.jsonEncoder version )
-        , ( "versions", Encode.list V.jsonEncoder versions )
-        ]
+knownVersionsCodec : Codec e KnownVersions
+knownVersionsCodec =
+    Serialize.customType
+        (\knownVersionsCodecEncoder (KnownVersions version versions) ->
+            knownVersionsCodecEncoder version versions
+        )
+        |> Serialize.variant2 KnownVersions V.jsonCodec (Serialize.list V.jsonCodec)
+        |> Serialize.finishCustomType
 
 
 
@@ -61,7 +54,7 @@ knownVersionsEncoder (KnownVersions version versions) =
 
 read : Stuff.PackageCache -> IO (Maybe Registry)
 read cache =
-    File.readBinary registryDecoder (Stuff.registry cache)
+    File.readBinary registryCodec (Stuff.registry cache)
 
 
 
@@ -85,7 +78,7 @@ fetch manager cache =
                 path =
                     Stuff.registry cache
             in
-            File.writeBinary registryEncoder path registry
+            File.writeBinary registryCodec path registry
                 |> IO.fmap (\_ -> registry)
 
 
@@ -143,7 +136,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         newRegistry =
                             Registry newSize newPkgs
                     in
-                    File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
+                    File.writeBinary registryCodec (Stuff.registry cache) newRegistry
                         |> IO.fmap (\_ -> newRegistry)
 
 
@@ -248,16 +241,11 @@ post manager path decoder callback =
 -- ENCODERS and DECODERS
 
 
-registryDecoder : Decode.Decoder Registry
-registryDecoder =
-    Decode.map2 Registry
-        (Decode.field "size" Decode.int)
-        (Decode.field "packages" (D.assocListDict identity Pkg.nameDecoder knownVersionsDecoder))
-
-
-registryEncoder : Registry -> Encode.Value
-registryEncoder (Registry size versions) =
-    Encode.object
-        [ ( "size", Encode.int size )
-        , ( "packages", E.assocListDict Pkg.compareName Pkg.nameEncoder knownVersionsEncoder versions )
-        ]
+registryCodec : Codec e Registry
+registryCodec =
+    Serialize.customType
+        (\registryCodecEncoder (Registry size packages) ->
+            registryCodecEncoder size packages
+        )
+        |> Serialize.variant2 Registry Serialize.int (S.assocListDict identity Pkg.compareName Pkg.nameCodec knownVersionsCodec)
+        |> Serialize.finishCustomType

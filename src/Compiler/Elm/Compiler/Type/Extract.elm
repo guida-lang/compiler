@@ -7,8 +7,7 @@ module Compiler.Elm.Compiler.Type.Extract exposing
     , fromType
     , merge
     , mergeMany
-    , typesDecoder
-    , typesEncoder
+    , typesCodec
     )
 
 import Compiler.AST.Canonical as Can
@@ -18,13 +17,11 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Type as T
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
+import Compiler.Serialize as S
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 import Utils.Main as Utils
 
@@ -315,27 +312,24 @@ tupleTraverse f ( a, b ) =
 -- ENCODERS and DECODERS
 
 
-typesEncoder : Types -> Encode.Value
-typesEncoder (Types types) =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder types_Encoder types
+typesCodec : Codec e Types
+typesCodec =
+    Serialize.customType
+        (\typesCodecEncoder (Types types) ->
+            typesCodecEncoder types
+        )
+        |> Serialize.variant1 Types (S.assocListDict ModuleName.toComparableCanonical ModuleName.compareCanonical ModuleName.canonicalCodec types_Codec)
+        |> Serialize.finishCustomType
 
 
-typesDecoder : Decode.Decoder Types
-typesDecoder =
-    Decode.map Types (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
-
-
-types_Encoder : Types_ -> Encode.Value
-types_Encoder (Types_ unionInfo aliasInfo) =
-    Encode.object
-        [ ( "type", Encode.string "Types_" )
-        , ( "unionInfo", E.assocListDict compare Encode.string Can.unionEncoder unionInfo )
-        , ( "aliasInfo", E.assocListDict compare Encode.string Can.aliasEncoder aliasInfo )
-        ]
-
-
-types_Decoder : Decode.Decoder Types_
-types_Decoder =
-    Decode.map2 Types_
-        (Decode.field "unionInfo" (D.assocListDict identity Decode.string Can.unionDecoder))
-        (Decode.field "aliasInfo" (D.assocListDict identity Decode.string Can.aliasDecoder))
+types_Codec : Codec e Types_
+types_Codec =
+    Serialize.customType
+        (\types_CodecEncoder (Types_ unionInfo aliasInfo) ->
+            types_CodecEncoder unionInfo aliasInfo
+        )
+        |> Serialize.variant2
+            Types_
+            (S.assocListDict identity compare Serialize.string Can.unionCodec)
+            (S.assocListDict identity compare Serialize.string Can.aliasCodec)
+        |> Serialize.finishCustomType

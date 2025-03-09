@@ -24,6 +24,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
 import List.Extra as List
+import Serialize
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
@@ -239,7 +240,7 @@ verifyBuild root =
                                     |> Task.bind
                                         (\exposed ->
                                             Task.eio Exit.PublishBuildProblem <|
-                                                Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed
+                                                Build.fromExposed Docs.jsonCodec Reporting.silent root details Build.keepDocs exposed
                                         )
                             )
                     )
@@ -424,7 +425,7 @@ verifyZipBuild root =
                                 |> Task.bind
                                     (\exposed ->
                                         Task.eio Exit.PublishZipBuildProblem
-                                            (Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs exposed)
+                                            (Build.fromExposed Docs.jsonCodec Reporting.silent root details Build.keepDocs exposed)
                                             |> Task.fmap (\_ -> ())
                                     )
                         )
@@ -511,7 +512,7 @@ register manager pkg vsn docs commitHash sha =
                 Http.upload manager
                     url
                     [ Http.filePart "elm.json" "elm.json"
-                    , Http.jsonPart "docs.json" "docs.json" (Docs.jsonEncoder docs)
+                    , Http.jsonPart "docs.json" "docs.json" (Serialize.encodeToJson Docs.jsonCodec docs)
                     , Http.filePart "README.md" "README.md"
                     , Http.stringPart "github-hash" (Http.shaToChars sha)
                     ]

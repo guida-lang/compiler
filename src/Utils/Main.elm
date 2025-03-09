@@ -1,6 +1,5 @@
 module Utils.Main exposing
-    ( AsyncException(..)
-    , ChItem
+    ( ChItem
     , Chan
     , FilePath
     , HttpExceptionContent(..)
@@ -60,8 +59,7 @@ module Utils.Main exposing
     , fpTakeDirectory
     , fpTakeExtension
     , fpTakeFileName
-    , httpExceptionContentDecoder
-    , httpExceptionContentEncoder
+    , httpExceptionContentCodec
     , httpHLocation
     , httpResponseHeaders
     , httpResponseStatus
@@ -77,8 +75,7 @@ module Utils.Main exposing
     , listTraverse
     , listTraverse_
     , lockWithFileLock
-    , mVarDecoder
-    , mVarEncoder
+    , mVarCodec
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -97,7 +94,6 @@ module Utils.Main exposing
     , mapUnionWith
     , mapUnions
     , mapUnionsWith
-    , maybeEncoder
     , maybeMapM
     , maybeTraverseTask
     , newChan
@@ -118,8 +114,7 @@ module Utils.Main exposing
     , sequenceDictResult_
     , sequenceListMaybe
     , sequenceNonemptyListResult
-    , someExceptionDecoder
-    , someExceptionEncoder
+    , someExceptionCodec
     , takeMVar
     , unlines
     , unzip3
@@ -127,26 +122,26 @@ module Utils.Main exposing
     , zipWithM
     )
 
-import Array
 import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Dict
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Prelude
+import Process
+import Serialize exposing (Codec)
 import System.Exit as Exit
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 import Time
 import Utils.Crash exposing (crash)
+import Utils.Impure as Impure
 
 
 liftInputT : IO () -> ReplInputT ()
@@ -195,16 +190,6 @@ mapFromListWith toComparable f =
             Map.update toComparable k (Maybe.map (flip f a))
         )
         Map.empty
-
-
-maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybeEncoder encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
 
 
 eitherLefts : List (Result e a) -> List e
@@ -453,9 +438,8 @@ mapTraverseWithKeyResult toComparable keyComparison f =
 
 
 listTraverse : (a -> IO b) -> List a -> IO (List b)
-listTraverse f =
-    List.foldr (\a -> IO.bind (\c -> IO.fmap (\va -> va :: c) (f a)))
-        (IO.pure [])
+listTraverse =
+    IO.mapM
 
 
 listMaybeTraverse : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -748,12 +732,18 @@ lockWithFileLock path mode ioFunc =
 
 lockFile : FilePath -> IO ()
 lockFile path =
-    IO (\_ s -> ( s, IO.LockFile IO.pure path ))
+    Impure.task "lockFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 unlockFile : FilePath -> IO ()
 unlockFile path =
-    IO (\_ s -> ( s, IO.UnlockFile IO.pure path ))
+    Impure.task "unlockFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 
@@ -762,53 +752,88 @@ unlockFile path =
 
 dirDoesFileExist : FilePath -> IO Bool
 dirDoesFileExist filename =
-    IO (\_ s -> ( s, IO.DirDoesFileExist IO.pure filename ))
+    Impure.task "dirDoesFileExist"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver Decode.bool)
 
 
 dirFindExecutable : FilePath -> IO (Maybe FilePath)
 dirFindExecutable filename =
-    IO (\_ s -> ( s, IO.DirFindExecutable IO.pure filename ))
+    Impure.task "dirFindExecutable"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
 dirCreateDirectoryIfMissing createParents filename =
-    IO (\_ s -> ( s, IO.DirCreateDirectoryIfMissing IO.pure createParents filename ))
+    Impure.task "dirCreateDirectoryIfMissing"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "createParents", Encode.bool createParents )
+                , ( "filename", Encode.string filename )
+                ]
+            )
+        )
+        (Impure.Always ())
 
 
 dirGetCurrentDirectory : IO String
 dirGetCurrentDirectory =
-    IO (\_ s -> ( s, IO.Pure s.currentDirectory ))
+    Impure.task "dirGetCurrentDirectory"
+        []
+        Impure.EmptyBody
+        (Impure.StringResolver identity)
 
 
 dirGetAppUserDataDirectory : FilePath -> IO FilePath
 dirGetAppUserDataDirectory filename =
-    IO (\_ s -> ( s, IO.Pure (s.homedir ++ "/." ++ filename) ))
+    Impure.task "dirGetAppUserDataDirectory"
+        []
+        (Impure.StringBody filename)
+        (Impure.StringResolver identity)
 
 
 dirGetModificationTime : FilePath -> IO Time.Posix
 dirGetModificationTime filename =
-    IO (\_ s -> ( s, IO.DirGetModificationTime IO.pure filename ))
-        |> IO.fmap Time.millisToPosix
+    Impure.task "dirGetModificationTime"
+        []
+        (Impure.StringBody filename)
+        (Impure.DecoderResolver (Decode.map Time.millisToPosix Decode.int))
 
 
 dirRemoveFile : FilePath -> IO ()
 dirRemoveFile path =
-    IO (\_ s -> ( s, IO.DirRemoveFile IO.pure path ))
+    Impure.task "dirRemoveFile"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 dirRemoveDirectoryRecursive : FilePath -> IO ()
 dirRemoveDirectoryRecursive path =
-    IO (\_ s -> ( s, IO.DirRemoveDirectoryRecursive IO.pure path ))
+    Impure.task "dirRemoveDirectoryRecursive"
+        []
+        (Impure.StringBody path)
+        (Impure.Always ())
 
 
 dirDoesDirectoryExist : FilePath -> IO Bool
 dirDoesDirectoryExist path =
-    IO (\_ s -> ( s, IO.DirDoesDirectoryExist IO.pure path ))
+    Impure.task "dirDoesDirectoryExist"
+        []
+        (Impure.StringBody path)
+        (Impure.DecoderResolver Decode.bool)
 
 
 dirCanonicalizePath : FilePath -> IO FilePath
 dirCanonicalizePath path =
-    IO (\_ s -> ( s, IO.DirCanonicalizePath IO.pure path ))
+    Impure.task "dirCanonicalizePath"
+        []
+        (Impure.StringBody path)
+        (Impure.StringResolver identity)
 
 
 dirWithCurrentDirectory : FilePath -> IO a -> IO a
@@ -817,15 +842,26 @@ dirWithCurrentDirectory dir action =
         |> IO.bind
             (\currentDir ->
                 bracket_
-                    (IO (\_ s -> ( s, IO.DirWithCurrentDirectory IO.pure dir )))
-                    (IO (\_ s -> ( s, IO.DirWithCurrentDirectory IO.pure currentDir )))
+                    (Impure.task "dirWithCurrentDirectory"
+                        []
+                        (Impure.StringBody dir)
+                        (Impure.Always ())
+                    )
+                    (Impure.task "dirWithCurrentDirectory"
+                        []
+                        (Impure.StringBody currentDir)
+                        (Impure.Always ())
+                    )
                     action
             )
 
 
 dirListDirectory : FilePath -> IO (List FilePath)
 dirListDirectory path =
-    IO (\_ s -> ( s, IO.DirListDirectory IO.pure path ))
+    Impure.task "dirListDirectory"
+        []
+        (Impure.StringBody path)
+        (Impure.DecoderResolver (Decode.list Decode.string))
 
 
 
@@ -834,17 +870,23 @@ dirListDirectory path =
 
 envLookupEnv : String -> IO (Maybe String)
 envLookupEnv name =
-    IO (\_ s -> ( s, IO.Pure (Dict.get name s.envVars) ))
+    Impure.task "envLookupEnv"
+        []
+        (Impure.StringBody name)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 envGetProgName : IO String
 envGetProgName =
-    IO (\_ s -> ( s, IO.Pure s.progName ))
+    IO.pure "guida"
 
 
 envGetArgs : IO (List String)
 envGetArgs =
-    IO (\_ s -> ( s, IO.Pure s.args ))
+    Impure.task "envGetArgs"
+        []
+        Impure.EmptyBody
+        (Impure.DecoderResolver (Decode.list Decode.string))
 
 
 
@@ -915,10 +957,6 @@ type SomeException
     = SomeException
 
 
-type AsyncException
-    = UserInterrupt
-
-
 bracket : IO a -> (a -> IO b) -> (a -> IO c) -> IO c
 bracket before after thing =
     before
@@ -942,13 +980,13 @@ bracket_ before after thing =
 -- Control.Concurrent
 
 
-type ThreadId
-    = ThreadId
+type alias ThreadId =
+    Process.Id
 
 
 forkIO : IO () -> IO ThreadId
-forkIO ioArg =
-    IO (\_ s -> ( s, IO.ForkIO (\() -> IO.pure ThreadId) ioArg ))
+forkIO =
+    Process.spawn
 
 
 
@@ -959,147 +997,57 @@ type MVar a
     = MVar Int
 
 
-newMVar : (a -> Encode.Value) -> a -> IO (MVar a)
-newMVar encoder value =
+newMVar : Codec e a -> a -> IO (MVar a)
+newMVar codec value =
     newEmptyMVar
         |> IO.bind
             (\mvar ->
-                putMVar encoder mvar value
+                putMVar codec mvar value
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-readMVar : Decode.Decoder a -> MVar a -> IO a
-readMVar decoder (MVar ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            ( s, IO.ReadMVar IO.pure (Just value) )
-
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.ReadSubscriber index ] } s.mVars }
-                            , IO.ReadMVar IO.pure Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.readMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.readMVar: invalid value"
-            )
+readMVar : Codec e a -> MVar a -> IO a
+readMVar codec (MVar ref) =
+    Impure.task "readMVar"
+        []
+        (Impure.StringBody (String.fromInt ref))
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
-modifyMVar decoder encoder m io =
-    takeMVar decoder m
+modifyMVar : Codec e a -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar codec m io =
+    takeMVar codec m
         |> IO.bind io
         |> IO.bind
             (\( a, b ) ->
-                putMVar encoder m a
+                putMVar codec m a
                     |> IO.fmap (\_ -> b)
             )
 
 
-takeMVar : Decode.Decoder a -> MVar a -> IO a
-takeMVar decoder (MVar ref) =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    case mVar.value of
-                        Just value ->
-                            case mVar.subscribers of
-                                (IO.PutSubscriber putIndex putValue) :: restSubscribers ->
-                                    ( { s | mVars = Array.set ref { mVar | subscribers = restSubscribers, value = Just putValue } s.mVars }
-                                    , IO.TakeMVar IO.pure (Just value) (Just putIndex)
-                                    )
-
-                                _ ->
-                                    ( { s | mVars = Array.set ref { mVar | value = Nothing } s.mVars }
-                                    , IO.TakeMVar IO.pure (Just value) Nothing
-                                    )
-
-                        Nothing ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.TakeSubscriber index ] } s.mVars }
-                            , IO.TakeMVar IO.pure Nothing Nothing
-                            )
-
-                Nothing ->
-                    crash "Utils.Main.takeMVar: invalid ref"
-        )
-        |> IO.fmap
-            (\encodedValue ->
-                case Decode.decodeValue decoder encodedValue of
-                    Ok value ->
-                        value
-
-                    Err _ ->
-                        crash "Utils.Main.takeMVar: invalid value"
-            )
+takeMVar : Codec e a -> MVar a -> IO a
+takeMVar codec (MVar ref) =
+    Impure.task "takeMVar"
+        []
+        (Impure.StringBody (String.fromInt ref))
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
 
 
-putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
-putMVar encoder (MVar ref) value =
-    IO
-        (\index s ->
-            case Array.get ref s.mVars of
-                Just mVar ->
-                    let
-                        encodedValue : Encode.Value
-                        encodedValue =
-                            encoder value
-                    in
-                    case mVar.value of
-                        Just _ ->
-                            ( { s | mVars = Array.set ref { mVar | subscribers = mVar.subscribers ++ [ IO.PutSubscriber index encodedValue ] } s.mVars }
-                            , IO.PutMVar IO.pure [] Nothing
-                            )
-
-                        Nothing ->
-                            let
-                                ( filteredSubscribers, readIndexes ) =
-                                    List.foldr
-                                        (\subscriber ( filteredSubscribersAcc, readIndexesAcc ) ->
-                                            case subscriber of
-                                                IO.ReadSubscriber readIndex ->
-                                                    ( filteredSubscribersAcc, readIndex :: readIndexesAcc )
-
-                                                IO.TakeSubscriber takeIndex ->
-                                                    ( filteredSubscribersAcc, takeIndex :: readIndexesAcc )
-
-                                                _ ->
-                                                    ( subscriber :: filteredSubscribersAcc, readIndexesAcc )
-                                        )
-                                        ( [], [] )
-                                        mVar.subscribers
-                            in
-                            ( { s | mVars = Array.set ref { mVar | subscribers = filteredSubscribers, value = Just encodedValue } s.mVars }
-                            , IO.PutMVar IO.pure readIndexes (Just encodedValue)
-                            )
-
-                _ ->
-                    crash "Utils.Main.putMVar: invalid ref"
-        )
+putMVar : Codec e a -> MVar a -> a -> IO ()
+putMVar codec (MVar ref) value =
+    Impure.task "putMVar"
+        [ Http.header "id" (String.fromInt ref) ]
+        (Impure.BytesBody (Serialize.encodeToBytes codec value))
+        (Impure.Always ())
 
 
 newEmptyMVar : IO (MVar a)
 newEmptyMVar =
-    IO
-        (\_ s ->
-            ( { s | mVars = Array.push { subscribers = [], value = Nothing } s.mVars }
-            , IO.NewEmptyMVar IO.pure (Array.length s.mVars)
-            )
-        )
-        |> IO.fmap MVar
+    Impure.task "newEmptyMVar"
+        []
+        Impure.EmptyBody
+        (Impure.DecoderResolver (Decode.map MVar Decode.int))
 
 
 
@@ -1118,15 +1066,15 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
-newChan encoder =
+newChan : Codec e (MVar (ChItem a)) -> IO (Chan a)
+newChan codec =
     newEmptyMVar
         |> IO.bind
             (\hole ->
-                newMVar encoder hole
+                newMVar codec hole
                     |> IO.bind
                         (\readVar ->
-                            newMVar encoder hole
+                            newMVar codec hole
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
@@ -1135,11 +1083,11 @@ newChan encoder =
             )
 
 
-readChan : Decode.Decoder a -> Chan a -> IO a
-readChan decoder (Chan readVar _) =
-    modifyMVar mVarDecoder mVarEncoder readVar <|
+readChan : Codec e a -> Chan a -> IO a
+readChan codec (Chan readVar _) =
+    modifyMVar mVarCodec readVar <|
         \read_end ->
-            readMVar (chItemDecoder decoder) read_end
+            readMVar (chItemCodec codec) read_end
                 |> IO.fmap
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
@@ -1148,16 +1096,16 @@ readChan decoder (Chan readVar _) =
                     )
 
 
-writeChan : (a -> Encode.Value) -> Chan a -> a -> IO ()
-writeChan encoder (Chan _ writeVar) val =
+writeChan : Codec e a -> Chan a -> a -> IO ()
+writeChan codec (Chan _ writeVar) val =
     newEmptyMVar
         |> IO.bind
             (\new_hole ->
-                takeMVar mVarDecoder writeVar
+                takeMVar mVarCodec writeVar
                     |> IO.bind
                         (\old_hole ->
-                            putMVar (chItemEncoder encoder) old_hole (ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                            putMVar (chItemCodec codec) old_hole (ChItem val new_hole)
+                                |> IO.bind (\_ -> putMVar mVarCodec writeVar new_hole)
                         )
             )
 
@@ -1167,26 +1115,29 @@ writeChan encoder (Chan _ writeVar) val =
 
 
 builderHPutBuilder : IO.Handle -> String -> IO ()
-builderHPutBuilder handle str =
-    IO (\_ s -> ( s, IO.HPutStr IO.pure handle str ))
+builderHPutBuilder =
+    IO.hPutStr
 
 
 
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
-binaryDecodeFileOrFail decoder filename =
-    IO (\_ s -> ( s, IO.BinaryDecodeFileOrFail IO.pure filename ))
-        |> IO.fmap
-            (Decode.decodeValue decoder
-                >> Result.mapError (\_ -> ( 0, "Could not find file " ++ filename ))
-            )
+binaryDecodeFileOrFail : Codec e a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail codec filename =
+    Impure.task "binaryDecodeFileOrFail"
+        []
+        (Impure.StringBody filename)
+        (Impure.BytesResolver (Serialize.decodeFromBytes codec))
+        |> IO.fmap Ok
 
 
-binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value =
-    IO (\_ s -> ( s, IO.Write IO.pure path (encoder value) ))
+binaryEncodeFile : Codec e a -> FilePath -> a -> IO ()
+binaryEncodeFile codec path value =
+    Impure.task "write"
+        [ Http.header "path" path ]
+        (Impure.BytesBody (Serialize.encodeToBytes codec value))
+        (Impure.Always ())
 
 
 
@@ -1231,140 +1182,90 @@ replCompleteWord _ _ _ =
 
 replGetInputLine : String -> ReplInputT (Maybe String)
 replGetInputLine prompt =
-    IO (\_ s -> ( s, IO.ReplGetInputLine IO.pure prompt ))
+    Impure.task "replGetInputLine"
+        []
+        (Impure.StringBody prompt)
+        (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
-    IO (\_ s -> ( s, IO.ReplGetInputLineWithInitial IO.pure prompt left right ))
+    replGetInputLine (left ++ prompt ++ right)
 
 
 
 -- ENCODERS and DECODERS
 
 
-mVarDecoder : Decode.Decoder (MVar a)
-mVarDecoder =
-    Decode.map MVar Decode.int
+mVarCodec : Codec e (MVar a)
+mVarCodec =
+    Serialize.int |> Serialize.map MVar (\(MVar ref) -> ref)
 
 
-mVarEncoder : MVar a -> Encode.Value
-mVarEncoder (MVar ref) =
-    Encode.int ref
-
-
-chItemEncoder : (a -> Encode.Value) -> ChItem a -> Encode.Value
-chItemEncoder valueEncoder (ChItem value hole) =
-    Encode.object
-        [ ( "type", Encode.string "ChItem" )
-        , ( "value", valueEncoder value )
-        , ( "hole", mVarEncoder hole )
-        ]
-
-
-chItemDecoder : Decode.Decoder a -> Decode.Decoder (ChItem a)
-chItemDecoder decoder =
-    Decode.map2 ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
-
-
-someExceptionEncoder : SomeException -> Encode.Value
-someExceptionEncoder _ =
-    Encode.object [ ( "type", Encode.string "SomeException" ) ]
-
-
-someExceptionDecoder : Decode.Decoder SomeException
-someExceptionDecoder =
-    Decode.succeed SomeException
-
-
-httpResponseEncoder : HttpResponse body -> Encode.Value
-httpResponseEncoder (HttpResponse httpResponse) =
-    Encode.object
-        [ ( "type", Encode.string "HttpResponse" )
-        , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
-        , ( "responseHeaders", httpResponseHeadersEncoder httpResponse.responseHeaders )
-        ]
-
-
-httpResponseDecoder : Decode.Decoder (HttpResponse body)
-httpResponseDecoder =
-    Decode.map2
-        (\responseStatus responseHeaders ->
-            HttpResponse
-                { responseStatus = responseStatus
-                , responseHeaders = responseHeaders
-                }
+chItemCodec : Codec e a -> Codec e (ChItem a)
+chItemCodec codec =
+    Serialize.customType
+        (\chItemCodecEncoder (ChItem value hole) ->
+            chItemCodecEncoder value hole
         )
-        (Decode.field "responseStatus" httpStatusDecoder)
-        (Decode.field "responseHeaders" httpResponseHeadersDecoder)
+        |> Serialize.variant2 ChItem codec mVarCodec
+        |> Serialize.finishCustomType
 
 
-httpStatusEncoder : HttpStatus -> Encode.Value
-httpStatusEncoder (HttpStatus statusCode statusMessage) =
-    Encode.object
-        [ ( "type", Encode.string "HttpStatus" )
-        , ( "statusCode", Encode.int statusCode )
-        , ( "statusMessage", Encode.string statusMessage )
-        ]
+someExceptionCodec : Codec e SomeException
+someExceptionCodec =
+    Serialize.customType
+        (\someExceptionCodecEncoder SomeException ->
+            someExceptionCodecEncoder
+        )
+        |> Serialize.variant0 SomeException
+        |> Serialize.finishCustomType
 
 
-httpStatusDecoder : Decode.Decoder HttpStatus
-httpStatusDecoder =
-    Decode.map2 HttpStatus
-        (Decode.field "statusCode" Decode.int)
-        (Decode.field "statusMessage" Decode.string)
+httpExceptionContentCodec : Codec e HttpExceptionContent
+httpExceptionContentCodec =
+    Serialize.customType
+        (\statusCodeExceptionEncoder tooManyRedirectsEncoder connectionFailureEncoder value ->
+            case value of
+                StatusCodeException response body ->
+                    statusCodeExceptionEncoder response body
+
+                TooManyRedirects responses ->
+                    tooManyRedirectsEncoder responses
+
+                ConnectionFailure someException ->
+                    connectionFailureEncoder someException
+        )
+        |> Serialize.variant2 StatusCodeException httpResponseCodec Serialize.string
+        |> Serialize.variant1 TooManyRedirects (Serialize.list httpResponseCodec)
+        |> Serialize.variant1 ConnectionFailure someExceptionCodec
+        |> Serialize.finishCustomType
 
 
-httpResponseHeadersEncoder : HttpResponseHeaders -> Encode.Value
-httpResponseHeadersEncoder =
-    Encode.list (E.jsonPair Encode.string Encode.string)
-
-
-httpResponseHeadersDecoder : Decode.Decoder HttpResponseHeaders
-httpResponseHeadersDecoder =
-    Decode.list (D.jsonPair Decode.string Decode.string)
-
-
-httpExceptionContentEncoder : HttpExceptionContent -> Encode.Value
-httpExceptionContentEncoder httpExceptionContent =
-    case httpExceptionContent of
-        StatusCodeException response body ->
-            Encode.object
-                [ ( "type", Encode.string "StatusCodeException" )
-                , ( "response", httpResponseEncoder response )
-                , ( "body", Encode.string body )
-                ]
-
-        TooManyRedirects responses ->
-            Encode.object
-                [ ( "type", Encode.string "TooManyRedirects" )
-                , ( "responses", Encode.list httpResponseEncoder responses )
-                ]
-
-        ConnectionFailure someException ->
-            Encode.object
-                [ ( "type", Encode.string "ConnectionFailure" )
-                , ( "someException", someExceptionEncoder someException )
-                ]
-
-
-httpExceptionContentDecoder : Decode.Decoder HttpExceptionContent
-httpExceptionContentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StatusCodeException" ->
-                        Decode.map2 StatusCodeException
-                            (Decode.field "response" httpResponseDecoder)
-                            (Decode.field "body" Decode.string)
-
-                    "TooManyRedirects" ->
-                        Decode.map TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
-
-                    "ConnectionFailure" ->
-                        Decode.map ConnectionFailure (Decode.field "someException" someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
+httpResponseCodec : Codec e (HttpResponse body)
+httpResponseCodec =
+    Serialize.customType
+        (\httpResponseCodecEncoder (HttpResponse httpResponse) ->
+            httpResponseCodecEncoder httpResponse
+        )
+        |> Serialize.variant1
+            HttpResponse
+            (Serialize.record
+                (\responseStatus responseHeaders ->
+                    { responseStatus = responseStatus, responseHeaders = responseHeaders }
+                )
+                |> Serialize.field .responseStatus httpStatusCodec
+                |> Serialize.field .responseHeaders (Serialize.list (Serialize.tuple Serialize.string Serialize.string))
+                |> Serialize.finishRecord
             )
+        |> Serialize.finishCustomType
+
+
+httpStatusCodec : Codec e HttpStatus
+httpStatusCodec =
+    Serialize.customType
+        (\httpStatusCodecEncoder (HttpStatus statusCode statusMessage) ->
+            httpStatusCodecEncoder statusCode statusMessage
+        )
+        |> Serialize.variant2 HttpStatus Serialize.int Serialize.string
+        |> Serialize.finishCustomType

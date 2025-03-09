@@ -2,8 +2,7 @@ module Compiler.Elm.Kernel exposing
     ( Chunk(..)
     , Content(..)
     , Foreigns
-    , chunkDecoder
-    , chunkEncoder
+    , chunkCodec
     , countFields
     , fromByteString
     )
@@ -18,8 +17,7 @@ import Compiler.Parse.Space as Space
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 import System.TypeCheck.IO as IO
 import Utils.Crash exposing (crash)
 
@@ -417,92 +415,41 @@ toName exposed =
 -- ENCODERS and DECODERS
 
 
-chunkEncoder : Chunk -> Encode.Value
-chunkEncoder chunk =
-    case chunk of
-        JS javascript ->
-            Encode.object
-                [ ( "type", Encode.string "JS" )
-                , ( "javascript", Encode.string javascript )
-                ]
+chunkCodec : Codec e Chunk
+chunkCodec =
+    Serialize.customType
+        (\jsEncoder elmVarEncoder jsVarEncoder elmFieldEncoder jsFieldEncoder jsEnumEncoder debugEncoder prodEncoder chunk ->
+            case chunk of
+                JS javascript ->
+                    jsEncoder javascript
 
-        ElmVar home name ->
-            Encode.object
-                [ ( "type", Encode.string "ElmVar" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                ]
+                ElmVar home name ->
+                    elmVarEncoder home name
 
-        JsVar home name ->
-            Encode.object
-                [ ( "type", Encode.string "JsVar" )
-                , ( "home", Encode.string home )
-                , ( "name", Encode.string name )
-                ]
+                JsVar home name ->
+                    jsVarEncoder home name
 
-        ElmField name ->
-            Encode.object
-                [ ( "type", Encode.string "ElmField" )
-                , ( "name", Encode.string name )
-                ]
+                ElmField name ->
+                    elmFieldEncoder name
 
-        JsField int ->
-            Encode.object
-                [ ( "type", Encode.string "JsField" )
-                , ( "int", Encode.int int )
-                ]
+                JsField int ->
+                    jsFieldEncoder int
 
-        JsEnum int ->
-            Encode.object
-                [ ( "type", Encode.string "JsEnum" )
-                , ( "int", Encode.int int )
-                ]
+                JsEnum int ->
+                    jsEnumEncoder int
 
-        Debug ->
-            Encode.object
-                [ ( "type", Encode.string "Debug" )
-                ]
+                Debug ->
+                    debugEncoder
 
-        Prod ->
-            Encode.object
-                [ ( "type", Encode.string "Prod" )
-                ]
-
-
-chunkDecoder : Decode.Decoder Chunk
-chunkDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "JS" ->
-                        Decode.map JS (Decode.field "javascript" Decode.string)
-
-                    "ElmVar" ->
-                        Decode.map2 ElmVar
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-
-                    "JsVar" ->
-                        Decode.map2 JsVar
-                            (Decode.field "home" Decode.string)
-                            (Decode.field "name" Decode.string)
-
-                    "ElmField" ->
-                        Decode.map ElmField (Decode.field "name" Decode.string)
-
-                    "JsField" ->
-                        Decode.map JsField (Decode.field "int" Decode.int)
-
-                    "JsEnum" ->
-                        Decode.map JsEnum (Decode.field "int" Decode.int)
-
-                    "Debug" ->
-                        Decode.succeed Debug
-
-                    "Prod" ->
-                        Decode.succeed Prod
-
-                    _ ->
-                        Decode.fail ("Unknown Chunk's type: " ++ type_)
-            )
+                Prod ->
+                    prodEncoder
+        )
+        |> Serialize.variant1 JS Serialize.string
+        |> Serialize.variant2 ElmVar ModuleName.canonicalCodec Serialize.string
+        |> Serialize.variant2 JsVar Serialize.string Serialize.string
+        |> Serialize.variant1 ElmField Serialize.string
+        |> Serialize.variant1 JsField Serialize.int
+        |> Serialize.variant1 JsEnum Serialize.int
+        |> Serialize.variant0 Debug
+        |> Serialize.variant0 Prod
+        |> Serialize.finishCustomType

@@ -5,15 +5,13 @@ module Builder.Http exposing
     , MultiPart
     , Sha
     , accept
-    , errorDecoder
-    , errorEncoder
+    , errorCodec
     , filePart
     , get
     , getArchive
     , getManager
     , jsonPart
-    , managerDecoder
-    , managerEncoder
+    , managerCodec
     , post
     , shaToChars
     , stringPart
@@ -24,10 +22,14 @@ module Builder.Http exposing
 import Basics.Extra exposing (uncurry)
 import Codec.Archive.Zip as Zip
 import Compiler.Elm.Version as V
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import Serialize exposing (Codec)
+import System.IO as IO exposing (IO)
+import Task
 import Url.Builder
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (SomeException)
 
 
@@ -39,23 +41,14 @@ type Manager
     = Manager
 
 
-managerEncoder : Manager -> Encode.Value
-managerEncoder _ =
-    Encode.object [ ( "type", Encode.string "Manager" ) ]
-
-
-managerDecoder : Decode.Decoder Manager
-managerDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Manager" ->
-                        Decode.succeed Manager
-
-                    _ ->
-                        Decode.fail "Failed to decode Http.Manager"
-            )
+managerCodec : Codec e Manager
+managerCodec =
+    Serialize.customType
+        (\managerCodecEncoder Manager ->
+            managerCodecEncoder
+        )
+        |> Serialize.variant0 Manager
+        |> Serialize.finishCustomType
 
 
 getManager : IO Manager
@@ -94,37 +87,22 @@ type alias Header =
 
 get : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 get =
-    fetch MethodGet
+    fetch "GET"
 
 
 post : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 post =
-    fetch MethodPost
+    fetch "POST"
 
 
-type Method
-    = MethodGet
-    | MethodPost
-
-
-fetch : Method -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
-fetch methodVerb _ url headers _ onSuccess =
-    IO
-        (\_ s ->
-            ( s
-            , IO.HttpFetch IO.pure
-                (case methodVerb of
-                    MethodGet ->
-                        "GET"
-
-                    MethodPost ->
-                        "POST"
-                )
-                url
-                (addDefaultHeaders headers)
-            )
-        )
-        |> IO.bind onSuccess
+fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
+fetch method _ url headers _ onSuccess =
+    Impure.customTask method
+        url
+        (List.map (\( a, b ) -> Http.header a b) (addDefaultHeaders headers))
+        Impure.EmptyBody
+        (Impure.StringResolver identity)
+        |> Task.andThen onSuccess
 
 
 addDefaultHeaders : List Header -> List Header
@@ -171,8 +149,23 @@ shaToChars =
 
 getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO (\_ s -> ( s, IO.GetArchive IO.pure "GET" url ))
-        |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
+    Impure.task "getArchive"
+        []
+        (Impure.StringBody url)
+        (Impure.DecoderResolver
+            (Decode.map2 Tuple.pair
+                (Decode.field "sha" Decode.string)
+                (Decode.field "archive"
+                    (Decode.list
+                        (Decode.map2 Zip.Entry
+                            (Decode.field "eRelativePath" Decode.string)
+                            (Decode.field "eData" Decode.string)
+                        )
+                    )
+                )
+            )
+        )
+        |> Task.andThen onSuccess
 
 
 
@@ -187,42 +180,44 @@ type MultiPart
 
 upload : Manager -> String -> List MultiPart -> IO (Result Error ())
 upload _ url parts =
-    IO
-        (\_ s ->
-            ( s
-            , IO.HttpUpload IO.pure
-                url
-                (addDefaultHeaders [])
-                (List.map
-                    (\part ->
-                        case part of
-                            FilePart name filePath ->
-                                Encode.object
-                                    [ ( "type", Encode.string "FilePart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    ]
+    Impure.task "httpUpload"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "urlStr", Encode.string url )
+                , ( "headers", Encode.object (List.map (Tuple.mapSecond Encode.string) (addDefaultHeaders [])) )
+                , ( "parts"
+                  , Encode.list
+                        (\part ->
+                            case part of
+                                FilePart name filePath ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "FilePart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "filePath", Encode.string filePath )
+                                        ]
 
-                            JsonPart name filePath value ->
-                                Encode.object
-                                    [ ( "type", Encode.string "JsonPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    , ( "value", value )
-                                    ]
+                                JsonPart name filePath value ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "JsonPart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "filePath", Encode.string filePath )
+                                        , ( "value", value )
+                                        ]
 
-                            StringPart name string ->
-                                Encode.object
-                                    [ ( "type", Encode.string "StringPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "string", Encode.string string )
-                                    ]
-                    )
-                    parts
-                )
+                                StringPart name string ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "StringPart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "string", Encode.string string )
+                                        ]
+                        )
+                        parts
+                  )
+                ]
             )
         )
-        |> IO.fmap Ok
+        (Impure.Always (Ok ()))
 
 
 filePart : String -> String -> MultiPart
@@ -244,52 +239,21 @@ stringPart name string =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
-errorEncoder error =
-    case error of
-        BadUrl url reason ->
-            Encode.object
-                [ ( "type", Encode.string "BadUrl" )
-                , ( "url", Encode.string url )
-                , ( "reason", Encode.string reason )
-                ]
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\badUrlEncoder badHttpEncoder badMysteryEncoder value ->
+            case value of
+                BadUrl url reason ->
+                    badUrlEncoder url reason
 
-        BadHttp url httpExceptionContent ->
-            Encode.object
-                [ ( "type", Encode.string "BadHttp" )
-                , ( "url", Encode.string url )
-                , ( "httpExceptionContent", Utils.httpExceptionContentEncoder httpExceptionContent )
-                ]
+                BadHttp url httpExceptionContent ->
+                    badHttpEncoder url httpExceptionContent
 
-        BadMystery url someException ->
-            Encode.object
-                [ ( "type", Encode.string "BadMystery" )
-                , ( "url", Encode.string url )
-                , ( "someException", Utils.someExceptionEncoder someException )
-                ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadUrl" ->
-                        Decode.map2 BadUrl
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "reason" Decode.string)
-
-                    "BadHttp" ->
-                        Decode.map2 BadHttp
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "httpExceptionContent" Utils.httpExceptionContentDecoder)
-
-                    "BadMystery" ->
-                        Decode.map2 BadMystery
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "someException" Utils.someExceptionDecoder)
-
-                    _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
-            )
+                BadMystery url someException ->
+                    badMysteryEncoder url someException
+        )
+        |> Serialize.variant2 BadUrl Serialize.string Serialize.string
+        |> Serialize.variant2 BadHttp Serialize.string Utils.httpExceptionContentCodec
+        |> Serialize.variant2 BadMystery Serialize.string Utils.someExceptionCodec
+        |> Serialize.finishCustomType

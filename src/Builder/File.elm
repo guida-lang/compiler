@@ -6,8 +6,7 @@ module Builder.File exposing
     , readStdin
     , readUtf8
     , remove
-    , timeDecoder
-    , timeEncoder
+    , timeCodec
     , writeBinary
     , writeBuilder
     , writePackage
@@ -16,10 +15,10 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
-import Json.Decode as Decode
-import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import Serialize exposing (Codec)
+import System.IO as IO exposing (IO)
 import Time
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -45,24 +44,24 @@ zeroTime =
 -- BINARY
 
 
-writeBinary : (a -> Encode.Value) -> FilePath -> a -> IO ()
-writeBinary encoder path value =
+writeBinary : Codec e a -> FilePath -> a -> IO ()
+writeBinary codec path value =
     let
         dir : FilePath
         dir =
             Utils.fpDropFileName path
     in
     Utils.dirCreateDirectoryIfMissing True dir
-        |> IO.bind (\_ -> Utils.binaryEncodeFile encoder path value)
+        |> IO.bind (\_ -> Utils.binaryEncodeFile codec path value)
 
 
-readBinary : Decode.Decoder a -> FilePath -> IO (Maybe a)
-readBinary decoder path =
+readBinary : Codec e a -> FilePath -> IO (Maybe a)
+readBinary codec path =
     Utils.dirDoesFileExist path
         |> IO.bind
             (\pathExists ->
                 if pathExists then
-                    Utils.binaryDecodeFileOrFail decoder path
+                    Utils.binaryDecodeFileOrFail codec path
                         |> IO.bind
                             (\result ->
                                 case result of
@@ -95,8 +94,8 @@ readBinary decoder path =
 
 
 writeUtf8 : FilePath -> String -> IO ()
-writeUtf8 path content =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path content ))
+writeUtf8 =
+    IO.writeString
 
 
 
@@ -105,12 +104,12 @@ writeUtf8 path content =
 
 readUtf8 : FilePath -> IO String
 readUtf8 path =
-    IO (\_ s -> ( s, IO.Read IO.pure path ))
+    Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver identity)
 
 
 readStdin : IO String
 readStdin =
-    IO (\_ s -> ( s, IO.ReadStdin IO.pure ))
+    Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver identity)
 
 
 
@@ -118,8 +117,8 @@ readStdin =
 
 
 writeBuilder : FilePath -> String -> IO ()
-writeBuilder path builder =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path builder ))
+writeBuilder =
+    IO.writeString
 
 
 
@@ -194,11 +193,6 @@ remove path =
 -- ENCODERS and DECODERS
 
 
-timeEncoder : Time -> Encode.Value
-timeEncoder (Time posix) =
-    Encode.int (Time.posixToMillis posix)
-
-
-timeDecoder : Decode.Decoder Time
-timeDecoder =
-    Decode.map (Time << Time.millisToPosix) Decode.int
+timeCodec : Codec e Time
+timeCodec =
+    Serialize.int |> Serialize.map (Time << Time.millisToPosix) (\(Time posix) -> Time.posixToMillis posix)

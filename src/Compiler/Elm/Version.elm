@@ -8,8 +8,7 @@ module Compiler.Elm.Version exposing
     , decoder
     , elmCompiler
     , encode
-    , jsonDecoder
-    , jsonEncoder
+    , jsonCodec
     , major
     , max
     , maxVersion
@@ -18,15 +17,13 @@ module Compiler.Elm.Version exposing
     , parser
     , toChars
     , toComparable
-    , versionDecoder
-    , versionEncoder
+    , versionCodec
     )
 
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -239,38 +236,21 @@ isDigit word =
 -- ENCODERS and DECODERS
 
 
-jsonDecoder : Decode.Decoder Version
-jsonDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case P.fromByteString parser Tuple.pair str of
-                    Ok version ->
-                        Decode.succeed version
-
-                    Err _ ->
-                        Decode.fail "failed to parse version"
-            )
+jsonCodec : Codec e Version
+jsonCodec =
+    Serialize.customType
+        (\versionCodecEncoder (Version major_ minor patch) ->
+            versionCodecEncoder major_ minor patch
+        )
+        |> Serialize.variant3 Version Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType
 
 
-versionEncoder : Version -> Encode.Value
-versionEncoder (Version major_ minor_ patch_) =
-    Encode.object
-        [ ( "type", Encode.string "Version" )
-        , ( "major", Encode.int major_ )
-        , ( "minor", Encode.int minor_ )
-        , ( "patch", Encode.int patch_ )
-        ]
-
-
-versionDecoder : Decode.Decoder Version
-versionDecoder =
-    Decode.map3 Version
-        (Decode.field "major" Decode.int)
-        (Decode.field "minor" Decode.int)
-        (Decode.field "patch" Decode.int)
-
-
-jsonEncoder : Version -> Encode.Value
-jsonEncoder version =
-    Encode.string (toChars version)
+versionCodec : Codec e Version
+versionCodec =
+    Serialize.customType
+        (\versionCodecEncoder (Version major_ minor patch) ->
+            versionCodecEncoder major_ minor patch
+        )
+        |> Serialize.variant3 Version Serialize.int Serialize.int Serialize.int
+        |> Serialize.finishCustomType

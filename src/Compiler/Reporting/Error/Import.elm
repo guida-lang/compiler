@@ -1,26 +1,22 @@
 module Compiler.Reporting.Error.Import exposing
     ( Error(..)
     , Problem(..)
-    , errorDecoder
-    , errorEncoder
-    , problemDecoder
-    , problemEncoder
+    , errorCodec
+    , problemCodec
     , toReport
     )
 
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
+import Compiler.Serialize as S
 import Data.Map as Dict
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Serialize exposing (Codec)
 
 
 
@@ -186,88 +182,35 @@ toSuggestions name unimportedModules =
 -- ENCODERS and DECODERS
 
 
-problemEncoder : Problem -> Encode.Value
-problemEncoder problem =
-    case problem of
-        NotFound ->
-            Encode.object
-                [ ( "type", Encode.string "NotFound" )
-                ]
+problemCodec : Codec e Problem
+problemCodec =
+    Serialize.customType
+        (\notFoundEncoder ambiguousEncoder ambiguousLocalEncoder ambiguousForeignEncoder value ->
+            case value of
+                NotFound ->
+                    notFoundEncoder
 
-        Ambiguous path paths pkg pkgs ->
-            Encode.object
-                [ ( "type", Encode.string "Ambiguous" )
-                , ( "path", Encode.string path )
-                , ( "paths", Encode.list Encode.string paths )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "pkgs", Encode.list Pkg.nameEncoder pkgs )
-                ]
+                Ambiguous path paths pkg pkgs ->
+                    ambiguousEncoder path paths pkg pkgs
 
-        AmbiguousLocal path1 path2 paths ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousLocal" )
-                , ( "path1", Encode.string path1 )
-                , ( "path2", Encode.string path2 )
-                , ( "paths", Encode.list Encode.string paths )
-                ]
+                AmbiguousLocal path1 path2 paths ->
+                    ambiguousLocalEncoder path1 path2 paths
 
-        AmbiguousForeign pkg1 pkg2 pkgs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousForeign" )
-                , ( "pkg1", Pkg.nameEncoder pkg1 )
-                , ( "pkg2", Pkg.nameEncoder pkg2 )
-                , ( "pkgs", Encode.list Pkg.nameEncoder pkgs )
-                ]
+                AmbiguousForeign pkg1 pkg2 pkgs ->
+                    ambiguousForeignEncoder pkg1 pkg2 pkgs
+        )
+        |> Serialize.variant0 NotFound
+        |> Serialize.variant4 Ambiguous Serialize.string (Serialize.list Serialize.string) Pkg.nameCodec (Serialize.list Pkg.nameCodec)
+        |> Serialize.variant3 AmbiguousLocal Serialize.string Serialize.string (Serialize.list Serialize.string)
+        |> Serialize.variant3 AmbiguousForeign Pkg.nameCodec Pkg.nameCodec (Serialize.list Pkg.nameCodec)
+        |> Serialize.finishCustomType
 
 
-problemDecoder : Decode.Decoder Problem
-problemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NotFound" ->
-                        Decode.succeed NotFound
-
-                    "Ambiguous" ->
-                        Decode.map4 Ambiguous
-                            (Decode.field "path" Decode.string)
-                            (Decode.field "paths" (Decode.list Decode.string))
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
-
-                    "AmbiguousLocal" ->
-                        Decode.map3 AmbiguousLocal
-                            (Decode.field "path1" Decode.string)
-                            (Decode.field "path2" Decode.string)
-                            (Decode.field "paths" (Decode.list Decode.string))
-
-                    "AmbiguousForeign" ->
-                        Decode.map3 AmbiguousForeign
-                            (Decode.field "pkg1" Pkg.nameDecoder)
-                            (Decode.field "pkg2" Pkg.nameDecoder)
-                            (Decode.field "pkgs" (Decode.list Pkg.nameDecoder))
-
-                    _ ->
-                        Decode.fail ("Failed to decode Problem's type: " ++ type_)
-            )
-
-
-errorEncoder : Error -> Encode.Value
-errorEncoder (Error region name unimportedModules problem) =
-    Encode.object
-        [ ( "type", Encode.string "Error" )
-        , ( "region", A.regionEncoder region )
-        , ( "name", ModuleName.rawEncoder name )
-        , ( "unimportedModules", EncodeX.everySet compare ModuleName.rawEncoder unimportedModules )
-        , ( "problem", problemEncoder problem )
-        ]
-
-
-errorDecoder : Decode.Decoder Error
-errorDecoder =
-    Decode.map4 Error
-        (Decode.field "region" A.regionDecoder)
-        (Decode.field "name" ModuleName.rawDecoder)
-        (Decode.field "unimportedModules" (DecodeX.everySet identity ModuleName.rawDecoder))
-        (Decode.field "problem" problemDecoder)
+errorCodec : Codec e Error
+errorCodec =
+    Serialize.customType
+        (\errorCodecEncoder (Error region name unimportedModules problem) ->
+            errorCodecEncoder region name unimportedModules problem
+        )
+        |> Serialize.variant4 Error A.regionCodec ModuleName.rawCodec (S.everySet identity compare ModuleName.rawCodec) problemCodec
+        |> Serialize.finishCustomType
