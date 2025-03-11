@@ -457,27 +457,26 @@ getConstraints pkg vsn =
                                             IO.pure (ISBack state)
 
                                         Online manager ->
-                                            let
-                                                url : String
-                                                url =
-                                                    Website.metadata pkg vsn "elm.json"
-                                            in
-                                            Http.get manager url [] identity (IO.pure << Ok)
+                                            Website.metadata pkg vsn "elm.json"
                                                 |> IO.bind
-                                                    (\result ->
-                                                        case result of
-                                                            Err httpProblem ->
-                                                                IO.pure (ISErr (Exit.SolverBadHttp pkg vsn httpProblem))
+                                                    (\url ->
+                                                        Http.get manager url [] identity (IO.pure << Ok)
+                                                            |> IO.bind
+                                                                (\result ->
+                                                                    case result of
+                                                                        Err httpProblem ->
+                                                                            IO.pure (ISErr (Exit.SolverBadHttp pkg vsn httpProblem))
 
-                                                            Ok body ->
-                                                                case D.fromByteString constraintsDecoder body of
-                                                                    Ok cs ->
-                                                                        Utils.dirCreateDirectoryIfMissing True home
-                                                                            |> IO.bind (\_ -> File.writeUtf8 path body)
-                                                                            |> IO.fmap (\_ -> ISOk (toNewState cs) cs)
+                                                                        Ok body ->
+                                                                            case D.fromByteString constraintsDecoder body of
+                                                                                Ok cs ->
+                                                                                    Utils.dirCreateDirectoryIfMissing True home
+                                                                                        |> IO.bind (\_ -> File.writeUtf8 path body)
+                                                                                        |> IO.fmap (\_ -> ISOk (toNewState cs) cs)
 
-                                                                    Err _ ->
-                                                                        IO.pure (ISErr (Exit.SolverBadHttpData pkg vsn url))
+                                                                                Err _ ->
+                                                                                    IO.pure (ISErr (Exit.SolverBadHttpData pkg vsn url))
+                                                                )
                                                     )
                             )
 

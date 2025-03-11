@@ -423,19 +423,18 @@ getDocs cache manager name version =
                             )
 
                 else
-                    let
-                        url : String
-                        url =
-                            Website.metadata name version "docs.json"
-                    in
-                    Http.get manager url [] Exit.DP_Http <|
-                        \body ->
-                            case D.fromByteString Docs.decoder body of
-                                Ok docs ->
-                                    Utils.dirCreateDirectoryIfMissing True home
-                                        |> IO.bind (\_ -> File.writeUtf8 path body)
-                                        |> IO.fmap (\_ -> Ok docs)
+                    Website.metadata name version "docs.json"
+                        |> IO.bind
+                            (\url ->
+                                Http.get manager url [] Exit.DP_Http <|
+                                    \body ->
+                                        case D.fromByteString Docs.decoder body of
+                                            Ok docs ->
+                                                Utils.dirCreateDirectoryIfMissing True home
+                                                    |> IO.bind (\_ -> File.writeUtf8 path body)
+                                                    |> IO.fmap (\_ -> Ok docs)
 
-                                Err _ ->
-                                    IO.pure (Err (DP_Data url body))
+                                            Err _ ->
+                                                IO.pure (Err (DP_Data url body))
+                            )
             )

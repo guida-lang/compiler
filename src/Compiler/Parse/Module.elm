@@ -281,16 +281,21 @@ freshLine toFreshLineError =
 
 
 chompDecls : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
-chompDecls syntaxVersion decls =
-    Decl.declaration syntaxVersion
-        |> P.bind
-            (\( decl, _ ) ->
-                P.oneOfWithFallback
-                    [ Space.checkFreshLine E.DeclStart
-                        |> P.bind (\_ -> chompDecls syntaxVersion (decl :: decls))
-                    ]
-                    (List.reverse (decl :: decls))
-            )
+chompDecls syntaxVersion =
+    P.loop (chompDeclsHelp syntaxVersion)
+
+
+chompDeclsHelp : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (P.Step (List Decl.Decl) (List Decl.Decl))
+chompDeclsHelp syntaxVersion decls =
+    P.oneOfWithFallback
+        [ Space.checkFreshLine E.DeclStart
+            |> P.bind
+                (\_ ->
+                    Decl.declaration syntaxVersion
+                        |> P.fmap (\( decl, _ ) -> P.Loop (decl :: decls))
+                )
+        ]
+        (P.Done (List.reverse decls))
 
 
 chompInfixes : List (A.Located Src.Infix) -> P.Parser E.Module (List (A.Located Src.Infix))
@@ -620,13 +625,13 @@ exposing_ =
                         |> P.bind
                             (\exposed ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
-                                    |> P.bind (\_ -> exposingHelp [ exposed ])
+                                    |> P.bind (\_ -> P.loop exposingHelp [ exposed ])
                             )
                     ]
             )
 
 
-exposingHelp : List Src.Exposed -> P.Parser E.Exposing Src.Exposing
+exposingHelp : List Src.Exposed -> P.Parser E.Exposing (P.Step (List Src.Exposed) Src.Exposing)
 exposingHelp revExposed =
     P.oneOf E.ExposingEnd
         [ P.word1 ',' E.ExposingEnd
@@ -635,10 +640,10 @@ exposingHelp revExposed =
             |> P.bind
                 (\exposed ->
                     Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
-                        |> P.bind (\_ -> exposingHelp (exposed :: revExposed))
+                        |> P.fmap (\_ -> P.Loop (exposed :: revExposed))
                 )
         , P.word1 ')' E.ExposingEnd
-            |> P.fmap (\_ -> Src.Explicit (List.reverse revExposed))
+            |> P.fmap (\_ -> P.Done (Src.Explicit (List.reverse revExposed)))
         ]
 
 

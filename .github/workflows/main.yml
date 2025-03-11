@@ -26,3 +26,5 @@ jobs:
       - run: npm run test:jest
       - run: npm run test:elm
       - run: npm run test:elm-review
+      - name: self-hosted environment
+        run: ./bin/index.js make --optimize src/Terminal/Main.elm

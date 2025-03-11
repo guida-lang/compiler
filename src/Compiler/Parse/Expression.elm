@@ -117,7 +117,7 @@ list syntaxVersion start =
                             |> P.bind
                                 (\( entry, end ) ->
                                     Space.checkIndent end E.ListIndentEnd
-                                        |> P.bind (\_ -> chompListEnd syntaxVersion start [ entry ])
+                                        |> P.bind (\_ -> P.loop (chompListEnd syntaxVersion start) [ entry ])
                                 )
                         , P.word1 ']' E.ListOpen
                             |> P.bind (\_ -> P.addEnd start (Src.List []))
@@ -126,7 +126,7 @@ list syntaxVersion start =
         )
 
 
-chompListEnd : SyntaxVersion -> A.Position -> List Src.Expr -> P.Parser E.List_ Src.Expr
+chompListEnd : SyntaxVersion -> A.Position -> List Src.Expr -> P.Parser E.List_ (P.Step (List Src.Expr) Src.Expr)
 chompListEnd syntaxVersion start entries =
     P.oneOf E.ListEnd
         [ P.word1 ',' E.ListEnd
@@ -135,10 +135,11 @@ chompListEnd syntaxVersion start entries =
             |> P.bind
                 (\( entry, end ) ->
                     Space.checkIndent end E.ListIndentEnd
-                        |> P.bind (\_ -> chompListEnd syntaxVersion start (entry :: entries))
+                        |> P.fmap (\_ -> P.Loop (entry :: entries))
                 )
         , P.word1 ']' E.ListEnd
             |> P.bind (\_ -> P.addEnd start (Src.List (List.reverse entries)))
+            |> P.fmap P.Done
         ]
 
 

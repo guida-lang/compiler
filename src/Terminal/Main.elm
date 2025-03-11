@@ -95,6 +95,7 @@ init =
         initFlags =
             Terminal.flags
                 |> Terminal.more (Terminal.onOff "package" "Creates a starter elm.json file for a package project.")
+                |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
     in
     Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs initFlags <|
         \chunks ->
@@ -104,6 +105,7 @@ init =
                 ]
                 (Chomp.pure Init.Flags
                     |> Chomp.apply (Chomp.chompOnOffFlag "package")
+                    |> Chomp.apply (Chomp.chompOnOffFlag "yes")
                     |> Chomp.bind
                         (\value ->
                             Chomp.checkForUnknownFlags initFlags
