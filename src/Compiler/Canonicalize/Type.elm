@@ -4,11 +4,13 @@ module Compiler.Canonicalize.Type exposing
     , toAnnotation
     )
 
+import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Name as Name
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -28,9 +30,9 @@ type alias CResult i w a =
 -- TO ANNOTATION
 
 
-toAnnotation : Env.Env -> Src.Type -> CResult i w Can.Annotation
-toAnnotation env srcType =
-    canonicalize env srcType
+toAnnotation : SyntaxVersion -> Env.Env -> Src.Type -> CResult i w Can.Annotation
+toAnnotation syntaxVersion env srcType =
+    canonicalize syntaxVersion env srcType
         |> R.bind (\tipe -> R.ok (Can.Forall (addFreeVars Dict.empty tipe) tipe))
 
 
@@ -38,30 +40,30 @@ toAnnotation env srcType =
 -- CANONICALIZE TYPES
 
 
-canonicalize : Env.Env -> Src.Type -> CResult i w Can.Type
-canonicalize env (A.At typeRegion tipe) =
+canonicalize : SyntaxVersion -> Env.Env -> Src.Type -> CResult i w Can.Type
+canonicalize syntaxVersion env (A.At typeRegion tipe) =
     case tipe of
         Src.TVar x ->
             R.ok (Can.TVar x)
 
         Src.TType region name args ->
             Env.findType region env name
-                |> R.bind (canonicalizeType env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
 
         Src.TTypeQual region home name args ->
             Env.findTypeQual region env home name
-                |> R.bind (canonicalizeType env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
 
         Src.TLambda a b ->
-            canonicalize env a
+            canonicalize syntaxVersion env a
                 |> R.fmap Can.TLambda
                 |> R.bind
                     (\tLambda ->
-                        R.fmap tLambda (canonicalize env b)
+                        R.fmap tLambda (canonicalize syntaxVersion env b)
                     )
 
         Src.TRecord fields ext ->
-            Dups.checkFields (canonicalizeFields env fields)
+            Dups.checkFields (canonicalizeFields syntaxVersion env fields)
                 |> R.bind (Utils.sequenceADict identity compare)
                 |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map A.toValue ext))
 
@@ -69,30 +71,36 @@ canonicalize env (A.At typeRegion tipe) =
             R.ok Can.TUnit
 
         Src.TTuple a b cs ->
-            canonicalize env a
+            canonicalize syntaxVersion env a
                 |> R.fmap Can.TTuple
-                |> R.bind (\tTuple -> R.fmap tTuple (canonicalize env b))
+                |> R.bind (\tTuple -> R.fmap tTuple (canonicalize syntaxVersion env b))
                 |> R.bind
                     (\tTuple ->
                         case cs of
                             [] ->
-                                R.ok (tTuple Nothing)
+                                R.ok (tTuple [])
 
                             [ c ] ->
-                                canonicalize env c
-                                    |> R.fmap (tTuple << Just)
+                                canonicalize syntaxVersion env c
+                                    |> R.fmap (tTuple << List.singleton)
 
                             _ ->
-                                R.throw <| Error.TupleLargerThanThree typeRegion
+                                case syntaxVersion of
+                                    SV.Elm ->
+                                        R.throw <| Error.TupleLargerThanThree typeRegion
+
+                                    SV.Guida ->
+                                        R.traverse (canonicalize syntaxVersion env) cs
+                                            |> R.fmap tTuple
                     )
 
 
-canonicalizeFields : Env.Env -> List ( A.Located Name.Name, Src.Type ) -> List ( A.Located Name.Name, CResult i w Can.FieldType )
-canonicalizeFields env fields =
+canonicalizeFields : SyntaxVersion -> Env.Env -> List ( A.Located Name.Name, Src.Type ) -> List ( A.Located Name.Name, CResult i w Can.FieldType )
+canonicalizeFields syntaxVersion env fields =
     let
         canonicalizeField : Int -> ( a, Src.Type ) -> ( a, R.RResult i w Error.Error Can.FieldType )
         canonicalizeField index ( name, srcType ) =
-            ( name, R.fmap (Can.FieldType index) (canonicalize env srcType) )
+            ( name, R.fmap (Can.FieldType index) (canonicalize syntaxVersion env srcType) )
     in
     List.indexedMap canonicalizeField fields
 
@@ -101,9 +109,9 @@ canonicalizeFields env fields =
 -- CANONICALIZE TYPE
 
 
-canonicalizeType : Env.Env -> A.Region -> Name.Name -> List Src.Type -> Env.Type -> CResult i w Can.Type
-canonicalizeType env region name args info =
-    R.traverse (canonicalize env) args
+canonicalizeType : SyntaxVersion -> Env.Env -> A.Region -> Name.Name -> List Src.Type -> Env.Type -> CResult i w Can.Type
+canonicalizeType syntaxVersion env region name args info =
+    R.traverse (canonicalize syntaxVersion env) args
         |> R.bind
             (\cargs ->
                 case info of
@@ -156,13 +164,8 @@ addFreeVars freeVars tipe =
         Can.TUnit ->
             freeVars
 
-        Can.TTuple a b maybeC ->
-            case maybeC of
-                Nothing ->
-                    addFreeVars (addFreeVars freeVars a) b
-
-                Just c ->
-                    addFreeVars (addFreeVars (addFreeVars freeVars a) b) c
+        Can.TTuple a b cs ->
+            List.foldl (flip addFreeVars) (addFreeVars (addFreeVars freeVars a) b) cs
 
         Can.TAlias _ _ args _ ->
             List.foldl (\( _, arg ) fvs -> addFreeVars fvs arg) freeVars args

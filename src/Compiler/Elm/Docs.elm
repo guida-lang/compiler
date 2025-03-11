@@ -356,21 +356,32 @@ type alias Parser a =
 
 
 chompOverview : List (A.Located Name.Name) -> Parser (List (A.Located Name.Name))
-chompOverview names =
+chompOverview =
+    P.loop chompOverviewHelp
+
+
+chompOverviewHelp : List (A.Located Name.Name) -> Parser (P.Step (List (A.Located Name.Name)) (List (A.Located Name.Name)))
+chompOverviewHelp names =
     chompUntilDocs
         |> P.bind
             (\isDocs ->
                 if isDocs then
                     Space.chomp E.Space
-                        |> P.bind (\_ -> P.bind chompOverview (chompDocs names))
+                        |> P.bind (\_ -> chompDocs names)
+                        |> P.fmap P.Loop
 
                 else
-                    P.pure names
+                    P.pure (P.Done names)
             )
 
 
 chompDocs : List (A.Located Name.Name) -> Parser (List (A.Located Name.Name))
-chompDocs names =
+chompDocs =
+    P.loop chompDocsHelp
+
+
+chompDocsHelp : List (A.Located Name.Name) -> Parser (P.Step (List (A.Located Name.Name)) (List (A.Located Name.Name)))
+chompDocsHelp names =
     P.addLocation
         (P.oneOf E.Name
             [ Var.lower E.Name
@@ -394,15 +405,12 @@ chompDocs names =
                                                             |> P.bind
                                                                 (\_ ->
                                                                     Space.chomp E.Space
-                                                                        |> P.bind
-                                                                            (\_ ->
-                                                                                chompDocs (name :: names)
-                                                                            )
+                                                                        |> P.fmap (\_ -> P.Loop (name :: names))
                                                                 )
                                                     )
                                         )
                                 ]
-                                (name :: names)
+                                (P.Done (name :: names))
                         )
             )
 

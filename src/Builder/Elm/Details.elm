@@ -844,7 +844,7 @@ crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
         |> IO.bind
             (\bytes ->
                 case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
-                    Ok ((Src.Module (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
+                    Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports
                                 |> IO.fmap (\deps -> Just (SLocal docsStatus deps modul))
@@ -1063,31 +1063,30 @@ toDocs result =
 
 downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> IO (Result Exit.PackageProblem ())
 downloadPackage cache manager pkg vsn =
-    let
-        url : String
-        url =
-            Website.metadata pkg vsn "endpoint.json"
-    in
-    Http.get manager url [] identity (IO.pure << Ok)
+    Website.metadata pkg vsn "endpoint.json"
         |> IO.bind
-            (\eitherByteString ->
-                case eitherByteString of
-                    Err err ->
-                        IO.pure (Err (Exit.PP_BadEndpointRequest err))
+            (\url ->
+                Http.get manager url [] identity (IO.pure << Ok)
+                    |> IO.bind
+                        (\eitherByteString ->
+                            case eitherByteString of
+                                Err err ->
+                                    IO.pure (Err (Exit.PP_BadEndpointRequest err))
 
-                    Ok byteString ->
-                        case D.fromByteString endpointDecoder byteString of
-                            Err _ ->
-                                IO.pure (Err (Exit.PP_BadEndpointContent url))
+                                Ok byteString ->
+                                    case D.fromByteString endpointDecoder byteString of
+                                        Err _ ->
+                                            IO.pure (Err (Exit.PP_BadEndpointContent url))
 
-                            Ok ( endpoint, expectedHash ) ->
-                                Http.getArchive manager endpoint Exit.PP_BadArchiveRequest (Exit.PP_BadArchiveContent endpoint) <|
-                                    \( sha, archive ) ->
-                                        if expectedHash == Http.shaToChars sha then
-                                            IO.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
+                                        Ok ( endpoint, expectedHash ) ->
+                                            Http.getArchive manager endpoint Exit.PP_BadArchiveRequest (Exit.PP_BadArchiveContent endpoint) <|
+                                                \( sha, archive ) ->
+                                                    if expectedHash == Http.shaToChars sha then
+                                                        IO.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
 
-                                        else
-                                            IO.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
+                                                    else
+                                                        IO.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
+                        )
             )
 
 

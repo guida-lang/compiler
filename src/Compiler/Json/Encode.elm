@@ -29,7 +29,7 @@ import Compiler.Data.OneOrMore exposing (OneOrMore(..))
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 
 
 
@@ -220,8 +220,8 @@ writeUgly path value =
 {-| FIXME Builder.File.writeBuilder
 -}
 fileWriteBuilder : String -> String -> IO ()
-fileWriteBuilder path value =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path value ))
+fileWriteBuilder =
+    IO.writeString
 
 
 

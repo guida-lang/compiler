@@ -60,17 +60,11 @@ occursHelp seen var foundCycle =
                                 IO.Unit1 ->
                                     IO.pure foundCycle
 
-                                IO.Tuple1 a b maybeC ->
-                                    case maybeC of
-                                        Nothing ->
-                                            IO.bind (occursHelp newSeen a)
-                                                (occursHelp newSeen b foundCycle)
-
-                                        Just c ->
-                                            IO.bind (occursHelp newSeen a)
-                                                (IO.bind (occursHelp newSeen b)
-                                                    (occursHelp newSeen c foundCycle)
-                                                )
+                                IO.Tuple1 a b cs ->
+                                    IO.bind (occursHelp newSeen a)
+                                        (IO.bind (occursHelp newSeen b)
+                                            (IO.foldrM (occursHelp newSeen) foundCycle cs)
+                                        )
 
                         IO.Alias _ _ args _ ->
                             IO.foldrM (occursHelp (var :: seen)) foundCycle (List.map Tuple.second args)

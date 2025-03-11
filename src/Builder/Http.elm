@@ -24,10 +24,13 @@ module Builder.Http exposing
 import Basics.Extra exposing (uncurry)
 import Codec.Archive.Zip as Zip
 import Compiler.Elm.Version as V
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
+import Task
 import Url.Builder
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (SomeException)
 
 
@@ -94,37 +97,22 @@ type alias Header =
 
 get : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 get =
-    fetch MethodGet
+    fetch "GET"
 
 
 post : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
 post =
-    fetch MethodPost
+    fetch "POST"
 
 
-type Method
-    = MethodGet
-    | MethodPost
-
-
-fetch : Method -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
-fetch methodVerb _ url headers _ onSuccess =
-    IO
-        (\_ s ->
-            ( s
-            , IO.HttpFetch IO.pure
-                (case methodVerb of
-                    MethodGet ->
-                        "GET"
-
-                    MethodPost ->
-                        "POST"
-                )
-                url
-                (addDefaultHeaders headers)
-            )
-        )
-        |> IO.bind onSuccess
+fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
+fetch method _ url headers _ onSuccess =
+    Impure.customTask method
+        url
+        (List.map (\( a, b ) -> Http.header a b) (addDefaultHeaders headers))
+        Impure.EmptyBody
+        (Impure.StringResolver identity)
+        |> Task.andThen onSuccess
 
 
 addDefaultHeaders : List Header -> List Header
@@ -171,8 +159,23 @@ shaToChars =
 
 getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
 getArchive _ url _ _ onSuccess =
-    IO (\_ s -> ( s, IO.GetArchive IO.pure "GET" url ))
-        |> IO.bind (\shaAndArchive -> onSuccess shaAndArchive)
+    Impure.task "getArchive"
+        []
+        (Impure.StringBody url)
+        (Impure.DecoderResolver
+            (Decode.map2 Tuple.pair
+                (Decode.field "sha" Decode.string)
+                (Decode.field "archive"
+                    (Decode.list
+                        (Decode.map2 Zip.Entry
+                            (Decode.field "eRelativePath" Decode.string)
+                            (Decode.field "eData" Decode.string)
+                        )
+                    )
+                )
+            )
+        )
+        |> Task.andThen onSuccess
 
 
 
@@ -187,42 +190,44 @@ type MultiPart
 
 upload : Manager -> String -> List MultiPart -> IO (Result Error ())
 upload _ url parts =
-    IO
-        (\_ s ->
-            ( s
-            , IO.HttpUpload IO.pure
-                url
-                (addDefaultHeaders [])
-                (List.map
-                    (\part ->
-                        case part of
-                            FilePart name filePath ->
-                                Encode.object
-                                    [ ( "type", Encode.string "FilePart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    ]
+    Impure.task "httpUpload"
+        []
+        (Impure.JsonBody
+            (Encode.object
+                [ ( "urlStr", Encode.string url )
+                , ( "headers", Encode.object (List.map (Tuple.mapSecond Encode.string) (addDefaultHeaders [])) )
+                , ( "parts"
+                  , Encode.list
+                        (\part ->
+                            case part of
+                                FilePart name filePath ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "FilePart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "filePath", Encode.string filePath )
+                                        ]
 
-                            JsonPart name filePath value ->
-                                Encode.object
-                                    [ ( "type", Encode.string "JsonPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "filePath", Encode.string filePath )
-                                    , ( "value", value )
-                                    ]
+                                JsonPart name filePath value ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "JsonPart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "filePath", Encode.string filePath )
+                                        , ( "value", value )
+                                        ]
 
-                            StringPart name string ->
-                                Encode.object
-                                    [ ( "type", Encode.string "StringPart" )
-                                    , ( "name", Encode.string name )
-                                    , ( "string", Encode.string string )
-                                    ]
-                    )
-                    parts
-                )
+                                StringPart name string ->
+                                    Encode.object
+                                        [ ( "type", Encode.string "StringPart" )
+                                        , ( "name", Encode.string name )
+                                        , ( "string", Encode.string string )
+                                        ]
+                        )
+                        parts
+                  )
+                ]
             )
         )
-        |> IO.fmap Ok
+        (Impure.Always (Ok ()))
 
 
 filePart : String -> String -> MultiPart

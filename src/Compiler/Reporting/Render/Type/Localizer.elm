@@ -92,7 +92,7 @@ fromNames names =
 
 
 fromModule : Src.Module -> Localizer
-fromModule ((Src.Module _ _ _ imports _ _ _ _ _) as modul) =
+fromModule ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) =
     Localizer <|
         Dict.fromList identity <|
             (( Src.getName modul, { alias = Nothing, exposing_ = All } ) :: List.map toPair imports)

@@ -75,7 +75,7 @@ type Expr
     | Record (Dict String Name Expr)
     | TrackedRecord A.Region (Dict String (A.Located Name) Expr)
     | Unit
-    | Tuple A.Region Expr Expr (Maybe Expr)
+    | Tuple A.Region Expr Expr (List Expr)
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
@@ -116,6 +116,7 @@ type Destructor
 
 type Path
     = Index Index.ZeroBased Path
+    | ArrayIndex Int Path
     | Field Name Path
     | Unbox Path
     | Root Name
@@ -701,13 +702,13 @@ exprEncoder expr =
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple region a b maybeC ->
+        Tuple region a b cs ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "region", A.regionEncoder region )
                 , ( "a", exprEncoder a )
                 , ( "b", exprEncoder b )
-                , ( "maybeC", E.maybe exprEncoder maybeC )
+                , ( "cs", Encode.list exprEncoder cs )
                 ]
 
         Shader src attributes uniforms ->
@@ -876,7 +877,7 @@ exprDecoder =
                             (Decode.field "region" A.regionDecoder)
                             (Decode.field "a" exprDecoder)
                             (Decode.field "b" exprDecoder)
-                            (Decode.field "maybeC" (Decode.maybe exprDecoder))
+                            (Decode.field "cs" (Decode.list exprDecoder))
 
                     "Shader" ->
                         Decode.map3 Shader
@@ -1045,6 +1046,13 @@ pathEncoder path =
                 , ( "subPath", pathEncoder subPath )
                 ]
 
+        ArrayIndex index subPath ->
+            Encode.object
+                [ ( "type", Encode.string "ArrayIndex" )
+                , ( "index", Encode.int index )
+                , ( "subPath", pathEncoder subPath )
+                ]
+
         Field field subPath ->
             Encode.object
                 [ ( "type", Encode.string "Field" )
@@ -1074,6 +1082,11 @@ pathDecoder =
                     "Index" ->
                         Decode.map2 Index
                             (Decode.field "index" Index.zeroBasedDecoder)
+                            (Decode.field "subPath" pathDecoder)
+
+                    "ArrayIndex" ->
+                        Decode.map2 ArrayIndex
+                            (Decode.field "index" Decode.int)
                             (Decode.field "subPath" pathDecoder)
 
                     "Field" ->

@@ -13,6 +13,7 @@ import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -41,18 +42,18 @@ verify context (R.RResult k) =
     R.RResult <|
         \info warnings ->
             case k Dups.none warnings of
-                Err (R.RErr _ warnings1 errors) ->
-                    Err (R.RErr info warnings1 errors)
+                R.RErr _ warnings1 errors ->
+                    R.RErr info warnings1 errors
 
-                Ok (R.ROk bindings warnings1 value) ->
+                R.ROk bindings warnings1 value ->
                     case Dups.detect (Error.DuplicatePattern context) bindings of
                         R.RResult k1 ->
                             case k1 () () of
-                                Err (R.RErr () () errs) ->
-                                    Err (R.RErr info warnings1 errs)
+                                R.RErr () () errs ->
+                                    R.RErr info warnings1 errs
 
-                                Ok (R.ROk () () dict) ->
-                                    Ok (R.ROk info warnings1 ( value, dict ))
+                                R.ROk () () dict ->
+                                    R.ROk info warnings1 ( value, dict )
 
 
 
@@ -63,8 +64,8 @@ type alias DupsDict =
     Dups.Tracker A.Region
 
 
-canonicalize : Env.Env -> Src.Pattern -> PResult DupsDict w Can.Pattern
-canonicalize env (A.At region pattern) =
+canonicalize : SyntaxVersion -> Env.Env -> Src.Pattern -> PResult DupsDict w Can.Pattern
+canonicalize syntaxVersion env (A.At region pattern) =
     R.fmap (A.At region) <|
         case pattern of
             Src.PAnything _ ->
@@ -81,28 +82,28 @@ canonicalize env (A.At region pattern) =
 
             Src.PTuple a b cs ->
                 R.ok Can.PTuple
-                    |> R.apply (canonicalize env a)
-                    |> R.apply (canonicalize env b)
-                    |> R.apply (canonicalizeTuple region env cs)
+                    |> R.apply (canonicalize syntaxVersion env a)
+                    |> R.apply (canonicalize syntaxVersion env b)
+                    |> R.apply (canonicalizeTuple syntaxVersion region env cs)
 
             Src.PCtor nameRegion name patterns ->
                 Env.findCtor nameRegion env name
-                    |> R.bind (canonicalizeCtor env region name patterns)
+                    |> R.bind (canonicalizeCtor syntaxVersion env region name patterns)
 
             Src.PCtorQual nameRegion home name patterns ->
                 Env.findCtorQual nameRegion env home name
-                    |> R.bind (canonicalizeCtor env region name patterns)
+                    |> R.bind (canonicalizeCtor syntaxVersion env region name patterns)
 
             Src.PList patterns ->
-                R.fmap Can.PList (canonicalizeList env patterns)
+                R.fmap Can.PList (canonicalizeList syntaxVersion env patterns)
 
             Src.PCons first rest ->
                 R.ok Can.PCons
-                    |> R.apply (canonicalize env first)
-                    |> R.apply (canonicalize env rest)
+                    |> R.apply (canonicalize syntaxVersion env first)
+                    |> R.apply (canonicalize syntaxVersion env rest)
 
             Src.PAlias ptrn (A.At reg name) ->
-                canonicalize env ptrn
+                canonicalize syntaxVersion env ptrn
                     |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
 
             Src.PChr chr ->
@@ -115,15 +116,15 @@ canonicalize env (A.At region pattern) =
                 R.ok (Can.PInt int)
 
 
-canonicalizeCtor : Env.Env -> A.Region -> Name.Name -> List Src.Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
-canonicalizeCtor env region name patterns ctor =
+canonicalizeCtor : SyntaxVersion -> Env.Env -> A.Region -> Name.Name -> List Src.Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
+canonicalizeCtor syntaxVersion env region name patterns ctor =
     case ctor of
         Env.Ctor home tipe union index args ->
             let
                 toCanonicalArg : Index.ZeroBased -> Src.Pattern -> Can.Type -> R.RResult DupsDict w Error.Error Can.PatternCtorArg
                 toCanonicalArg argIndex argPattern argTipe =
                     R.fmap (Can.PatternCtorArg argIndex argTipe)
-                        (canonicalize env argPattern)
+                        (canonicalize syntaxVersion env argPattern)
             in
             Utils.indexedZipWithA toCanonicalArg patterns args
                 |> R.bind
@@ -144,29 +145,34 @@ canonicalizeCtor env region name patterns ctor =
             R.throw (Error.PatternHasRecordCtor region name)
 
 
-canonicalizeTuple : A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (Maybe Can.Pattern)
-canonicalizeTuple tupleRegion env extras =
+canonicalizeTuple : SyntaxVersion -> A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeTuple syntaxVersion tupleRegion env extras =
     case extras of
         [] ->
-            R.ok Nothing
+            R.ok []
 
         [ three ] ->
-            R.fmap Just (canonicalize env three)
+            R.fmap List.singleton (canonicalize syntaxVersion env three)
 
         _ ->
-            R.throw (Error.TupleLargerThanThree tupleRegion)
+            case syntaxVersion of
+                SV.Elm ->
+                    R.throw (Error.TupleLargerThanThree tupleRegion)
+
+                SV.Guida ->
+                    R.traverse (canonicalize syntaxVersion env) extras
 
 
-canonicalizeList : Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
-canonicalizeList env list =
+canonicalizeList : SyntaxVersion -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeList syntaxVersion env list =
     case list of
         [] ->
             R.ok []
 
         pattern :: otherPatterns ->
             R.ok (::)
-                |> R.apply (canonicalize env pattern)
-                |> R.apply (canonicalizeList env otherPatterns)
+                |> R.apply (canonicalize syntaxVersion env pattern)
+                |> R.apply (canonicalizeList syntaxVersion env otherPatterns)
 
 
 
@@ -177,7 +183,7 @@ logVar : Name.Name -> A.Region -> a -> PResult DupsDict w a
 logVar name region value =
     R.RResult <|
         \bindings warnings ->
-            Ok (R.ROk (Dups.insert name region region bindings) warnings value)
+            R.ROk (Dups.insert name region region bindings) warnings value
 
 
 logFields : List (A.Located Name.Name) -> a -> PResult DupsDict w a
@@ -189,4 +195,4 @@ logFields fields value =
     in
     R.RResult <|
         \bindings warnings ->
-            Ok (R.ROk (List.foldl addField bindings fields) warnings value)
+            R.ROk (List.foldl addField bindings fields) warnings value

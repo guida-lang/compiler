@@ -54,8 +54,8 @@ add (A.At region pattern) expectation state =
             in
             IO.pure (State headers vars (unitCon :: revCons))
 
-        Can.PTuple a b maybeC ->
-            addTuple region a b maybeC expectation state
+        Can.PTuple a b cs ->
+            addTuple region a b cs expectation state
 
         Can.PCtor { home, type_, union, name, args } ->
             let
@@ -254,8 +254,8 @@ addEntry listRegion tipe state ( index, pattern ) =
 -- CONSTRAIN TUPLE
 
 
-addTuple : A.Region -> Can.Pattern -> Can.Pattern -> Maybe Can.Pattern -> E.PExpected Type -> State -> IO State
-addTuple region a b maybeC expectation state =
+addTuple : A.Region -> Can.Pattern -> Can.Pattern -> List Can.Pattern -> E.PExpected Type -> State -> IO State
+addTuple region a b cs expectation state =
     Type.mkFlexVar
         |> IO.bind
             (\aVar ->
@@ -271,42 +271,31 @@ addTuple region a b maybeC expectation state =
                                 bType =
                                     Type.VarN bVar
                             in
-                            case maybeC of
-                                Nothing ->
-                                    simpleAdd a aType state
-                                        |> IO.bind (simpleAdd b bType)
-                                        |> IO.fmap
-                                            (\(State headers vars revCons) ->
-                                                let
-                                                    tupleCon : Type.Constraint
-                                                    tupleCon =
-                                                        Type.CPattern region E.PTuple (Type.TupleN aType bType Nothing) expectation
-                                                in
-                                                State headers (aVar :: bVar :: vars) (tupleCon :: revCons)
-                                            )
-
-                                Just c ->
-                                    Type.mkFlexVar
-                                        |> IO.bind
-                                            (\cVar ->
-                                                let
-                                                    cType : Type
-                                                    cType =
-                                                        Type.VarN cVar
-                                                in
-                                                simpleAdd a aType state
-                                                    |> IO.bind (simpleAdd b bType)
-                                                    |> IO.bind (simpleAdd c cType)
-                                                    |> IO.fmap
-                                                        (\(State headers vars revCons) ->
-                                                            let
-                                                                tupleCon : Type.Constraint
-                                                                tupleCon =
-                                                                    Type.CPattern region E.PTuple (Type.TupleN aType bType (Just cType)) expectation
-                                                            in
-                                                            State headers (aVar :: bVar :: cVar :: vars) (tupleCon :: revCons)
+                            simpleAdd a aType state
+                                |> IO.bind (simpleAdd b bType)
+                                |> IO.bind
+                                    (\updatedState ->
+                                        IO.foldM
+                                            (\( cVars, s ) c ->
+                                                Type.mkFlexVar
+                                                    |> IO.bind
+                                                        (\cVar ->
+                                                            simpleAdd c (Type.VarN cVar) s
+                                                                |> IO.fmap (Tuple.pair (cVar :: cVars))
                                                         )
                                             )
+                                            ( [], updatedState )
+                                            cs
+                                            |> IO.fmap
+                                                (\( cVars, State headers vars revCons ) ->
+                                                    let
+                                                        tupleCon : Type.Constraint
+                                                        tupleCon =
+                                                            Type.CPattern region E.PTuple (Type.TupleN aType bType (List.map Type.VarN cVars)) expectation
+                                                    in
+                                                    State headers (aVar :: bVar :: cVars ++ vars) (tupleCon :: revCons)
+                                                )
+                                    )
                         )
             )
 

@@ -27,7 +27,6 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Maybe.Extra as Maybe
 import Prelude
 import System.TypeCheck.IO as IO
 
@@ -47,7 +46,7 @@ type Type
     | Type IO.Canonical Name (List Type)
     | Record (Dict String Name Type) Extension
     | Unit
-    | Tuple Type Type (Maybe Type)
+    | Tuple Type Type (List Type)
     | Alias IO.Canonical Name (List ( Name, Type )) Type
 
 
@@ -116,11 +115,11 @@ toDoc localizer ctx tipe =
         Unit ->
             D.fromChars "()"
 
-        Tuple a b maybeC ->
+        Tuple a b cs ->
             RT.tuple
                 (toDoc localizer RT.None a)
                 (toDoc localizer RT.None b)
-                (List.map (toDoc localizer RT.None) (Maybe.toList maybeC))
+                (List.map (toDoc localizer RT.None) cs)
 
         Alias home name args _ ->
             aliasToDoc localizer ctx home name args
@@ -329,17 +328,8 @@ toDiff localizer ctx tipe1 tipe2 =
                     (D.dullyellow (RT.lambda ctx (f x) (f y) (List.map f zs)))
                     (Bag.one (ArityMismatch (2 + List.length cs) (2 + List.length zs)))
 
-        ( Tuple a b Nothing, Tuple x y Nothing ) ->
-            toDiff localizer RT.None a x
-                |> fmapDiff RT.tuple
-                |> applyDiff (toDiff localizer RT.None b y)
-                |> applyDiff (Diff [] [] Similar)
-
-        ( Tuple a b (Just c), Tuple x y (Just z) ) ->
-            toDiff localizer RT.None a x
-                |> fmapDiff RT.tuple
-                |> applyDiff (toDiff localizer RT.None b y)
-                |> applyDiff (fmapDiff List.singleton (toDiff localizer RT.None c z))
+        ( Tuple a b cs, Tuple x y zs ) as pair ->
+            toDiffTuple localizer ctx pair ( a, b, cs ) ( x, y, zs ) (pureDiff [])
 
         ( Record fields1 ext1, Record fields2 ext2 ) ->
             diffRecord localizer fields1 ext1 fields2 ext2
@@ -443,6 +433,24 @@ toDiff localizer ctx tipe1 tipe2 =
                                 Bag.empty
 
         pair ->
+            toDiffOtherwise localizer ctx pair
+
+
+toDiffTuple : L.Localizer -> RT.Context -> ( Type, Type ) -> ( Type, Type, List Type ) -> ( Type, Type, List Type ) -> Diff (List D.Doc) -> Diff D.Doc
+toDiffTuple localizer ctx pair ( a, b, cs ) ( x, y, zs ) diffCs =
+    case ( cs, zs ) of
+        ( [], [] ) ->
+            toDiff localizer RT.None a x
+                |> fmapDiff RT.tuple
+                |> applyDiff (toDiff localizer RT.None b y)
+                |> applyDiff diffCs
+
+        ( c :: restCs, z :: restZs ) ->
+            fmapDiff (::) (toDiff localizer RT.None c z)
+                |> applyDiff diffCs
+                |> toDiffTuple localizer ctx pair ( a, b, restCs ) ( x, y, restZs )
+
+        _ ->
             toDiffOtherwise localizer ctx pair
 
 
@@ -600,13 +608,13 @@ isSuper super tipe =
                 CompAppend ->
                     isString h n || isList h n && isSuper Comparable (Prelude.head args)
 
-        Tuple a b maybeC ->
+        Tuple a b cs ->
             case super of
                 Number ->
                     False
 
                 Comparable ->
-                    isSuper super a && isSuper super b && Maybe.withDefault True (Maybe.map (isSuper super) maybeC)
+                    List.all (isSuper super) (a :: b :: cs)
 
                 Appendable ->
                     False
@@ -901,12 +909,12 @@ typeEncoder type_ =
                 [ ( "type", Encode.string "Unit" )
                 ]
 
-        Tuple a b maybeC ->
+        Tuple a b cs ->
             Encode.object
                 [ ( "type", Encode.string "Tuple" )
                 , ( "a", typeEncoder a )
                 , ( "b", typeEncoder b )
-                , ( "maybeC", EncodeX.maybe typeEncoder maybeC )
+                , ( "cs", Encode.list typeEncoder cs )
                 ]
 
         Alias home name args tipe ->
@@ -971,7 +979,7 @@ typeDecoder =
                         Decode.map3 Tuple
                             (Decode.field "a" typeDecoder)
                             (Decode.field "b" typeDecoder)
-                            (Decode.field "maybeC" (Decode.maybe typeDecoder))
+                            (Decode.field "cs" (Decode.list typeDecoder))
 
                     "Alias" ->
                         Decode.map4 Alias

@@ -72,7 +72,30 @@ generate sourceMaps leadingLines mode (Opt.GlobalGraph graph _) mains =
         ++ stateToBuilder state
         ++ toMainExports mode mains
         ++ "}(this));"
+        ++ escapeNewCode """// EXTRA GUIDA CORE
+
+function _Utils_TupleN(a, b, ...cs) {
+  return { $: '#N', a: a, b: b, cs: cs };
+}
+
+(function(original) {
+    _Debug_toAnsiString = function(ansi, value) {
+        if (value.$ === '#N') {
+            var output = [_Debug_toAnsiString(ansi, value.a), _Debug_toAnsiString(ansi, value.b)];
+            for (var k in value.cs) {
+                output.push(_Debug_toAnsiString(ansi, value.cs[k]));
+            }
+            return '(' + output.join(',') + ')';
+        }
+        return original(ansi, value);
+    }
+}(_Debug_toAnsiString))"""
         ++ generateSourceMaps sourceMaps leadingLines state
+
+
+escapeNewCode : String -> String
+escapeNewCode code =
+    "//__START__\n" ++ code ++ "\n//__END__"
 
 
 generateSourceMaps : SourceMaps -> Int -> State -> String

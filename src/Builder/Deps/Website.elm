@@ -6,18 +6,23 @@ module Builder.Deps.Website exposing
 import Builder.Http as Http
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
+import System.IO as IO exposing (IO)
+import Utils.Main as Utils
 
 
-domain : String
+domain : IO String
 domain =
-    "https://package.elm-lang.org"
+    Utils.envLookupEnv "GUIDA_REGISTRY"
+        |> IO.fmap (Maybe.withDefault "https://package.elm-lang.org")
 
 
-route : String -> List ( String, String ) -> String
+route : String -> List ( String, String ) -> IO String
 route path params =
-    Http.toUrl (domain ++ path) params
+    domain
+        |> IO.fmap (\d -> Http.toUrl (d ++ path) params)
 
 
-metadata : Pkg.Name -> V.Version -> String -> String
+metadata : Pkg.Name -> V.Version -> String -> IO String
 metadata name version file =
-    domain ++ "/packages/" ++ Pkg.toUrl name ++ "/" ++ V.toChars version ++ "/" ++ file
+    domain
+        |> IO.fmap (\d -> d ++ "/packages/" ++ Pkg.toUrl name ++ "/" ++ V.toChars version ++ "/" ++ file)

@@ -230,19 +230,18 @@ getVersions_ name (Registry _ versions) =
 
 post : Http.Manager -> String -> D.Decoder x a -> (a -> IO b) -> IO (Result Exit.RegistryProblem b)
 post manager path decoder callback =
-    let
-        url : String
-        url =
-            Website.route path []
-    in
-    Http.post manager url [] Exit.RP_Http <|
-        \body ->
-            case D.fromByteString decoder body of
-                Ok a ->
-                    IO.fmap Ok (callback a)
+    Website.route path []
+        |> IO.bind
+            (\url ->
+                Http.post manager url [] Exit.RP_Http <|
+                    \body ->
+                        case D.fromByteString decoder body of
+                            Ok a ->
+                                IO.fmap Ok (callback a)
 
-                Err _ ->
-                    IO.pure <| Err <| Exit.RP_Data url body
+                            Err _ ->
+                                IO.pure <| Err <| Exit.RP_Data url body
+            )
 
 
 

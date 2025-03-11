@@ -29,7 +29,7 @@ fromByteString : SyntaxVersion -> ProjectType -> String -> Result E.Error Src.Mo
 fromByteString syntaxVersion projectType source =
     case P.fromByteString (chompModule syntaxVersion projectType) E.ModuleBadEnd source of
         Ok modul ->
-            checkModule projectType modul
+            checkModule syntaxVersion projectType modul
 
         Err err ->
             Err (E.ParseError err)
@@ -116,8 +116,8 @@ chompModule syntaxVersion projectType =
 -- CHECK MODULE
 
 
-checkModule : ProjectType -> Module -> Result E.Error Src.Module
-checkModule projectType module_ =
+checkModule : SyntaxVersion -> ProjectType -> Module -> Result E.Error Src.Module
+checkModule syntaxVersion projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
             categorizeDecls [] [] [] [] module_.decls
@@ -126,7 +126,7 @@ checkModule projectType module_ =
         Just { name, effects, exports, docs } ->
             checkEffects projectType ports effects
                 |> Result.map
-                    (Src.Module
+                    (Src.Module syntaxVersion
                         (Just name)
                         exports
                         (toDocs docs module_.decls)
@@ -139,7 +139,7 @@ checkModule projectType module_ =
 
         Nothing ->
             Ok
-                (Src.Module
+                (Src.Module syntaxVersion
                     Nothing
                     (A.At A.one Src.Open)
                     (Src.NoDocs A.one)
@@ -281,16 +281,21 @@ freshLine toFreshLineError =
 
 
 chompDecls : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
-chompDecls syntaxVersion decls =
-    Decl.declaration syntaxVersion
-        |> P.bind
-            (\( decl, _ ) ->
-                P.oneOfWithFallback
-                    [ Space.checkFreshLine E.DeclStart
-                        |> P.bind (\_ -> chompDecls syntaxVersion (decl :: decls))
-                    ]
-                    (List.reverse (decl :: decls))
-            )
+chompDecls syntaxVersion =
+    P.loop (chompDeclsHelp syntaxVersion)
+
+
+chompDeclsHelp : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (P.Step (List Decl.Decl) (List Decl.Decl))
+chompDeclsHelp syntaxVersion decls =
+    P.oneOfWithFallback
+        [ Space.checkFreshLine E.DeclStart
+            |> P.bind
+                (\_ ->
+                    Decl.declaration syntaxVersion
+                        |> P.fmap (\( decl, _ ) -> P.Loop (decl :: decls))
+                )
+        ]
+        (P.Done (List.reverse decls))
 
 
 chompInfixes : List (A.Located Src.Infix) -> P.Parser E.Module (List (A.Located Src.Infix))
@@ -620,13 +625,13 @@ exposing_ =
                         |> P.bind
                             (\exposed ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
-                                    |> P.bind (\_ -> exposingHelp [ exposed ])
+                                    |> P.bind (\_ -> P.loop exposingHelp [ exposed ])
                             )
                     ]
             )
 
 
-exposingHelp : List Src.Exposed -> P.Parser E.Exposing Src.Exposing
+exposingHelp : List Src.Exposed -> P.Parser E.Exposing (P.Step (List Src.Exposed) Src.Exposing)
 exposingHelp revExposed =
     P.oneOf E.ExposingEnd
         [ P.word1 ',' E.ExposingEnd
@@ -635,10 +640,10 @@ exposingHelp revExposed =
             |> P.bind
                 (\exposed ->
                     Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
-                        |> P.bind (\_ -> exposingHelp (exposed :: revExposed))
+                        |> P.fmap (\_ -> P.Loop (exposed :: revExposed))
                 )
         , P.word1 ')' E.ExposingEnd
-            |> P.fmap (\_ -> Src.Explicit (List.reverse revExposed))
+            |> P.fmap (\_ -> P.Done (Src.Explicit (List.reverse revExposed)))
         ]
 
 

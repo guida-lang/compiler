@@ -7,6 +7,7 @@ import Builder.Deps.Solver as Solver
 import Builder.Elm.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
+import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Constraint as Con
 import Compiler.Elm.Licenses as Licenses
@@ -23,11 +24,11 @@ import Utils.Main as Utils
 
 
 type Flags
-    = Flags Bool
+    = Flags Bool Bool
 
 
 run : () -> Flags -> IO ()
-run () (Flags package) =
+run () (Flags package autoYes) =
     Reporting.attempt Exit.initToReport <|
         (Utils.dirDoesFileExist "elm.json"
             |> IO.bind
@@ -36,7 +37,21 @@ run () (Flags package) =
                         IO.pure (Err Exit.InitAlreadyExists)
 
                     else
-                        Reporting.ask question
+                        let
+                            askQuestion : IO Bool
+                            askQuestion =
+                                if autoYes then
+                                    Help.toStdout (information [ D.fromChars "" ])
+                                        |> IO.fmap (\_ -> True)
+
+                                else
+                                    Reporting.ask
+                                        (information
+                                            [ D.fromChars "Knowing all that, would you like me to create an elm.json file now? [Y/n]: "
+                                            ]
+                                        )
+                        in
+                        askQuestion
                             |> IO.bind
                                 (\approved ->
                                     if approved then
@@ -50,10 +65,10 @@ run () (Flags package) =
         )
 
 
-question : D.Doc
-question =
+information : List D.Doc -> D.Doc
+information question =
     D.stack
-        [ D.fillSep
+        (D.fillSep
             [ D.fromChars "Hello!"
             , D.fromChars "Elm"
             , D.fromChars "projects"
@@ -68,18 +83,18 @@ question =
             , D.fromChars "create"
             , D.fromChars "them!"
             ]
-        , D.reflow "Now you may be wondering, what will be in this file? How do I add Elm files to my project? How do I see it in the browser? How will my code grow? Do I need more directories? What about tests? Etc."
-        , D.fillSep
-            [ D.fromChars "Check"
-            , D.fromChars "out"
-            , D.cyan (D.fromChars (D.makeLink "init"))
-            , D.fromChars "for"
-            , D.fromChars "all"
-            , D.fromChars "the"
-            , D.fromChars "answers!"
-            ]
-        , D.fromChars "Knowing all that, would you like me to create an elm.json file now? [Y/n]: "
-        ]
+            :: D.reflow "Now you may be wondering, what will be in this file? How do I add Elm files to my project? How do I see it in the browser? How will my code grow? Do I need more directories? What about tests? Etc."
+            :: D.fillSep
+                [ D.fromChars "Check"
+                , D.fromChars "out"
+                , D.cyan (D.fromChars (D.makeLink "init"))
+                , D.fromChars "for"
+                , D.fromChars "all"
+                , D.fromChars "the"
+                , D.fromChars "answers!"
+                ]
+            :: question
+        )
 
 
 

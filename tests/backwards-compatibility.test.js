@@ -79,8 +79,10 @@ describe("backwards compatibility", () => {
           console.error(e);
         }
 
+        const escapedNewCodeRegex = /\/\/__START__[\s\S]*\/\/__END__/gm;
+
         expect(fs.readFileSync(elmOutput).toString()).toBe(
-          fs.readFileSync(guidaOutput).toString()
+          fs.readFileSync(guidaOutput).toString().replace(escapedNewCodeRegex, "")
         );
       });
     }

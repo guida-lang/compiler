@@ -10,6 +10,7 @@ import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
 import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -31,12 +32,13 @@ type alias EResult i w a =
 
 
 canonicalize :
-    Env.Env
+    SyntaxVersion
+    -> Env.Env
     -> List (A.Located Src.Value)
     -> Dict String Name.Name union
     -> Src.Effects
     -> EResult i w Can.Effects
-canonicalize env values unions effects =
+canonicalize syntaxVersion env values unions effects =
     case effects of
         Src.NoEffects ->
             R.ok Can.NoEffects
@@ -45,7 +47,7 @@ canonicalize env values unions effects =
             let
                 pairs : R.RResult i w Error.Error (List ( Name.Name, Can.Port ))
                 pairs =
-                    R.traverse (canonicalizePort env) ports
+                    R.traverse (canonicalizePort syntaxVersion env) ports
             in
             R.fmap (Can.Ports << Dict.fromList identity) pairs
 
@@ -100,9 +102,9 @@ canonicalize env values unions effects =
 -- CANONICALIZE PORT
 
 
-canonicalizePort : Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
-canonicalizePort env (Src.Port (A.At region portName) tipe) =
-    Type.toAnnotation env tipe
+canonicalizePort : SyntaxVersion -> Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
+canonicalizePort syntaxVersion env (Src.Port (A.At region portName) tipe) =
+    Type.toAnnotation syntaxVersion env tipe
         |> R.bind
             (\(Can.Forall freeVars ctipe) ->
                 case List.reverse (Type.delambda (Type.deepDealias ctipe)) of
@@ -232,18 +234,10 @@ checkPayload tipe =
         Can.TUnit ->
             Ok ()
 
-        Can.TTuple a b maybeC ->
+        Can.TTuple a b cs ->
             checkPayload a
                 |> Result.andThen (\_ -> checkPayload b)
-                |> Result.andThen
-                    (\_ ->
-                        case maybeC of
-                            Nothing ->
-                                Ok ()
-
-                            Just c ->
-                                checkPayload c
-                    )
+                |> Result.andThen (\_ -> checkPayloadTupleCs cs)
 
         Can.TVar name ->
             Err ( tipe, Error.TypeVariable name )
@@ -259,6 +253,17 @@ checkPayload tipe =
                 (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
                 (Ok ())
                 fields
+
+
+checkPayloadTupleCs : List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayloadTupleCs types =
+    case types of
+        [] ->
+            Ok ()
+
+        tipe :: rest ->
+            checkPayload tipe
+                |> Result.andThen (\_ -> checkPayloadTupleCs rest)
 
 
 checkFieldPayload : Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()

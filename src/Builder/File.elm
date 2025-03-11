@@ -18,8 +18,9 @@ module Builder.File exposing
 import Codec.Archive.Zip as Zip
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO(..))
+import System.IO as IO exposing (IO)
 import Time
+import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -95,8 +96,8 @@ readBinary decoder path =
 
 
 writeUtf8 : FilePath -> String -> IO ()
-writeUtf8 path content =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path content ))
+writeUtf8 =
+    IO.writeString
 
 
 
@@ -105,12 +106,12 @@ writeUtf8 path content =
 
 readUtf8 : FilePath -> IO String
 readUtf8 path =
-    IO (\_ s -> ( s, IO.Read IO.pure path ))
+    Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver identity)
 
 
 readStdin : IO String
 readStdin =
-    IO (\_ s -> ( s, IO.ReadStdin IO.pure ))
+    Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver identity)
 
 
 
@@ -118,8 +119,8 @@ readStdin =
 
 
 writeBuilder : FilePath -> String -> IO ()
-writeBuilder path builder =
-    IO (\_ s -> ( s, IO.WriteString IO.pure path builder ))
+writeBuilder =
+    IO.writeString
 
 
 

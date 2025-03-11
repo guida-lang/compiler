@@ -501,23 +501,22 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
 
 register : Http.Manager -> Pkg.Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task.Task Exit.Publish ()
 register manager pkg vsn docs commitHash sha =
-    let
-        url : String
-        url =
-            Website.route "/register"
-                [ ( "name", Pkg.toChars pkg )
-                , ( "version", V.toChars vsn )
-                , ( "commit-hash", commitHash )
-                ]
-    in
-    Task.eio Exit.PublishCannotRegister <|
-        Http.upload manager
-            url
-            [ Http.filePart "elm.json" "elm.json"
-            , Http.jsonPart "docs.json" "docs.json" (Docs.jsonEncoder docs)
-            , Http.filePart "README.md" "README.md"
-            , Http.stringPart "github-hash" (Http.shaToChars sha)
-            ]
+    Website.route "/register"
+        [ ( "name", Pkg.toChars pkg )
+        , ( "version", V.toChars vsn )
+        , ( "commit-hash", commitHash )
+        ]
+        |> IO.bind
+            (\url ->
+                Http.upload manager
+                    url
+                    [ Http.filePart "elm.json" "elm.json"
+                    , Http.jsonPart "docs.json" "docs.json" (Docs.jsonEncoder docs)
+                    , Http.filePart "README.md" "README.md"
+                    , Http.stringPart "github-hash" (Http.shaToChars sha)
+                    ]
+            )
+        |> Task.eio Exit.PublishCannotRegister
 
 
 

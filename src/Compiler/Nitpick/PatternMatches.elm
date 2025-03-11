@@ -65,11 +65,14 @@ simplify (A.At _ pattern) =
         Can.PUnit ->
             Ctor unit unitName []
 
-        Can.PTuple a b Nothing ->
+        Can.PTuple a b [] ->
             Ctor pair pairName [ simplify a, simplify b ]
 
-        Can.PTuple a b (Just c) ->
+        Can.PTuple a b [ c ] ->
             Ctor triple tripleName [ simplify a, simplify b, simplify c ]
+
+        Can.PTuple a b cs ->
+            Ctor nTuple nTupleName (List.map simplify (a :: b :: cs))
 
         Can.PCtor { union, name, args } ->
             Ctor union name <|
@@ -148,6 +151,16 @@ triple =
     Can.Union [ "a", "b", "c" ] [ ctor ] 1 Can.Normal
 
 
+nTuple : Can.Union
+nTuple =
+    let
+        ctor : Can.Ctor
+        ctor =
+            Can.Ctor nTupleName Index.first 3 [ Can.TVar "a", Can.TVar "b", Can.TVar "cs" ]
+    in
+    Can.Union [ "a", "b", "cs" ] [ ctor ] 1 Can.Normal
+
+
 list : Can.Union
 list =
     let
@@ -182,6 +195,11 @@ tripleName =
     "#3"
 
 
+nTupleName : Name.Name
+nTupleName =
+    "#N"
+
+
 consName : Name.Name
 consName =
     "::"
@@ -213,7 +231,7 @@ type Context
 
 check : Can.Module -> Result (NE.Nonempty Error) ()
 check (Can.Module _ _ _ decls _ _ _ _) =
-    case checkDecls decls [] of
+    case checkDecls decls [] identity of
         [] ->
             Ok ()
 
@@ -225,17 +243,17 @@ check (Can.Module _ _ _ decls _ _ _ _) =
 -- CHECK DECLS
 
 
-checkDecls : Can.Decls -> List Error -> List Error
-checkDecls decls errors =
+checkDecls : Can.Decls -> List Error -> (List Error -> List Error) -> List Error
+checkDecls decls errors cont =
     case decls of
         Can.Declare def subDecls ->
-            checkDef def (checkDecls subDecls errors)
+            checkDecls subDecls errors (checkDef def >> cont)
 
         Can.DeclareRec def defs subDecls ->
-            checkDef def (List.foldr checkDef (checkDecls subDecls errors) defs)
+            List.foldr checkDef (checkDecls subDecls errors (checkDef def >> cont)) defs
 
         Can.SaveTheEnvironment ->
-            errors
+            cont errors
 
 
 
@@ -340,7 +358,7 @@ checkExpr (A.At region expression) errors =
         Can.Access record _ ->
             checkExpr record errors
 
-        Can.Update _ record fields ->
+        Can.Update _ _ record fields ->
             checkExpr record <| Dict.foldr A.compareLocated (\_ -> checkField) errors fields
 
         Can.Record fields ->
@@ -349,16 +367,10 @@ checkExpr (A.At region expression) errors =
         Can.Unit ->
             errors
 
-        Can.Tuple a b maybeC ->
+        Can.Tuple a b cs ->
             checkExpr a
                 (checkExpr b
-                    (case maybeC of
-                        Nothing ->
-                            errors
-
-                        Just c ->
-                            checkExpr c errors
-                    )
+                    (List.foldr checkExpr errors cs)
                 )
 
         Can.Shader _ _ ->

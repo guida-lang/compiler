@@ -76,7 +76,7 @@ type Type
     | EmptyRecordN
     | RecordN (Dict String Name Type) Type
     | UnitN
-    | TupleN Type Type (Maybe Type)
+    | TupleN Type Type (List Type)
 
 
 
@@ -394,11 +394,11 @@ termToCanType term =
         Unit1 ->
             State.pure Can.TUnit
 
-        Tuple1 a b maybeC ->
+        Tuple1 a b cs ->
             State.pure Can.TTuple
                 |> State.apply (variableToCanType a)
                 |> State.apply (variableToCanType b)
-                |> State.apply (State.traverseMaybe variableToCanType maybeC)
+                |> State.apply (State.traverseList variableToCanType cs)
 
 
 fieldToCanType : Variable -> StateT NameState Can.FieldType
@@ -573,11 +573,11 @@ termToErrorType term =
         Unit1 ->
             State.pure ET.Unit
 
-        Tuple1 a b maybeC ->
+        Tuple1 a b cs ->
             State.pure ET.Tuple
                 |> State.apply (variableToErrorType a)
                 |> State.apply (variableToErrorType b)
-                |> State.apply (State.traverseMaybe variableToErrorType maybeC)
+                |> State.apply (State.traverseList variableToErrorType cs)
 
 
 
@@ -766,13 +766,8 @@ getVarNames var takenNames =
                                             Unit1 ->
                                                 IO.pure takenNames
 
-                                            Tuple1 a b Nothing ->
-                                                IO.bind (getVarNames a) (getVarNames b takenNames)
-
-                                            Tuple1 a b (Just c) ->
-                                                getVarNames c takenNames
-                                                    |> IO.bind (getVarNames b)
-                                                    |> IO.bind (getVarNames a)
+                                            Tuple1 a b cs ->
+                                                IO.foldrM getVarNames takenNames (a :: b :: cs)
                             )
             )
 
