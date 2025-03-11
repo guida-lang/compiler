@@ -74,8 +74,6 @@ generate sourceMaps leadingLines mode (Opt.GlobalGraph graph _) mains =
         ++ "}(this));"
         ++ escapeNewCode """// EXTRA GUIDA CORE
 
-console.warn("FIXME: EXTRA GUIDA CORE");
-
 function _Utils_TupleN(a, b, ...cs) {
   return { $: '#N', a: a, b: b, cs: cs };
 }
