@@ -21,7 +21,7 @@ module System.IO exposing
 
 # The IO monad
 
-@docs IO, ION, RealWorld, pure, apply, fmap, bind, mapM
+@docs IO, pure, apply, fmap, bind, mapM
 
 
 # Files and handles
