@@ -305,8 +305,9 @@ server.post("binaryDecodeFileOrFail", (request) => {
 });
 
 server.post("write", (request) => {
-  const { fd, content } = JSON.parse(request.body);
-  fs.writeFile(fd, JSON.stringify(content), (err) => {
+  const path = request.requestHeaders.getHeader("path");
+
+  fs.writeFile(path, request.body, (err) => {
     if (err) throw err;
     request.respond(200);
   });
@@ -353,12 +354,12 @@ server.post("dirGetAppUserDataDirectory", (request) => {
 });
 
 server.post("putStateT", (request) => {
-  stateT = JSON.parse(request.body);
+  stateT = request.body;
   request.respond(200);
 });
 
 server.post("getStateT", (request) => {
-  request.respond(200, null, JSON.stringify(stateT));
+  request.respond(200, null, stateT);
 });
 
 // MVARS
@@ -373,7 +374,7 @@ server.post("readMVar", (request) => {
   if (typeof mVars[id].value === "undefined") {
     mVars[id].subscribers.push({ action: "read", request });
   } else {
-    request.respond(200, null, JSON.stringify(mVars[id].value));
+    request.respond(200, null, mVars[id].value);
   }
 });
 
@@ -394,18 +395,19 @@ server.post("takeMVar", (request) => {
       request.respond(200);
     }
 
-    request.respond(200, null, JSON.stringify(value));
+    request.respond(200, null, value);
   }
 });
 
 server.post("putMVar", (request) => {
-  const { id, value } = JSON.parse(request.body);
+  const id = request.requestHeaders.getHeader("id");
+  const value = request.body;
   if (typeof mVars[id].value === "undefined") {
     mVars[id].value = value;
 
     mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
       if (subscriber.action === "read") {
-        subscriber.request.respond(200, null, JSON.stringify(value));
+        subscriber.request.respond(200, null, value);
       }
 
       return subscriber.action !== "read";
@@ -414,7 +416,7 @@ server.post("putMVar", (request) => {
     const subscriber = mVars[id].subscribers.shift();
 
     if (subscriber) {
-      subscriber.request.respond(200, null, JSON.stringify(value));
+      subscriber.request.respond(200, null, value);
 
       if (subscriber.action === "take") {
         mVars[id].value = undefined;

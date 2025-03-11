@@ -137,6 +137,7 @@ import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
@@ -1056,14 +1057,8 @@ takeMVar decoder (MVar ref) =
 putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
 putMVar encoder (MVar ref) value =
     Impure.task "putMVar"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "id", Encode.int ref )
-                , ( "value", encoder value )
-                ]
-            )
-        )
+        [ Http.header "id" (String.fromInt ref) ]
+        (Impure.JsonBody (encoder value))
         (Impure.Always ())
 
 
@@ -1159,14 +1154,8 @@ binaryDecodeFileOrFail decoder filename =
 binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
 binaryEncodeFile encoder path value =
     Impure.task "write"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "fd", Encode.string path )
-                , ( "content", encoder value )
-                ]
-            )
-        )
+        [ Http.header "path" path ]
+        (Impure.JsonBody (encoder value))
         (Impure.Always ())
 
 
