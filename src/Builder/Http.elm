@@ -163,7 +163,6 @@ getArchive _ url _ _ onSuccess =
         []
         (Impure.StringBody url)
         (Impure.DecoderResolver
-            -- (Decode.map2 (\sha archive -> onSuccess ( sha, archive ))
             (Decode.map2 Tuple.pair
                 (Decode.field "sha" Decode.string)
                 (Decode.field "archive"

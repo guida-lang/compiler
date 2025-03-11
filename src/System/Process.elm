@@ -110,9 +110,6 @@ withCreateProcess createProcess f =
         )
         (Impure.DecoderResolver
             (Decode.map2 Tuple.pair
-                -- (\stdinHandle ph ->
-                --     f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
-                -- )
                 (Decode.field "stdinHandle" (Decode.maybe Decode.int))
                 (Decode.field "ph" Decode.int)
             )
