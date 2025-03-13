@@ -8,6 +8,7 @@
         "direct": {
             "Janiczek/elm-vlq": "1.0.0",
             "dasch/levenshtein": "1.0.3",
+            "elm/bytes": "1.0.8",
             "elm/core": "1.0.5",
             "elm/http": "2.0.0",
             "elm/json": "1.1.3",
@@ -20,6 +21,7 @@
             "elm-community/result-extra": "2.4.0",
             "guida-lang/glsl": "1.0.0",
             "guida-lang/graph": "1.0.1",
+            "jxxcarlson/hex": "4.0.1",
             "lue-bird/elm-syntax-format": "1.1.7",
             "obiloud/numeric-decimal": "3.0.1",
             "rtfeldman/elm-hex": "1.0.0",
@@ -29,7 +31,6 @@
         },
         "indirect": {
             "andre-dietrich/parser-combinators": "4.1.0",
-            "elm/bytes": "1.0.8",
             "elm/file": "1.0.5",
             "elm/parser": "1.1.0",
             "elm/regex": "1.0.0",

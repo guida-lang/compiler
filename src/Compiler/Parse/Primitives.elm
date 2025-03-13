@@ -31,8 +31,8 @@ module Compiler.Parse.Primitives exposing
     )
 
 import Compiler.Reporting.Annotation as A
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 
 
@@ -470,21 +470,20 @@ getCharWidth word =
 -- ENCODERS and DECODERS
 
 
-snippetEncoder : Snippet -> Encode.Value
+snippetEncoder : Snippet -> BE.Encoder
 snippetEncoder (Snippet { fptr, offset, length, offRow, offCol }) =
-    Encode.object
-        [ ( "type", Encode.string "Snippet" )
-        , ( "fptr", Encode.string fptr )
-        , ( "offset", Encode.int offset )
-        , ( "length", Encode.int length )
-        , ( "offRow", Encode.int offRow )
-        , ( "offCol", Encode.int offCol )
+    BE.sequence
+        [ BE.string fptr
+        , BE.int offset
+        , BE.int length
+        , BE.int offRow
+        , BE.int offCol
         ]
 
 
-snippetDecoder : Decode.Decoder Snippet
+snippetDecoder : BD.Decoder Snippet
 snippetDecoder =
-    Decode.map5
+    BD.map5
         (\fptr offset length offRow offCol ->
             Snippet
                 { fptr = fptr
@@ -494,11 +493,11 @@ snippetDecoder =
                 , offCol = offCol
                 }
         )
-        (Decode.field "fptr" Decode.string)
-        (Decode.field "offset" Decode.int)
-        (Decode.field "length" Decode.int)
-        (Decode.field "offRow" Decode.int)
-        (Decode.field "offCol" Decode.int)
+        BD.string
+        BD.int
+        BD.int
+        BD.int
+        BD.int
 
 
 

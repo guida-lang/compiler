@@ -18,9 +18,9 @@ import Compiler.Parse.Space as Space
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 
 
@@ -417,92 +417,88 @@ toName exposed =
 -- ENCODERS and DECODERS
 
 
-chunkEncoder : Chunk -> Encode.Value
+chunkEncoder : Chunk -> BE.Encoder
 chunkEncoder chunk =
     case chunk of
         JS javascript ->
-            Encode.object
-                [ ( "type", Encode.string "JS" )
-                , ( "javascript", Encode.string javascript )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string javascript
                 ]
 
         ElmVar home name ->
-            Encode.object
-                [ ( "type", Encode.string "ElmVar" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.canonicalEncoder home
+                , BE.string name
                 ]
 
         JsVar home name ->
-            Encode.object
-                [ ( "type", Encode.string "JsVar" )
-                , ( "home", Encode.string home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string home
+                , BE.string name
                 ]
 
         ElmField name ->
-            Encode.object
-                [ ( "type", Encode.string "ElmField" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string name
                 ]
 
         JsField int ->
-            Encode.object
-                [ ( "type", Encode.string "JsField" )
-                , ( "int", Encode.int int )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int int
                 ]
 
         JsEnum int ->
-            Encode.object
-                [ ( "type", Encode.string "JsEnum" )
-                , ( "int", Encode.int int )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int int
                 ]
 
         Debug ->
-            Encode.object
-                [ ( "type", Encode.string "Debug" )
-                ]
+            BE.unsignedInt8 6
 
         Prod ->
-            Encode.object
-                [ ( "type", Encode.string "Prod" )
-                ]
+            BE.unsignedInt8 7
 
 
-chunkDecoder : Decode.Decoder Chunk
+chunkDecoder : BD.Decoder Chunk
 chunkDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "JS" ->
-                        Decode.map JS (Decode.field "javascript" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map JS BD.string
 
-                    "ElmVar" ->
-                        Decode.map2 ElmVar
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
+                    1 ->
+                        BD.map2 ElmVar
+                            ModuleName.canonicalDecoder
+                            BD.string
 
-                    "JsVar" ->
-                        Decode.map2 JsVar
-                            (Decode.field "home" Decode.string)
-                            (Decode.field "name" Decode.string)
+                    2 ->
+                        BD.map2 JsVar
+                            BD.string
+                            BD.string
 
-                    "ElmField" ->
-                        Decode.map ElmField (Decode.field "name" Decode.string)
+                    3 ->
+                        BD.map ElmField BD.string
 
-                    "JsField" ->
-                        Decode.map JsField (Decode.field "int" Decode.int)
+                    4 ->
+                        BD.map JsField BD.int
 
-                    "JsEnum" ->
-                        Decode.map JsEnum (Decode.field "int" Decode.int)
+                    5 ->
+                        BD.map JsEnum BD.int
 
-                    "Debug" ->
-                        Decode.succeed Debug
+                    6 ->
+                        BD.succeed Debug
 
-                    "Prod" ->
-                        Decode.succeed Prod
+                    7 ->
+                        BD.succeed Prod
 
                     _ ->
-                        Decode.fail ("Unknown Chunk's type: " ++ type_)
+                        BD.fail
             )

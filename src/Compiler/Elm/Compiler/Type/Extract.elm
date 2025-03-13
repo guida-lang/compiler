@@ -18,13 +18,11 @@ import Compiler.Data.Name as Name
 import Compiler.Elm.Compiler.Type as T
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
 
 
@@ -314,27 +312,26 @@ tupleTraverse f ( a, b ) =
 -- ENCODERS and DECODERS
 
 
-typesEncoder : Types -> Encode.Value
+typesEncoder : Types -> BE.Encoder
 typesEncoder (Types types) =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder types_Encoder types
+    BE.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder types_Encoder types
 
 
-typesDecoder : Decode.Decoder Types
+typesDecoder : BD.Decoder Types
 typesDecoder =
-    Decode.map Types (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
+    BD.map Types (BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder types_Decoder)
 
 
-types_Encoder : Types_ -> Encode.Value
+types_Encoder : Types_ -> BE.Encoder
 types_Encoder (Types_ unionInfo aliasInfo) =
-    Encode.object
-        [ ( "type", Encode.string "Types_" )
-        , ( "unionInfo", E.assocListDict compare Encode.string Can.unionEncoder unionInfo )
-        , ( "aliasInfo", E.assocListDict compare Encode.string Can.aliasEncoder aliasInfo )
+    BE.sequence
+        [ BE.assocListDict compare BE.string Can.unionEncoder unionInfo
+        , BE.assocListDict compare BE.string Can.aliasEncoder aliasInfo
         ]
 
 
-types_Decoder : Decode.Decoder Types_
+types_Decoder : BD.Decoder Types_
 types_Decoder =
-    Decode.map2 Types_
-        (Decode.field "unionInfo" (D.assocListDict identity Decode.string Can.unionDecoder))
-        (Decode.field "aliasInfo" (D.assocListDict identity Decode.string Can.aliasDecoder))
+    BD.map2 Types_
+        (BD.assocListDict identity BD.string Can.unionDecoder)
+        (BD.assocListDict identity BD.string Can.aliasDecoder)

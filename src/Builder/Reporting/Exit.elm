@@ -59,9 +59,9 @@ import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as CoreDecode
-import Json.Encode as CoreEncode
 import System.IO exposing (IO)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -2901,304 +2901,300 @@ replToReport problem =
 -- ENCODERS and DECODERS
 
 
-detailsBadDepEncoder : DetailsBadDep -> CoreEncode.Value
+detailsBadDepEncoder : DetailsBadDep -> BE.Encoder
 detailsBadDepEncoder detailsBadDep =
     case detailsBadDep of
         BD_BadDownload pkg vsn packageProblem ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BD_BadDownload" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                , ( "packageProblem", packageProblemEncoder packageProblem )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Pkg.nameEncoder pkg
+                , V.versionEncoder vsn
+                , packageProblemEncoder packageProblem
                 ]
 
         BD_BadBuild pkg vsn fingerprint ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BD_BadBuild" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "vsn", V.versionEncoder vsn )
-                , ( "fingerprint", Encode.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Pkg.nameEncoder pkg
+                , V.versionEncoder vsn
+                , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
                 ]
 
 
-detailsBadDepDecoder : CoreDecode.Decoder DetailsBadDep
+detailsBadDepDecoder : BD.Decoder DetailsBadDep
 detailsBadDepDecoder =
-    CoreDecode.field "type" CoreDecode.string
-        |> CoreDecode.andThen
-            (\type_ ->
-                case type_ of
-                    "BD_BadDownload" ->
-                        CoreDecode.map3 BD_BadDownload
-                            (CoreDecode.field "pkg" Pkg.nameDecoder)
-                            (CoreDecode.field "vsn" V.versionDecoder)
-                            (CoreDecode.field "packageProblem" packageProblemDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 BD_BadDownload
+                            Pkg.nameDecoder
+                            V.versionDecoder
+                            packageProblemDecoder
 
-                    "BD_BadBuild" ->
-                        CoreDecode.map3 BD_BadBuild
-                            (CoreDecode.field "pkg" Pkg.nameDecoder)
-                            (CoreDecode.field "vsn" V.versionDecoder)
-                            (CoreDecode.field "fingerprint" (Decode.assocListDict identity Pkg.nameDecoder V.versionDecoder))
+                    1 ->
+                        BD.map3 BD_BadBuild
+                            Pkg.nameDecoder
+                            V.versionDecoder
+                            (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
 
                     _ ->
-                        CoreDecode.fail ("Failed to decode DetailsBadDep's type: " ++ type_)
+                        BD.fail
             )
 
 
-buildProblemEncoder : BuildProblem -> CoreEncode.Value
+buildProblemEncoder : BuildProblem -> BE.Encoder
 buildProblemEncoder buildProblem =
     case buildProblem of
         BuildBadModules root e es ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BuildBadModules" )
-                , ( "root", CoreEncode.string root )
-                , ( "e", Error.moduleEncoder e )
-                , ( "es", CoreEncode.list Error.jsonToJson es )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string root
+                , Error.moduleEncoder e
+                , BE.list Error.moduleEncoder es
                 ]
 
         BuildProjectProblem problem ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BuildProjectProblem" )
-                , ( "problem", buildProjectProblemEncoder problem )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , buildProjectProblemEncoder problem
                 ]
 
 
-buildProblemDecoder : CoreDecode.Decoder BuildProblem
+buildProblemDecoder : BD.Decoder BuildProblem
 buildProblemDecoder =
-    CoreDecode.field "type" CoreDecode.string
-        |> CoreDecode.andThen
-            (\type_ ->
-                case type_ of
-                    "BuildBadModules" ->
-                        CoreDecode.map3 BuildBadModules
-                            (CoreDecode.field "root" CoreDecode.string)
-                            (CoreDecode.field "e" Error.moduleDecoder)
-                            (CoreDecode.field "es" (CoreDecode.list Error.moduleDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 BuildBadModules
+                            BD.string
+                            Error.moduleDecoder
+                            (BD.list Error.moduleDecoder)
 
-                    "BuildProjectProblem" ->
-                        CoreDecode.map BuildProjectProblem (CoreDecode.field "problem" buildProjectProblemDecoder)
+                    1 ->
+                        BD.map BuildProjectProblem buildProjectProblemDecoder
 
                     _ ->
-                        CoreDecode.fail ("Failed to decode BuildProblem's type: " ++ type_)
+                        BD.fail
             )
 
 
-buildProjectProblemEncoder : BuildProjectProblem -> CoreEncode.Value
+buildProjectProblemEncoder : BuildProjectProblem -> BE.Encoder
 buildProjectProblemEncoder buildProjectProblem =
     case buildProjectProblem of
         BP_PathUnknown path ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_PathUnknown" )
-                , ( "path", CoreEncode.string path )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string path
                 ]
 
         BP_WithBadExtension path ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_WithBadExtension" )
-                , ( "path", CoreEncode.string path )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string path
                 ]
 
         BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_WithAmbiguousSrcDir" )
-                , ( "path", CoreEncode.string path )
-                , ( "srcDir1", CoreEncode.string srcDir1 )
-                , ( "srcDir2", CoreEncode.string srcDir2 )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string path
+                , BE.string srcDir1
+                , BE.string srcDir2
                 ]
 
         BP_MainPathDuplicate path1 path2 ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_MainPathDuplicate" )
-                , ( "path1", CoreEncode.string path1 )
-                , ( "path2", CoreEncode.string path2 )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string path1
+                , BE.string path2
                 ]
 
         BP_RootNameDuplicate name outsidePath otherPath ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_RootNameDuplicate" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "outsidePath", CoreEncode.string outsidePath )
-                , ( "otherPath", CoreEncode.string otherPath )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , ModuleName.rawEncoder name
+                , BE.string outsidePath
+                , BE.string otherPath
                 ]
 
         BP_RootNameInvalid givenPath srcDir names ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_RootNameInvalid" )
-                , ( "givenPath", CoreEncode.string givenPath )
-                , ( "srcDir", CoreEncode.string srcDir )
-                , ( "names", CoreEncode.list CoreEncode.string names )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.string givenPath
+                , BE.string srcDir
+                , BE.list BE.string names
                 ]
 
         BP_CannotLoadDependencies ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_CannotLoadDependencies" )
-                ]
+            BE.unsignedInt8 6
 
         BP_Cycle name names ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_Cycle" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "names", CoreEncode.list ModuleName.rawEncoder names )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , ModuleName.rawEncoder name
+                , BE.list ModuleName.rawEncoder names
                 ]
 
         BP_MissingExposed problems ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "BP_MissingExposed" )
-                , ( "problems", Encode.nonempty (Encode.jsonPair ModuleName.rawEncoder Import.problemEncoder) problems )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.nonempty (BE.jsonPair ModuleName.rawEncoder Import.problemEncoder) problems
                 ]
 
 
-buildProjectProblemDecoder : CoreDecode.Decoder BuildProjectProblem
+buildProjectProblemDecoder : BD.Decoder BuildProjectProblem
 buildProjectProblemDecoder =
-    CoreDecode.field "type" CoreDecode.string
-        |> CoreDecode.andThen
-            (\type_ ->
-                case type_ of
-                    "BP_PathUnknown" ->
-                        CoreDecode.map BP_PathUnknown (CoreDecode.field "path" CoreDecode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map BP_PathUnknown BD.string
 
-                    "BP_WithBadExtension" ->
-                        CoreDecode.map BP_WithBadExtension (CoreDecode.field "path" CoreDecode.string)
+                    1 ->
+                        BD.map BP_WithBadExtension BD.string
 
-                    "BP_WithAmbiguousSrcDir" ->
-                        CoreDecode.map3 BP_WithAmbiguousSrcDir
-                            (CoreDecode.field "path" CoreDecode.string)
-                            (CoreDecode.field "srcDir1" CoreDecode.string)
-                            (CoreDecode.field "srcDir2" CoreDecode.string)
+                    2 ->
+                        BD.map3 BP_WithAmbiguousSrcDir
+                            BD.string
+                            BD.string
+                            BD.string
 
-                    "BP_MainPathDuplicate" ->
-                        CoreDecode.map2 BP_MainPathDuplicate
-                            (CoreDecode.field "path1" CoreDecode.string)
-                            (CoreDecode.field "path2" CoreDecode.string)
+                    3 ->
+                        BD.map2 BP_MainPathDuplicate
+                            BD.string
+                            BD.string
 
-                    "BP_RootNameDuplicate" ->
-                        CoreDecode.map3 BP_RootNameDuplicate
-                            (CoreDecode.field "name" ModuleName.rawDecoder)
-                            (CoreDecode.field "outsidePath" CoreDecode.string)
-                            (CoreDecode.field "otherPath" CoreDecode.string)
+                    4 ->
+                        BD.map3 BP_RootNameDuplicate
+                            ModuleName.rawDecoder
+                            BD.string
+                            BD.string
 
-                    "BP_RootNameInvalid" ->
-                        CoreDecode.map3 BP_RootNameInvalid
-                            (CoreDecode.field "givenPath" CoreDecode.string)
-                            (CoreDecode.field "srcDir" CoreDecode.string)
-                            (CoreDecode.field "names" (CoreDecode.list CoreDecode.string))
+                    5 ->
+                        BD.map3 BP_RootNameInvalid
+                            BD.string
+                            BD.string
+                            (BD.list BD.string)
 
-                    "BP_CannotLoadDependencies" ->
-                        CoreDecode.succeed BP_CannotLoadDependencies
+                    6 ->
+                        BD.succeed BP_CannotLoadDependencies
 
-                    "BP_Cycle" ->
-                        CoreDecode.map2 BP_Cycle
-                            (CoreDecode.field "name" ModuleName.rawDecoder)
-                            (CoreDecode.field "names" (CoreDecode.list ModuleName.rawDecoder))
+                    7 ->
+                        BD.map2 BP_Cycle
+                            ModuleName.rawDecoder
+                            (BD.list ModuleName.rawDecoder)
 
-                    "BP_MissingExposed" ->
-                        CoreDecode.map BP_MissingExposed
-                            (CoreDecode.field "problems"
-                                (Decode.nonempty
-                                    (Decode.jsonPair ModuleName.rawDecoder Import.problemDecoder)
-                                )
+                    8 ->
+                        BD.map BP_MissingExposed
+                            (BD.nonempty
+                                (BD.jsonPair ModuleName.rawDecoder Import.problemDecoder)
                             )
 
                     _ ->
-                        CoreDecode.fail ("Failed to decode BuildProjectProblem's type: " ++ type_)
+                        BD.fail
             )
 
 
-registryProblemEncoder : RegistryProblem -> CoreEncode.Value
+registryProblemEncoder : RegistryProblem -> BE.Encoder
 registryProblemEncoder registryProblem =
     case registryProblem of
         RP_Http err ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "RP_Http" )
-                , ( "err", Http.errorEncoder err )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Http.errorEncoder err
                 ]
 
         RP_Data url body ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "RP_Data" )
-                , ( "url", CoreEncode.string url )
-                , ( "body", CoreEncode.string body )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string url
+                , BE.string body
                 ]
 
 
-registryProblemDecoder : CoreDecode.Decoder RegistryProblem
+registryProblemDecoder : BD.Decoder RegistryProblem
 registryProblemDecoder =
-    CoreDecode.field "type" CoreDecode.string
-        |> CoreDecode.andThen
-            (\type_ ->
-                case type_ of
-                    "RP_Http" ->
-                        CoreDecode.map RP_Http (CoreDecode.field "err" Http.errorDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map RP_Http Http.errorDecoder
 
-                    "RP_Data" ->
-                        CoreDecode.map2 RP_Data
-                            (CoreDecode.field "url" CoreDecode.string)
-                            (CoreDecode.field "body" CoreDecode.string)
+                    1 ->
+                        BD.map2 RP_Data
+                            BD.string
+                            BD.string
 
                     _ ->
-                        CoreDecode.fail ("Failed to decode RegistryProblem's type: " ++ type_)
+                        BD.fail
             )
 
 
-packageProblemEncoder : PackageProblem -> CoreEncode.Value
+packageProblemEncoder : PackageProblem -> BE.Encoder
 packageProblemEncoder packageProblem =
     case packageProblem of
         PP_BadEndpointRequest httpError ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "PP_BadEndpointRequest" )
-                , ( "httpError", Http.errorEncoder httpError )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Http.errorEncoder httpError
                 ]
 
         PP_BadEndpointContent url ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "PP_BadEndpointContent" )
-                , ( "url", CoreEncode.string url )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string url
                 ]
 
         PP_BadArchiveRequest httpError ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "PP_BadArchiveRequest" )
-                , ( "httpError", Http.errorEncoder httpError )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Http.errorEncoder httpError
                 ]
 
         PP_BadArchiveContent url ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "PP_BadArchiveContent" )
-                , ( "url", CoreEncode.string url )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string url
                 ]
 
         PP_BadArchiveHash url expectedHash actualHash ->
-            CoreEncode.object
-                [ ( "type", CoreEncode.string "PP_BadArchiveHash" )
-                , ( "url", CoreEncode.string url )
-                , ( "expectedHash", CoreEncode.string expectedHash )
-                , ( "actualHash", CoreEncode.string actualHash )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string url
+                , BE.string expectedHash
+                , BE.string actualHash
                 ]
 
 
-packageProblemDecoder : CoreDecode.Decoder PackageProblem
+packageProblemDecoder : BD.Decoder PackageProblem
 packageProblemDecoder =
-    CoreDecode.field "type" CoreDecode.string
-        |> CoreDecode.andThen
-            (\type_ ->
-                case type_ of
-                    "PP_BadEndpointRequest" ->
-                        CoreDecode.map PP_BadEndpointRequest (CoreDecode.field "httpError" Http.errorDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map PP_BadEndpointRequest Http.errorDecoder
 
-                    "PP_BadEndpointContent" ->
-                        CoreDecode.map PP_BadEndpointContent (CoreDecode.field "url" CoreDecode.string)
+                    1 ->
+                        BD.map PP_BadEndpointContent BD.string
 
-                    "PP_BadArchiveRequest" ->
-                        CoreDecode.map PP_BadArchiveRequest (CoreDecode.field "httpError" Http.errorDecoder)
+                    2 ->
+                        BD.map PP_BadArchiveRequest Http.errorDecoder
 
-                    "PP_BadArchiveContent" ->
-                        CoreDecode.map PP_BadArchiveContent (CoreDecode.field "url" CoreDecode.string)
+                    3 ->
+                        BD.map PP_BadArchiveContent BD.string
 
-                    "PP_BadArchiveHash" ->
-                        CoreDecode.map3 PP_BadArchiveHash
-                            (CoreDecode.field "url" CoreDecode.string)
-                            (CoreDecode.field "expectedHash" CoreDecode.string)
-                            (CoreDecode.field "actualHash" CoreDecode.string)
+                    4 ->
+                        BD.map3 PP_BadArchiveHash
+                            BD.string
+                            BD.string
+                            BD.string
 
                     _ ->
-                        CoreDecode.fail ("Failed to decode PackageProblem's type: " ++ type_)
+                        BD.fail
             )

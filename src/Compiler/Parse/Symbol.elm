@@ -9,8 +9,8 @@ module Compiler.Parse.Symbol exposing
 import Compiler.Data.Name exposing (Name)
 import Compiler.Parse.Primitives as P exposing (Col, Parser, Row)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -95,46 +95,48 @@ binopCharSet =
 -- ENCODERS and DECODERS
 
 
-badOperatorEncoder : BadOperator -> Encode.Value
+badOperatorEncoder : BadOperator -> BE.Encoder
 badOperatorEncoder badOperator =
-    case badOperator of
-        BadDot ->
-            Encode.string "BadDot"
+    BE.unsignedInt8
+        (case badOperator of
+            BadDot ->
+                0
 
-        BadPipe ->
-            Encode.string "BadPipe"
+            BadPipe ->
+                1
 
-        BadArrow ->
-            Encode.string "BadArrow"
+            BadArrow ->
+                2
 
-        BadEquals ->
-            Encode.string "BadEquals"
+            BadEquals ->
+                3
 
-        BadHasType ->
-            Encode.string "BadHasType"
+            BadHasType ->
+                4
+        )
 
 
-badOperatorDecoder : Decode.Decoder BadOperator
+badOperatorDecoder : BD.Decoder BadOperator
 badOperatorDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "BadDot" ->
-                        Decode.succeed BadDot
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed BadDot
 
-                    "BadPipe" ->
-                        Decode.succeed BadPipe
+                    1 ->
+                        BD.succeed BadPipe
 
-                    "BadArrow" ->
-                        Decode.succeed BadArrow
+                    2 ->
+                        BD.succeed BadArrow
 
-                    "BadEquals" ->
-                        Decode.succeed BadEquals
+                    3 ->
+                        BD.succeed BadEquals
 
-                    "BadHasType" ->
-                        Decode.succeed BadHasType
+                    4 ->
+                        BD.succeed BadHasType
 
                     _ ->
-                        Decode.fail ("Unknown BadOperator: " ++ str)
+                        BD.fail
             )

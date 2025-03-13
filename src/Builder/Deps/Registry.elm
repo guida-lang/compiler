@@ -20,12 +20,11 @@ import Builder.Stuff as Stuff
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -38,21 +37,6 @@ type Registry
 
 type KnownVersions
     = KnownVersions V.Version (List V.Version)
-
-
-knownVersionsDecoder : Decode.Decoder KnownVersions
-knownVersionsDecoder =
-    Decode.map2 KnownVersions
-        (Decode.field "version" V.jsonDecoder)
-        (Decode.field "versions" (Decode.list V.jsonDecoder))
-
-
-knownVersionsEncoder : KnownVersions -> Encode.Value
-knownVersionsEncoder (KnownVersions version versions) =
-    Encode.object
-        [ ( "version", V.jsonEncoder version )
-        , ( "versions", Encode.list V.jsonEncoder versions )
-        ]
 
 
 
@@ -248,16 +232,31 @@ post manager path decoder callback =
 -- ENCODERS and DECODERS
 
 
-registryDecoder : Decode.Decoder Registry
+registryDecoder : BD.Decoder Registry
 registryDecoder =
-    Decode.map2 Registry
-        (Decode.field "size" Decode.int)
-        (Decode.field "packages" (D.assocListDict identity Pkg.nameDecoder knownVersionsDecoder))
+    BD.map2 Registry
+        BD.int
+        (BD.assocListDict identity Pkg.nameDecoder knownVersionsDecoder)
 
 
-registryEncoder : Registry -> Encode.Value
+registryEncoder : Registry -> BE.Encoder
 registryEncoder (Registry size versions) =
-    Encode.object
-        [ ( "size", Encode.int size )
-        , ( "packages", E.assocListDict Pkg.compareName Pkg.nameEncoder knownVersionsEncoder versions )
+    BE.sequence
+        [ BE.int size
+        , BE.assocListDict Pkg.compareName Pkg.nameEncoder knownVersionsEncoder versions
+        ]
+
+
+knownVersionsDecoder : BD.Decoder KnownVersions
+knownVersionsDecoder =
+    BD.map2 KnownVersions
+        V.versionDecoder
+        (BD.list V.versionDecoder)
+
+
+knownVersionsEncoder : KnownVersions -> BE.Encoder
+knownVersionsEncoder (KnownVersions version versions) =
+    BE.sequence
+        [ V.versionEncoder version
+        , BE.list V.versionEncoder versions
         ]

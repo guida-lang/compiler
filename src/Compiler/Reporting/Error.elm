@@ -1,7 +1,6 @@
 module Compiler.Reporting.Error exposing
     ( Error(..)
     , Module
-    , jsonToJson
     , moduleDecoder
     , moduleEncoder
     , toDoc
@@ -12,7 +11,6 @@ import Builder.File as File
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
 import Compiler.Json.Encode as E
 import Compiler.Nitpick.PatternMatches as P
 import Compiler.Reporting.Annotation as A
@@ -27,9 +25,9 @@ import Compiler.Reporting.Error.Type as Type
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Time
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
 
 
@@ -239,111 +237,106 @@ encodeRegion (A.Region (A.Position sr sc) (A.Position er ec)) =
 -- ENCODERS and DECODERS
 
 
-jsonToJson : Module -> Encode.Value
-jsonToJson =
-    E.toJsonValue << toJson
-
-
-moduleEncoder : Module -> Encode.Value
+moduleEncoder : Module -> BE.Encoder
 moduleEncoder modul =
-    Encode.object
-        [ ( "name", ModuleName.rawEncoder modul.name )
-        , ( "absolutePath", Encode.string modul.absolutePath )
-        , ( "modificationTime", File.timeEncoder modul.modificationTime )
-        , ( "source", Encode.string modul.source )
-        , ( "error", errorEncoder modul.error )
+    BE.sequence
+        [ ModuleName.rawEncoder modul.name
+        , BE.string modul.absolutePath
+        , File.timeEncoder modul.modificationTime
+        , BE.string modul.source
+        , errorEncoder modul.error
         ]
 
 
-moduleDecoder : Decode.Decoder Module
+moduleDecoder : BD.Decoder Module
 moduleDecoder =
-    Decode.map5 Module
-        (Decode.field "name" ModuleName.rawDecoder)
-        (Decode.field "absolutePath" Decode.string)
-        (Decode.field "modificationTime" File.timeDecoder)
-        (Decode.field "source" Decode.string)
-        (Decode.field "error" errorDecoder)
+    BD.map5 Module
+        ModuleName.rawDecoder
+        BD.string
+        File.timeDecoder
+        BD.string
+        errorDecoder
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         BadSyntax syntaxError ->
-            Encode.object
-                [ ( "type", Encode.string "BadSyntax" )
-                , ( "syntaxError", Syntax.errorEncoder syntaxError )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Syntax.errorEncoder syntaxError
                 ]
 
         BadImports errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadImports" )
-                , ( "errs", E.nonempty Import.errorEncoder errs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.nonempty Import.errorEncoder errs
                 ]
 
         BadNames errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadNames" )
-                , ( "errs", E.oneOrMore Canonicalize.errorEncoder errs )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.oneOrMore Canonicalize.errorEncoder errs
                 ]
 
         BadTypes localizer errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadTypes" )
-                , ( "localizer", L.localizerEncoder localizer )
-                , ( "errs", E.nonempty Type.errorEncoder errs )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , L.localizerEncoder localizer
+                , BE.nonempty Type.errorEncoder errs
                 ]
 
         BadMains localizer errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadMains" )
-                , ( "localizer", L.localizerEncoder localizer )
-                , ( "errs", E.oneOrMore Main.errorEncoder errs )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , L.localizerEncoder localizer
+                , BE.oneOrMore Main.errorEncoder errs
                 ]
 
         BadPatterns errs ->
-            Encode.object
-                [ ( "type", Encode.string "BadPatterns" )
-                , ( "errs", E.nonempty P.errorEncoder errs )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.nonempty P.errorEncoder errs
                 ]
 
         BadDocs docsErr ->
-            Encode.object
-                [ ( "type", Encode.string "BadDocs" )
-                , ( "docsErr", Docs.errorEncoder docsErr )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , Docs.errorEncoder docsErr
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadSyntax" ->
-                        Decode.map BadSyntax (Decode.field "syntaxError" Syntax.errorDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map BadSyntax Syntax.errorDecoder
 
-                    "BadImports" ->
-                        Decode.map BadImports (Decode.field "errs" (DecodeX.nonempty Import.errorDecoder))
+                    1 ->
+                        BD.map BadImports (BD.nonempty Import.errorDecoder)
 
-                    "BadNames" ->
-                        Decode.map BadNames (Decode.field "errs" (DecodeX.oneOrMore Canonicalize.errorDecoder))
+                    2 ->
+                        BD.map BadNames (BD.oneOrMore Canonicalize.errorDecoder)
 
-                    "BadTypes" ->
-                        Decode.map2 BadTypes
-                            (Decode.field "localizer" L.localizerDecoder)
-                            (Decode.field "errs" (DecodeX.nonempty Type.errorDecoder))
+                    3 ->
+                        BD.map2 BadTypes
+                            L.localizerDecoder
+                            (BD.nonempty Type.errorDecoder)
 
-                    "BadMains" ->
-                        Decode.map2 BadMains
-                            (Decode.field "localizer" L.localizerDecoder)
-                            (Decode.field "errs" (DecodeX.oneOrMore Main.errorDecoder))
+                    4 ->
+                        BD.map2 BadMains
+                            L.localizerDecoder
+                            (BD.oneOrMore Main.errorDecoder)
 
-                    "BadPatterns" ->
-                        Decode.map BadPatterns (Decode.field "errs" (DecodeX.nonempty P.errorDecoder))
+                    5 ->
+                        BD.map BadPatterns (BD.nonempty P.errorDecoder)
 
-                    "BadDocs" ->
-                        Decode.map BadDocs (Decode.field "docsErr" Docs.errorDecoder)
+                    6 ->
+                        BD.map BadDocs Docs.errorDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Path's type: " ++ type_)
+                        BD.fail
             )

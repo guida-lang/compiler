@@ -13,8 +13,8 @@ module Compiler.Data.Index exposing
     , zeroBasedEncoder
     )
 
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -103,11 +103,11 @@ indexedZipWithHelp func index listX listY revListZ =
 -- ENCODERS and DECODERS
 
 
-zeroBasedEncoder : ZeroBased -> Encode.Value
+zeroBasedEncoder : ZeroBased -> BE.Encoder
 zeroBasedEncoder (ZeroBased zeroBased) =
-    Encode.int zeroBased
+    BE.int zeroBased
 
 
-zeroBasedDecoder : Decode.Decoder ZeroBased
+zeroBasedDecoder : BD.Decoder ZeroBased
 zeroBasedDecoder =
-    Decode.map ZeroBased Decode.int
+    BD.map ZeroBased BD.int

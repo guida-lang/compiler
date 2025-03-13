@@ -31,10 +31,10 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -533,34 +533,34 @@ boundParser bound tooLong =
                 P.Cerr row newCol (\_ _ -> tooLong)
 
 
-srcDirEncoder : SrcDir -> Encode.Value
+srcDirEncoder : SrcDir -> BE.Encoder
 srcDirEncoder srcDir =
     case srcDir of
         AbsoluteSrcDir dir ->
-            Encode.object
-                [ ( "type", Encode.string "AbsoluteSrcDir" )
-                , ( "dir", Encode.string dir )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string dir
                 ]
 
         RelativeSrcDir dir ->
-            Encode.object
-                [ ( "type", Encode.string "RelativeSrcDir" )
-                , ( "dir", Encode.string dir )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string dir
                 ]
 
 
-srcDirDecoder : Decode.Decoder SrcDir
+srcDirDecoder : BD.Decoder SrcDir
 srcDirDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "AbsoluteSrcDir" ->
-                        Decode.map AbsoluteSrcDir (Decode.field "dir" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map AbsoluteSrcDir BD.string
 
-                    "RelativeSrcDir" ->
-                        Decode.map RelativeSrcDir (Decode.field "dir" Decode.string)
+                    1 ->
+                        BD.map RelativeSrcDir BD.string
 
                     _ ->
-                        Decode.fail ("Failed to decode SrcDir's type: " ++ type_)
+                        BD.fail
             )

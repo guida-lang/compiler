@@ -22,12 +22,10 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -208,161 +206,154 @@ privatize di =
 -- ENCODERS and DECODERS
 
 
-interfaceEncoder : Interface -> Encode.Value
+interfaceEncoder : Interface -> BE.Encoder
 interfaceEncoder (Interface home values unions aliases binops) =
-    Encode.object
-        [ ( "type", Encode.string "Interface" )
-        , ( "home", Pkg.nameEncoder home )
-        , ( "values", E.assocListDict compare Encode.string Can.annotationEncoder values )
-        , ( "unions", E.assocListDict compare Encode.string unionEncoder unions )
-        , ( "aliases", E.assocListDict compare Encode.string aliasEncoder aliases )
-        , ( "binops", E.assocListDict compare Encode.string binopEncoder binops )
+    BE.sequence
+        [ Pkg.nameEncoder home
+        , BE.assocListDict compare BE.string Can.annotationEncoder values
+        , BE.assocListDict compare BE.string unionEncoder unions
+        , BE.assocListDict compare BE.string aliasEncoder aliases
+        , BE.assocListDict compare BE.string binopEncoder binops
         ]
 
 
-interfaceDecoder : Decode.Decoder Interface
+interfaceDecoder : BD.Decoder Interface
 interfaceDecoder =
-    Decode.map5 Interface
-        (Decode.field "home" Pkg.nameDecoder)
-        (Decode.field "values" (D.assocListDict identity Decode.string Can.annotationDecoder))
-        (Decode.field "unions" (D.assocListDict identity Decode.string unionDecoder))
-        (Decode.field "aliases" (D.assocListDict identity Decode.string aliasDecoder))
-        (Decode.field "binops" (D.assocListDict identity Decode.string binopDecoder))
+    BD.map5 Interface
+        Pkg.nameDecoder
+        (BD.assocListDict identity BD.string Can.annotationDecoder)
+        (BD.assocListDict identity BD.string unionDecoder)
+        (BD.assocListDict identity BD.string aliasDecoder)
+        (BD.assocListDict identity BD.string binopDecoder)
 
 
-unionEncoder : Union -> Encode.Value
+unionEncoder : Union -> BE.Encoder
 unionEncoder union_ =
     case union_ of
         OpenUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "OpenUnion" )
-                , ( "union", Can.unionEncoder union )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Can.unionEncoder union
                 ]
 
         ClosedUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "ClosedUnion" )
-                , ( "union", Can.unionEncoder union )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Can.unionEncoder union
                 ]
 
         PrivateUnion union ->
-            Encode.object
-                [ ( "type", Encode.string "PrivateUnion" )
-                , ( "union", Can.unionEncoder union )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Can.unionEncoder union
                 ]
 
 
-unionDecoder : Decode.Decoder Union
+unionDecoder : BD.Decoder Union
 unionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "OpenUnion" ->
-                        Decode.map OpenUnion
-                            (Decode.field "union" Can.unionDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map OpenUnion Can.unionDecoder
 
-                    "ClosedUnion" ->
-                        Decode.map ClosedUnion
-                            (Decode.field "union" Can.unionDecoder)
+                    1 ->
+                        BD.map ClosedUnion Can.unionDecoder
 
-                    "PrivateUnion" ->
-                        Decode.map PrivateUnion
-                            (Decode.field "union" Can.unionDecoder)
+                    2 ->
+                        BD.map PrivateUnion Can.unionDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Union's type: " ++ type_)
+                        BD.fail
             )
 
 
-aliasEncoder : Alias -> Encode.Value
+aliasEncoder : Alias -> BE.Encoder
 aliasEncoder aliasValue =
     case aliasValue of
         PublicAlias alias_ ->
-            Encode.object
-                [ ( "type", Encode.string "PublicAlias" )
-                , ( "alias", Can.aliasEncoder alias_ )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Can.aliasEncoder alias_
                 ]
 
         PrivateAlias alias_ ->
-            Encode.object
-                [ ( "type", Encode.string "PrivateAlias" )
-                , ( "alias", Can.aliasEncoder alias_ )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Can.aliasEncoder alias_
                 ]
 
 
-aliasDecoder : Decode.Decoder Alias
+aliasDecoder : BD.Decoder Alias
 aliasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PublicAlias" ->
-                        Decode.map PublicAlias
-                            (Decode.field "alias" Can.aliasDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map PublicAlias Can.aliasDecoder
 
-                    "PrivateAlias" ->
-                        Decode.map PrivateAlias
-                            (Decode.field "alias" Can.aliasDecoder)
+                    1 ->
+                        BD.map PrivateAlias Can.aliasDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Alias' type: " ++ type_)
+                        BD.fail
             )
 
 
-binopEncoder : Binop -> Encode.Value
+binopEncoder : Binop -> BE.Encoder
 binopEncoder (Binop name annotation associativity precedence) =
-    Encode.object
-        [ ( "type", Encode.string "Binop" )
-        , ( "name", Encode.string name )
-        , ( "annotation", Can.annotationEncoder annotation )
-        , ( "associativity", Binop.associativityEncoder associativity )
-        , ( "precedence", Binop.precedenceEncoder precedence )
+    BE.sequence
+        [ BE.string name
+        , Can.annotationEncoder annotation
+        , Binop.associativityEncoder associativity
+        , Binop.precedenceEncoder precedence
         ]
 
 
-binopDecoder : Decode.Decoder Binop
+binopDecoder : BD.Decoder Binop
 binopDecoder =
-    Decode.map4 Binop
-        (Decode.field "name" Decode.string)
-        (Decode.field "annotation" Can.annotationDecoder)
-        (Decode.field "associativity" Binop.associativityDecoder)
-        (Decode.field "precedence" Binop.precedenceDecoder)
+    BD.map4 Binop
+        BD.string
+        Can.annotationDecoder
+        Binop.associativityDecoder
+        Binop.precedenceDecoder
 
 
-dependencyInterfaceEncoder : DependencyInterface -> Encode.Value
+dependencyInterfaceEncoder : DependencyInterface -> BE.Encoder
 dependencyInterfaceEncoder dependencyInterface =
     case dependencyInterface of
         Public i ->
-            Encode.object
-                [ ( "type", Encode.string "Public" )
-                , ( "i", interfaceEncoder i )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , interfaceEncoder i
                 ]
 
         Private pkg unions aliases ->
-            Encode.object
-                [ ( "type", Encode.string "Private" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "unions", E.assocListDict compare Encode.string Can.unionEncoder unions )
-                , ( "aliases", E.assocListDict compare Encode.string Can.aliasEncoder aliases )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Pkg.nameEncoder pkg
+                , BE.assocListDict compare BE.string Can.unionEncoder unions
+                , BE.assocListDict compare BE.string Can.aliasEncoder aliases
                 ]
 
 
-dependencyInterfaceDecoder : Decode.Decoder DependencyInterface
+dependencyInterfaceDecoder : BD.Decoder DependencyInterface
 dependencyInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Public" ->
-                        Decode.map Public (Decode.field "i" interfaceDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Public interfaceDecoder
 
-                    "Private" ->
-                        Decode.map3 Private
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "unions" (D.assocListDict identity Decode.string Can.unionDecoder))
-                            (Decode.field "aliases" (D.assocListDict identity Decode.string Can.aliasDecoder))
+                    1 ->
+                        BD.map3 Private
+                            Pkg.nameDecoder
+                            (BD.assocListDict identity BD.string Can.unionDecoder)
+                            (BD.assocListDict identity BD.string Can.aliasDecoder)
 
                     _ ->
-                        Decode.fail ("Failed to decode DependencyInterface's type: " ++ type_)
+                        BD.fail
             )

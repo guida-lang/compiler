@@ -16,10 +16,10 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Time
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
 
@@ -46,18 +46,18 @@ zeroTime =
 -- BINARY
 
 
-writeBinary : (a -> Encode.Value) -> FilePath -> a -> IO ()
-writeBinary encoder path value =
+writeBinary : (a -> BE.Encoder) -> FilePath -> a -> IO ()
+writeBinary toEncoder path value =
     let
         dir : FilePath
         dir =
             Utils.fpDropFileName path
     in
     Utils.dirCreateDirectoryIfMissing True dir
-        |> IO.bind (\_ -> Utils.binaryEncodeFile encoder path value)
+        |> IO.bind (\_ -> Utils.binaryEncodeFile toEncoder path value)
 
 
-readBinary : Decode.Decoder a -> FilePath -> IO (Maybe a)
+readBinary : BD.Decoder a -> FilePath -> IO (Maybe a)
 readBinary decoder path =
     Utils.dirDoesFileExist path
         |> IO.bind
@@ -195,11 +195,11 @@ remove path =
 -- ENCODERS and DECODERS
 
 
-timeEncoder : Time -> Encode.Value
+timeEncoder : Time -> BE.Encoder
 timeEncoder (Time posix) =
-    Encode.int (Time.posixToMillis posix)
+    BE.int (Time.posixToMillis posix)
 
 
-timeDecoder : Decode.Decoder Time
+timeDecoder : BD.Decoder Time
 timeDecoder =
-    Decode.map (Time << Time.millisToPosix) Decode.int
+    BD.map (Time << Time.millisToPosix) BD.int

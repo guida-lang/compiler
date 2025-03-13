@@ -216,7 +216,7 @@ generateDocs (Env maybeRoot _ _ _) =
 
                                     e :: es ->
                                         Task.eio Exit.DiffBadBuild <|
-                                            Build.fromExposed Docs.jsonDecoder Docs.jsonEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
+                                            Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
                     )
 
 

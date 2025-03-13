@@ -131,8 +131,6 @@ import Basics.Extra exposing (flip)
 import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Result as R
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
@@ -146,6 +144,8 @@ import Process
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import Time
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
 
@@ -198,14 +198,9 @@ mapFromListWith toComparable f =
         Map.empty
 
 
-maybeEncoder : (a -> Encode.Value) -> Maybe a -> Encode.Value
-maybeEncoder encoder maybeValue =
-    case maybeValue of
-        Just value ->
-            encoder value
-
-        Nothing ->
-            Encode.null
+maybeEncoder : (a -> BE.Encoder) -> Maybe a -> BE.Encoder
+maybeEncoder =
+    BE.maybe
 
 
 eitherLefts : List (Result e a) -> List e
@@ -1017,48 +1012,48 @@ type MVar a
     = MVar Int
 
 
-newMVar : (a -> Encode.Value) -> a -> IO (MVar a)
-newMVar encoder value =
+newMVar : (a -> BE.Encoder) -> a -> IO (MVar a)
+newMVar toEncoder value =
     newEmptyMVar
         |> IO.bind
             (\mvar ->
-                putMVar encoder mvar value
+                putMVar toEncoder mvar value
                     |> IO.fmap (\_ -> mvar)
             )
 
 
-readMVar : Decode.Decoder a -> MVar a -> IO a
+readMVar : BD.Decoder a -> MVar a -> IO a
 readMVar decoder (MVar ref) =
     Impure.task "readMVar"
         []
         (Impure.StringBody (String.fromInt ref))
-        (Impure.DecoderResolver decoder)
+        (Impure.BytesResolver decoder)
 
 
-modifyMVar : Decode.Decoder a -> (a -> Encode.Value) -> MVar a -> (a -> IO ( a, b )) -> IO b
-modifyMVar decoder encoder m io =
+modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar decoder toEncoder m io =
     takeMVar decoder m
         |> IO.bind io
         |> IO.bind
             (\( a, b ) ->
-                putMVar encoder m a
+                putMVar toEncoder m a
                     |> IO.fmap (\_ -> b)
             )
 
 
-takeMVar : Decode.Decoder a -> MVar a -> IO a
+takeMVar : BD.Decoder a -> MVar a -> IO a
 takeMVar decoder (MVar ref) =
     Impure.task "takeMVar"
         []
         (Impure.StringBody (String.fromInt ref))
-        (Impure.DecoderResolver decoder)
+        (Impure.BytesResolver decoder)
 
 
-putMVar : (a -> Encode.Value) -> MVar a -> a -> IO ()
+putMVar : (a -> BE.Encoder) -> MVar a -> a -> IO ()
 putMVar encoder (MVar ref) value =
     Impure.task "putMVar"
         [ Http.header "id" (String.fromInt ref) ]
-        (Impure.JsonBody (encoder value))
+        (Impure.BytesBody (encoder value))
         (Impure.Always ())
 
 
@@ -1086,15 +1081,15 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> Encode.Value) -> IO (Chan a)
-newChan encoder =
+newChan : (MVar (ChItem a) -> BE.Encoder) -> IO (Chan a)
+newChan toEncoder =
     newEmptyMVar
         |> IO.bind
             (\hole ->
-                newMVar encoder hole
+                newMVar toEncoder hole
                     |> IO.bind
                         (\readVar ->
-                            newMVar encoder hole
+                            newMVar toEncoder hole
                                 |> IO.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
@@ -1103,7 +1098,7 @@ newChan encoder =
             )
 
 
-readChan : Decode.Decoder a -> Chan a -> IO a
+readChan : BD.Decoder a -> Chan a -> IO a
 readChan decoder (Chan readVar _) =
     modifyMVar mVarDecoder mVarEncoder readVar <|
         \read_end ->
@@ -1116,15 +1111,15 @@ readChan decoder (Chan readVar _) =
                     )
 
 
-writeChan : (a -> Encode.Value) -> Chan a -> a -> IO ()
-writeChan encoder (Chan _ writeVar) val =
+writeChan : (a -> BE.Encoder) -> Chan a -> a -> IO ()
+writeChan toEncoder (Chan _ writeVar) val =
     newEmptyMVar
         |> IO.bind
             (\new_hole ->
                 takeMVar mVarDecoder writeVar
                     |> IO.bind
                         (\old_hole ->
-                            putMVar (chItemEncoder encoder) old_hole (ChItem val new_hole)
+                            putMVar (chItemEncoder toEncoder) old_hole (ChItem val new_hole)
                                 |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
                         )
             )
@@ -1143,19 +1138,19 @@ builderHPutBuilder =
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : Decode.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail : BD.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
     Impure.task "binaryDecodeFileOrFail"
         []
         (Impure.StringBody filename)
-        (Impure.DecoderResolver (Decode.map Ok decoder))
+        (Impure.BytesResolver (BD.map Ok decoder))
 
 
-binaryEncodeFile : (a -> Encode.Value) -> FilePath -> a -> IO ()
-binaryEncodeFile encoder path value =
+binaryEncodeFile : (a -> BE.Encoder) -> FilePath -> a -> IO ()
+binaryEncodeFile toEncoder path value =
     Impure.task "write"
         [ Http.header "path" path ]
-        (Impure.JsonBody (encoder value))
+        (Impure.BytesBody (toEncoder value))
         (Impure.Always ())
 
 
@@ -1216,128 +1211,128 @@ replGetInputLineWithInitial prompt ( left, right ) =
 -- ENCODERS and DECODERS
 
 
-mVarDecoder : Decode.Decoder (MVar a)
+mVarDecoder : BD.Decoder (MVar a)
 mVarDecoder =
-    Decode.map MVar Decode.int
+    BD.map MVar BD.int
 
 
-mVarEncoder : MVar a -> Encode.Value
+mVarEncoder : MVar a -> BE.Encoder
 mVarEncoder (MVar ref) =
-    Encode.int ref
+    BE.int ref
 
 
-chItemEncoder : (a -> Encode.Value) -> ChItem a -> Encode.Value
+chItemEncoder : (a -> BE.Encoder) -> ChItem a -> BE.Encoder
 chItemEncoder valueEncoder (ChItem value hole) =
-    Encode.object
-        [ ( "type", Encode.string "ChItem" )
-        , ( "value", valueEncoder value )
-        , ( "hole", mVarEncoder hole )
+    BE.sequence
+        [ valueEncoder value
+        , mVarEncoder hole
         ]
 
 
-chItemDecoder : Decode.Decoder a -> Decode.Decoder (ChItem a)
+chItemDecoder : BD.Decoder a -> BD.Decoder (ChItem a)
 chItemDecoder decoder =
-    Decode.map2 ChItem (Decode.field "value" decoder) (Decode.field "hole" mVarDecoder)
+    BD.map2 ChItem
+        decoder
+        mVarDecoder
 
 
-someExceptionEncoder : SomeException -> Encode.Value
+someExceptionEncoder : SomeException -> BE.Encoder
 someExceptionEncoder _ =
-    Encode.object [ ( "type", Encode.string "SomeException" ) ]
+    BE.unsignedInt8 0
 
 
-someExceptionDecoder : Decode.Decoder SomeException
+someExceptionDecoder : BD.Decoder SomeException
 someExceptionDecoder =
-    Decode.succeed SomeException
+    BD.unsignedInt8
+        |> BD.map (\_ -> SomeException)
 
 
-httpResponseEncoder : HttpResponse body -> Encode.Value
+httpResponseEncoder : HttpResponse body -> BE.Encoder
 httpResponseEncoder (HttpResponse httpResponse) =
-    Encode.object
-        [ ( "type", Encode.string "HttpResponse" )
-        , ( "responseStatus", httpStatusEncoder httpResponse.responseStatus )
-        , ( "responseHeaders", httpResponseHeadersEncoder httpResponse.responseHeaders )
+    BE.sequence
+        [ httpStatusEncoder httpResponse.responseStatus
+        , httpResponseHeadersEncoder httpResponse.responseHeaders
         ]
 
 
-httpResponseDecoder : Decode.Decoder (HttpResponse body)
+httpResponseDecoder : BD.Decoder (HttpResponse body)
 httpResponseDecoder =
-    Decode.map2
+    BD.map2
         (\responseStatus responseHeaders ->
             HttpResponse
                 { responseStatus = responseStatus
                 , responseHeaders = responseHeaders
                 }
         )
-        (Decode.field "responseStatus" httpStatusDecoder)
-        (Decode.field "responseHeaders" httpResponseHeadersDecoder)
+        httpStatusDecoder
+        httpResponseHeadersDecoder
 
 
-httpStatusEncoder : HttpStatus -> Encode.Value
+httpStatusEncoder : HttpStatus -> BE.Encoder
 httpStatusEncoder (HttpStatus statusCode statusMessage) =
-    Encode.object
-        [ ( "type", Encode.string "HttpStatus" )
-        , ( "statusCode", Encode.int statusCode )
-        , ( "statusMessage", Encode.string statusMessage )
+    BE.sequence
+        [ BE.int statusCode
+        , BE.string statusMessage
         ]
 
 
-httpStatusDecoder : Decode.Decoder HttpStatus
+httpStatusDecoder : BD.Decoder HttpStatus
 httpStatusDecoder =
-    Decode.map2 HttpStatus
-        (Decode.field "statusCode" Decode.int)
-        (Decode.field "statusMessage" Decode.string)
+    BD.map2 HttpStatus
+        BD.int
+        BD.string
 
 
-httpResponseHeadersEncoder : HttpResponseHeaders -> Encode.Value
+httpResponseHeadersEncoder : HttpResponseHeaders -> BE.Encoder
 httpResponseHeadersEncoder =
-    Encode.list (E.jsonPair Encode.string Encode.string)
+    BE.list (BE.jsonPair BE.string BE.string)
 
 
-httpResponseHeadersDecoder : Decode.Decoder HttpResponseHeaders
+httpResponseHeadersDecoder : BD.Decoder HttpResponseHeaders
 httpResponseHeadersDecoder =
-    Decode.list (D.jsonPair Decode.string Decode.string)
+    BD.list (BD.jsonPair BD.string BD.string)
 
 
-httpExceptionContentEncoder : HttpExceptionContent -> Encode.Value
+httpExceptionContentEncoder : HttpExceptionContent -> BE.Encoder
 httpExceptionContentEncoder httpExceptionContent =
     case httpExceptionContent of
         StatusCodeException response body ->
-            Encode.object
-                [ ( "type", Encode.string "StatusCodeException" )
-                , ( "response", httpResponseEncoder response )
-                , ( "body", Encode.string body )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , httpResponseEncoder response
+                , BE.string body
                 ]
 
         TooManyRedirects responses ->
-            Encode.object
-                [ ( "type", Encode.string "TooManyRedirects" )
-                , ( "responses", Encode.list httpResponseEncoder responses )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.list httpResponseEncoder responses
                 ]
 
         ConnectionFailure someException ->
-            Encode.object
-                [ ( "type", Encode.string "ConnectionFailure" )
-                , ( "someException", someExceptionEncoder someException )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , someExceptionEncoder someException
                 ]
 
 
-httpExceptionContentDecoder : Decode.Decoder HttpExceptionContent
+httpExceptionContentDecoder : BD.Decoder HttpExceptionContent
 httpExceptionContentDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StatusCodeException" ->
-                        Decode.map2 StatusCodeException
-                            (Decode.field "response" httpResponseDecoder)
-                            (Decode.field "body" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 StatusCodeException
+                            httpResponseDecoder
+                            BD.string
 
-                    "TooManyRedirects" ->
-                        Decode.map TooManyRedirects (Decode.field "responses" (Decode.list httpResponseDecoder))
+                    1 ->
+                        BD.map TooManyRedirects (BD.list httpResponseDecoder)
 
-                    "ConnectionFailure" ->
-                        Decode.map ConnectionFailure (Decode.field "someException" someExceptionDecoder)
+                    2 ->
+                        BD.map ConnectionFailure someExceptionDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode HttpExceptionContent's type: " ++ type_)
+                        BD.fail
             )

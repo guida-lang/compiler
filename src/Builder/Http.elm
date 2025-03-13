@@ -30,6 +30,8 @@ import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import Task
 import Url.Builder
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
 import Utils.Main as Utils exposing (SomeException)
 
@@ -42,22 +44,22 @@ type Manager
     = Manager
 
 
-managerEncoder : Manager -> Encode.Value
+managerEncoder : Manager -> BE.Encoder
 managerEncoder _ =
-    Encode.object [ ( "type", Encode.string "Manager" ) ]
+    BE.unsignedInt8 0
 
 
-managerDecoder : Decode.Decoder Manager
+managerDecoder : BD.Decoder Manager
 managerDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Manager" ->
-                        Decode.succeed Manager
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Manager
 
                     _ ->
-                        Decode.fail "Failed to decode Http.Manager"
+                        BD.fail
             )
 
 
@@ -249,52 +251,52 @@ stringPart name string =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         BadUrl url reason ->
-            Encode.object
-                [ ( "type", Encode.string "BadUrl" )
-                , ( "url", Encode.string url )
-                , ( "reason", Encode.string reason )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string url
+                , BE.string reason
                 ]
 
         BadHttp url httpExceptionContent ->
-            Encode.object
-                [ ( "type", Encode.string "BadHttp" )
-                , ( "url", Encode.string url )
-                , ( "httpExceptionContent", Utils.httpExceptionContentEncoder httpExceptionContent )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string url
+                , Utils.httpExceptionContentEncoder httpExceptionContent
                 ]
 
         BadMystery url someException ->
-            Encode.object
-                [ ( "type", Encode.string "BadMystery" )
-                , ( "url", Encode.string url )
-                , ( "someException", Utils.someExceptionEncoder someException )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string url
+                , Utils.someExceptionEncoder someException
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadUrl" ->
-                        Decode.map2 BadUrl
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "reason" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 BadUrl
+                            BD.string
+                            BD.string
 
-                    "BadHttp" ->
-                        Decode.map2 BadHttp
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "httpExceptionContent" Utils.httpExceptionContentDecoder)
+                    1 ->
+                        BD.map2 BadHttp
+                            BD.string
+                            Utils.httpExceptionContentDecoder
 
-                    "BadMystery" ->
-                        Decode.map2 BadMystery
-                            (Decode.field "url" Decode.string)
-                            (Decode.field "someException" Utils.someExceptionDecoder)
+                    2 ->
+                        BD.map2 BadMystery
+                            BD.string
+                            Utils.someExceptionDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )
