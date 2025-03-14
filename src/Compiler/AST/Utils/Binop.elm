@@ -94,15 +94,17 @@ precedenceDecoder =
 
 associativityEncoder : Associativity -> BE.Encoder
 associativityEncoder associativity =
-    case associativity of
-        Left ->
-            BE.unsignedInt8 0
+    BE.unsignedInt8
+        (case associativity of
+            Left ->
+                0
 
-        Non ->
-            BE.unsignedInt8 1
+            Non ->
+                1
 
-        Right ->
-            BE.unsignedInt8 2
+            Right ->
+                2
+        )
 
 
 associativityDecoder : BD.Decoder Associativity

@@ -422,8 +422,7 @@ typeDecoder =
                             typeDecoder
 
                     1 ->
-                        BD.map TVar
-                            BD.string
+                        BD.map TVar BD.string
 
                     2 ->
                         BD.map3 TType

@@ -1,12 +1,12 @@
 module Builder.Stuff exposing
     ( PackageCache
     , details
-    , elmi
-    , elmo
     , findRoot
     , getElmHome
     , getPackageCache
     , getReplCache
+    , guidai
+    , guidao
     , interfaces
     , objects
     , package
@@ -66,14 +66,14 @@ compilerVersion =
 -- ELMI and ELMO
 
 
-elmi : String -> ModuleName.Raw -> String
-elmi root name =
-    toArtifactPath root name "elmi"
+guidai : String -> ModuleName.Raw -> String
+guidai root name =
+    toArtifactPath root name "guidai"
 
 
-elmo : String -> ModuleName.Raw -> String
-elmo root name =
-    toArtifactPath root name "elmo"
+guidao : String -> ModuleName.Raw -> String
+guidao root name =
+    toArtifactPath root name "guidao"
 
 
 toArtifactPath : String -> ModuleName.Raw -> String -> String

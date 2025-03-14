@@ -220,7 +220,7 @@ loadObject root modul =
             Utils.newEmptyMVar
                 |> IO.bind
                     (\mvar ->
-                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.elmo root name)))
+                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
                             |> IO.fmap (\_ -> ( name, mvar ))
                     )
 
@@ -303,7 +303,7 @@ loadTypesHelp root modul =
                                     |> IO.bind
                                         (\mvar ->
                                             Utils.forkIO
-                                                (File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                                                (File.readBinary I.interfaceDecoder (Stuff.guidai root name)
                                                     |> IO.bind
                                                         (\maybeIface ->
                                                             Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)

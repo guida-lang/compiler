@@ -757,7 +757,7 @@ loadInterface root ( name, ciMvar ) =
                             |> IO.fmap (\_ -> Just ( name, iface ))
 
                     Unneeded ->
-                        File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                        File.readBinary I.interfaceDecoder (Stuff.guidai root name)
                             |> IO.bind
                                 (\maybeIface ->
                                     case maybeIface of
@@ -990,14 +990,14 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                     iface =
                                         I.fromModule pkg canonical annotations
 
-                                    elmi : String
-                                    elmi =
-                                        Stuff.elmi root name
+                                    guidai : String
+                                    guidai =
+                                        Stuff.guidai root name
                                 in
-                                File.writeBinary Opt.localGraphEncoder (Stuff.elmo root name) objects
+                                File.writeBinary Opt.localGraphEncoder (Stuff.guidao root name) objects
                                     |> IO.bind
                                         (\_ ->
-                                            File.readBinary I.interfaceDecoder elmi
+                                            File.readBinary I.interfaceDecoder guidai
                                                 |> IO.bind
                                                     (\maybeOldi ->
                                                         case maybeOldi of
@@ -1016,7 +1016,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                                                             )
 
                                                                 else
-                                                                    File.writeBinary I.interfaceEncoder elmi iface
+                                                                    File.writeBinary I.interfaceEncoder guidai iface
                                                                         |> IO.bind
                                                                             (\_ ->
                                                                                 Reporting.report key Reporting.BDone
@@ -1033,7 +1033,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                                                             _ ->
                                                                 -- iface may be lazy still
-                                                                File.writeBinary I.interfaceEncoder elmi iface
+                                                                File.writeBinary I.interfaceEncoder guidai iface
                                                                     |> IO.bind
                                                                         (\_ ->
                                                                             Reporting.report key Reporting.BDone

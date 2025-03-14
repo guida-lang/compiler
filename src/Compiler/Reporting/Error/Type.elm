@@ -2536,7 +2536,7 @@ errorEncoder error =
 
         BadPattern region category tipe expected ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 1
                 , A.regionEncoder region
                 , pCategoryEncoder category
                 , T.typeEncoder tipe
@@ -2545,7 +2545,7 @@ errorEncoder error =
 
         InfiniteType region name overallType ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 2
                 , A.regionEncoder region
                 , BE.string name
                 , T.typeEncoder overallType
@@ -2776,66 +2776,6 @@ expectedDecoder decoder =
             )
 
 
-contextDecoder : BD.Decoder Context
-contextDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map ListEntry Index.zeroBasedDecoder
-
-                    1 ->
-                        BD.succeed Negate
-
-                    2 ->
-                        BD.map OpLeft BD.string
-
-                    3 ->
-                        BD.map OpRight BD.string
-
-                    4 ->
-                        BD.succeed IfCondition
-
-                    5 ->
-                        BD.map IfBranch Index.zeroBasedDecoder
-
-                    6 ->
-                        BD.map CaseBranch Index.zeroBasedDecoder
-
-                    7 ->
-                        BD.map2 CallArity
-                            maybeNameDecoder
-                            BD.int
-
-                    8 ->
-                        BD.map2 CallArg
-                            maybeNameDecoder
-                            Index.zeroBasedDecoder
-
-                    9 ->
-                        BD.map4 RecordAccess
-                            A.regionDecoder
-                            (BD.maybe BD.string)
-                            A.regionDecoder
-                            BD.string
-
-                    10 ->
-                        BD.map2 RecordUpdateKeys
-                            BD.string
-                            (BD.assocListDict identity BD.string Can.fieldUpdateDecoder)
-
-                    11 ->
-                        BD.map RecordUpdateValue BD.string
-
-                    12 ->
-                        BD.succeed Destructure
-
-                    _ ->
-                        BD.fail
-            )
-
-
 contextEncoder : Context -> BE.Encoder
 contextEncoder context =
     case context of
@@ -2915,20 +2855,60 @@ contextEncoder context =
             BE.unsignedInt8 12
 
 
-subContextDecoder : BD.Decoder SubContext
-subContextDecoder =
+contextDecoder : BD.Decoder Context
+contextDecoder =
     BD.unsignedInt8
         |> BD.andThen
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map TypedIfBranch Index.zeroBasedDecoder
+                        BD.map ListEntry Index.zeroBasedDecoder
 
                     1 ->
-                        BD.map TypedCaseBranch Index.zeroBasedDecoder
+                        BD.succeed Negate
 
                     2 ->
-                        BD.succeed TypedBody
+                        BD.map OpLeft BD.string
+
+                    3 ->
+                        BD.map OpRight BD.string
+
+                    4 ->
+                        BD.succeed IfCondition
+
+                    5 ->
+                        BD.map IfBranch Index.zeroBasedDecoder
+
+                    6 ->
+                        BD.map CaseBranch Index.zeroBasedDecoder
+
+                    7 ->
+                        BD.map2 CallArity
+                            maybeNameDecoder
+                            BD.int
+
+                    8 ->
+                        BD.map2 CallArg
+                            maybeNameDecoder
+                            Index.zeroBasedDecoder
+
+                    9 ->
+                        BD.map4 RecordAccess
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            A.regionDecoder
+                            BD.string
+
+                    10 ->
+                        BD.map2 RecordUpdateKeys
+                            BD.string
+                            (BD.assocListDict identity BD.string Can.fieldUpdateDecoder)
+
+                    11 ->
+                        BD.map RecordUpdateValue BD.string
+
+                    12 ->
+                        BD.succeed Destructure
 
                     _ ->
                         BD.fail
@@ -2952,6 +2932,26 @@ subContextEncoder subContext =
 
         TypedBody ->
             BE.unsignedInt8 2
+
+
+subContextDecoder : BD.Decoder SubContext
+subContextDecoder =
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map TypedIfBranch Index.zeroBasedDecoder
+
+                    1 ->
+                        BD.map TypedCaseBranch Index.zeroBasedDecoder
+
+                    2 ->
+                        BD.succeed TypedBody
+
+                    _ ->
+                        BD.fail
+            )
 
 
 pCategoryEncoder : PCategory -> BE.Encoder

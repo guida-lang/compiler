@@ -503,7 +503,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                     Reporting.report key Reporting.DCached
                         |> IO.bind
                             (\_ ->
-                                File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.json")
+                                File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.dat")
                                     |> IO.bind
                                         (\maybeCache ->
                                             case maybeCache of

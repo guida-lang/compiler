@@ -293,7 +293,7 @@ mainEncoder main_ =
 
         Dynamic msgType decoder ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 1
                 , Can.typeEncoder msgType
                 , exprEncoder decoder
                 ]

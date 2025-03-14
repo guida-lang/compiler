@@ -105,7 +105,7 @@ list decoder =
 listStep : Decoder a -> ( Int, List a ) -> Decoder (BD.Step ( Int, List a ) (List a))
 listStep decoder ( n, xs ) =
     if n <= 0 then
-        succeed (BD.Done xs)
+        succeed (BD.Done (List.reverse xs))
 
     else
         map (\x -> BD.Loop ( n - 1, x :: xs )) decoder

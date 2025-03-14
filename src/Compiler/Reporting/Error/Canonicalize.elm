@@ -1310,7 +1310,7 @@ errorEncoder error =
 
         AmbiguousVar region maybePrefix name h hs ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 1
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1320,7 +1320,7 @@ errorEncoder error =
 
         AmbiguousType region maybePrefix name h hs ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 2
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1330,7 +1330,7 @@ errorEncoder error =
 
         AmbiguousVariant region maybePrefix name h hs ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 3
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1340,7 +1340,7 @@ errorEncoder error =
 
         AmbiguousBinop region name h hs ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 4
                 , A.regionEncoder region
                 , BE.string name
                 , ModuleName.canonicalEncoder h
@@ -1349,7 +1349,7 @@ errorEncoder error =
 
         BadArity region badArityContext name expected actual ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 5
                 , A.regionEncoder region
                 , badArityContextEncoder badArityContext
                 , BE.string name
@@ -1359,7 +1359,7 @@ errorEncoder error =
 
         Binop region op1 op2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 6
                 , A.regionEncoder region
                 , BE.string op1
                 , BE.string op2
@@ -1367,7 +1367,7 @@ errorEncoder error =
 
         DuplicateDecl name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 7
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1375,7 +1375,7 @@ errorEncoder error =
 
         DuplicateType name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 8
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1383,7 +1383,7 @@ errorEncoder error =
 
         DuplicateCtor name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 9
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1391,7 +1391,7 @@ errorEncoder error =
 
         DuplicateBinop name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 10
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1399,7 +1399,7 @@ errorEncoder error =
 
         DuplicateField name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 11
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1407,7 +1407,7 @@ errorEncoder error =
 
         DuplicateAliasArg typeName name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 12
                 , BE.string typeName
                 , BE.string name
                 , A.regionEncoder r1
@@ -1416,7 +1416,7 @@ errorEncoder error =
 
         DuplicateUnionArg typeName name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 13
                 , BE.string typeName
                 , BE.string name
                 , A.regionEncoder r1
@@ -1425,7 +1425,7 @@ errorEncoder error =
 
         DuplicatePattern context name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 14
                 , duplicatePatternContextEncoder context
                 , BE.string name
                 , A.regionEncoder r1
@@ -1434,21 +1434,21 @@ errorEncoder error =
 
         EffectNotFound region name ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 15
                 , A.regionEncoder region
                 , BE.string name
                 ]
 
         EffectFunctionNotFound region name ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 16
                 , A.regionEncoder region
                 , BE.string name
                 ]
 
         ExportDuplicate name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 17
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1456,7 +1456,7 @@ errorEncoder error =
 
         ExportNotFound region kind rawName possibleNames ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 18
                 , A.regionEncoder region
                 , varKindEncoder kind
                 , BE.string rawName
@@ -1465,14 +1465,14 @@ errorEncoder error =
 
         ExportOpenAlias region name ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 19
                 , A.regionEncoder region
                 , BE.string name
                 ]
 
         ImportCtorByName region ctor tipe ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 20
                 , A.regionEncoder region
                 , BE.string ctor
                 , BE.string tipe
@@ -1480,7 +1480,7 @@ errorEncoder error =
 
         ImportNotFound region name suggestions ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 21
                 , A.regionEncoder region
                 , BE.string name
                 , BE.list ModuleName.canonicalEncoder suggestions
@@ -1488,14 +1488,14 @@ errorEncoder error =
 
         ImportOpenAlias region name ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 22
                 , A.regionEncoder region
                 , BE.string name
                 ]
 
         ImportExposingNotFound region home value possibleNames ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 23
                 , A.regionEncoder region
                 , ModuleName.canonicalEncoder home
                 , BE.string value
@@ -1504,7 +1504,7 @@ errorEncoder error =
 
         NotFoundVar region prefix name possibleNames ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 24
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
@@ -1513,7 +1513,7 @@ errorEncoder error =
 
         NotFoundType region prefix name possibleNames ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 25
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
@@ -1522,7 +1522,7 @@ errorEncoder error =
 
         NotFoundVariant region prefix name possibleNames ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 26
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
@@ -1531,7 +1531,7 @@ errorEncoder error =
 
         NotFoundBinop region op locals ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 27
                 , A.regionEncoder region
                 , BE.string op
                 , BE.everySet compare BE.string locals
@@ -1539,14 +1539,14 @@ errorEncoder error =
 
         PatternHasRecordCtor region name ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 28
                 , A.regionEncoder region
                 , BE.string name
                 ]
 
         PortPayloadInvalid region portName badType invalidPayload ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 29
                 , A.regionEncoder region
                 , BE.string portName
                 , Can.typeEncoder badType
@@ -1555,7 +1555,7 @@ errorEncoder error =
 
         PortTypeInvalid region name portProblem ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 30
                 , A.regionEncoder region
                 , BE.string name
                 , portProblemEncoder portProblem
@@ -1563,7 +1563,7 @@ errorEncoder error =
 
         RecursiveAlias region name args tipe others ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 31
                 , A.regionEncoder region
                 , BE.string name
                 , BE.list BE.string args
@@ -1573,7 +1573,7 @@ errorEncoder error =
 
         RecursiveDecl region name names ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 32
                 , A.regionEncoder region
                 , BE.string name
                 , BE.list BE.string names
@@ -1581,14 +1581,14 @@ errorEncoder error =
 
         RecursiveLet name names ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 33
                 , A.locatedEncoder BE.string name
                 , BE.list BE.string names
                 ]
 
         Shadowing name r1 r2 ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 34
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1596,13 +1596,13 @@ errorEncoder error =
 
         TupleLargerThanThree region ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 35
                 , A.regionEncoder region
                 ]
 
         TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 36
                 , A.regionEncoder unionRegion
                 , BE.string typeName
                 , BE.list BE.string allVars
@@ -1612,7 +1612,7 @@ errorEncoder error =
 
         TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
             BE.sequence
-                [ BE.unsignedInt8 0
+                [ BE.unsignedInt8 37
                 , A.regionEncoder aliasRegion
                 , BE.string typeName
                 , BE.list BE.string allVars
