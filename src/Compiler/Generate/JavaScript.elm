@@ -71,7 +71,6 @@ generate sourceMaps leadingLines mode (Opt.GlobalGraph graph _) mains =
     prelude mode
         ++ stateToBuilder state
         ++ toMainExports mode mains
-        ++ "}(this));"
         ++ escapeNewCode """// EXTRA GUIDA CORE
 
 function _Utils_TupleN(a, b, ...cs) {
@@ -90,12 +89,13 @@ function _Utils_TupleN(a, b, ...cs) {
         return original(ansi, value);
     }
 }(_Debug_toAnsiString))"""
+        ++ "}(this));"
         ++ generateSourceMaps sourceMaps leadingLines state
 
 
 escapeNewCode : String -> String
 escapeNewCode code =
-    "//__START__\n" ++ code ++ "\n//__END__"
+    "//__START__\n" ++ code ++ "\n//__END__\n"
 
 
 generateSourceMaps : SourceMaps -> Int -> State -> String

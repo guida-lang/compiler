@@ -45,7 +45,7 @@ const examples = [
 ];
 
 const escapedNewCodeRegex = function (guidaOutput) {
-  return fs.readFileSync(guidaOutput).toString().replace(/\/\/__START__$(?:(?!__START__)[\s\S])*?\/\/__END__$/gm, "");
+  return fs.readFileSync(guidaOutput).toString().replace("__END__\n", "__END__").replace(/\/\/__START__$(?:(?!__START__)[\s\S])*?\/\/__END__/gm, "");
 };
 
 const generateCommandFlags = function (flag) {
