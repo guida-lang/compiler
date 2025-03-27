@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
-    "form-data": "^4.0.1",
+    "form-data": "^4.0.2",
     "indexeddb-fs": "^2.1.5",
     "jszip": "^3.10.1",
     "mock-xmlhttprequest": "^8.4.1",
@@ -29,8 +29,8 @@
   "devDependencies": {
     "elm": "^0.19.1-6",
     "elm-format": "^0.8.7",
-    "elm-review": "^2.13.1",
-    "elm-test": "^0.19.1-revision12",
+    "elm-review": "^2.13.2",
+    "elm-test": "^0.19.1-revision15",
     "guida": "^0.3.0-alpha",
     "jest": "^29.7.0",
     "npm-run-all": "^4.1.5",
