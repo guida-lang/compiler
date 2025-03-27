@@ -94,19 +94,7 @@ type alias Program =
 run : IO () -> Program
 run app =
     Platform.worker
-        { init =
-            \() ->
-                update
-                    (bind
-                        (\() ->
-                            Impure.task "exitWith"
-                                []
-                                (Impure.StringBody "0")
-                                Impure.Crash
-                        )
-                        app
-                    )
-                    ()
+        { init = update app
         , update = update
         , subscriptions = \_ -> Sub.none
         }

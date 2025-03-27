@@ -1,0 +1,27 @@
+body {
+    display: grid;
+    grid-template:
+        "code preview" 1fr
+        "run preview" min-content
+        / 1fr 1fr;
+    align-items: stretch;
+    justify-items: stretch;
+    height: 100vh;
+    margin: 0;
+}
+
+#code {
+    grid-area: code;
+    padding: 10px;
+    overflow-y: auto;
+    resize: none;
+}
+
+#run {
+    grid-area: run;
+}
+
+#preview {
+    grid-area: preview;
+    overflow-y: auto;
+}
