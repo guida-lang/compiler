@@ -11,7 +11,6 @@ module Compiler.Reporting.Result exposing
     , ok
     , pure
     , run
-    , then_
     , throw
     , traverse
     , traverseDict
@@ -158,18 +157,6 @@ bind callback (RResult ka) =
 
                 RErr i1 w1 e ->
                     RErr i1 w1 e
-
-
-then_ : RResult i w x a -> RResult i w x b -> RResult i w x b
-then_ (RResult ka) (RResult kb) =
-    RResult <|
-        \i w ->
-            case ka i w of
-                ROk i1 w1 _ ->
-                    kb i1 w1
-
-                RErr i1 w1 e1 ->
-                    RErr i1 w1 e1
 
 
 traverse : (a -> RResult i w x b) -> List a -> RResult i w x (List b)

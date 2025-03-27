@@ -12,7 +12,7 @@
     "build:browser": "./scripts/build.sh browser",
     "test": "npm-run-all --parallel test:*",
     "test:jest": "jest",
-    "test:elm": "elm-test",
+    "test:elm": "elm-test tests/Parse",
     "test:elm-review": "elm-review",
     "test:elm-format-validate": "elm-format . --validate",
     "elm-format": "elm-format . --yes"

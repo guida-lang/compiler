@@ -284,8 +284,8 @@ addDef home annotations def graph =
                 (Can.Forall _ tipe) =
                     Utils.find identity name annotations
             in
-            addDefHelp region annotations home name args body graph
-                |> R.then_ (R.warn (W.MissingTypeAnnotation region name tipe))
+            R.warn (W.MissingTypeAnnotation region name tipe)
+                |> R.bind (\_ -> addDefHelp region annotations home name args body graph)
 
         Can.TypedDef (A.At region name) _ typedArgs body _ ->
             addDefHelp region annotations home name (List.map Tuple.first typedArgs) body graph

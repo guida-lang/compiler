@@ -55,12 +55,9 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                 |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
 
         Src.TLambda a b ->
-            canonicalize syntaxVersion env a
-                |> R.fmap Can.TLambda
-                |> R.bind
-                    (\tLambda ->
-                        R.fmap tLambda (canonicalize syntaxVersion env b)
-                    )
+            R.pure Can.TLambda
+                |> R.apply (canonicalize syntaxVersion env a)
+                |> R.apply (canonicalize syntaxVersion env b)
 
         Src.TRecord fields ext ->
             Dups.checkFields (canonicalizeFields syntaxVersion env fields)
@@ -71,27 +68,25 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
             R.ok Can.TUnit
 
         Src.TTuple a b cs ->
-            canonicalize syntaxVersion env a
-                |> R.fmap Can.TTuple
-                |> R.bind (\tTuple -> R.fmap tTuple (canonicalize syntaxVersion env b))
-                |> R.bind
-                    (\tTuple ->
-                        case cs of
-                            [] ->
-                                R.ok (tTuple [])
+            R.pure Can.TTuple
+                |> R.apply (canonicalize syntaxVersion env a)
+                |> R.apply (canonicalize syntaxVersion env b)
+                |> R.apply
+                    (case cs of
+                        [] ->
+                            R.ok []
 
-                            [ c ] ->
-                                canonicalize syntaxVersion env c
-                                    |> R.fmap (tTuple << List.singleton)
+                        [ c ] ->
+                            canonicalize syntaxVersion env c
+                                |> R.fmap List.singleton
 
-                            _ ->
-                                case syntaxVersion of
-                                    SV.Elm ->
-                                        R.throw <| Error.TupleLargerThanThree typeRegion
+                        _ ->
+                            case syntaxVersion of
+                                SV.Elm ->
+                                    R.throw (Error.TupleLargerThanThree typeRegion)
 
-                                    SV.Guida ->
-                                        R.traverse (canonicalize syntaxVersion env) cs
-                                            |> R.fmap tTuple
+                                SV.Guida ->
+                                    R.traverse (canonicalize syntaxVersion env) cs
                     )
 
 
