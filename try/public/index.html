@@ -2,15 +2,15 @@
 <html>
 
 <head>
-    <meta charset="UTF-8" />
-    <title>Guida Try!</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="/app.js"></script>
-    <link rel="stylesheet" href="/app.css" />
+  <meta charset="UTF-8" />
+  <title>Guida Try!</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/app.js"></script>
+  <link rel="stylesheet" href="/app.css" />
 </head>
 
 <body>
-    <textarea id="code">
+  <textarea id="code">
 module Main exposing (..)
 
 -- Press buttons to increment and decrement a counter.
@@ -70,13 +70,17 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
+  let
+    _ =
+      (0, 1, 2, 3)
+  in
   div []
     [ button [ onClick Decrement ] [ text "-" ]
     , div [] [ text (String.fromInt model) ]
     , button [ onClick Increment ] [ text "+" ]
     ]</textarea>
-    <button id="run">Run</button>
-    <iframe id="preview"></iframe>
+  <button id="run">Run</button>
+  <iframe id="preview"></iframe>
 </body>
 
 </html>
