@@ -80,6 +80,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                         |> Task.bind
                             (\desiredMode ->
                                 let
+                                    style : Reporting.Style
                                     style =
                                         Reporting.json
                                 in

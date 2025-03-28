@@ -4,7 +4,6 @@ import Browser.Format as Format
 import Browser.Make as Make
 import Builder.Reporting.Exit as Exit
 import Compiler.Json.Encode as E
-import Compiler.Reporting.Doc exposing (args)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
