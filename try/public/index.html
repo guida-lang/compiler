@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Try Guida!</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="/app.js"></script>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+
+<body>
+  <textarea id="code">
+module Main exposing (..)
+
+-- Press buttons to increment and decrement a counter.
+--
+-- Read how it works:
+--   https://guide.elm-lang.org/architecture/buttons.html
+--
+
+
+import Browser
+import Html exposing (Html, button, div, text)
+import Html.Events exposing (onClick)
+
+
+
+-- MAIN
+
+
+main =
+  Browser.sandbox { init = init, update = update, view = view }
+
+
+
+-- MODEL
+
+
+type alias Model = Int
+
+
+init : Model
+init =
+  0
+
+
+
+-- UPDATE
+
+
+type Msg
+  = Increment
+  | Decrement
+
+
+update : Msg -> Model -> Model
+update msg model =
+  case msg of
+    Increment ->
+      model + 1
+
+    Decrement ->
+      model - 1
+
+
+
+-- VIEW
+
+
+view : Model -> Html Msg
+view model =
+  let
+    _ =
+      (0, 1, 2, 3)
+  in
+  div []
+    [ button [ onClick Decrement ] [ text "-" ]
+    , div [] [ text (String.fromInt model) ]
+    , button [ onClick Increment ] [ text "+" ]
+    ]</textarea>
+  <select id="mode">
+    <option value="dev" selected>Dev</option>
+    <option value="debug">Debug</option>
+    <option value="prod">Prod</option>
+  </select>
+  <label id="sourcemaps">
+    <input id="sourcemaps-input" type="checkbox" value="false" disabled />
+    Sourcemaps (not working)
+  </label>
+  <button id="format">Format</button>
+  <button id="run">Run</button>
+
+  <input id="dependency" type="text" />
+  <button id="install">Install</button>
+  <button id="uninstall">Uninstall</button>
+
+  <iframe id="preview"></iframe>
+</body>
+
+</html>

@@ -4,6 +4,15 @@ elm-stuff
 .idea
 
 # Guida
+guida-stuff
+
+# Command line
 bin/guida.js
 bin/guida.min.js
-guida-stuff
+
+# Browser
+lib/guida.js
+lib/guida.min.js
+
+# Try
+try/public/app.js

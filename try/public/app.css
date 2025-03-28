@@ -1,0 +1,52 @@
+body {
+    display: grid;
+    grid-template:
+        "code code code code preview" 1fr
+        "mode sourcemaps format run preview" min-content
+        "dependency dependency install uninstall preview" min-content
+        / 1fr 2fr 1fr 1fr 5fr;
+    align-items: stretch;
+    justify-items: stretch;
+    height: 100vh;
+    margin: 0;
+}
+
+#code {
+    grid-area: code;
+    padding: 10px;
+    overflow-y: auto;
+    resize: none;
+}
+
+#mode {
+    grid-area: mode;
+}
+
+#sourcemaps {
+    grid-area: sourcemaps;
+}
+
+#format {
+    grid-area: format;
+}
+
+#run {
+    grid-area: run;
+}
+
+#dependency {
+    grid-area: dependency;
+}
+
+#install {
+    grid-area: install;
+}
+
+#uninstall {
+    grid-area: uninstall;
+}
+
+#preview {
+    grid-area: preview;
+    overflow-y: auto;
+}
