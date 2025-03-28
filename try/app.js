@@ -4,10 +4,16 @@ window.addEventListener("load", async () => {
     const app = await guida.init();
 
     const code = document.getElementById("code");
+
     const mode = document.getElementById("mode");
     const sourcemaps = document.getElementById("sourcemaps-input");
     const format = document.getElementById("format");
     const run = document.getElementById("run");
+
+    const dependency = document.getElementById("dependency");
+    const install = document.getElementById("install");
+    const uninstall = document.getElementById("uninstall");
+
     const preview = document.getElementById("preview");
 
     format.addEventListener("click", async () => {
@@ -32,5 +38,13 @@ window.addEventListener("load", async () => {
         } else {
             preview.srcdoc = result.output;
         }
+    });
+
+    install.addEventListener("click", async () => {
+        console.log("TODO install", dependency.value);
+    });
+
+    uninstall.addEventListener("click", async () => {
+        console.log("TODO uninstall", dependency.value);
     });
 });

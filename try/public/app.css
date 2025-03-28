@@ -3,6 +3,7 @@ body {
     grid-template:
         "code code code code preview" 1fr
         "mode sourcemaps format run preview" min-content
+        "dependency dependency install uninstall preview" min-content
         / 1fr 2fr 1fr 1fr 5fr;
     align-items: stretch;
     justify-items: stretch;
@@ -31,6 +32,18 @@ body {
 
 #run {
     grid-area: run;
+}
+
+#dependency {
+    grid-area: dependency;
+}
+
+#install {
+    grid-area: install;
+}
+
+#uninstall {
+    grid-area: uninstall;
 }
 
 #preview {
