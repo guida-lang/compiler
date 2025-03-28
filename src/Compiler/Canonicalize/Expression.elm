@@ -122,29 +122,25 @@ canonicalize syntaxVersion env (A.At region expression) =
                     )
 
             Src.Call func args ->
-                R.pure Can.Call
-                    |> R.apply (canonicalize syntaxVersion env func)
+                R.fmap Can.Call (canonicalize syntaxVersion env func)
                     |> R.apply (R.traverse (canonicalize syntaxVersion env) args)
 
             Src.If branches finally ->
-                R.pure Can.If
-                    |> R.apply (R.traverse (canonicalizeIfBranch syntaxVersion env) branches)
+                R.fmap Can.If (R.traverse (canonicalizeIfBranch syntaxVersion env) branches)
                     |> R.apply (canonicalize syntaxVersion env finally)
 
             Src.Let defs expr ->
-                R.fmap A.toValue <| canonicalizeLet syntaxVersion region env defs expr
+                R.fmap A.toValue (canonicalizeLet syntaxVersion region env defs expr)
 
             Src.Case expr branches ->
-                R.pure Can.Case
-                    |> R.apply (canonicalize syntaxVersion env expr)
+                R.fmap Can.Case (canonicalize syntaxVersion env expr)
                     |> R.apply (R.traverse (canonicalizeCaseBranch syntaxVersion env) branches)
 
             Src.Accessor field ->
                 R.pure (Can.Accessor field)
 
             Src.Access record field ->
-                R.pure Can.Access
-                    |> R.apply (canonicalize syntaxVersion env record)
+                R.fmap Can.Access (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
             Src.Update (A.At reg ( maybeNamespace, name )) fields ->
@@ -162,8 +158,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                     makeCanFields =
                         Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize syntaxVersion env t)) fields
                 in
-                R.pure (Can.Update maybeNamespace name)
-                    |> R.apply (R.fmap (A.At reg) expr)
+                R.fmap (Can.Update maybeNamespace name) (R.fmap (A.At reg) expr)
                     |> R.apply (R.bind (Utils.sequenceADict A.toValue A.compareLocated) makeCanFields)
 
             Src.Record fields ->
@@ -177,8 +172,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.ok Can.Unit
 
             Src.Tuple a b cs ->
-                R.pure Can.Tuple
-                    |> R.apply (canonicalize syntaxVersion env a)
+                R.fmap Can.Tuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
                     |> R.apply (canonicalizeTupleExtras syntaxVersion region env cs)
 
@@ -210,8 +204,7 @@ canonicalizeTupleExtras syntaxVersion region env extras =
 
 canonicalizeIfBranch : SyntaxVersion -> Env.Env -> ( Src.Expr, Src.Expr ) -> EResult FreeLocals (List W.Warning) ( Can.Expr, Can.Expr )
 canonicalizeIfBranch syntaxVersion env ( condition, branch ) =
-    R.pure Tuple.pair
-        |> R.apply (canonicalize syntaxVersion env condition)
+    R.fmap Tuple.pair (canonicalize syntaxVersion env condition)
         |> R.apply (canonicalize syntaxVersion env branch)
 
 
@@ -248,13 +241,11 @@ canonicalizeBinops syntaxVersion overallRegion env ops final =
     let
         canonicalizeHelp : ( Src.Expr, A.Located Name ) -> R.RResult FreeLocals (List W.Warning) Error.Error ( Can.Expr, Env.Binop )
         canonicalizeHelp ( expr, A.At region op ) =
-            R.ok Tuple.pair
-                |> R.apply (canonicalize syntaxVersion env expr)
+            R.fmap Tuple.pair (canonicalize syntaxVersion env expr)
                 |> R.apply (Env.findBinop region env op)
     in
     R.bind (runBinopStepper overallRegion)
-        (R.ok More
-            |> R.apply (R.traverse canonicalizeHelp ops)
+        (R.fmap More (R.traverse canonicalizeHelp ops)
             |> R.apply (canonicalize syntaxVersion env final)
         )
 
@@ -635,10 +626,10 @@ detectCycles letRegion sccs body =
                                 |> R.fmap (A.At letRegion)
 
                 Graph.CyclicSCC bindings ->
-                    R.ok Can.LetRec
-                        |> R.apply (checkCycle bindings [])
-                        |> R.apply (detectCycles letRegion subSccs body)
-                        |> R.fmap (A.At letRegion)
+                    R.fmap (A.At letRegion)
+                        (R.fmap Can.LetRec (checkCycle bindings [])
+                            |> R.apply (detectCycles letRegion subSccs body)
+                        )
 
 
 checkCycle : List Binding -> List Can.Def -> EResult i w (List Can.Def)

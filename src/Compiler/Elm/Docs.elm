@@ -125,8 +125,7 @@ toDictHelp ((Module name _ _ _ _ _) as modul) =
 
 moduleDecoder : D.Decoder Error Module
 moduleDecoder =
-    D.pure Module
-        |> D.apply (D.field "name" moduleNameDecoder)
+    D.fmap Module (D.field "name" moduleNameDecoder)
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "unions" (dictDecoder union))
         |> D.apply (D.field "aliases" (dictDecoder alias_))
@@ -141,8 +140,7 @@ dictDecoder entryDecoder =
 
 named : D.Decoder Error a -> D.Decoder Error ( Name.Name, a )
 named entryDecoder =
-    D.pure Tuple.pair
-        |> D.apply (D.field "name" nameDecoder)
+    D.fmap Tuple.pair (D.field "name" nameDecoder)
         |> D.apply entryDecoder
 
 
@@ -177,8 +175,7 @@ encodeUnion ( name, Union comment args cases ) =
 
 union : D.Decoder Error Union
 union =
-    D.pure Union
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Union (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "cases" (D.list caseDecoder))
 
@@ -209,8 +206,7 @@ encodeAlias ( name, Alias comment args tipe ) =
 
 alias_ : D.Decoder Error Alias
 alias_ =
-    D.pure Alias
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Alias (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "type" typeDecoder)
 
@@ -230,8 +226,7 @@ encodeValue ( name, Value comment tipe ) =
 
 value : D.Decoder Error Value
 value =
-    D.pure Value
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Value (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
 
 
@@ -252,8 +247,7 @@ encodeBinop ( name, Binop comment tipe assoc prec ) =
 
 binop : D.Decoder Error Binop
 binop =
-    D.pure Binop
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Binop (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
         |> D.apply (D.field "associativity" assocDecoder)
         |> D.apply (D.field "precedence" precDecoder)

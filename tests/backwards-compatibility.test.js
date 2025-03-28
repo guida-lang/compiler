@@ -113,7 +113,7 @@ describe("backwards compatibility", () => {
     expect(escapedNewCodeRegex(guidaOutput)).toBe(fs.readFileSync(elmOutput).toString());
   });
 
-  test.skip("json report", () => {
+  test("json report", () => {
     const elmOutput = `${tmpDir}/guida-test-elm-json-report-${process.pid}.json`;
     const guidaOutput = `${tmpDir}/guida-test-guida-json-report-${process.pid}.json`;
 

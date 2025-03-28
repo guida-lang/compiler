@@ -44,12 +44,8 @@ canonicalize syntaxVersion env values unions effects =
             R.ok Can.NoEffects
 
         Src.Ports ports ->
-            let
-                pairs : R.RResult i w Error.Error (List ( Name.Name, Can.Port ))
-                pairs =
-                    R.traverse (canonicalizePort syntaxVersion env) ports
-            in
-            R.fmap (Can.Ports << Dict.fromList identity) pairs
+            R.traverse (canonicalizePort syntaxVersion env) ports
+                |> R.fmap (Can.Ports << Dict.fromList identity)
 
         Src.Manager region manager ->
             let
@@ -57,15 +53,13 @@ canonicalize syntaxVersion env values unions effects =
                 dict =
                     Dict.fromList identity (List.map toNameRegion values)
             in
-            R.ok Can.Manager
-                |> R.apply (verifyManager region dict "init")
+            R.fmap Can.Manager (verifyManager region dict "init")
                 |> R.apply (verifyManager region dict "onEffects")
                 |> R.apply (verifyManager region dict "onSelfMsg")
                 |> R.apply
                     (case manager of
                         Src.Cmd cmdType ->
-                            R.ok Can.Cmd
-                                |> R.apply (verifyEffectType cmdType unions)
+                            R.fmap Can.Cmd (verifyEffectType cmdType unions)
                                 |> R.bind
                                     (\result ->
                                         verifyManager region dict "cmdMap"
@@ -73,8 +67,7 @@ canonicalize syntaxVersion env values unions effects =
                                     )
 
                         Src.Sub subType ->
-                            R.ok Can.Sub
-                                |> R.apply (verifyEffectType subType unions)
+                            R.fmap Can.Sub (verifyEffectType subType unions)
                                 |> R.bind
                                     (\result ->
                                         verifyManager region dict "subMap"
@@ -82,8 +75,7 @@ canonicalize syntaxVersion env values unions effects =
                                     )
 
                         Src.Fx cmdType subType ->
-                            R.ok Can.Fx
-                                |> R.apply (verifyEffectType cmdType unions)
+                            R.fmap Can.Fx (verifyEffectType cmdType unions)
                                 |> R.apply (verifyEffectType subType unions)
                                 |> R.bind
                                     (\result ->

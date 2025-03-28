@@ -98,7 +98,7 @@ chompModule syntaxVersion projectType =
                             )
                                 |> P.bind
                                     (\infixes ->
-                                        P.specialize E.Declarations (chompDecls syntaxVersion [])
+                                        P.specialize E.Declarations (chompDecls syntaxVersion)
                                             |> P.fmap
                                                 (\decls ->
                                                     Module
@@ -280,9 +280,10 @@ freshLine toFreshLineError =
 -- CHOMP DECLARATIONS
 
 
-chompDecls : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (List Decl.Decl)
+chompDecls : SyntaxVersion -> P.Parser E.Decl (List Decl.Decl)
 chompDecls syntaxVersion =
-    P.loop (chompDeclsHelp syntaxVersion)
+    Decl.declaration syntaxVersion
+        |> P.bind (\( decl, _ ) -> P.loop (chompDeclsHelp syntaxVersion) [ decl ])
 
 
 chompDeclsHelp : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (P.Step (List Decl.Decl) (List Decl.Decl))

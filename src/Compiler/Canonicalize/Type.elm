@@ -55,8 +55,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                 |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
 
         Src.TLambda a b ->
-            R.pure Can.TLambda
-                |> R.apply (canonicalize syntaxVersion env a)
+            R.fmap Can.TLambda (canonicalize syntaxVersion env a)
                 |> R.apply (canonicalize syntaxVersion env b)
 
         Src.TRecord fields ext ->
@@ -68,8 +67,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
             R.ok Can.TUnit
 
         Src.TTuple a b cs ->
-            R.pure Can.TTuple
-                |> R.apply (canonicalize syntaxVersion env a)
+            R.fmap Can.TTuple (canonicalize syntaxVersion env a)
                 |> R.apply (canonicalize syntaxVersion env b)
                 |> R.apply
                     (case cs of
