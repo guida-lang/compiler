@@ -79,6 +79,16 @@ view model =
     , div [] [ text (String.fromInt model) ]
     , button [ onClick Increment ] [ text "+" ]
     ]</textarea>
+  <select id="mode">
+    <option value="dev" selected>Dev</option>
+    <option value="debug">Debug</option>
+    <option value="prod">Prod</option>
+  </select>
+  <label id="sourcemaps">
+    <input id="sourcemaps-input" type="checkbox" value="false" disabled />
+    Sourcemaps (not working)
+  </label>
+  <button id="format">Format</button>
   <button id="run">Run</button>
   <iframe id="preview"></iframe>
 </body>

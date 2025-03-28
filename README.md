@@ -89,7 +89,7 @@ You can then `open index.html`.
 
 # Try
 
-Find an example of how to use the browser version of the compiler on the `try` folder.
+Find an example of how to use the browser version of the compiler on the [`try` folder](try/README.md).
 
 ## Clear cache
 
