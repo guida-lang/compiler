@@ -1,9 +1,13 @@
 module Browser.Main exposing (main)
 
 import Browser.Format as Format
+import Browser.Install as Install
 import Browser.Make as Make
+import Browser.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
+import Compiler.Elm.Package as Pkg
 import Compiler.Json.Encode as E
+import Compiler.Parse.Primitives as P
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO exposing (IO)
@@ -40,6 +44,24 @@ app =
 
                             Err error ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string error ) ])
+
+                    InstallArgs pkgString ->
+                        case P.fromByteString Pkg.parser Tuple.pair pkgString of
+                            Ok pkg ->
+                                Install.run pkg
+                                    |> IO.bind (\_ -> exitWithResponse Encode.null)
+
+                            Err _ ->
+                                exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
+
+                    UninstallArgs pkgString ->
+                        case P.fromByteString Pkg.parser Tuple.pair pkgString of
+                            Ok pkg ->
+                                Uninstall.run pkg
+                                    |> IO.bind (\_ -> exitWithResponse Encode.null)
+
+                            Err _ ->
+                                exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
             )
 
 
@@ -60,6 +82,8 @@ exitWithResponse value =
 type Args
     = MakeArgs String Bool Bool Bool
     | FormatArgs String
+    | InstallArgs String
+    | UninstallArgs String
 
 
 argsDecoder : Decode.Decoder Args
@@ -78,6 +102,14 @@ argsDecoder =
                     "format" ->
                         Decode.map FormatArgs
                             (Decode.field "content" Decode.string)
+
+                    "install" ->
+                        Decode.map InstallArgs
+                            (Decode.field "pkg" Decode.string)
+
+                    "uninstall" ->
+                        Decode.map UninstallArgs
+                            (Decode.field "pkg" Decode.string)
 
                     _ ->
                         Decode.fail ("Unknown command: " ++ command)

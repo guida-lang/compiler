@@ -41,10 +41,18 @@ window.addEventListener("load", async () => {
     });
 
     install.addEventListener("click", async () => {
-        console.log("TODO install", dependency.value);
+        const result = await app.install(dependency.value);
+
+        if (result && result.hasOwnProperty("error")) {
+            console.error(result.error);
+        }
     });
 
     uninstall.addEventListener("click", async () => {
-        console.log("TODO uninstall", dependency.value);
+        const result = await app.uninstall(dependency.value);
+
+        if (result && result.hasOwnProperty("error")) {
+            console.error(result.error);
+        }
     });
 });
