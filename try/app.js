@@ -1,7 +1,7 @@
 const guida = require("guida");
 
 window.addEventListener("load", async () => {
-    const app = await guida.init();
+    const app = await guida.init({ GUIDA_REGISTRY: "/proxy/https://package.elm-lang.org" });
 
     const code = document.getElementById("code");
 
