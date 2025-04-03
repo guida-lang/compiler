@@ -5,18 +5,21 @@
   "author": "Decio Ferreira",
   "license": "BSD-3-Clause",
   "browser": "lib/index.js",
-  "bin": "bin/index.js",
+  "bin": {
+    "guida": "bin/index.js"
+  },
   "scripts": {
-    "build": "npm-run-all --parallel build:*",
+    "build": "npm-run-all --sequential build:*",
     "build:bin": "./scripts/build.sh bin",
     "build:browser": "./scripts/build.sh browser",
-    "test": "npm-run-all --parallel test:*",
-    "test:jest": "jest",
+    "test": "npm-run-all --sequential test:*",
     "test:eslint": "eslint",
+    "test:elm-format-validate": "elm-format . --validate",
+    "test:jest": "jest",
     "test:elm": "elm-test tests/Parse",
     "test:elm-review": "elm-review src tests/Parse",
-    "test:elm-format-validate": "elm-format . --validate",
-    "elm-format": "elm-format . --yes"
+    "elm-format": "elm-format . --yes",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
