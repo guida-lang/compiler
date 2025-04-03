@@ -1,7 +1,5 @@
-const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
-const os = require("os");
 
 describe("tuples", () => {
     test("allows 3+ tuples", () => {

@@ -12,6 +12,7 @@
     "build:browser": "./scripts/build.sh browser",
     "test": "npm-run-all --parallel test:*",
     "test:jest": "jest",
+    "test:eslint": "eslint",
     "test:elm": "elm-test tests/Parse",
     "test:elm-review": "elm-review src tests/Parse",
     "test:elm-format-validate": "elm-format . --validate",
@@ -27,10 +28,14 @@
     "which": "^5.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.23.0",
     "elm": "^0.19.1-6",
     "elm-format": "^0.8.7",
     "elm-review": "^2.13.2",
     "elm-test": "^0.19.1-revision15",
+    "eslint": "^9.23.0",
+    "eslint-plugin-jest": "^28.11.0",
+    "globals": "^16.0.0",
     "guida": "^0.3.0-alpha",
     "jest": "^29.7.0",
     "npm-run-all": "^4.1.5",

@@ -1,4 +1,4 @@
-import guida from "guida";
+const guida = require("guida");
 
 window.addEventListener("load", async () => {
     const app = await guida.init();
@@ -19,7 +19,7 @@ window.addEventListener("load", async () => {
     format.addEventListener("click", async () => {
         const result = await app.format(code.value);
 
-        if (result.hasOwnProperty("error")) {
+        if (Object.prototype.hasOwnProperty.call(result, "error")) {
             console.error(JSON.parse(result.error));
         } else {
             code.value = result.output;
@@ -33,7 +33,7 @@ window.addEventListener("load", async () => {
             sourcemaps: sourcemaps.checked
         });
 
-        if (result.hasOwnProperty("error")) {
+        if (Object.prototype.hasOwnProperty.call(result, "error")) {
             console.error(result.error);
         } else {
             preview.srcdoc = result.output;
@@ -43,7 +43,7 @@ window.addEventListener("load", async () => {
     install.addEventListener("click", async () => {
         const result = await app.install(dependency.value);
 
-        if (result && result.hasOwnProperty("error")) {
+        if (result && Object.prototype.hasOwnProperty.call(result, "error")) {
             console.error(result.error);
         }
     });
@@ -51,7 +51,7 @@ window.addEventListener("load", async () => {
     uninstall.addEventListener("click", async () => {
         const result = await app.uninstall(dependency.value);
 
-        if (result && result.hasOwnProperty("error")) {
+        if (result && Object.prototype.hasOwnProperty.call(result, "error")) {
             console.error(result.error);
         }
     });
