@@ -237,8 +237,7 @@ server.post("dirDoesFileExist", (request) => {
 
 server.post("dirCreateDirectoryIfMissing", (request) => {
   const { createParents, filename } = JSON.parse(request.body);
-  fs.mkdir(filename, { recursive: createParents }, (err) => {
-    if (err) throw err;
+  fs.mkdir(filename, { recursive: createParents }, (_err) => {
     request.respond(200);
   });
 });
