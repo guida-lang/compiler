@@ -681,7 +681,7 @@ fpPathSeparator =
 
 fpIsRelative : FilePath -> Bool
 fpIsRelative =
-    String.startsWith "/"
+    not << String.startsWith "/"
 
 
 fpTakeFileName : FilePath -> FilePath
