@@ -173,12 +173,12 @@ server.post("hFileSize", (request) => {
 server.post("withCreateProcess", (request) => {
   let createProcess = JSON.parse(request.body);
 
-  tmp.file((err, path, fd, _cleanupCallback) => {
+  tmp.file((err, path, fd) => {
     if (err) throw err;
 
     const reader = fs.createReadStream(path);
 
-    reader.on("open", (_fd) => {
+    reader.on("open", () => {
       nextCounter += 1;
       processes[nextCounter] = child_process.spawn(
         createProcess.cmdspec.cmd,
@@ -237,7 +237,7 @@ server.post("dirDoesFileExist", (request) => {
 
 server.post("dirCreateDirectoryIfMissing", (request) => {
   const { createParents, filename } = JSON.parse(request.body);
-  fs.mkdir(filename, { recursive: createParents }, (err) => {
+  fs.mkdir(filename, { recursive: createParents }, (_err) => {
     request.respond(200);
   });
 });
@@ -300,7 +300,7 @@ server.post("dirListDirectory", (request) => {
 server.post("binaryDecodeFileOrFail", (request) => {
   fs.readFile(request.body, (err, data) => {
     if (err) throw err;
-    request.respond(200, null, data.toString());
+    request.respond(200, null, data.buffer);
   });
 });
 
@@ -359,7 +359,7 @@ server.post("putStateT", (request) => {
 });
 
 server.post("getStateT", (request) => {
-  request.respond(200, null, stateT);
+  request.respond(200, null, stateT.buffer);
 });
 
 // MVARS
@@ -374,7 +374,7 @@ server.post("readMVar", (request) => {
   if (typeof mVars[id].value === "undefined") {
     mVars[id].subscribers.push({ action: "read", request });
   } else {
-    request.respond(200, null, mVars[id].value);
+    request.respond(200, null, mVars[id].value.buffer);
   }
 });
 
@@ -395,7 +395,7 @@ server.post("takeMVar", (request) => {
       request.respond(200);
     }
 
-    request.respond(200, null, value);
+    request.respond(200, null, value.buffer);
   }
 });
 
@@ -407,7 +407,7 @@ server.post("putMVar", (request) => {
 
     mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
       if (subscriber.action === "read") {
-        subscriber.request.respond(200, null, value);
+        subscriber.request.respond(200, null, value.buffer);
       }
 
       return subscriber.action !== "read";
@@ -416,7 +416,7 @@ server.post("putMVar", (request) => {
     const subscriber = mVars[id].subscribers.shift();
 
     if (subscriber) {
-      subscriber.request.respond(200, null, value);
+      subscriber.request.respond(200, null, value.buffer);
 
       if (subscriber.action === "take") {
         mVars[id].value = undefined;

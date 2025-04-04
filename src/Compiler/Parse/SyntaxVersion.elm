@@ -8,8 +8,8 @@ module Compiler.Parse.SyntaxVersion exposing
 {-| Compiler.Parse.SyntaxVersion
 -}
 
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 {-| The `SyntaxVersion` type is used to specify which syntax version to work
@@ -40,28 +40,30 @@ fileSyntaxVersion path =
 -- ENCODERS and DECODERS
 
 
-encoder : SyntaxVersion -> Encode.Value
+encoder : SyntaxVersion -> BE.Encoder
 encoder syntaxVersion =
-    case syntaxVersion of
-        Elm ->
-            Encode.string "Elm"
+    BE.unsignedInt8
+        (case syntaxVersion of
+            Elm ->
+                0
 
-        Guida ->
-            Encode.string "Guida"
+            Guida ->
+                1
+        )
 
 
-decoder : Decode.Decoder SyntaxVersion
+decoder : BD.Decoder SyntaxVersion
 decoder =
-    Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Elm" ->
-                        Decode.succeed Elm
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Elm
 
-                    "Guida" ->
-                        Decode.succeed Guida
+                    1 ->
+                        BD.succeed Guida
 
                     _ ->
-                        Decode.fail ("Failed to decode SyntaxVersion's type: " ++ type_)
+                        BD.fail
             )

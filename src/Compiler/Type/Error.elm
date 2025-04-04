@@ -19,16 +19,14 @@ module Compiler.Type.Error exposing
 import Compiler.Data.Bag as Bag
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Prelude
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -842,232 +840,226 @@ extToStatus ext1 ext2 =
 -- ENCODERS and DECODERS
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : Type -> BE.Encoder
 typeEncoder type_ =
     case type_ of
         Lambda x y zs ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                , ( "x", typeEncoder x )
-                , ( "y", typeEncoder y )
-                , ( "zs", Encode.list typeEncoder zs )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , typeEncoder x
+                , typeEncoder y
+                , BE.list typeEncoder zs
                 ]
 
         Infinite ->
-            Encode.object
-                [ ( "type", Encode.string "Infinite" )
-                ]
+            BE.unsignedInt8 1
 
         Error ->
-            Encode.object
-                [ ( "type", Encode.string "Error" )
-                ]
+            BE.unsignedInt8 2
 
         FlexVar name ->
-            Encode.object
-                [ ( "type", Encode.string "FlexVar" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string name
                 ]
 
         FlexSuper s x ->
-            Encode.object
-                [ ( "type", Encode.string "FlexSuper" )
-                , ( "s", superEncoder s )
-                , ( "x", Encode.string x )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , superEncoder s
+                , BE.string x
                 ]
 
         RigidVar name ->
-            Encode.object
-                [ ( "type", Encode.string "RigidVar" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.string name
                 ]
 
         RigidSuper s x ->
-            Encode.object
-                [ ( "type", Encode.string "RigidSuper" )
-                , ( "s", superEncoder s )
-                , ( "x", Encode.string x )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , superEncoder s
+                , BE.string x
                 ]
 
         Type home name args ->
-            Encode.object
-                [ ( "type", Encode.string "Type" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list typeEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , BE.list typeEncoder args
                 ]
 
         Record msgType decoder ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "msgType", EncodeX.assocListDict compare Encode.string typeEncoder msgType )
-                , ( "decoder", extensionEncoder decoder )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.assocListDict compare BE.string typeEncoder msgType
+                , extensionEncoder decoder
                 ]
 
         Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
+            BE.unsignedInt8 9
 
         Tuple a b cs ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "a", typeEncoder a )
-                , ( "b", typeEncoder b )
-                , ( "cs", Encode.list typeEncoder cs )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , typeEncoder a
+                , typeEncoder b
+                , BE.list typeEncoder cs
                 ]
 
         Alias home name args tipe ->
-            Encode.object
-                [ ( "type", Encode.string "Alias" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list (EncodeX.jsonPair Encode.string typeEncoder) args )
-                , ( "tipe", typeEncoder tipe )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , BE.list (BE.jsonPair BE.string typeEncoder) args
+                , typeEncoder tipe
                 ]
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : BD.Decoder Type
 typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Lambda" ->
-                        Decode.map3 Lambda
-                            (Decode.field "x" typeDecoder)
-                            (Decode.field "y" typeDecoder)
-                            (Decode.field "zs" (Decode.list typeDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Lambda
+                            typeDecoder
+                            typeDecoder
+                            (BD.list typeDecoder)
 
-                    "Infinite" ->
-                        Decode.succeed Infinite
+                    1 ->
+                        BD.succeed Infinite
 
-                    "Error" ->
-                        Decode.succeed Error
+                    2 ->
+                        BD.succeed Error
 
-                    "FlexVar" ->
-                        Decode.map FlexVar (Decode.field "name" Decode.string)
+                    3 ->
+                        BD.map FlexVar BD.string
 
-                    "FlexSuper" ->
-                        Decode.map2 FlexSuper
-                            (Decode.field "s" superDecoder)
-                            (Decode.field "x" Decode.string)
+                    4 ->
+                        BD.map2 FlexSuper
+                            superDecoder
+                            BD.string
 
-                    "RigidVar" ->
-                        Decode.map RigidVar (Decode.field "name" Decode.string)
+                    5 ->
+                        BD.map RigidVar BD.string
 
-                    "RigidSuper" ->
-                        Decode.map2 RigidSuper
-                            (Decode.field "s" superDecoder)
-                            (Decode.field "x" Decode.string)
+                    6 ->
+                        BD.map2 RigidSuper
+                            superDecoder
+                            BD.string
 
-                    "Type" ->
-                        Decode.map3 Type
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list typeDecoder))
+                    7 ->
+                        BD.map3 Type
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            (BD.list typeDecoder)
 
-                    "Record" ->
-                        Decode.map2 Record
-                            (Decode.field "msgType" (DecodeX.assocListDict identity Decode.string typeDecoder))
-                            (Decode.field "decoder" extensionDecoder)
+                    8 ->
+                        BD.map2 Record
+                            (BD.assocListDict identity BD.string typeDecoder)
+                            extensionDecoder
 
-                    "Unit" ->
-                        Decode.succeed Unit
+                    9 ->
+                        BD.succeed Unit
 
-                    "Tuple" ->
-                        Decode.map3 Tuple
-                            (Decode.field "a" typeDecoder)
-                            (Decode.field "b" typeDecoder)
-                            (Decode.field "cs" (Decode.list typeDecoder))
+                    10 ->
+                        BD.map3 Tuple
+                            typeDecoder
+                            typeDecoder
+                            (BD.list typeDecoder)
 
-                    "Alias" ->
-                        Decode.map4 Alias
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list (DecodeX.jsonPair Decode.string typeDecoder)))
-                            (Decode.field "tipe" typeDecoder)
+                    11 ->
+                        BD.map4 Alias
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            (BD.list (BD.jsonPair BD.string typeDecoder))
+                            typeDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Type's type: " ++ type_)
+                        BD.fail
             )
 
 
-superEncoder : Super -> Encode.Value
+superEncoder : Super -> BE.Encoder
 superEncoder super =
-    case super of
-        Number ->
-            Encode.string "Number"
+    BE.unsignedInt8
+        (case super of
+            Number ->
+                0
 
-        Comparable ->
-            Encode.string "Comparable"
+            Comparable ->
+                1
 
-        Appendable ->
-            Encode.string "Appendable"
+            Appendable ->
+                2
 
-        CompAppend ->
-            Encode.string "CompAppend"
+            CompAppend ->
+                3
+        )
 
 
-superDecoder : Decode.Decoder Super
+superDecoder : BD.Decoder Super
 superDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Number" ->
-                        Decode.succeed Number
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Number
 
-                    "Comparable" ->
-                        Decode.succeed Comparable
+                    1 ->
+                        BD.succeed Comparable
 
-                    "Appendable" ->
-                        Decode.succeed Appendable
+                    2 ->
+                        BD.succeed Appendable
 
-                    "CompAppend" ->
-                        Decode.succeed CompAppend
+                    3 ->
+                        BD.succeed CompAppend
 
                     _ ->
-                        Decode.fail ("Unknown Super: " ++ str)
+                        BD.fail
             )
 
 
-extensionEncoder : Extension -> Encode.Value
+extensionEncoder : Extension -> BE.Encoder
 extensionEncoder extension =
     case extension of
         Closed ->
-            Encode.object
-                [ ( "type", Encode.string "Closed" )
-                ]
+            BE.unsignedInt8 0
 
         FlexOpen x ->
-            Encode.object
-                [ ( "type", Encode.string "FlexOpen" )
-                , ( "x", Encode.string x )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string x
                 ]
 
         RigidOpen x ->
-            Encode.object
-                [ ( "type", Encode.string "RigidOpen" )
-                , ( "x", Encode.string x )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string x
                 ]
 
 
-extensionDecoder : Decode.Decoder Extension
+extensionDecoder : BD.Decoder Extension
 extensionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Closed" ->
-                        Decode.succeed Closed
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Closed
 
-                    "FlexOpen" ->
-                        Decode.map FlexOpen (Decode.field "x" Decode.string)
+                    1 ->
+                        BD.map FlexOpen BD.string
 
-                    "RigidOpen" ->
-                        Decode.map RigidOpen (Decode.field "x" Decode.string)
+                    2 ->
+                        BD.map RigidOpen BD.string
 
                     _ ->
-                        Decode.fail ("Unknown Extension's type: " ++ type_)
+                        BD.fail
             )

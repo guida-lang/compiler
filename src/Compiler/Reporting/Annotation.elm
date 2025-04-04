@@ -17,9 +17,9 @@ module Compiler.Reporting.Annotation exposing
     , zero
     )
 
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO exposing (IO)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -95,49 +95,46 @@ one =
 -- ENCODERS and DECODERS
 
 
-regionEncoder : Region -> Encode.Value
+regionEncoder : Region -> BE.Encoder
 regionEncoder (Region start end) =
-    Encode.object
-        [ ( "type", Encode.string "Region" )
-        , ( "start", positionEncoder start )
-        , ( "end", positionEncoder end )
+    BE.sequence
+        [ positionEncoder start
+        , positionEncoder end
         ]
 
 
-regionDecoder : Decode.Decoder Region
+regionDecoder : BD.Decoder Region
 regionDecoder =
-    Decode.map2 Region
-        (Decode.field "start" positionDecoder)
-        (Decode.field "end" positionDecoder)
+    BD.map2 Region
+        positionDecoder
+        positionDecoder
 
 
-positionEncoder : Position -> Encode.Value
+positionEncoder : Position -> BE.Encoder
 positionEncoder (Position start end) =
-    Encode.object
-        [ ( "type", Encode.string "Position" )
-        , ( "start", Encode.int start )
-        , ( "end", Encode.int end )
+    BE.sequence
+        [ BE.int start
+        , BE.int end
         ]
 
 
-positionDecoder : Decode.Decoder Position
+positionDecoder : BD.Decoder Position
 positionDecoder =
-    Decode.map2 Position
-        (Decode.field "start" Decode.int)
-        (Decode.field "end" Decode.int)
+    BD.map2 Position
+        BD.int
+        BD.int
 
 
-locatedEncoder : (a -> Encode.Value) -> Located a -> Encode.Value
+locatedEncoder : (a -> BE.Encoder) -> Located a -> BE.Encoder
 locatedEncoder encoder (At region value) =
-    Encode.object
-        [ ( "type", Encode.string "Located" )
-        , ( "region", regionEncoder region )
-        , ( "value", encoder value )
+    BE.sequence
+        [ regionEncoder region
+        , encoder value
         ]
 
 
-locatedDecoder : Decode.Decoder a -> Decode.Decoder (Located a)
+locatedDecoder : BD.Decoder a -> BD.Decoder (Located a)
 locatedDecoder decoder =
-    Decode.map2 At
-        (Decode.field "region" regionDecoder)
-        (Decode.field "value" (Decode.lazy (\_ -> decoder)))
+    BD.map2 At
+        regionDecoder
+        (BD.lazy (\_ -> decoder))

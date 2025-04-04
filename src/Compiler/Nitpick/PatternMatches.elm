@@ -22,10 +22,10 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import List.Extra as List
 import Prelude
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -724,165 +724,165 @@ collectCtorsHelp ctors row =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         Incomplete region context unhandled ->
-            Encode.object
-                [ ( "type", Encode.string "Incomplete" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", contextEncoder context )
-                , ( "unhandled", Encode.list patternEncoder unhandled )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , contextEncoder context
+                , BE.list patternEncoder unhandled
                 ]
 
         Redundant caseRegion patternRegion index ->
-            Encode.object
-                [ ( "type", Encode.string "Redundant" )
-                , ( "caseRegion", A.regionEncoder caseRegion )
-                , ( "patternRegion", A.regionEncoder patternRegion )
-                , ( "index", Encode.int index )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder caseRegion
+                , A.regionEncoder patternRegion
+                , BE.int index
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Incomplete" ->
-                        Decode.map3 Incomplete
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" contextDecoder)
-                            (Decode.field "unhandled" (Decode.list patternDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Incomplete
+                            A.regionDecoder
+                            contextDecoder
+                            (BD.list patternDecoder)
 
-                    "Redundant" ->
-                        Decode.map3 Redundant
-                            (Decode.field "caseRegion" A.regionDecoder)
-                            (Decode.field "patternRegion" A.regionDecoder)
-                            (Decode.field "index" Decode.int)
+                    1 ->
+                        BD.map3 Redundant
+                            A.regionDecoder
+                            A.regionDecoder
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Unknown Error's type: " ++ type_)
+                        BD.fail
             )
 
 
-contextEncoder : Context -> Encode.Value
+contextEncoder : Context -> BE.Encoder
 contextEncoder context =
-    case context of
-        BadArg ->
-            Encode.string "BadArg"
+    BE.unsignedInt8
+        (case context of
+            BadArg ->
+                0
 
-        BadDestruct ->
-            Encode.string "BadDestruct"
+            BadDestruct ->
+                1
 
-        BadCase ->
-            Encode.string "BadCase"
+            BadCase ->
+                2
+        )
 
 
-contextDecoder : Decode.Decoder Context
+contextDecoder : BD.Decoder Context
 contextDecoder =
-    Decode.string
-        |> Decode.andThen
+    BD.unsignedInt8
+        |> BD.andThen
             (\str ->
                 case str of
-                    "BadArg" ->
-                        Decode.succeed BadArg
+                    0 ->
+                        BD.succeed BadArg
 
-                    "BadDestruct" ->
-                        Decode.succeed BadDestruct
+                    1 ->
+                        BD.succeed BadDestruct
 
-                    "BadCase" ->
-                        Decode.succeed BadCase
+                    2 ->
+                        BD.succeed BadCase
 
                     _ ->
-                        Decode.fail ("Unknown Context: " ++ str)
+                        BD.fail
             )
 
 
-patternEncoder : Pattern -> Encode.Value
+patternEncoder : Pattern -> BE.Encoder
 patternEncoder pattern =
     case pattern of
         Anything ->
-            Encode.object
-                [ ( "type", Encode.string "Anything" )
-                ]
+            BE.unsignedInt8 0
 
         Literal index ->
-            Encode.object
-                [ ( "type", Encode.string "Literal" )
-                , ( "index", literalEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , literalEncoder index
                 ]
 
         Ctor union name args ->
-            Encode.object
-                [ ( "type", Encode.string "Ctor" )
-                , ( "union", Can.unionEncoder union )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list patternEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Can.unionEncoder union
+                , BE.string name
+                , BE.list patternEncoder args
                 ]
 
 
-patternDecoder : Decode.Decoder Pattern
+patternDecoder : BD.Decoder Pattern
 patternDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Anything" ->
-                        Decode.succeed Anything
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Anything
 
-                    "Literal" ->
-                        Decode.map Literal (Decode.field "index" literalDecoder)
+                    1 ->
+                        BD.map Literal literalDecoder
 
-                    "Ctor" ->
-                        Decode.map3 Ctor
-                            (Decode.field "union" Can.unionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list patternDecoder))
+                    2 ->
+                        BD.map3 Ctor
+                            Can.unionDecoder
+                            BD.string
+                            (BD.list patternDecoder)
 
                     _ ->
-                        Decode.fail ("Unknown Pattern's type: " ++ type_)
+                        BD.fail
             )
 
 
-literalEncoder : Literal -> Encode.Value
+literalEncoder : Literal -> BE.Encoder
 literalEncoder literal =
     case literal of
         Chr value ->
-            Encode.object
-                [ ( "type", Encode.string "Chr" )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string value
                 ]
 
         Str value ->
-            Encode.object
-                [ ( "type", Encode.string "Str" )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string value
                 ]
 
         Int value ->
-            Encode.object
-                [ ( "type", Encode.string "Int" )
-                , ( "value", Encode.int value )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int value
                 ]
 
 
-literalDecoder : Decode.Decoder Literal
+literalDecoder : BD.Decoder Literal
 literalDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Chr" ->
-                        Decode.map Chr (Decode.field "value" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Chr BD.string
 
-                    "Str" ->
-                        Decode.map Str (Decode.field "value" Decode.string)
+                    1 ->
+                        BD.map Str BD.string
 
-                    "Int" ->
-                        Decode.map Int (Decode.field "value" Decode.int)
+                    2 ->
+                        BD.map Int BD.int
 
                     _ ->
-                        Decode.fail ("Unknown Literal's type: " ++ type_)
+                        BD.fail
             )

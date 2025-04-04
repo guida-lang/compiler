@@ -7,6 +7,10 @@ module Compiler.Elm.Docs exposing
     , Module(..)
     , Union(..)
     , Value(..)
+    , bytesDecoder
+    , bytesEncoder
+    , bytesModuleDecoder
+    , bytesModuleEncoder
     , decoder
     , encode
     , fromModule
@@ -40,6 +44,8 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
 
 
@@ -119,8 +125,7 @@ toDictHelp ((Module name _ _ _ _ _) as modul) =
 
 moduleDecoder : D.Decoder Error Module
 moduleDecoder =
-    D.pure Module
-        |> D.apply (D.field "name" moduleNameDecoder)
+    D.fmap Module (D.field "name" moduleNameDecoder)
         |> D.apply (D.field "comment" D.string)
         |> D.apply (D.field "unions" (dictDecoder union))
         |> D.apply (D.field "aliases" (dictDecoder alias_))
@@ -135,8 +140,7 @@ dictDecoder entryDecoder =
 
 named : D.Decoder Error a -> D.Decoder Error ( Name.Name, a )
 named entryDecoder =
-    D.pure Tuple.pair
-        |> D.apply (D.field "name" nameDecoder)
+    D.fmap Tuple.pair (D.field "name" nameDecoder)
         |> D.apply entryDecoder
 
 
@@ -171,8 +175,7 @@ encodeUnion ( name, Union comment args cases ) =
 
 union : D.Decoder Error Union
 union =
-    D.pure Union
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Union (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "cases" (D.list caseDecoder))
 
@@ -203,8 +206,7 @@ encodeAlias ( name, Alias comment args tipe ) =
 
 alias_ : D.Decoder Error Alias
 alias_ =
-    D.pure Alias
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Alias (D.field "comment" D.string)
         |> D.apply (D.field "args" (D.list nameDecoder))
         |> D.apply (D.field "type" typeDecoder)
 
@@ -224,8 +226,7 @@ encodeValue ( name, Value comment tipe ) =
 
 value : D.Decoder Error Value
 value =
-    D.pure Value
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Value (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
 
 
@@ -246,8 +247,7 @@ encodeBinop ( name, Binop comment tipe assoc prec ) =
 
 binop : D.Decoder Error Binop
 binop =
-    D.pure Binop
-        |> D.apply (D.field "comment" D.string)
+    D.fmap Binop (D.field "comment" D.string)
         |> D.apply (D.field "type" typeDecoder)
         |> D.apply (D.field "associativity" assocDecoder)
         |> D.apply (D.field "precedence" precDecoder)
@@ -776,7 +776,7 @@ addDef types def =
 
 
 
--- ENCODERS and DECODERS
+-- JSON ENCODERS and DECODERS
 
 
 jsonEncoder : Documentation -> Encode.Value
@@ -866,8 +866,8 @@ jsonBinopEncoder (Binop comment type_ associativity precedence) =
     Encode.object
         [ ( "comment", Encode.string comment )
         , ( "type", Type.jsonEncoder type_ )
-        , ( "associativity", Binop.associativityEncoder associativity )
-        , ( "precedence", Binop.precedenceEncoder precedence )
+        , ( "associativity", Binop.jsonAssociativityEncoder associativity )
+        , ( "precedence", Binop.jsonPrecedenceEncoder precedence )
         ]
 
 
@@ -876,5 +876,110 @@ jsonBinopDecoder =
     Decode.map4 Binop
         (Decode.field "comment" Decode.string)
         (Decode.field "type" Type.jsonDecoder)
-        (Decode.field "associativity" Binop.associativityDecoder)
-        (Decode.field "precedence" Binop.precedenceDecoder)
+        (Decode.field "associativity" Binop.jsonAssociativityDecoder)
+        (Decode.field "precedence" Binop.jsonPrecedenceDecoder)
+
+
+
+-- ENCODERS and DECODERS
+
+
+bytesEncoder : Documentation -> BE.Encoder
+bytesEncoder docs =
+    BE.list bytesModuleEncoder (Dict.values compare docs)
+
+
+bytesDecoder : BD.Decoder Documentation
+bytesDecoder =
+    BD.map toDict (BD.list bytesModuleDecoder)
+
+
+bytesModuleEncoder : Module -> BE.Encoder
+bytesModuleEncoder (Module name comment unions aliases values binops) =
+    BE.sequence
+        [ BE.string name
+        , BE.string comment
+        , BE.assocListDict compare BE.string bytesUnionEncoder unions
+        , BE.assocListDict compare BE.string bytesAliasEncoder aliases
+        , BE.assocListDict compare BE.string bytesValueEncoder values
+        , BE.assocListDict compare BE.string bytesBinopEncoder binops
+        ]
+
+
+bytesModuleDecoder : BD.Decoder Module
+bytesModuleDecoder =
+    BD.map6 Module
+        BD.string
+        BD.string
+        (BD.assocListDict identity BD.string bytesUnionDecoder)
+        (BD.assocListDict identity BD.string bytesAliasDecoder)
+        (BD.assocListDict identity BD.string bytesValueDecoder)
+        (BD.assocListDict identity BD.string bytesBinopDecoder)
+
+
+bytesUnionEncoder : Union -> BE.Encoder
+bytesUnionEncoder (Union comment args cases) =
+    BE.sequence
+        [ BE.string comment
+        , BE.list BE.string args
+        , BE.list (BE.jsonPair BE.string (BE.list Type.bytesEncoder)) cases
+        ]
+
+
+bytesUnionDecoder : BD.Decoder Union
+bytesUnionDecoder =
+    BD.map3 Union
+        BD.string
+        (BD.list BD.string)
+        (BD.list (BD.jsonPair BD.string (BD.list Type.bytesDecoder)))
+
+
+bytesAliasEncoder : Alias -> BE.Encoder
+bytesAliasEncoder (Alias comment args type_) =
+    BE.sequence
+        [ BE.string comment
+        , BE.list BE.string args
+        , Type.bytesEncoder type_
+        ]
+
+
+bytesAliasDecoder : BD.Decoder Alias
+bytesAliasDecoder =
+    BD.map3 Alias
+        BD.string
+        (BD.list BD.string)
+        Type.bytesDecoder
+
+
+bytesValueEncoder : Value -> BE.Encoder
+bytesValueEncoder (Value comment type_) =
+    BE.sequence
+        [ BE.string comment
+        , Type.bytesEncoder type_
+        ]
+
+
+bytesValueDecoder : BD.Decoder Value
+bytesValueDecoder =
+    BD.map2 Value
+        BD.string
+        Type.bytesDecoder
+
+
+bytesBinopEncoder : Binop -> BE.Encoder
+bytesBinopEncoder (Binop comment type_ associativity precedence) =
+    BE.sequence
+        [ BE.string comment
+        , Type.bytesEncoder type_
+        , Binop.associativityEncoder associativity
+        , Binop.precedenceEncoder precedence
+        ]
+
+
+bytesBinopDecoder : BD.Decoder Binop
+bytesBinopDecoder =
+    BD.map4 Binop
+        BD.string
+        Type.bytesDecoder
+        Binop.associativityDecoder
+        Binop.precedenceDecoder

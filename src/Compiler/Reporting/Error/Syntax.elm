@@ -41,14 +41,14 @@ module Compiler.Reporting.Error.Syntax exposing
 import Compiler.Data.Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Parse.Primitives exposing (Col, Row)
-import Compiler.Parse.Symbol exposing (BadOperator(..))
+import Compiler.Parse.Symbol as Symbol exposing (BadOperator(..))
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
 import Hex
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -7889,3717 +7889,3707 @@ toTTupleReport source context tuple startRow startCol =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         ModuleNameUnspecified name ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleNameUnspecified" )
-                , ( "name", ModuleName.rawEncoder name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
                 ]
 
         ModuleNameMismatch expectedName actualName ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleNameMismatch" )
-                , ( "expectedName", ModuleName.rawEncoder expectedName )
-                , ( "actualName", A.locatedEncoder ModuleName.rawEncoder actualName )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.rawEncoder expectedName
+                , A.locatedEncoder ModuleName.rawEncoder actualName
                 ]
 
         UnexpectedPort region ->
-            Encode.object
-                [ ( "type", Encode.string "UnexpectedPort" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
                 ]
 
         NoPorts region ->
-            Encode.object
-                [ ( "type", Encode.string "NoPorts" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , A.regionEncoder region
                 ]
 
         NoPortsInPackage name ->
-            Encode.object
-                [ ( "type", Encode.string "NoPortsInPackage" )
-                , ( "name", A.locatedEncoder Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , A.locatedEncoder BE.string name
                 ]
 
         NoPortModulesInPackage region ->
-            Encode.object
-                [ ( "type", Encode.string "NoPortModulesInPackage" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , A.regionEncoder region
                 ]
 
         NoEffectsOutsideKernel region ->
-            Encode.object
-                [ ( "type", Encode.string "NoEffectsOutsideKernel" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , A.regionEncoder region
                 ]
 
         ParseError modul ->
-            Encode.object
-                [ ( "type", Encode.string "ParseError" )
-                , ( "modul", moduleEncoder modul )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , moduleEncoder modul
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ModuleNameUnspecified" ->
-                        Decode.map ModuleNameUnspecified (Decode.field "name" ModuleName.rawDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map ModuleNameUnspecified ModuleName.rawDecoder
 
-                    "ModuleNameMismatch" ->
-                        Decode.map2 ModuleNameMismatch
-                            (Decode.field "expectedName" ModuleName.rawDecoder)
-                            (Decode.field "actualName" (A.locatedDecoder ModuleName.rawDecoder))
+                    1 ->
+                        BD.map2 ModuleNameMismatch
+                            ModuleName.rawDecoder
+                            (A.locatedDecoder ModuleName.rawDecoder)
 
-                    "UnexpectedPort" ->
-                        Decode.map UnexpectedPort (Decode.field "region" A.regionDecoder)
+                    2 ->
+                        BD.map UnexpectedPort A.regionDecoder
 
-                    "NoPorts" ->
-                        Decode.map NoPorts (Decode.field "region" A.regionDecoder)
+                    3 ->
+                        BD.map NoPorts A.regionDecoder
 
-                    "NoPortsInPackage" ->
-                        Decode.map NoPortsInPackage (Decode.field "name" (A.locatedDecoder Decode.string))
+                    4 ->
+                        BD.map NoPortsInPackage (A.locatedDecoder BD.string)
 
-                    "NoPortModulesInPackage" ->
-                        Decode.map NoPortModulesInPackage (Decode.field "region" A.regionDecoder)
+                    5 ->
+                        BD.map NoPortModulesInPackage A.regionDecoder
 
-                    "NoEffectsOutsideKernel" ->
-                        Decode.map NoEffectsOutsideKernel (Decode.field "region" A.regionDecoder)
+                    6 ->
+                        BD.map NoEffectsOutsideKernel A.regionDecoder
 
-                    "ParseError" ->
-                        Decode.map ParseError (Decode.field "modul" moduleDecoder)
+                    7 ->
+                        BD.map ParseError moduleDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )
 
 
-spaceEncoder : Space -> Encode.Value
+spaceEncoder : Space -> BE.Encoder
 spaceEncoder space =
-    case space of
-        HasTab ->
-            Encode.string "HasTab"
+    BE.unsignedInt8
+        (case space of
+            HasTab ->
+                0
 
-        EndlessMultiComment ->
-            Encode.string "EndlessMultiComment"
+            EndlessMultiComment ->
+                1
+        )
 
 
-spaceDecoder : Decode.Decoder Space
+spaceDecoder : BD.Decoder Space
 spaceDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "HasTab" ->
-                        Decode.succeed HasTab
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed HasTab
 
-                    "EndlessMultiComment" ->
-                        Decode.succeed EndlessMultiComment
+                    1 ->
+                        BD.succeed EndlessMultiComment
 
                     _ ->
-                        Decode.fail ("Unknown Space: " ++ str)
+                        BD.fail
             )
 
 
-moduleEncoder : Module -> Encode.Value
+moduleEncoder : Module -> BE.Encoder
 moduleEncoder modul =
     case modul of
         ModuleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         ModuleBadEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleBadEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         ModuleProblem row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleProblem" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         ModuleName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         ModuleExposing exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "ModuleExposing" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , exposingEncoder exposing_
+                , BE.int row
+                , BE.int col
                 ]
 
         PortModuleProblem row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleProblem" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         PortModuleName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         PortModuleExposing exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortModuleExposing" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , exposingEncoder exposing_
+                , BE.int row
+                , BE.int col
                 ]
 
         Effect row col ->
-            Encode.object
-                [ ( "type", Encode.string "Effect" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         FreshLine row col ->
-            Encode.object
-                [ ( "type", Encode.string "FreshLine" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportAs row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportAs" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportExposing row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportExposing" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 14
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportExposingList exposing_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportExposingList" )
-                , ( "exposing", exposingEncoder exposing_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 15
+                , exposingEncoder exposing_
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportIndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportIndentAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 18
+                , BE.int row
+                , BE.int col
                 ]
 
         ImportIndentExposingList row col ->
-            Encode.object
-                [ ( "type", Encode.string "ImportIndentExposingList" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 19
+                , BE.int row
+                , BE.int col
                 ]
 
         Infix row col ->
-            Encode.object
-                [ ( "type", Encode.string "Infix" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 20
+                , BE.int row
+                , BE.int col
                 ]
 
         Declarations decl row col ->
-            Encode.object
-                [ ( "type", Encode.string "Declarations" )
-                , ( "decl", declEncoder decl )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 21
+                , declEncoder decl
+                , BE.int row
+                , BE.int col
                 ]
 
 
-moduleDecoder : Decode.Decoder Module
+moduleDecoder : BD.Decoder Module
 moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ModuleSpace" ->
-                        Decode.map3 ModuleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 ModuleSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "ModuleBadEnd" ->
-                        Decode.map2 ModuleBadEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 ModuleBadEnd
+                            BD.int
+                            BD.int
 
-                    "ModuleProblem" ->
-                        Decode.map2 ModuleProblem
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 ModuleProblem
+                            BD.int
+                            BD.int
 
-                    "ModuleName" ->
-                        Decode.map2 ModuleName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 ModuleName
+                            BD.int
+                            BD.int
 
-                    "ModuleExposing" ->
-                        Decode.map3 ModuleExposing
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 ModuleExposing
+                            exposingDecoder
+                            BD.int
+                            BD.int
 
-                    "PortModuleProblem" ->
-                        Decode.map2 PortModuleProblem
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 PortModuleProblem
+                            BD.int
+                            BD.int
 
-                    "PortModuleName" ->
-                        Decode.map2 PortModuleName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 PortModuleName
+                            BD.int
+                            BD.int
 
-                    "PortModuleExposing" ->
-                        Decode.map3 PortModuleExposing
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map3 PortModuleExposing
+                            exposingDecoder
+                            BD.int
+                            BD.int
 
-                    "Effect" ->
-                        Decode.map2 Effect
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 Effect
+                            BD.int
+                            BD.int
 
-                    "FreshLine" ->
-                        Decode.map2 FreshLine
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 FreshLine
+                            BD.int
+                            BD.int
 
-                    "ImportStart" ->
-                        Decode.map2 ImportStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map2 ImportStart
+                            BD.int
+                            BD.int
 
-                    "ImportName" ->
-                        Decode.map2 ImportName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    11 ->
+                        BD.map2 ImportName
+                            BD.int
+                            BD.int
 
-                    "ImportAs" ->
-                        Decode.map2 ImportAs
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    12 ->
+                        BD.map2 ImportAs
+                            BD.int
+                            BD.int
 
-                    "ImportAlias" ->
-                        Decode.map2 ImportAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    13 ->
+                        BD.map2 ImportAlias
+                            BD.int
+                            BD.int
 
-                    "ImportExposing" ->
-                        Decode.map2 ImportExposing
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    14 ->
+                        BD.map2 ImportExposing
+                            BD.int
+                            BD.int
 
-                    "ImportExposingList" ->
-                        Decode.map3 ImportExposingList
-                            (Decode.field "exposing" exposingDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    15 ->
+                        BD.map3 ImportExposingList
+                            exposingDecoder
+                            BD.int
+                            BD.int
 
-                    "ImportEnd" ->
-                        Decode.map2 ImportEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    16 ->
+                        BD.map2 ImportEnd
+                            BD.int
+                            BD.int
 
-                    "ImportIndentName" ->
-                        Decode.map2 ImportIndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    17 ->
+                        BD.map2 ImportIndentName
+                            BD.int
+                            BD.int
 
-                    "ImportIndentAlias" ->
-                        Decode.map2 ImportIndentAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    18 ->
+                        BD.map2 ImportIndentAlias
+                            BD.int
+                            BD.int
 
-                    "ImportIndentExposingList" ->
-                        Decode.map2 ImportIndentExposingList
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    19 ->
+                        BD.map2 ImportIndentExposingList
+                            BD.int
+                            BD.int
 
-                    "Infix" ->
-                        Decode.map2 Infix
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    20 ->
+                        BD.map2 Infix
+                            BD.int
+                            BD.int
 
-                    "Declarations" ->
-                        Decode.map3 Declarations
-                            (Decode.field "decl" declDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    21 ->
+                        BD.map3 Declarations
+                            declDecoder
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
+                        BD.fail
             )
 
 
-exposingEncoder : Exposing -> Encode.Value
+exposingEncoder : Exposing -> BE.Encoder
 exposingEncoder exposing_ =
     case exposing_ of
         ExposingSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingValue row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingValue" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingOperator row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperator" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingOperatorReserved op row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperatorReserved" )
-                , ( "op", Compiler.Parse.Symbol.badOperatorEncoder op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , Symbol.badOperatorEncoder op
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingOperatorRightParen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingOperatorRightParen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingTypePrivacy row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingTypePrivacy" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         ExposingIndentValue row col ->
-            Encode.object
-                [ ( "type", Encode.string "ExposingIndentValue" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
 
-exposingDecoder : Decode.Decoder Exposing
+exposingDecoder : BD.Decoder Exposing
 exposingDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ExposingSpace" ->
-                        Decode.map3 ExposingSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 ExposingSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "ExposingStart" ->
-                        Decode.map2 ExposingStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 ExposingStart
+                            BD.int
+                            BD.int
 
-                    "ExposingValue" ->
-                        Decode.map2 ExposingValue
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 ExposingValue
+                            BD.int
+                            BD.int
 
-                    "ExposingOperator" ->
-                        Decode.map2 ExposingOperator
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 ExposingOperator
+                            BD.int
+                            BD.int
 
-                    "ExposingOperatorReserved" ->
-                        Decode.map3 ExposingOperatorReserved
-                            (Decode.field "op" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 ExposingOperatorReserved
+                            Symbol.badOperatorDecoder
+                            BD.int
+                            BD.int
 
-                    "ExposingOperatorRightParen" ->
-                        Decode.map2 ExposingOperatorRightParen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 ExposingOperatorRightParen
+                            BD.int
+                            BD.int
 
-                    "ExposingTypePrivacy" ->
-                        Decode.map2 ExposingTypePrivacy
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 ExposingTypePrivacy
+                            BD.int
+                            BD.int
 
-                    "ExposingEnd" ->
-                        Decode.map2 ExposingEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 ExposingEnd
+                            BD.int
+                            BD.int
 
-                    "ExposingIndentEnd" ->
-                        Decode.map2 ExposingIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 ExposingIndentEnd
+                            BD.int
+                            BD.int
 
-                    "ExposingIndentValue" ->
-                        Decode.map2 ExposingIndentValue
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 ExposingIndentValue
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Exposing's type: " ++ type_)
+                        BD.fail
             )
 
 
-declEncoder : Decl -> Encode.Value
+declEncoder : Decl -> BE.Encoder
 declEncoder decl =
     case decl of
         DeclStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         Port port_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Port" )
-                , ( "port", portEncoder port_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , portEncoder port_
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclType declType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclType" )
-                , ( "declType", declTypeEncoder declType )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , declTypeEncoder declType
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDef name declDef row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDef" )
-                , ( "name", Encode.string name )
-                , ( "declDef", declDefEncoder declDef )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string name
+                , declDefEncoder declDef
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclFreshLineAfterDocComment row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclFreshLineAfterDocComment" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
 
-declDecoder : Decode.Decoder Decl
+declDecoder : BD.Decoder Decl
 declDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DeclStart" ->
-                        Decode.map2 DeclStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 DeclStart
+                            BD.int
+                            BD.int
 
-                    "DeclSpace" ->
-                        Decode.map3 DeclSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 DeclSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "Port" ->
-                        Decode.map3 Port
-                            (Decode.field "port" portDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 Port
+                            portDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclType" ->
-                        Decode.map3 DeclType
-                            (Decode.field "declType" declTypeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 DeclType
+                            declTypeDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclDef" ->
-                        Decode.map4 DeclDef
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "declDef" declDefDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map4 DeclDef
+                            BD.string
+                            declDefDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclFreshLineAfterDocComment" ->
-                        Decode.map2 DeclFreshLineAfterDocComment
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 DeclFreshLineAfterDocComment
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Decl's type: " ++ type_)
+                        BD.fail
             )
 
 
-portEncoder : Port -> Encode.Value
+portEncoder : Port -> BE.Encoder
 portEncoder port_ =
     case port_ of
         PortSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         PortName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         PortColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         PortType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         PortIndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         PortIndentColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         PortIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "PortIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-portDecoder : Decode.Decoder Port
+portDecoder : BD.Decoder Port
 portDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PortSpace" ->
-                        Decode.map3 PortSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 PortSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "PortName" ->
-                        Decode.map2 PortName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 PortName
+                            BD.int
+                            BD.int
 
-                    "PortColon" ->
-                        Decode.map2 PortColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 PortColon
+                            BD.int
+                            BD.int
 
-                    "PortType" ->
-                        Decode.map3 PortType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 PortType
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "PortIndentName" ->
-                        Decode.map2 PortIndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 PortIndentName
+                            BD.int
+                            BD.int
 
-                    "PortIndentColon" ->
-                        Decode.map2 PortIndentColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 PortIndentColon
+                            BD.int
+                            BD.int
 
-                    "PortIndentType" ->
-                        Decode.map2 PortIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 PortIndentType
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Port's type: " ++ type_)
+                        BD.fail
             )
 
 
-declTypeEncoder : DeclType -> Encode.Value
+declTypeEncoder : DeclType -> BE.Encoder
 declTypeEncoder declType =
     case declType of
         DT_Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         DT_Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         DT_Alias typeAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Alias" )
-                , ( "typeAlias", typeAliasEncoder typeAlias )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , typeAliasEncoder typeAlias
+                , BE.int row
+                , BE.int col
                 ]
 
         DT_Union customType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_Union" )
-                , ( "customType", customTypeEncoder customType )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , customTypeEncoder customType
+                , BE.int row
+                , BE.int col
                 ]
 
         DT_IndentName row col ->
-            Encode.object
-                [ ( "type", Encode.string "DT_IndentName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
 
-declTypeDecoder : Decode.Decoder DeclType
+declTypeDecoder : BD.Decoder DeclType
 declTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DT_Space" ->
-                        Decode.map3 DT_Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 DT_Space
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "DT_Name" ->
-                        Decode.map2 DT_Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 DT_Name
+                            BD.int
+                            BD.int
 
-                    "DT_Alias" ->
-                        Decode.map3 DT_Alias
-                            (Decode.field "typeAlias" typeAliasDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 DT_Alias
+                            typeAliasDecoder
+                            BD.int
+                            BD.int
 
-                    "DT_Union" ->
-                        Decode.map3 DT_Union
-                            (Decode.field "customType" customTypeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 DT_Union
+                            customTypeDecoder
+                            BD.int
+                            BD.int
 
-                    "DT_IndentName" ->
-                        Decode.map2 DT_IndentName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 DT_IndentName
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode DeclType's type: " ++ type_)
+                        BD.fail
             )
 
 
-declDefEncoder : DeclDef -> Encode.Value
+declDefEncoder : DeclDef -> BE.Encoder
 declDefEncoder declDef =
     case declDef of
         DeclDefSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefNameRepeat row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefNameRepeat" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefNameMatch name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefNameMatch" )
-                , ( "name", Encode.string name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.string name
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         DeclDefIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DeclDefIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
 
-declDefDecoder : Decode.Decoder DeclDef
+declDefDecoder : BD.Decoder DeclDef
 declDefDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DeclDefSpace" ->
-                        Decode.map3 DeclDefSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 DeclDefSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclDefEquals" ->
-                        Decode.map2 DeclDefEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 DeclDefEquals
+                            BD.int
+                            BD.int
 
-                    "DeclDefType" ->
-                        Decode.map3 DeclDefType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 DeclDefType
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclDefArg" ->
-                        Decode.map3 DeclDefArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 DeclDefArg
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclDefBody" ->
-                        Decode.map3 DeclDefBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 DeclDefBody
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "DeclDefNameRepeat" ->
-                        Decode.map2 DeclDefNameRepeat
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 DeclDefNameRepeat
+                            BD.int
+                            BD.int
 
-                    "DeclDefNameMatch" ->
-                        Decode.map3 DeclDefNameMatch
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 DeclDefNameMatch
+                            BD.string
+                            BD.int
+                            BD.int
 
-                    "DeclDefIndentType" ->
-                        Decode.map2 DeclDefIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 DeclDefIndentType
+                            BD.int
+                            BD.int
 
-                    "DeclDefIndentEquals" ->
-                        Decode.map2 DeclDefIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 DeclDefIndentEquals
+                            BD.int
+                            BD.int
 
-                    "DeclDefIndentBody" ->
-                        Decode.map2 DeclDefIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 DeclDefIndentBody
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode DeclDef's type: " ++ type_)
+                        BD.fail
             )
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : Type -> BE.Encoder
 typeEncoder type_ =
     case type_ of
         TRecord record row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecord" )
-                , ( "record", tRecordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , tRecordEncoder record
+                , BE.int row
+                , BE.int col
                 ]
 
         TTuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTuple" )
-                , ( "tuple", tTupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , tTupleEncoder tuple
+                , BE.int row
+                , BE.int col
                 ]
 
         TStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "TStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         TSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         TIndentStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "TIndentStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : BD.Decoder Type
 typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TRecord" ->
-                        Decode.map3 TRecord
-                            (Decode.field "record" tRecordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 TRecord
+                            tRecordDecoder
+                            BD.int
+                            BD.int
 
-                    "TTuple" ->
-                        Decode.map3 TTuple
-                            (Decode.field "tuple" tTupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 TTuple
+                            tTupleDecoder
+                            BD.int
+                            BD.int
 
-                    "TStart" ->
-                        Decode.map2 TStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 TStart
+                            BD.int
+                            BD.int
 
-                    "TSpace" ->
-                        Decode.map3 TSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 TSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "TIndentStart" ->
-                        Decode.map2 TIndentStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 TIndentStart
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Type's type: " ++ type_)
+                        BD.fail
             )
 
 
-patternEncoder : Pattern -> Encode.Value
+patternEncoder : Pattern -> BE.Encoder
 patternEncoder pattern =
     case pattern of
         PRecord record row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecord" )
-                , ( "record", pRecordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , pRecordEncoder record
+                , BE.int row
+                , BE.int col
                 ]
 
         PTuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTuple" )
-                , ( "tuple", pTupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , pTupleEncoder tuple
+                , BE.int row
+                , BE.int col
                 ]
 
         PList list row col ->
-            Encode.object
-                [ ( "type", Encode.string "PList" )
-                , ( "list", pListEncoder list )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , pListEncoder list
+                , BE.int row
+                , BE.int col
                 ]
 
         PStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "PStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         PChar char row col ->
-            Encode.object
-                [ ( "type", Encode.string "PChar" )
-                , ( "char", charEncoder char )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , charEncoder char
+                , BE.int row
+                , BE.int col
                 ]
 
         PString string row col ->
-            Encode.object
-                [ ( "type", Encode.string "PString" )
-                , ( "string", stringEncoder string )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , stringEncoder string
+                , BE.int row
+                , BE.int col
                 ]
 
         PNumber number row col ->
-            Encode.object
-                [ ( "type", Encode.string "PNumber" )
-                , ( "number", numberEncoder number )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , numberEncoder number
+                , BE.int row
+                , BE.int col
                 ]
 
         PFloat width row col ->
-            Encode.object
-                [ ( "type", Encode.string "PFloat" )
-                , ( "width", Encode.int width )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int width
+                , BE.int row
+                , BE.int col
                 ]
 
         PAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "PAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         PWildcardNotVar name width row col ->
-            Encode.object
-                [ ( "type", Encode.string "PWildcardNotVar" )
-                , ( "name", Encode.string name )
-                , ( "width", Encode.int width )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.string name
+                , BE.int width
+                , BE.int row
+                , BE.int col
                 ]
 
         PWildcardReservedWord name width row col ->
-            Encode.object
-                [ ( "type", Encode.string "PWildcardReservedWord" )
-                , ( "name", Encode.string name )
-                , ( "width", Encode.int width )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.string name
+                , BE.int width
+                , BE.int row
+                , BE.int col
                 ]
 
         PSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         PIndentStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "PIndentStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , BE.int row
+                , BE.int col
                 ]
 
         PIndentAlias row col ->
-            Encode.object
-                [ ( "type", Encode.string "PIndentAlias" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , BE.int row
+                , BE.int col
                 ]
 
 
-patternDecoder : Decode.Decoder Pattern
+patternDecoder : BD.Decoder Pattern
 patternDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecord" ->
-                        Decode.map3 PRecord
-                            (Decode.field "record" pRecordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 PRecord
+                            pRecordDecoder
+                            BD.int
+                            BD.int
 
-                    "PTuple" ->
-                        Decode.map3 PTuple
-                            (Decode.field "tuple" pTupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 PTuple
+                            pTupleDecoder
+                            BD.int
+                            BD.int
 
-                    "PList" ->
-                        Decode.map3 PList
-                            (Decode.field "list" pListDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 PList
+                            pListDecoder
+                            BD.int
+                            BD.int
 
-                    "PStart" ->
-                        Decode.map2 PStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 PStart
+                            BD.int
+                            BD.int
 
-                    "PChar" ->
-                        Decode.map3 PChar
-                            (Decode.field "char" charDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 PChar
+                            charDecoder
+                            BD.int
+                            BD.int
 
-                    "PString" ->
-                        Decode.map3 PString
-                            (Decode.field "string" stringDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 PString
+                            stringDecoder
+                            BD.int
+                            BD.int
 
-                    "PNumber" ->
-                        Decode.map3 PNumber
-                            (Decode.field "number" numberDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 PNumber
+                            numberDecoder
+                            BD.int
+                            BD.int
 
-                    "PFloat" ->
-                        Decode.map3 PFloat
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map3 PFloat
+                            BD.int
+                            BD.int
+                            BD.int
 
-                    "PAlias" ->
-                        Decode.map2 PAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 PAlias
+                            BD.int
+                            BD.int
 
-                    "PWildcardNotVar" ->
-                        Decode.map4 PWildcardNotVar
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map4 PWildcardNotVar
+                            BD.string
+                            BD.int
+                            BD.int
+                            BD.int
 
-                    "PWildcardReservedWord" ->
-                        Decode.map4 PWildcardReservedWord
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map4 PWildcardReservedWord
+                            BD.string
+                            BD.int
+                            BD.int
+                            BD.int
 
-                    "PSpace" ->
-                        Decode.map3 PSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    11 ->
+                        BD.map3 PSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "PIndentStart" ->
-                        Decode.map2 PIndentStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    12 ->
+                        BD.map2 PIndentStart
+                            BD.int
+                            BD.int
 
-                    "PIndentAlias" ->
-                        Decode.map2 PIndentAlias
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    13 ->
+                        BD.map2 PIndentAlias
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Pattern's type: " ++ type_)
+                        BD.fail
             )
 
 
-exprEncoder : Expr -> Encode.Value
+exprEncoder : Expr -> BE.Encoder
 exprEncoder expr =
     case expr of
         Let let_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Let" )
-                , ( "let", letEncoder let_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , letEncoder let_
+                , BE.int row
+                , BE.int col
                 ]
 
         Case case_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                , ( "case", caseEncoder case_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , caseEncoder case_
+                , BE.int row
+                , BE.int col
                 ]
 
         If if_ row col ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                , ( "if", ifEncoder if_ )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , ifEncoder if_
+                , BE.int row
+                , BE.int col
                 ]
 
         List list row col ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                , ( "list", listEncoder list )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , listEncoder list
+                , BE.int row
+                , BE.int col
                 ]
 
         Record record row col ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "record", recordEncoder record )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , recordEncoder record
+                , BE.int row
+                , BE.int col
                 ]
 
         Tuple tuple row col ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "tuple", tupleEncoder tuple )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , tupleEncoder tuple
+                , BE.int row
+                , BE.int col
                 ]
 
         Func func row col ->
-            Encode.object
-                [ ( "type", Encode.string "Func" )
-                , ( "func", funcEncoder func )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , funcEncoder func
+                , BE.int row
+                , BE.int col
                 ]
 
         Dot row col ->
-            Encode.object
-                [ ( "type", Encode.string "Dot" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         Access row col ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         OperatorRight op row col ->
-            Encode.object
-                [ ( "type", Encode.string "OperatorRight" )
-                , ( "op", Encode.string op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.string op
+                , BE.int row
+                , BE.int col
                 ]
 
         OperatorReserved operator row col ->
-            Encode.object
-                [ ( "type", Encode.string "OperatorReserved" )
-                , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , Symbol.badOperatorEncoder operator
+                , BE.int row
+                , BE.int col
                 ]
 
         Start row col ->
-            Encode.object
-                [ ( "type", Encode.string "Start" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.int row
+                , BE.int col
                 ]
 
         Char char row col ->
-            Encode.object
-                [ ( "type", Encode.string "Char" )
-                , ( "char", charEncoder char )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , charEncoder char
+                , BE.int row
+                , BE.int col
                 ]
 
         String_ string row col ->
-            Encode.object
-                [ ( "type", Encode.string "String" )
-                , ( "string", stringEncoder string )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , stringEncoder string
+                , BE.int row
+                , BE.int col
                 ]
 
         Number number row col ->
-            Encode.object
-                [ ( "type", Encode.string "Number" )
-                , ( "number", numberEncoder number )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 14
+                , numberEncoder number
+                , BE.int row
+                , BE.int col
                 ]
 
         Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 15
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         EndlessShader row col ->
-            Encode.object
-                [ ( "type", Encode.string "EndlessShader" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , BE.int row
+                , BE.int col
                 ]
 
         ShaderProblem problem row col ->
-            Encode.object
-                [ ( "type", Encode.string "ShaderProblem" )
-                , ( "problem", Encode.string problem )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , BE.string problem
+                , BE.int row
+                , BE.int col
                 ]
 
         IndentOperatorRight op row col ->
-            Encode.object
-                [ ( "type", Encode.string "IndentOperatorRight" )
-                , ( "op", Encode.string op )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 18
+                , BE.string op
+                , BE.int row
+                , BE.int col
                 ]
 
 
-exprDecoder : Decode.Decoder Expr
+exprDecoder : BD.Decoder Expr
 exprDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Let" ->
-                        Decode.map3 Let
-                            (Decode.field "let" letDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Let
+                            letDecoder
+                            BD.int
+                            BD.int
 
-                    "Case" ->
-                        Decode.map3 Case
-                            (Decode.field "case" caseDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 Case
+                            caseDecoder
+                            BD.int
+                            BD.int
 
-                    "If" ->
-                        Decode.map3 If
-                            (Decode.field "if" ifDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 If
+                            ifDecoder
+                            BD.int
+                            BD.int
 
-                    "List" ->
-                        Decode.map3 List
-                            (Decode.field "list" listDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 List
+                            listDecoder
+                            BD.int
+                            BD.int
 
-                    "Record" ->
-                        Decode.map3 Record
-                            (Decode.field "record" recordDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 Record
+                            recordDecoder
+                            BD.int
+                            BD.int
 
-                    "Tuple" ->
-                        Decode.map3 Tuple
-                            (Decode.field "tuple" tupleDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 Tuple
+                            tupleDecoder
+                            BD.int
+                            BD.int
 
-                    "Func" ->
-                        Decode.map3 Func
-                            (Decode.field "func" funcDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 Func
+                            funcDecoder
+                            BD.int
+                            BD.int
 
-                    "Dot" ->
-                        Decode.map2 Dot
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 Dot
+                            BD.int
+                            BD.int
 
-                    "Access" ->
-                        Decode.map2 Access
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 Access
+                            BD.int
+                            BD.int
 
-                    "OperatorRight" ->
-                        Decode.map3 OperatorRight
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map3 OperatorRight
+                            BD.string
+                            BD.int
+                            BD.int
 
-                    "OperatorReserved" ->
-                        Decode.map3 OperatorReserved
-                            (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map3 OperatorReserved
+                            Symbol.badOperatorDecoder
+                            BD.int
+                            BD.int
 
-                    "Start" ->
-                        Decode.map2 Start
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    11 ->
+                        BD.map2 Start
+                            BD.int
+                            BD.int
 
-                    "Char" ->
-                        Decode.map3 Char
-                            (Decode.field "char" charDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    12 ->
+                        BD.map3 Char
+                            charDecoder
+                            BD.int
+                            BD.int
 
-                    "String" ->
-                        Decode.map3 String_
-                            (Decode.field "string" stringDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    13 ->
+                        BD.map3 String_
+                            stringDecoder
+                            BD.int
+                            BD.int
 
-                    "Number" ->
-                        Decode.map3 Number
-                            (Decode.field "number" numberDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    14 ->
+                        BD.map3 Number
+                            numberDecoder
+                            BD.int
+                            BD.int
 
-                    "Space" ->
-                        Decode.map3 Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    15 ->
+                        BD.map3 Space
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "EndlessShader" ->
-                        Decode.map2 EndlessShader
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    16 ->
+                        BD.map2 EndlessShader
+                            BD.int
+                            BD.int
 
-                    "ShaderProblem" ->
-                        Decode.map3 ShaderProblem
-                            (Decode.field "problem" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    17 ->
+                        BD.map3 ShaderProblem
+                            BD.string
+                            BD.int
+                            BD.int
 
-                    "IndentOperatorRight" ->
-                        Decode.map3 IndentOperatorRight
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    18 ->
+                        BD.map3 IndentOperatorRight
+                            BD.string
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Expr's type: " ++ type_)
+                        BD.fail
             )
 
 
-letEncoder : Let -> Encode.Value
+letEncoder : Let -> BE.Encoder
 letEncoder let_ =
     case let_ of
         LetSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         LetIn row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIn" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         LetDefAlignment int row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDefAlignment" )
-                , ( "int", Encode.int int )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int int
+                , BE.int row
+                , BE.int col
                 ]
 
         LetDefName row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDefName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         LetDef name def row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDef" )
-                , ( "name", Encode.string name )
-                , ( "def", defEncoder def )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string name
+                , defEncoder def
+                , BE.int row
+                , BE.int col
                 ]
 
         LetDestruct destruct row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetDestruct" )
-                , ( "destruct", destructEncoder destruct )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , destructEncoder destruct
+                , BE.int row
+                , BE.int col
                 ]
 
         LetBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         LetIndentDef row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentDef" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         LetIndentIn row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentIn" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         LetIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "LetIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
 
-letDecoder : Decode.Decoder Let
+letDecoder : BD.Decoder Let
 letDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LetSpace" ->
-                        Decode.map3 LetSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 LetSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "LetIn" ->
-                        Decode.map2 LetIn
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 LetIn
+                            BD.int
+                            BD.int
 
-                    "LetDefAlignment" ->
-                        Decode.map3 LetDefAlignment
-                            (Decode.field "int" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 LetDefAlignment
+                            BD.int
+                            BD.int
+                            BD.int
 
-                    "LetDefName" ->
-                        Decode.map2 LetDefName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 LetDefName
+                            BD.int
+                            BD.int
 
-                    "LetDef" ->
-                        Decode.map4 LetDef
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "def" defDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map4 LetDef
+                            BD.string
+                            defDecoder
+                            BD.int
+                            BD.int
 
-                    "LetDestruct" ->
-                        Decode.map3 LetDestruct
-                            (Decode.field "destruct" destructDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 LetDestruct
+                            destructDecoder
+                            BD.int
+                            BD.int
 
-                    "LetBody" ->
-                        Decode.map3 LetBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 LetBody
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "LetIndentDef" ->
-                        Decode.map2 LetIndentDef
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 LetIndentDef
+                            BD.int
+                            BD.int
 
-                    "LetIndentIn" ->
-                        Decode.map2 LetIndentIn
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 LetIndentIn
+                            BD.int
+                            BD.int
 
-                    "LetIndentBody" ->
-                        Decode.map2 LetIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 LetIndentBody
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Let's type: " ++ type_)
+                        BD.fail
             )
 
 
-caseEncoder : Case -> Encode.Value
+caseEncoder : Case -> BE.Encoder
 caseEncoder case_ =
     case case_ of
         CaseSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseOf row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseOf" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         CasePattern pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "CasePattern" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseIndentOf row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentOf" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseIndentPattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentPattern" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseIndentArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         CaseIndentBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "CaseIndentBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int row
+                , BE.int col
                 ]
 
         CasePatternAlignment indent row col ->
-            Encode.object
-                [ ( "type", Encode.string "CasePatternAlignment" )
-                , ( "indent", Encode.int indent )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.int indent
+                , BE.int row
+                , BE.int col
                 ]
 
 
-caseDecoder : Decode.Decoder Case
+caseDecoder : BD.Decoder Case
 caseDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CaseSpace" ->
-                        Decode.map3 CaseSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 CaseSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "CaseOf" ->
-                        Decode.map2 CaseOf
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 CaseOf
+                            BD.int
+                            BD.int
 
-                    "CasePattern" ->
-                        Decode.map3 CasePattern
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 CasePattern
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "CaseArrow" ->
-                        Decode.map2 CaseArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 CaseArrow
+                            BD.int
+                            BD.int
 
-                    "CaseExpr" ->
-                        Decode.map3 CaseExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 CaseExpr
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "CaseBranch" ->
-                        Decode.map3 CaseBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 CaseBranch
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "CaseIndentOf" ->
-                        Decode.map2 CaseIndentOf
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 CaseIndentOf
+                            BD.int
+                            BD.int
 
-                    "CaseIndentExpr" ->
-                        Decode.map2 CaseIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 CaseIndentExpr
+                            BD.int
+                            BD.int
 
-                    "CaseIndentPattern" ->
-                        Decode.map2 CaseIndentPattern
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 CaseIndentPattern
+                            BD.int
+                            BD.int
 
-                    "CaseIndentArrow" ->
-                        Decode.map2 CaseIndentArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 CaseIndentArrow
+                            BD.int
+                            BD.int
 
-                    "CaseIndentBranch" ->
-                        Decode.map2 CaseIndentBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map2 CaseIndentBranch
+                            BD.int
+                            BD.int
 
-                    "CasePatternAlignment" ->
-                        Decode.map3 CasePatternAlignment
-                            (Decode.field "indent" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    11 ->
+                        BD.map3 CasePatternAlignment
+                            BD.int
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Case's type: " ++ type_)
+                        BD.fail
             )
 
 
-ifEncoder : If -> Encode.Value
+ifEncoder : If -> BE.Encoder
 ifEncoder if_ =
     case if_ of
         IfSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         IfThen row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfThen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         IfElse row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElse" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         IfElseBranchStart row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElseBranchStart" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         IfCondition expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfCondition" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         IfThenBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfThenBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         IfElseBranch expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfElseBranch" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         IfIndentCondition row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentCondition" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         IfIndentThen row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentThen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         IfIndentThenBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentThenBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         IfIndentElseBranch row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentElseBranch" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int row
+                , BE.int col
                 ]
 
         IfIndentElse row col ->
-            Encode.object
-                [ ( "type", Encode.string "IfIndentElse" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.int row
+                , BE.int col
                 ]
 
 
-ifDecoder : Decode.Decoder If
+ifDecoder : BD.Decoder If
 ifDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "IfSpace" ->
-                        Decode.map3 IfSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 IfSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "IfThen" ->
-                        Decode.map2 IfThen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 IfThen
+                            BD.int
+                            BD.int
 
-                    "IfElse" ->
-                        Decode.map2 IfElse
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 IfElse
+                            BD.int
+                            BD.int
 
-                    "IfElseBranchStart" ->
-                        Decode.map2 IfElseBranchStart
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 IfElseBranchStart
+                            BD.int
+                            BD.int
 
-                    "IfCondition" ->
-                        Decode.map3 IfCondition
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 IfCondition
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "IfThenBranch" ->
-                        Decode.map3 IfThenBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 IfThenBranch
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "IfElseBranch" ->
-                        Decode.map3 IfElseBranch
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 IfElseBranch
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "IfIndentCondition" ->
-                        Decode.map2 IfIndentCondition
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 IfIndentCondition
+                            BD.int
+                            BD.int
 
-                    "IfIndentThen" ->
-                        Decode.map2 IfIndentThen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 IfIndentThen
+                            BD.int
+                            BD.int
 
-                    "IfIndentThenBranch" ->
-                        Decode.map2 IfIndentThenBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 IfIndentThenBranch
+                            BD.int
+                            BD.int
 
-                    "IfIndentElseBranch" ->
-                        Decode.map2 IfIndentElseBranch
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map2 IfIndentElseBranch
+                            BD.int
+                            BD.int
 
-                    "IfIndentElse" ->
-                        Decode.map2 IfIndentElse
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    11 ->
+                        BD.map2 IfIndentElse
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode If's type: " ++ type_)
+                        BD.fail
             )
 
 
-listEncoder : List_ -> Encode.Value
+listEncoder : List_ -> BE.Encoder
 listEncoder list_ =
     case list_ of
         ListSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         ListOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         ListExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         ListEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         ListIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         ListIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         ListIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "ListIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-listDecoder : Decode.Decoder List_
+listDecoder : BD.Decoder List_
 listDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ListSpace" ->
-                        Decode.map3 ListSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 ListSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "ListOpen" ->
-                        Decode.map2 ListOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 ListOpen
+                            BD.int
+                            BD.int
 
-                    "ListExpr" ->
-                        Decode.map3 ListExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 ListExpr
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "ListEnd" ->
-                        Decode.map2 ListEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 ListEnd
+                            BD.int
+                            BD.int
 
-                    "ListIndentOpen" ->
-                        Decode.map2 ListIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 ListIndentOpen
+                            BD.int
+                            BD.int
 
-                    "ListIndentEnd" ->
-                        Decode.map2 ListIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 ListIndentEnd
+                            BD.int
+                            BD.int
 
-                    "ListIndentExpr" ->
-                        Decode.map2 ListIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 ListIndentExpr
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode List's type: " ++ type_)
+                        BD.fail
             )
 
 
-recordEncoder : Record -> Encode.Value
+recordEncoder : Record -> BE.Encoder
 recordEncoder record =
     case record of
         RecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         RecordIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "RecordIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int row
+                , BE.int col
                 ]
 
 
-recordDecoder : Decode.Decoder Record
+recordDecoder : BD.Decoder Record
 recordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RecordOpen" ->
-                        Decode.map2 RecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 RecordOpen
+                            BD.int
+                            BD.int
 
-                    "RecordEnd" ->
-                        Decode.map2 RecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 RecordEnd
+                            BD.int
+                            BD.int
 
-                    "RecordField" ->
-                        Decode.map2 RecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 RecordField
+                            BD.int
+                            BD.int
 
-                    "RecordEquals" ->
-                        Decode.map2 RecordEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 RecordEquals
+                            BD.int
+                            BD.int
 
-                    "RecordExpr" ->
-                        Decode.map3 RecordExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 RecordExpr
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "RecordSpace" ->
-                        Decode.map3 RecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 RecordSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "RecordIndentOpen" ->
-                        Decode.map2 RecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 RecordIndentOpen
+                            BD.int
+                            BD.int
 
-                    "RecordIndentEnd" ->
-                        Decode.map2 RecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 RecordIndentEnd
+                            BD.int
+                            BD.int
 
-                    "RecordIndentField" ->
-                        Decode.map2 RecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 RecordIndentField
+                            BD.int
+                            BD.int
 
-                    "RecordIndentEquals" ->
-                        Decode.map2 RecordIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 RecordIndentEquals
+                            BD.int
+                            BD.int
 
-                    "RecordIndentExpr" ->
-                        Decode.map2 RecordIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map2 RecordIndentExpr
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Record's type: " ++ type_)
+                        BD.fail
             )
 
 
-tupleEncoder : Tuple -> Encode.Value
+tupleEncoder : Tuple -> BE.Encoder
 tupleEncoder tuple =
     case tuple of
         TupleExpr expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleExpr" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleOperatorClose row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleOperatorClose" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleOperatorReserved operator row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleOperatorReserved" )
-                , ( "operator", Compiler.Parse.Symbol.badOperatorEncoder operator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , Symbol.badOperatorEncoder operator
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleIndentExpr1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentExpr1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleIndentExprN row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentExprN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         TupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
 
-tupleDecoder : Decode.Decoder Tuple
+tupleDecoder : BD.Decoder Tuple
 tupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TupleExpr" ->
-                        Decode.map3 TupleExpr
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 TupleExpr
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "TupleSpace" ->
-                        Decode.map3 TupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 TupleSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "TupleEnd" ->
-                        Decode.map2 TupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 TupleEnd
+                            BD.int
+                            BD.int
 
-                    "TupleOperatorClose" ->
-                        Decode.map2 TupleOperatorClose
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 TupleOperatorClose
+                            BD.int
+                            BD.int
 
-                    "TupleOperatorReserved" ->
-                        Decode.map3 TupleOperatorReserved
-                            (Decode.field "operator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 TupleOperatorReserved
+                            Symbol.badOperatorDecoder
+                            BD.int
+                            BD.int
 
-                    "TupleIndentExpr1" ->
-                        Decode.map2 TupleIndentExpr1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 TupleIndentExpr1
+                            BD.int
+                            BD.int
 
-                    "TupleIndentExprN" ->
-                        Decode.map2 TupleIndentExprN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 TupleIndentExprN
+                            BD.int
+                            BD.int
 
-                    "TupleIndentEnd" ->
-                        Decode.map2 TupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 TupleIndentEnd
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Tuple's type: " ++ type_)
+                        BD.fail
             )
 
 
-funcEncoder : Func -> Encode.Value
+funcEncoder : Func -> BE.Encoder
 funcEncoder func =
     case func of
         FuncSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncIndentArg row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentArg" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncIndentArrow row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentArrow" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         FuncIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "FuncIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-funcDecoder : Decode.Decoder Func
+funcDecoder : BD.Decoder Func
 funcDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FuncSpace" ->
-                        Decode.map3 FuncSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 FuncSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "FuncArg" ->
-                        Decode.map3 FuncArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 FuncArg
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "FuncBody" ->
-                        Decode.map3 FuncBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 FuncBody
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "FuncArrow" ->
-                        Decode.map2 FuncArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 FuncArrow
+                            BD.int
+                            BD.int
 
-                    "FuncIndentArg" ->
-                        Decode.map2 FuncIndentArg
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 FuncIndentArg
+                            BD.int
+                            BD.int
 
-                    "FuncIndentArrow" ->
-                        Decode.map2 FuncIndentArrow
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 FuncIndentArrow
+                            BD.int
+                            BD.int
 
-                    "FuncIndentBody" ->
-                        Decode.map2 FuncIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 FuncIndentBody
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Func's type: " ++ type_)
+                        BD.fail
             )
 
 
-charEncoder : Char -> Encode.Value
+charEncoder : Char -> BE.Encoder
 charEncoder char =
     case char of
         CharEndless ->
-            Encode.object
-                [ ( "type", Encode.string "CharEndless" )
-                ]
+            BE.unsignedInt8 0
 
         CharEscape escape ->
-            Encode.object
-                [ ( "type", Encode.string "CharEscape" )
-                , ( "escape", escapeEncoder escape )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , escapeEncoder escape
                 ]
 
         CharNotString width ->
-            Encode.object
-                [ ( "type", Encode.string "CharNotString" )
-                , ( "width", Encode.int width )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int width
                 ]
 
 
-charDecoder : Decode.Decoder Char
+charDecoder : BD.Decoder Char
 charDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CharEndless" ->
-                        Decode.succeed CharEndless
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed CharEndless
 
-                    "CharEscape" ->
-                        Decode.map CharEscape (Decode.field "escape" escapeDecoder)
+                    1 ->
+                        BD.map CharEscape escapeDecoder
 
-                    "CharNotString" ->
-                        Decode.map CharNotString (Decode.field "width" Decode.int)
+                    2 ->
+                        BD.map CharNotString BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Char's type: " ++ type_)
+                        BD.fail
             )
 
 
-stringEncoder : String_ -> Encode.Value
+stringEncoder : String_ -> BE.Encoder
 stringEncoder string_ =
     case string_ of
         StringEndless_Single ->
-            Encode.object
-                [ ( "type", Encode.string "StringEndless_Single" ) ]
+            BE.unsignedInt8 0
 
         StringEndless_Multi ->
-            Encode.object
-                [ ( "type", Encode.string "StringEndless_Multi" ) ]
+            BE.unsignedInt8 1
 
         StringEscape escape ->
-            Encode.object
-                [ ( "type", Encode.string "StringEscape" )
-                , ( "escape", escapeEncoder escape )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , escapeEncoder escape
                 ]
 
 
-stringDecoder : Decode.Decoder String_
+stringDecoder : BD.Decoder String_
 stringDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "StringEndless_Single" ->
-                        Decode.succeed StringEndless_Single
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed StringEndless_Single
 
-                    "StringEndless_Multi" ->
-                        Decode.succeed StringEndless_Multi
+                    1 ->
+                        BD.succeed StringEndless_Multi
 
-                    "StringEscape" ->
-                        Decode.map StringEscape (Decode.field "escape" escapeDecoder)
+                    2 ->
+                        BD.map StringEscape escapeDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode String's type: " ++ type_)
+                        BD.fail
             )
 
 
-numberEncoder : Number -> Encode.Value
+numberEncoder : Number -> BE.Encoder
 numberEncoder number =
     case number of
         NumberEnd ->
-            Encode.object
-                [ ( "type", Encode.string "NumberEnd" )
-                ]
+            BE.unsignedInt8 0
 
         NumberDot n ->
-            Encode.object
-                [ ( "type", Encode.string "NumberDot" )
-                , ( "n", Encode.int n )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int n
                 ]
 
         NumberHexDigit ->
-            Encode.object
-                [ ( "type", Encode.string "NumberHexDigit" )
-                ]
+            BE.unsignedInt8 2
 
         NumberNoLeadingZero ->
-            Encode.object
-                [ ( "type", Encode.string "NumberNoLeadingZero" )
-                ]
+            BE.unsignedInt8 3
 
 
-numberDecoder : Decode.Decoder Number
+numberDecoder : BD.Decoder Number
 numberDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NumberEnd" ->
-                        Decode.succeed NumberEnd
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed NumberEnd
 
-                    "NumberDot" ->
-                        Decode.map NumberDot (Decode.field "n" Decode.int)
+                    1 ->
+                        BD.map NumberDot BD.int
 
-                    "NumberHexDigit" ->
-                        Decode.succeed NumberHexDigit
+                    2 ->
+                        BD.succeed NumberHexDigit
 
-                    "NumberNoLeadingZero" ->
-                        Decode.succeed NumberNoLeadingZero
+                    3 ->
+                        BD.succeed NumberNoLeadingZero
 
                     _ ->
-                        Decode.fail ("Failed to decode Number's type: " ++ type_)
+                        BD.fail
             )
 
 
-escapeEncoder : Escape -> Encode.Value
+escapeEncoder : Escape -> BE.Encoder
 escapeEncoder escape =
     case escape of
         EscapeUnknown ->
-            Encode.object
-                [ ( "type", Encode.string "EscapeUnknown" )
-                ]
+            BE.unsignedInt8 0
 
         BadUnicodeFormat width ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeFormat" )
-                , ( "width", Encode.int width )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int width
                 ]
 
         BadUnicodeCode width ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeCode" )
-                , ( "width", Encode.int width )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int width
                 ]
 
         BadUnicodeLength width numDigits badCode ->
-            Encode.object
-                [ ( "type", Encode.string "BadUnicodeLength" )
-                , ( "width", Encode.int width )
-                , ( "numDigits", Encode.int numDigits )
-                , ( "badCode", Encode.int badCode )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int width
+                , BE.int numDigits
+                , BE.int badCode
                 ]
 
 
-escapeDecoder : Decode.Decoder Escape
+escapeDecoder : BD.Decoder Escape
 escapeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "EscapeUnknown" ->
-                        Decode.succeed EscapeUnknown
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed EscapeUnknown
 
-                    "BadUnicodeFormat" ->
-                        Decode.map BadUnicodeFormat (Decode.field "width" Decode.int)
+                    1 ->
+                        BD.map BadUnicodeFormat BD.int
 
-                    "BadUnicodeCode" ->
-                        Decode.map BadUnicodeCode (Decode.field "width" Decode.int)
+                    2 ->
+                        BD.map BadUnicodeCode BD.int
 
-                    "BadUnicodeLength" ->
-                        Decode.map3 BadUnicodeLength
-                            (Decode.field "width" Decode.int)
-                            (Decode.field "numDigits" Decode.int)
-                            (Decode.field "badCode" Decode.int)
+                    3 ->
+                        BD.map3 BadUnicodeLength
+                            BD.int
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Escape's type: " ++ type_)
+                        BD.fail
             )
 
 
-defEncoder : Def -> Encode.Value
+defEncoder : Def -> BE.Encoder
 defEncoder def =
     case def of
         DefSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         DefType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         DefNameRepeat row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefNameRepeat" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         DefNameMatch name row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefNameMatch" )
-                , ( "name", Encode.string name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string name
+                , BE.int row
+                , BE.int col
                 ]
 
         DefArg pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefArg" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         DefEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         DefBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         DefIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         DefIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         DefIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         DefAlignment indent row col ->
-            Encode.object
-                [ ( "type", Encode.string "DefAlignment" )
-                , ( "indent", Encode.int indent )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int indent
+                , BE.int row
+                , BE.int col
                 ]
 
 
-defDecoder : Decode.Decoder Def
+defDecoder : BD.Decoder Def
 defDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DefSpace" ->
-                        Decode.map3 DefSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 DefSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "DefType" ->
-                        Decode.map3 DefType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 DefType
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "DefNameRepeat" ->
-                        Decode.map2 DefNameRepeat
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 DefNameRepeat
+                            BD.int
+                            BD.int
 
-                    "DefNameMatch" ->
-                        Decode.map3 DefNameMatch
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 DefNameMatch
+                            BD.string
+                            BD.int
+                            BD.int
 
-                    "DefArg" ->
-                        Decode.map3 DefArg
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 DefArg
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "DefEquals" ->
-                        Decode.map2 DefEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 DefEquals
+                            BD.int
+                            BD.int
 
-                    "DefBody" ->
-                        Decode.map3 DefBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map3 DefBody
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "DefIndentEquals" ->
-                        Decode.map2 DefIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 DefIndentEquals
+                            BD.int
+                            BD.int
 
-                    "DefIndentType" ->
-                        Decode.map2 DefIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 DefIndentType
+                            BD.int
+                            BD.int
 
-                    "DefIndentBody" ->
-                        Decode.map2 DefIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 DefIndentBody
+                            BD.int
+                            BD.int
 
-                    "DefAlignment" ->
-                        Decode.map3 DefAlignment
-                            (Decode.field "indent" Decode.int)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map3 DefAlignment
+                            BD.int
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Def's type: " ++ type_)
+                        BD.fail
             )
 
 
-destructEncoder : Destruct -> Encode.Value
+destructEncoder : Destruct -> BE.Encoder
 destructEncoder destruct =
     case destruct of
         DestructSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         DestructPattern pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructPattern" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         DestructEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         DestructBody expr row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructBody" )
-                , ( "expr", exprEncoder expr )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , exprEncoder expr
+                , BE.int row
+                , BE.int col
                 ]
 
         DestructIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         DestructIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "DestructIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
 
-destructDecoder : Decode.Decoder Destruct
+destructDecoder : BD.Decoder Destruct
 destructDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DestructSpace" ->
-                        Decode.map3 DestructSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 DestructSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "DestructPattern" ->
-                        Decode.map3 DestructPattern
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 DestructPattern
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "DestructEquals" ->
-                        Decode.map2 DestructEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 DestructEquals
+                            BD.int
+                            BD.int
 
-                    "DestructBody" ->
-                        Decode.map3 DestructBody
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 DestructBody
+                            exprDecoder
+                            BD.int
+                            BD.int
 
-                    "DestructIndentEquals" ->
-                        Decode.map2 DestructIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 DestructIndentEquals
+                            BD.int
+                            BD.int
 
-                    "DestructIndentBody" ->
-                        Decode.map2 DestructIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 DestructIndentBody
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode Destruct's type: " ++ type_)
+                        BD.fail
             )
 
 
-pRecordEncoder : PRecord -> Encode.Value
+pRecordEncoder : PRecord -> BE.Encoder
 pRecordEncoder pRecord =
     case pRecord of
         PRecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         PRecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "PRecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-pRecordDecoder : Decode.Decoder PRecord
+pRecordDecoder : BD.Decoder PRecord
 pRecordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecordOpen" ->
-                        Decode.map2 PRecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 PRecordOpen
+                            BD.int
+                            BD.int
 
-                    "PRecordEnd" ->
-                        Decode.map2 PRecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 PRecordEnd
+                            BD.int
+                            BD.int
 
-                    "PRecordField" ->
-                        Decode.map2 PRecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 PRecordField
+                            BD.int
+                            BD.int
 
-                    "PRecordSpace" ->
-                        Decode.map3 PRecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 PRecordSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "PRecordIndentOpen" ->
-                        Decode.map2 PRecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 PRecordIndentOpen
+                            BD.int
+                            BD.int
 
-                    "PRecordIndentEnd" ->
-                        Decode.map2 PRecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 PRecordIndentEnd
+                            BD.int
+                            BD.int
 
-                    "PRecordIndentField" ->
-                        Decode.map2 PRecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 PRecordIndentField
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode PRecord's type: " ++ type_)
+                        BD.fail
             )
 
 
-pTupleEncoder : PTuple -> Encode.Value
+pTupleEncoder : PTuple -> BE.Encoder
 pTupleEncoder pTuple =
     case pTuple of
         PTupleOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleExpr pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleExpr" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleIndentExpr1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentExpr1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         PTupleIndentExprN row col ->
-            Encode.object
-                [ ( "type", Encode.string "PTupleIndentExprN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-pTupleDecoder : Decode.Decoder PTuple
+pTupleDecoder : BD.Decoder PTuple
 pTupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PTupleOpen" ->
-                        Decode.map2 PTupleOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 PTupleOpen
+                            BD.int
+                            BD.int
 
-                    "PTupleEnd" ->
-                        Decode.map2 PTupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 PTupleEnd
+                            BD.int
+                            BD.int
 
-                    "PTupleExpr" ->
-                        Decode.map3 PTupleExpr
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 PTupleExpr
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "PTupleSpace" ->
-                        Decode.map3 PTupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 PTupleSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "PTupleIndentEnd" ->
-                        Decode.map2 PTupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 PTupleIndentEnd
+                            BD.int
+                            BD.int
 
-                    "PTupleIndentExpr1" ->
-                        Decode.map2 PTupleIndentExpr1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 PTupleIndentExpr1
+                            BD.int
+                            BD.int
 
-                    "PTupleIndentExprN" ->
-                        Decode.map2 PTupleIndentExprN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 PTupleIndentExprN
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode PTuple's type: " ++ type_)
+                        BD.fail
             )
 
 
-pListEncoder : PList -> Encode.Value
+pListEncoder : PList -> BE.Encoder
 pListEncoder pList =
     case pList of
         PListOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         PListEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         PListExpr pattern row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListExpr" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , patternEncoder pattern
+                , BE.int row
+                , BE.int col
                 ]
 
         PListSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         PListIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         PListIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         PListIndentExpr row col ->
-            Encode.object
-                [ ( "type", Encode.string "PListIndentExpr" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-pListDecoder : Decode.Decoder PList
+pListDecoder : BD.Decoder PList
 pListDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PListOpen" ->
-                        Decode.map2 PListOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 PListOpen
+                            BD.int
+                            BD.int
 
-                    "PListEnd" ->
-                        Decode.map2 PListEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 PListEnd
+                            BD.int
+                            BD.int
 
-                    "PListExpr" ->
-                        Decode.map3 PListExpr
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 PListExpr
+                            patternDecoder
+                            BD.int
+                            BD.int
 
-                    "PListSpace" ->
-                        Decode.map3 PListSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 PListSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "PListIndentOpen" ->
-                        Decode.map2 PListIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 PListIndentOpen
+                            BD.int
+                            BD.int
 
-                    "PListIndentEnd" ->
-                        Decode.map2 PListIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 PListIndentEnd
+                            BD.int
+                            BD.int
 
-                    "PListIndentExpr" ->
-                        Decode.map2 PListIndentExpr
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 PListIndentExpr
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode PList's type: " ++ type_)
+                        BD.fail
             )
 
 
-tRecordEncoder : TRecord -> Encode.Value
+tRecordEncoder : TRecord -> BE.Encoder
 tRecordEncoder tRecord =
     case tRecord of
         TRecordOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordField row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordIndentOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordIndentField row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentField" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordIndentColon row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentColon" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordIndentType row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentType" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
         TRecordIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TRecordIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.int row
+                , BE.int col
                 ]
 
 
-tRecordDecoder : Decode.Decoder TRecord
+tRecordDecoder : BD.Decoder TRecord
 tRecordDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TRecordOpen" ->
-                        Decode.map2 TRecordOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 TRecordOpen
+                            BD.int
+                            BD.int
 
-                    "TRecordEnd" ->
-                        Decode.map2 TRecordEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 TRecordEnd
+                            BD.int
+                            BD.int
 
-                    "TRecordField" ->
-                        Decode.map2 TRecordField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 TRecordField
+                            BD.int
+                            BD.int
 
-                    "TRecordColon" ->
-                        Decode.map2 TRecordColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 TRecordColon
+                            BD.int
+                            BD.int
 
-                    "TRecordType" ->
-                        Decode.map3 TRecordType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map3 TRecordType
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "TRecordSpace" ->
-                        Decode.map3 TRecordSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 TRecordSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "TRecordIndentOpen" ->
-                        Decode.map2 TRecordIndentOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 TRecordIndentOpen
+                            BD.int
+                            BD.int
 
-                    "TRecordIndentField" ->
-                        Decode.map2 TRecordIndentField
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 TRecordIndentField
+                            BD.int
+                            BD.int
 
-                    "TRecordIndentColon" ->
-                        Decode.map2 TRecordIndentColon
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 TRecordIndentColon
+                            BD.int
+                            BD.int
 
-                    "TRecordIndentType" ->
-                        Decode.map2 TRecordIndentType
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 TRecordIndentType
+                            BD.int
+                            BD.int
 
-                    "TRecordIndentEnd" ->
-                        Decode.map2 TRecordIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    10 ->
+                        BD.map2 TRecordIndentEnd
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode TRecord's type: " ++ type_)
+                        BD.fail
             )
 
 
-tTupleEncoder : TTuple -> Encode.Value
+tTupleEncoder : TTuple -> BE.Encoder
 tTupleEncoder tTuple =
     case tTuple of
         TTupleOpen row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleOpen" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleType tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleType" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleIndentType1 row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentType1" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleIndentTypeN row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentTypeN" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
         TTupleIndentEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "TTupleIndentEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
 
-tTupleDecoder : Decode.Decoder TTuple
+tTupleDecoder : BD.Decoder TTuple
 tTupleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TTupleOpen" ->
-                        Decode.map2 TTupleOpen
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 TTupleOpen
+                            BD.int
+                            BD.int
 
-                    "TTupleEnd" ->
-                        Decode.map2 TTupleEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 TTupleEnd
+                            BD.int
+                            BD.int
 
-                    "TTupleType" ->
-                        Decode.map3 TTupleType
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map3 TTupleType
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "TTupleSpace" ->
-                        Decode.map3 TTupleSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 TTupleSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "TTupleIndentType1" ->
-                        Decode.map2 TTupleIndentType1
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 TTupleIndentType1
+                            BD.int
+                            BD.int
 
-                    "TTupleIndentTypeN" ->
-                        Decode.map2 TTupleIndentTypeN
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 TTupleIndentTypeN
+                            BD.int
+                            BD.int
 
-                    "TTupleIndentEnd" ->
-                        Decode.map2 TTupleIndentEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 TTupleIndentEnd
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode TTuple's type: " ++ type_)
+                        BD.fail
             )
 
 
-customTypeEncoder : CustomType -> Encode.Value
+customTypeEncoder : CustomType -> BE.Encoder
 customTypeEncoder customType =
     case customType of
         CT_Space space row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Space" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_Equals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Equals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_Bar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Bar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_Variant row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_Variant" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_VariantArg tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_VariantArg" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_IndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_IndentBar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentBar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_IndentAfterBar row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentAfterBar" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.int row
+                , BE.int col
                 ]
 
         CT_IndentAfterEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "CT_IndentAfterEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int row
+                , BE.int col
                 ]
 
 
-customTypeDecoder : Decode.Decoder CustomType
+customTypeDecoder : BD.Decoder CustomType
 customTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CT_Space" ->
-                        Decode.map3 CT_Space
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 CT_Space
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "CT_Name" ->
-                        Decode.map2 CT_Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 CT_Name
+                            BD.int
+                            BD.int
 
-                    "CT_Equals" ->
-                        Decode.map2 CT_Equals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 CT_Equals
+                            BD.int
+                            BD.int
 
-                    "CT_Bar" ->
-                        Decode.map2 CT_Bar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map2 CT_Bar
+                            BD.int
+                            BD.int
 
-                    "CT_Variant" ->
-                        Decode.map2 CT_Variant
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 CT_Variant
+                            BD.int
+                            BD.int
 
-                    "CT_VariantArg" ->
-                        Decode.map3 CT_VariantArg
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map3 CT_VariantArg
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "CT_IndentEquals" ->
-                        Decode.map2 CT_IndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    6 ->
+                        BD.map2 CT_IndentEquals
+                            BD.int
+                            BD.int
 
-                    "CT_IndentBar" ->
-                        Decode.map2 CT_IndentBar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    7 ->
+                        BD.map2 CT_IndentBar
+                            BD.int
+                            BD.int
 
-                    "CT_IndentAfterBar" ->
-                        Decode.map2 CT_IndentAfterBar
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    8 ->
+                        BD.map2 CT_IndentAfterBar
+                            BD.int
+                            BD.int
 
-                    "CT_IndentAfterEquals" ->
-                        Decode.map2 CT_IndentAfterEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    9 ->
+                        BD.map2 CT_IndentAfterEquals
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode CustomType's type: " ++ type_)
+                        BD.fail
             )
 
 
-typeAliasEncoder : TypeAlias -> Encode.Value
+typeAliasEncoder : TypeAlias -> BE.Encoder
 typeAliasEncoder typeAlias =
     case typeAlias of
         AliasSpace space row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasSpace" )
-                , ( "space", spaceEncoder space )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , spaceEncoder space
+                , BE.int row
+                , BE.int col
                 ]
 
         AliasName row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasName" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int row
+                , BE.int col
                 ]
 
         AliasEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         AliasBody tipe row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasBody" )
-                , ( "tipe", typeEncoder tipe )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , typeEncoder tipe
+                , BE.int row
+                , BE.int col
                 ]
 
         AliasIndentEquals row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasIndentEquals" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         AliasIndentBody row col ->
-            Encode.object
-                [ ( "type", Encode.string "AliasIndentBody" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
 
-typeAliasDecoder : Decode.Decoder TypeAlias
+typeAliasDecoder : BD.Decoder TypeAlias
 typeAliasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "AliasSpace" ->
-                        Decode.map3 AliasSpace
-                            (Decode.field "space" spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 AliasSpace
+                            spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "AliasName" ->
-                        Decode.map2 AliasName
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map2 AliasName
+                            BD.int
+                            BD.int
 
-                    "AliasEquals" ->
-                        Decode.map2 AliasEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 AliasEquals
+                            BD.int
+                            BD.int
 
-                    "AliasBody" ->
-                        Decode.map3 AliasBody
-                            (Decode.field "tipe" typeDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 AliasBody
+                            typeDecoder
+                            BD.int
+                            BD.int
 
-                    "AliasIndentEquals" ->
-                        Decode.map2 AliasIndentEquals
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 AliasIndentEquals
+                            BD.int
+                            BD.int
 
-                    "AliasIndentBody" ->
-                        Decode.map2 AliasIndentBody
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 AliasIndentBody
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode TypeAlias's type: " ++ type_)
+                        BD.fail
             )

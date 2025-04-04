@@ -1,0 +1,32 @@
+module GuidaTupleN exposing
+    ( tuple2
+    , tuple3
+    , tuple4
+    , tuple5
+    , tuple6
+    )
+
+
+tuple2 : ( Int, Int )
+tuple2 =
+    ( 1, 2 )
+
+
+tuple3 : ( Int, Int, Int )
+tuple3 =
+    ( 1, 2, 3 )
+
+
+tuple4 : ( Int, Int, Int, Int )
+tuple4 =
+    ( 1, 2, 3, 4 )
+
+
+tuple5 : ( Int, Int, Int, Int, Int )
+tuple5 =
+    ( 1, 2, 3, 4, 5 )
+
+
+tuple6 : ( Int, Int, Int, Int, Int, Int )
+tuple6 =
+    ( 1, 2, 3, 4, 5, 6 )

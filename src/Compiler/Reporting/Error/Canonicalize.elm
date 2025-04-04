@@ -19,8 +19,6 @@ import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -29,9 +27,9 @@ import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -1298,824 +1296,807 @@ aliasToUnionDoc name args tipe =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         AnnotationTooShort region name index leftovers ->
-            Encode.object
-                [ ( "type", Encode.string "AnnotationTooShort" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "leftovers", Encode.int leftovers )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , BE.string name
+                , Index.zeroBasedEncoder index
+                , BE.int leftovers
                 ]
 
         AmbiguousVar region maybePrefix name h hs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousVar" )
-                , ( "region", A.regionEncoder region )
-                , ( "maybePrefix", EncodeX.maybe Encode.string maybePrefix )
-                , ( "name", Encode.string name )
-                , ( "h", ModuleName.canonicalEncoder h )
-                , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , BE.maybe BE.string maybePrefix
+                , BE.string name
+                , ModuleName.canonicalEncoder h
+                , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
         AmbiguousType region maybePrefix name h hs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousType" )
-                , ( "region", A.regionEncoder region )
-                , ( "maybePrefix", EncodeX.maybe Encode.string maybePrefix )
-                , ( "name", Encode.string name )
-                , ( "h", ModuleName.canonicalEncoder h )
-                , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
+                , BE.maybe BE.string maybePrefix
+                , BE.string name
+                , ModuleName.canonicalEncoder h
+                , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
         AmbiguousVariant region maybePrefix name h hs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousVariant" )
-                , ( "region", A.regionEncoder region )
-                , ( "maybePrefix", EncodeX.maybe Encode.string maybePrefix )
-                , ( "name", Encode.string name )
-                , ( "h", ModuleName.canonicalEncoder h )
-                , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , A.regionEncoder region
+                , BE.maybe BE.string maybePrefix
+                , BE.string name
+                , ModuleName.canonicalEncoder h
+                , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
         AmbiguousBinop region name h hs ->
-            Encode.object
-                [ ( "type", Encode.string "AmbiguousBinop" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "h", ModuleName.canonicalEncoder h )
-                , ( "hs", EncodeX.oneOrMore ModuleName.canonicalEncoder hs )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , A.regionEncoder region
+                , BE.string name
+                , ModuleName.canonicalEncoder h
+                , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
         BadArity region badArityContext name expected actual ->
-            Encode.object
-                [ ( "type", Encode.string "BadArity" )
-                , ( "region", A.regionEncoder region )
-                , ( "badArityContext", badArityContextEncoder badArityContext )
-                , ( "name", Encode.string name )
-                , ( "expected", Encode.int expected )
-                , ( "actual", Encode.int actual )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , A.regionEncoder region
+                , badArityContextEncoder badArityContext
+                , BE.string name
+                , BE.int expected
+                , BE.int actual
                 ]
 
         Binop region op1 op2 ->
-            Encode.object
-                [ ( "type", Encode.string "Binop" )
-                , ( "region", A.regionEncoder region )
-                , ( "op1", Encode.string op1 )
-                , ( "op2", Encode.string op2 )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , A.regionEncoder region
+                , BE.string op1
+                , BE.string op2
                 ]
 
         DuplicateDecl name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateDecl" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateType name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateType" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateCtor name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateCtor" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateBinop name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateBinop" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateField name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateField" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateAliasArg typeName name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateAliasArg" )
-                , ( "typeName", Encode.string typeName )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , BE.string typeName
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicateUnionArg typeName name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicateUnionArg" )
-                , ( "typeName", Encode.string typeName )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , BE.string typeName
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         DuplicatePattern context name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "DuplicatePattern" )
-                , ( "context", duplicatePatternContextEncoder context )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 14
+                , duplicatePatternContextEncoder context
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         EffectNotFound region name ->
-            Encode.object
-                [ ( "type", Encode.string "EffectNotFound" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 15
+                , A.regionEncoder region
+                , BE.string name
                 ]
 
         EffectFunctionNotFound region name ->
-            Encode.object
-                [ ( "type", Encode.string "EffectFunctionNotFound" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , A.regionEncoder region
+                , BE.string name
                 ]
 
         ExportDuplicate name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "ExportDuplicate" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         ExportNotFound region kind rawName possibleNames ->
-            Encode.object
-                [ ( "type", Encode.string "ExportNotFound" )
-                , ( "region", A.regionEncoder region )
-                , ( "kind", varKindEncoder kind )
-                , ( "rawName", Encode.string rawName )
-                , ( "possibleNames", Encode.list Encode.string possibleNames )
+            BE.sequence
+                [ BE.unsignedInt8 18
+                , A.regionEncoder region
+                , varKindEncoder kind
+                , BE.string rawName
+                , BE.list BE.string possibleNames
                 ]
 
         ExportOpenAlias region name ->
-            Encode.object
-                [ ( "type", Encode.string "ExportOpenAlias" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 19
+                , A.regionEncoder region
+                , BE.string name
                 ]
 
         ImportCtorByName region ctor tipe ->
-            Encode.object
-                [ ( "type", Encode.string "ImportCtorByName" )
-                , ( "region", A.regionEncoder region )
-                , ( "ctor", Encode.string ctor )
-                , ( "tipe", Encode.string tipe )
+            BE.sequence
+                [ BE.unsignedInt8 20
+                , A.regionEncoder region
+                , BE.string ctor
+                , BE.string tipe
                 ]
 
         ImportNotFound region name suggestions ->
-            Encode.object
-                [ ( "type", Encode.string "ImportNotFound" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "suggestions", Encode.list ModuleName.canonicalEncoder suggestions )
+            BE.sequence
+                [ BE.unsignedInt8 21
+                , A.regionEncoder region
+                , BE.string name
+                , BE.list ModuleName.canonicalEncoder suggestions
                 ]
 
         ImportOpenAlias region name ->
-            Encode.object
-                [ ( "type", Encode.string "ImportOpenAlias" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 22
+                , A.regionEncoder region
+                , BE.string name
                 ]
 
         ImportExposingNotFound region home value possibleNames ->
-            Encode.object
-                [ ( "type", Encode.string "ImportExposingNotFound" )
-                , ( "region", A.regionEncoder region )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "value", Encode.string value )
-                , ( "possibleNames", Encode.list Encode.string possibleNames )
+            BE.sequence
+                [ BE.unsignedInt8 23
+                , A.regionEncoder region
+                , ModuleName.canonicalEncoder home
+                , BE.string value
+                , BE.list BE.string possibleNames
                 ]
 
         NotFoundVar region prefix name possibleNames ->
-            Encode.object
-                [ ( "type", Encode.string "NotFoundVar" )
-                , ( "region", A.regionEncoder region )
-                , ( "prefix", EncodeX.maybe Encode.string prefix )
-                , ( "name", Encode.string name )
-                , ( "possibleNames", possibleNamesEncoder possibleNames )
+            BE.sequence
+                [ BE.unsignedInt8 24
+                , A.regionEncoder region
+                , BE.maybe BE.string prefix
+                , BE.string name
+                , possibleNamesEncoder possibleNames
                 ]
 
         NotFoundType region prefix name possibleNames ->
-            Encode.object
-                [ ( "type", Encode.string "NotFoundType" )
-                , ( "region", A.regionEncoder region )
-                , ( "prefix", EncodeX.maybe Encode.string prefix )
-                , ( "name", Encode.string name )
-                , ( "possibleNames", possibleNamesEncoder possibleNames )
+            BE.sequence
+                [ BE.unsignedInt8 25
+                , A.regionEncoder region
+                , BE.maybe BE.string prefix
+                , BE.string name
+                , possibleNamesEncoder possibleNames
                 ]
 
         NotFoundVariant region prefix name possibleNames ->
-            Encode.object
-                [ ( "type", Encode.string "NotFoundVariant" )
-                , ( "region", A.regionEncoder region )
-                , ( "prefix", EncodeX.maybe Encode.string prefix )
-                , ( "name", Encode.string name )
-                , ( "possibleNames", possibleNamesEncoder possibleNames )
+            BE.sequence
+                [ BE.unsignedInt8 26
+                , A.regionEncoder region
+                , BE.maybe BE.string prefix
+                , BE.string name
+                , possibleNamesEncoder possibleNames
                 ]
 
         NotFoundBinop region op locals ->
-            Encode.object
-                [ ( "type", Encode.string "NotFoundBinop" )
-                , ( "region", A.regionEncoder region )
-                , ( "op", Encode.string op )
-                , ( "locals", EncodeX.everySet compare Encode.string locals )
+            BE.sequence
+                [ BE.unsignedInt8 27
+                , A.regionEncoder region
+                , BE.string op
+                , BE.everySet compare BE.string locals
                 ]
 
         PatternHasRecordCtor region name ->
-            Encode.object
-                [ ( "type", Encode.string "PatternHasRecordCtor" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 28
+                , A.regionEncoder region
+                , BE.string name
                 ]
 
         PortPayloadInvalid region portName badType invalidPayload ->
-            Encode.object
-                [ ( "type", Encode.string "PortPayloadInvalid" )
-                , ( "region", A.regionEncoder region )
-                , ( "portName", Encode.string portName )
-                , ( "badType", Can.typeEncoder badType )
-                , ( "invalidPayload", invalidPayloadEncoder invalidPayload )
+            BE.sequence
+                [ BE.unsignedInt8 29
+                , A.regionEncoder region
+                , BE.string portName
+                , Can.typeEncoder badType
+                , invalidPayloadEncoder invalidPayload
                 ]
 
         PortTypeInvalid region name portProblem ->
-            Encode.object
-                [ ( "type", Encode.string "PortTypeInvalid" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "portProblem", portProblemEncoder portProblem )
+            BE.sequence
+                [ BE.unsignedInt8 30
+                , A.regionEncoder region
+                , BE.string name
+                , portProblemEncoder portProblem
                 ]
 
         RecursiveAlias region name args tipe others ->
-            Encode.object
-                [ ( "type", Encode.string "RecursiveAlias" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list Encode.string args )
-                , ( "tipe", Src.typeEncoder tipe )
-                , ( "others", Encode.list Encode.string others )
+            BE.sequence
+                [ BE.unsignedInt8 31
+                , A.regionEncoder region
+                , BE.string name
+                , BE.list BE.string args
+                , Src.typeEncoder tipe
+                , BE.list BE.string others
                 ]
 
         RecursiveDecl region name names ->
-            Encode.object
-                [ ( "type", Encode.string "RecursiveDecl" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "names", Encode.list Encode.string names )
+            BE.sequence
+                [ BE.unsignedInt8 32
+                , A.regionEncoder region
+                , BE.string name
+                , BE.list BE.string names
                 ]
 
         RecursiveLet name names ->
-            Encode.object
-                [ ( "type", Encode.string "RecursiveLet" )
-                , ( "name", A.locatedEncoder Encode.string name )
-                , ( "names", Encode.list Encode.string names )
+            BE.sequence
+                [ BE.unsignedInt8 33
+                , A.locatedEncoder BE.string name
+                , BE.list BE.string names
                 ]
 
         Shadowing name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "Shadowing" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 34
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         TupleLargerThanThree region ->
-            Encode.object
-                [ ( "type", Encode.string "TupleLargerThanThree" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 35
+                , A.regionEncoder region
                 ]
 
         TypeVarsUnboundInUnion unionRegion typeName allVars unbound unbounds ->
-            Encode.object
-                [ ( "type", Encode.string "TypeVarsUnboundInUnion" )
-                , ( "unionRegion", A.regionEncoder unionRegion )
-                , ( "typeName", Encode.string typeName )
-                , ( "allVars", Encode.list Encode.string allVars )
-                , ( "unbound", EncodeX.jsonPair Encode.string A.regionEncoder unbound )
-                , ( "unbounds", Encode.list (EncodeX.jsonPair Encode.string A.regionEncoder) unbounds )
+            BE.sequence
+                [ BE.unsignedInt8 36
+                , A.regionEncoder unionRegion
+                , BE.string typeName
+                , BE.list BE.string allVars
+                , BE.jsonPair BE.string A.regionEncoder unbound
+                , BE.list (BE.jsonPair BE.string A.regionEncoder) unbounds
                 ]
 
         TypeVarsMessedUpInAlias aliasRegion typeName allVars unusedVars unboundVars ->
-            Encode.object
-                [ ( "type", Encode.string "TypeVarsMessedUpInAlias" )
-                , ( "aliasRegion", A.regionEncoder aliasRegion )
-                , ( "typeName", Encode.string typeName )
-                , ( "allVars", Encode.list Encode.string allVars )
-                , ( "unusedVars", Encode.list (EncodeX.jsonPair Encode.string A.regionEncoder) unusedVars )
-                , ( "unboundVars", Encode.list (EncodeX.jsonPair Encode.string A.regionEncoder) unboundVars )
+            BE.sequence
+                [ BE.unsignedInt8 37
+                , A.regionEncoder aliasRegion
+                , BE.string typeName
+                , BE.list BE.string allVars
+                , BE.list (BE.jsonPair BE.string A.regionEncoder) unusedVars
+                , BE.list (BE.jsonPair BE.string A.regionEncoder) unboundVars
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "AnnotationTooShort" ->
-                        Decode.map4 AnnotationTooShort
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "leftovers" Decode.int)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map4 AnnotationTooShort
+                            A.regionDecoder
+                            BD.string
+                            Index.zeroBasedDecoder
+                            BD.int
 
-                    "AmbiguousVar" ->
-                        Decode.map5 AmbiguousVar
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "maybePrefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "h" ModuleName.canonicalDecoder)
-                            (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
+                    1 ->
+                        BD.map5 AmbiguousVar
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            (BD.oneOrMore ModuleName.canonicalDecoder)
 
-                    "AmbiguousType" ->
-                        Decode.map5 AmbiguousType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "maybePrefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "h" ModuleName.canonicalDecoder)
-                            (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
+                    2 ->
+                        BD.map5 AmbiguousType
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            (BD.oneOrMore ModuleName.canonicalDecoder)
 
-                    "AmbiguousVariant" ->
-                        Decode.map5 AmbiguousVariant
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "maybePrefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "h" ModuleName.canonicalDecoder)
-                            (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
+                    3 ->
+                        BD.map5 AmbiguousVariant
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            (BD.oneOrMore ModuleName.canonicalDecoder)
 
-                    "AmbiguousBinop" ->
-                        Decode.map4 AmbiguousBinop
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "h" ModuleName.canonicalDecoder)
-                            (Decode.field "hs" (DecodeX.oneOrMore ModuleName.canonicalDecoder))
+                    4 ->
+                        BD.map4 AmbiguousBinop
+                            A.regionDecoder
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            (BD.oneOrMore ModuleName.canonicalDecoder)
 
-                    "BadArity" ->
-                        Decode.map5 BadArity
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "badArityContext" badArityContextDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "expected" Decode.int)
-                            (Decode.field "actual" Decode.int)
+                    5 ->
+                        BD.map5 BadArity
+                            A.regionDecoder
+                            badArityContextDecoder
+                            BD.string
+                            BD.int
+                            BD.int
 
-                    "Binop" ->
-                        Decode.map3 Binop
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "op1" Decode.string)
-                            (Decode.field "op2" Decode.string)
+                    6 ->
+                        BD.map3 Binop
+                            A.regionDecoder
+                            BD.string
+                            BD.string
 
-                    "DuplicateDecl" ->
-                        Decode.map3 DuplicateDecl
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    7 ->
+                        BD.map3 DuplicateDecl
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateType" ->
-                        Decode.map3 DuplicateType
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    8 ->
+                        BD.map3 DuplicateType
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateCtor" ->
-                        Decode.map3 DuplicateCtor
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    9 ->
+                        BD.map3 DuplicateCtor
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateBinop" ->
-                        Decode.map3 DuplicateBinop
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    10 ->
+                        BD.map3 DuplicateBinop
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateField" ->
-                        Decode.map3 DuplicateField
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    11 ->
+                        BD.map3 DuplicateField
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateAliasArg" ->
-                        Decode.map4 DuplicateAliasArg
-                            (Decode.field "typeName" Decode.string)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    12 ->
+                        BD.map4 DuplicateAliasArg
+                            BD.string
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicateUnionArg" ->
-                        Decode.map4 DuplicateUnionArg
-                            (Decode.field "typeName" Decode.string)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    13 ->
+                        BD.map4 DuplicateUnionArg
+                            BD.string
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "DuplicatePattern" ->
-                        Decode.map4 DuplicatePattern
-                            (Decode.field "context" duplicatePatternContextDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    14 ->
+                        BD.map4 DuplicatePattern
+                            duplicatePatternContextDecoder
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "EffectNotFound" ->
-                        Decode.map2 EffectNotFound
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
+                    15 ->
+                        BD.map2 EffectNotFound
+                            A.regionDecoder
+                            BD.string
 
-                    "EffectFunctionNotFound" ->
-                        Decode.map2 EffectFunctionNotFound
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
+                    16 ->
+                        BD.map2 EffectFunctionNotFound
+                            A.regionDecoder
+                            BD.string
 
-                    "ExportDuplicate" ->
-                        Decode.map3 ExportDuplicate
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    17 ->
+                        BD.map3 ExportDuplicate
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "ExportNotFound" ->
-                        Decode.map4 ExportNotFound
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "kind" varKindDecoder)
-                            (Decode.field "rawName" Decode.string)
-                            (Decode.field "possibleNames" (Decode.list Decode.string))
+                    18 ->
+                        BD.map4 ExportNotFound
+                            A.regionDecoder
+                            varKindDecoder
+                            BD.string
+                            (BD.list BD.string)
 
-                    "ExportOpenAlias" ->
-                        Decode.map2 ExportOpenAlias
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
+                    19 ->
+                        BD.map2 ExportOpenAlias
+                            A.regionDecoder
+                            BD.string
 
-                    "ImportCtorByName" ->
-                        Decode.map3 ImportCtorByName
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "ctor" Decode.string)
-                            (Decode.field "tipe" Decode.string)
+                    20 ->
+                        BD.map3 ImportCtorByName
+                            A.regionDecoder
+                            BD.string
+                            BD.string
 
-                    "ImportNotFound" ->
-                        Decode.map3 ImportNotFound
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "suggestions" (Decode.list ModuleName.canonicalDecoder))
+                    21 ->
+                        BD.map3 ImportNotFound
+                            A.regionDecoder
+                            BD.string
+                            (BD.list ModuleName.canonicalDecoder)
 
-                    "ImportOpenAlias" ->
-                        Decode.map2 ImportOpenAlias
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
+                    22 ->
+                        BD.map2 ImportOpenAlias
+                            A.regionDecoder
+                            BD.string
 
-                    "ImportExposingNotFound" ->
-                        Decode.map4 ImportExposingNotFound
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "value" Decode.string)
-                            (Decode.field "possibleNames" (Decode.list Decode.string))
+                    23 ->
+                        BD.map4 ImportExposingNotFound
+                            A.regionDecoder
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            (BD.list BD.string)
 
-                    "NotFoundVar" ->
-                        Decode.map4 NotFoundVar
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "prefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "possibleNames" possibleNamesDecoder)
+                    24 ->
+                        BD.map4 NotFoundVar
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            possibleNamesDecoder
 
-                    "NotFoundType" ->
-                        Decode.map4 NotFoundType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "prefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "possibleNames" possibleNamesDecoder)
+                    25 ->
+                        BD.map4 NotFoundType
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            possibleNamesDecoder
 
-                    "NotFoundVariant" ->
-                        Decode.map4 NotFoundVariant
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "prefix" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "possibleNames" possibleNamesDecoder)
+                    26 ->
+                        BD.map4 NotFoundVariant
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            BD.string
+                            possibleNamesDecoder
 
-                    "NotFoundBinop" ->
-                        Decode.map3 NotFoundBinop
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "locals" (DecodeX.everySet identity Decode.string))
+                    27 ->
+                        BD.map3 NotFoundBinop
+                            A.regionDecoder
+                            BD.string
+                            (BD.everySet identity BD.string)
 
-                    "PatternHasRecordCtor" ->
-                        Decode.map2 PatternHasRecordCtor
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
+                    28 ->
+                        BD.map2 PatternHasRecordCtor
+                            A.regionDecoder
+                            BD.string
 
-                    "PortPayloadInvalid" ->
-                        Decode.map4 PortPayloadInvalid
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "portName" Decode.string)
-                            (Decode.field "badType" Can.typeDecoder)
-                            (Decode.field "invalidPayload" invalidPayloadDecoder)
+                    29 ->
+                        BD.map4 PortPayloadInvalid
+                            A.regionDecoder
+                            BD.string
+                            Can.typeDecoder
+                            invalidPayloadDecoder
 
-                    "PortTypeInvalid" ->
-                        Decode.map3 PortTypeInvalid
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "portProblem" portProblemDecoder)
+                    30 ->
+                        BD.map3 PortTypeInvalid
+                            A.regionDecoder
+                            BD.string
+                            portProblemDecoder
 
-                    "RecursiveAlias" ->
-                        Decode.map5 RecursiveAlias
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list Decode.string))
-                            (Decode.field "tipe" Src.typeDecoder)
-                            (Decode.field "others" (Decode.list Decode.string))
+                    31 ->
+                        BD.map5 RecursiveAlias
+                            A.regionDecoder
+                            BD.string
+                            (BD.list BD.string)
+                            Src.typeDecoder
+                            (BD.list BD.string)
 
-                    "RecursiveDecl" ->
-                        Decode.map3 RecursiveDecl
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "names" (Decode.list Decode.string))
+                    32 ->
+                        BD.map3 RecursiveDecl
+                            A.regionDecoder
+                            BD.string
+                            (BD.list BD.string)
 
-                    "RecursiveLet" ->
-                        Decode.map2 RecursiveLet
-                            (Decode.field "name" (A.locatedDecoder Decode.string))
-                            (Decode.field "names" (Decode.list Decode.string))
+                    33 ->
+                        BD.map2 RecursiveLet
+                            (A.locatedDecoder BD.string)
+                            (BD.list BD.string)
 
-                    "Shadowing" ->
-                        Decode.map3 Shadowing
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+                    34 ->
+                        BD.map3 Shadowing
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "TupleLargerThanThree" ->
-                        Decode.map TupleLargerThanThree (Decode.field "region" A.regionDecoder)
+                    35 ->
+                        BD.map TupleLargerThanThree A.regionDecoder
 
-                    "TypeVarsUnboundInUnion" ->
-                        Decode.map5 TypeVarsUnboundInUnion
-                            (Decode.field "unionRegion" A.regionDecoder)
-                            (Decode.field "typeName" Decode.string)
-                            (Decode.field "allVars" (Decode.list Decode.string))
-                            (Decode.field "unbound" (DecodeX.jsonPair Decode.string A.regionDecoder))
-                            (Decode.field "unbounds" (Decode.list (DecodeX.jsonPair Decode.string A.regionDecoder)))
+                    36 ->
+                        BD.map5 TypeVarsUnboundInUnion
+                            A.regionDecoder
+                            BD.string
+                            (BD.list BD.string)
+                            (BD.jsonPair BD.string A.regionDecoder)
+                            (BD.list (BD.jsonPair BD.string A.regionDecoder))
 
-                    "TypeVarsMessedUpInAlias" ->
-                        Decode.map5 TypeVarsMessedUpInAlias
-                            (Decode.field "aliasRegion" A.regionDecoder)
-                            (Decode.field "typeName" Decode.string)
-                            (Decode.field "allVars" (Decode.list Decode.string))
-                            (Decode.field "unusedVars" (Decode.list (DecodeX.jsonPair Decode.string A.regionDecoder)))
-                            (Decode.field "unboundVars" (Decode.list (DecodeX.jsonPair Decode.string A.regionDecoder)))
+                    37 ->
+                        BD.map5 TypeVarsMessedUpInAlias
+                            A.regionDecoder
+                            BD.string
+                            (BD.list BD.string)
+                            (BD.list (BD.jsonPair BD.string A.regionDecoder))
+                            (BD.list (BD.jsonPair BD.string A.regionDecoder))
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )
 
 
-badArityContextEncoder : BadArityContext -> Encode.Value
+badArityContextEncoder : BadArityContext -> BE.Encoder
 badArityContextEncoder badArityContext =
-    case badArityContext of
-        TypeArity ->
-            Encode.string "TypeArity"
+    BE.unsignedInt8
+        (case badArityContext of
+            TypeArity ->
+                0
 
-        PatternArity ->
-            Encode.string "PatternArity"
+            PatternArity ->
+                1
+        )
 
 
-badArityContextDecoder : Decode.Decoder BadArityContext
+badArityContextDecoder : BD.Decoder BadArityContext
 badArityContextDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "TypeArity" ->
-                        Decode.succeed TypeArity
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed TypeArity
 
-                    "PatternArity" ->
-                        Decode.succeed PatternArity
+                    1 ->
+                        BD.succeed PatternArity
 
                     _ ->
-                        Decode.fail ("Unknown BadArityContext: " ++ str)
+                        BD.fail
             )
 
 
-duplicatePatternContextEncoder : DuplicatePatternContext -> Encode.Value
+duplicatePatternContextEncoder : DuplicatePatternContext -> BE.Encoder
 duplicatePatternContextEncoder duplicatePatternContext =
     case duplicatePatternContext of
         DPLambdaArgs ->
-            Encode.object
-                [ ( "type", Encode.string "DPLambdaArgs" )
-                ]
+            BE.unsignedInt8 0
 
         DPFuncArgs funcName ->
-            Encode.object
-                [ ( "type", Encode.string "DPFuncArgs" )
-                , ( "funcName", Encode.string funcName )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string funcName
                 ]
 
         DPCaseBranch ->
-            Encode.object
-                [ ( "type", Encode.string "DPCaseBranch" )
-                ]
+            BE.unsignedInt8 2
 
         DPLetBinding ->
-            Encode.object
-                [ ( "type", Encode.string "DPLetBinding" )
-                ]
+            BE.unsignedInt8 3
 
         DPDestruct ->
-            Encode.object
-                [ ( "type", Encode.string "DPDestruct" )
-                ]
+            BE.unsignedInt8 4
 
 
-duplicatePatternContextDecoder : Decode.Decoder DuplicatePatternContext
+duplicatePatternContextDecoder : BD.Decoder DuplicatePatternContext
 duplicatePatternContextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "DPLambdaArgs" ->
-                        Decode.succeed DPLambdaArgs
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed DPLambdaArgs
 
-                    "DPFuncArgs" ->
-                        Decode.map DPFuncArgs (Decode.field "funcName" Decode.string)
+                    1 ->
+                        BD.map DPFuncArgs BD.string
 
-                    "DPCaseBranch" ->
-                        Decode.succeed DPCaseBranch
+                    2 ->
+                        BD.succeed DPCaseBranch
 
-                    "DPLetBinding" ->
-                        Decode.succeed DPLetBinding
+                    3 ->
+                        BD.succeed DPLetBinding
 
-                    "DPDestruct" ->
-                        Decode.succeed DPDestruct
+                    4 ->
+                        BD.succeed DPDestruct
 
                     _ ->
-                        Decode.fail ("Failed to decode DuplicatePatternContext's type: " ++ type_)
+                        BD.fail
             )
 
 
-varKindEncoder : VarKind -> Encode.Value
+varKindEncoder : VarKind -> BE.Encoder
 varKindEncoder varKind =
-    case varKind of
-        BadOp ->
-            Encode.string "BadOp"
+    BE.unsignedInt8
+        (case varKind of
+            BadOp ->
+                0
 
-        BadVar ->
-            Encode.string "BadVar"
+            BadVar ->
+                1
 
-        BadPattern ->
-            Encode.string "BadPattern"
+            BadPattern ->
+                2
 
-        BadType ->
-            Encode.string "BadType"
+            BadType ->
+                3
+        )
 
 
-varKindDecoder : Decode.Decoder VarKind
+varKindDecoder : BD.Decoder VarKind
 varKindDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "BadOp" ->
-                        Decode.succeed BadOp
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed BadOp
 
-                    "BadVar" ->
-                        Decode.succeed BadVar
+                    1 ->
+                        BD.succeed BadVar
 
-                    "BadPattern" ->
-                        Decode.succeed BadPattern
+                    2 ->
+                        BD.succeed BadPattern
 
-                    "BadType" ->
-                        Decode.succeed BadType
+                    3 ->
+                        BD.succeed BadType
 
                     _ ->
-                        Decode.fail ("Unknown VarKind: " ++ str)
+                        BD.fail
             )
 
 
-possibleNamesEncoder : PossibleNames -> Encode.Value
+possibleNamesEncoder : PossibleNames -> BE.Encoder
 possibleNamesEncoder possibleNames =
-    Encode.object
-        [ ( "type", Encode.string "PossibleNames" )
-        , ( "locals", EncodeX.everySet compare Encode.string possibleNames.locals )
-        , ( "quals", EncodeX.assocListDict compare Encode.string (EncodeX.everySet compare Encode.string) possibleNames.quals )
+    BE.sequence
+        [ BE.everySet compare BE.string possibleNames.locals
+        , BE.assocListDict compare BE.string (BE.everySet compare BE.string) possibleNames.quals
         ]
 
 
-possibleNamesDecoder : Decode.Decoder PossibleNames
+possibleNamesDecoder : BD.Decoder PossibleNames
 possibleNamesDecoder =
-    Decode.map2 PossibleNames
-        (Decode.field "locals" (DecodeX.everySet identity Decode.string))
-        (Decode.field "quals" (DecodeX.assocListDict identity Decode.string (DecodeX.everySet identity Decode.string)))
+    BD.map2 PossibleNames
+        (BD.everySet identity BD.string)
+        (BD.assocListDict identity BD.string (BD.everySet identity BD.string))
 
 
-invalidPayloadEncoder : InvalidPayload -> Encode.Value
+invalidPayloadEncoder : InvalidPayload -> BE.Encoder
 invalidPayloadEncoder invalidPayload =
     case invalidPayload of
         ExtendedRecord ->
-            Encode.object
-                [ ( "type", Encode.string "ExtendedRecord" )
-                ]
+            BE.unsignedInt8 0
 
         Function ->
-            Encode.object
-                [ ( "type", Encode.string "Function" )
-                ]
+            BE.unsignedInt8 1
 
         TypeVariable name ->
-            Encode.object
-                [ ( "type", Encode.string "TypeVariable" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string name
                 ]
 
         UnsupportedType name ->
-            Encode.object
-                [ ( "type", Encode.string "UnsupportedType" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string name
                 ]
 
 
-invalidPayloadDecoder : Decode.Decoder InvalidPayload
+invalidPayloadDecoder : BD.Decoder InvalidPayload
 invalidPayloadDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ExtendedRecord" ->
-                        Decode.succeed ExtendedRecord
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed ExtendedRecord
 
-                    "Function" ->
-                        Decode.succeed Function
+                    1 ->
+                        BD.succeed Function
 
-                    "TypeVariable" ->
-                        Decode.map TypeVariable (Decode.field "name" Decode.string)
+                    2 ->
+                        BD.map TypeVariable BD.string
 
-                    "UnsupportedType" ->
-                        Decode.map UnsupportedType (Decode.field "name" Decode.string)
+                    3 ->
+                        BD.map UnsupportedType BD.string
 
                     _ ->
-                        Decode.fail ("Failed to decode InvalidPayload's type: " ++ type_)
+                        BD.fail
             )
 
 
-portProblemEncoder : PortProblem -> Encode.Value
+portProblemEncoder : PortProblem -> BE.Encoder
 portProblemEncoder portProblem =
     case portProblem of
         CmdNoArg ->
-            Encode.object
-                [ ( "type", Encode.string "CmdNoArg" )
-                ]
+            BE.unsignedInt8 0
 
         CmdExtraArgs n ->
-            Encode.object
-                [ ( "type", Encode.string "CmdExtraArgs" )
-                , ( "n", Encode.int n )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int n
                 ]
 
         CmdBadMsg ->
-            Encode.object
-                [ ( "type", Encode.string "CmdBadMsg" )
-                ]
+            BE.unsignedInt8 2
 
         SubBad ->
-            Encode.object
-                [ ( "type", Encode.string "SubBad" )
-                ]
+            BE.unsignedInt8 3
 
         NotCmdOrSub ->
-            Encode.object
-                [ ( "type", Encode.string "NotCmdOrSub" )
-                ]
+            BE.unsignedInt8 4
 
 
-portProblemDecoder : Decode.Decoder PortProblem
+portProblemDecoder : BD.Decoder PortProblem
 portProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "CmdNoArg" ->
-                        Decode.succeed CmdNoArg
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed CmdNoArg
 
-                    "CmdExtraArgs" ->
-                        Decode.map CmdExtraArgs (Decode.field "n" Decode.int)
+                    1 ->
+                        BD.map CmdExtraArgs BD.int
 
-                    "CmdBadMsg" ->
-                        Decode.succeed CmdBadMsg
+                    2 ->
+                        BD.succeed CmdBadMsg
 
-                    "SubBad" ->
-                        Decode.succeed SubBad
+                    3 ->
+                        BD.succeed SubBad
 
-                    "NotCmdOrSub" ->
-                        Decode.succeed NotCmdOrSub
+                    4 ->
+                        BD.succeed NotCmdOrSub
 
                     _ ->
-                        Decode.fail ("Failed to decode PortProblem's type: " ++ type_)
+                        BD.fail
             )

@@ -32,8 +32,8 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -369,16 +369,14 @@ chompName isGoodChar src pos end prevWasDash =
 -- ENCODERS and DECODERS
 
 
-nameEncoder : Name -> Encode.Value
+nameEncoder : Name -> BE.Encoder
 nameEncoder ( author, project ) =
-    Encode.object
-        [ ( "author", Encode.string author )
-        , ( "project", Encode.string project )
+    BE.sequence
+        [ BE.string author
+        , BE.string project
         ]
 
 
-nameDecoder : Decode.Decoder Name
+nameDecoder : BD.Decoder Name
 nameDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "author" Decode.string)
-        (Decode.field "project" Decode.string)
+    BD.map2 Tuple.pair BD.string BD.string

@@ -48,10 +48,10 @@ import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
 
@@ -368,7 +368,7 @@ allowEqualDups _ v1 v2 =
 -- FORK
 
 
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
+fork : (a -> BE.Encoder) -> IO a -> IO (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
         |> IO.bind
@@ -503,7 +503,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                     Reporting.report key Reporting.DCached
                         |> IO.bind
                             (\_ ->
-                                File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.json")
+                                File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.dat")
                                     |> IO.bind
                                         (\maybeCache ->
                                             case maybeCache of
@@ -607,12 +607,12 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                     Utils.newEmptyMVar
                                                                         |> IO.bind
                                                                             (\mvar ->
-                                                                                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                     |> IO.bind
                                                                                         (\mvars ->
                                                                                             Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
                                                                                                 |> IO.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
@@ -624,11 +624,11 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                 Utils.newEmptyMVar
                                                                                                                     |> IO.bind
                                                                                                                         (\rmvar ->
-                                                                                                                            Utils.mapTraverse identity compare (fork (E.maybe dResultEncoder) << compile pkg rmvar) statuses
+                                                                                                                            Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
                                                                                                                                 |> IO.bind
                                                                                                                                     (\rmvars ->
                                                                                                                                         Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
-                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe dResultDecoder)) rmvars)
+                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
                                                                                                                                             |> IO.bind
                                                                                                                                                 (\maybeResults ->
                                                                                                                                                     case Utils.sequenceDictMaybe identity compare maybeResults of
@@ -640,7 +640,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                             let
                                                                                                                                                                 path : String
                                                                                                                                                                 path =
-                                                                                                                                                                    Stuff.package cache pkg vsn ++ "/artifacts.json"
+                                                                                                                                                                    Stuff.package cache pkg vsn ++ "/artifacts.dat"
 
                                                                                                                                                                 ifaces : Dict String ModuleName.Raw I.DependencyInterface
                                                                                                                                                                 ifaces =
@@ -871,11 +871,11 @@ crawlImports foreignDeps mvar pkg src imports =
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey identity compare (always << fork (E.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
                     |> IO.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (Decode.maybe statusDecoder)) mvars)
+                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
                                 |> IO.fmap (\_ -> deps)
                         )
             )
@@ -937,7 +937,7 @@ compile pkg mvar status =
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
                 |> IO.bind
                     (\resultsDict ->
-                        Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe dResultDecoder)) (Dict.intersection compare resultsDict deps)
+                        Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) (Dict.intersection compare resultsDict deps)
                             |> IO.bind
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe identity compare maybeResults of
@@ -1104,377 +1104,370 @@ endpointDecoder =
 -- ENCODERS and DECODERS
 
 
-detailsEncoder : Details -> Encode.Value
+detailsEncoder : Details -> BE.Encoder
 detailsEncoder (Details oldTime outline buildID locals foreigns extras) =
-    Encode.object
-        [ ( "type", Encode.string "Details" )
-        , ( "oldTime", File.timeEncoder oldTime )
-        , ( "outline", validOutlineEncoder outline )
-        , ( "buildID", Encode.int buildID )
-        , ( "locals", E.assocListDict compare ModuleName.rawEncoder localEncoder locals )
-        , ( "foreigns", E.assocListDict compare ModuleName.rawEncoder foreignEncoder foreigns )
-        , ( "extras", extrasEncoder extras )
+    BE.sequence
+        [ File.timeEncoder oldTime
+        , validOutlineEncoder outline
+        , BE.int buildID
+        , BE.assocListDict compare ModuleName.rawEncoder localEncoder locals
+        , BE.assocListDict compare ModuleName.rawEncoder foreignEncoder foreigns
+        , extrasEncoder extras
         ]
 
 
-detailsDecoder : Decode.Decoder Details
+detailsDecoder : BD.Decoder Details
 detailsDecoder =
-    Decode.map6 Details
-        (Decode.field "oldTime" File.timeDecoder)
-        (Decode.field "outline" validOutlineDecoder)
-        (Decode.field "buildID" Decode.int)
-        (Decode.field "locals" (D.assocListDict identity ModuleName.rawDecoder localDecoder))
-        (Decode.field "foreigns" (D.assocListDict identity ModuleName.rawDecoder foreignDecoder))
-        (Decode.field "extras" extrasDecoder)
+    BD.map6 Details
+        File.timeDecoder
+        validOutlineDecoder
+        BD.int
+        (BD.assocListDict identity ModuleName.rawDecoder localDecoder)
+        (BD.assocListDict identity ModuleName.rawDecoder foreignDecoder)
+        extrasDecoder
 
 
-interfacesEncoder : Interfaces -> Encode.Value
+interfacesEncoder : Interfaces -> BE.Encoder
 interfacesEncoder =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
+    BE.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
 
 
-interfacesDecoder : Decode.Decoder Interfaces
+interfacesDecoder : BD.Decoder Interfaces
 interfacesDecoder =
-    D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
+    BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
 
 
-resultRegistryProblemEnvEncoder : Result Exit.RegistryProblem Solver.Env -> Encode.Value
+resultRegistryProblemEnvEncoder : Result Exit.RegistryProblem Solver.Env -> BE.Encoder
 resultRegistryProblemEnvEncoder =
-    E.result Exit.registryProblemEncoder Solver.envEncoder
+    BE.result Exit.registryProblemEncoder Solver.envEncoder
 
 
-resultRegistryProblemEnvDecoder : Decode.Decoder (Result Exit.RegistryProblem Solver.Env)
+resultRegistryProblemEnvDecoder : BD.Decoder (Result Exit.RegistryProblem Solver.Env)
 resultRegistryProblemEnvDecoder =
-    D.result Exit.registryProblemDecoder Solver.envDecoder
+    BD.result Exit.registryProblemDecoder Solver.envDecoder
 
 
-depEncoder : Dep -> Encode.Value
+depEncoder : Dep -> BE.Encoder
 depEncoder dep =
-    E.result (E.maybe Exit.detailsBadDepEncoder) artifactsEncoder dep
+    BE.result (BE.maybe Exit.detailsBadDepEncoder) artifactsEncoder dep
 
 
-depDecoder : Decode.Decoder Dep
+depDecoder : BD.Decoder Dep
 depDecoder =
-    D.result (Decode.maybe Exit.detailsBadDepDecoder) artifactsDecoder
+    BD.result (BD.maybe Exit.detailsBadDepDecoder) artifactsDecoder
 
 
-artifactsEncoder : Artifacts -> Encode.Value
+artifactsEncoder : Artifacts -> BE.Encoder
 artifactsEncoder (Artifacts ifaces objects) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "ifaces", E.assocListDict compare ModuleName.rawEncoder I.dependencyInterfaceEncoder ifaces )
-        , ( "objects", Opt.globalGraphEncoder objects )
+    BE.sequence
+        [ BE.assocListDict compare ModuleName.rawEncoder I.dependencyInterfaceEncoder ifaces
+        , Opt.globalGraphEncoder objects
         ]
 
 
-artifactsDecoder : Decode.Decoder Artifacts
+artifactsDecoder : BD.Decoder Artifacts
 artifactsDecoder =
-    Decode.map2 Artifacts
-        (Decode.field "ifaces" (D.assocListDict identity ModuleName.rawDecoder I.dependencyInterfaceDecoder))
-        (Decode.field "objects" Opt.globalGraphDecoder)
+    BD.map2 Artifacts
+        (BD.assocListDict identity ModuleName.rawDecoder I.dependencyInterfaceDecoder)
+        Opt.globalGraphDecoder
 
 
-dictNameMVarDepEncoder : Dict ( String, String ) Pkg.Name (MVar Dep) -> Encode.Value
+dictNameMVarDepEncoder : Dict ( String, String ) Pkg.Name (MVar Dep) -> BE.Encoder
 dictNameMVarDepEncoder =
-    E.assocListDict compare Pkg.nameEncoder Utils.mVarEncoder
+    BE.assocListDict compare Pkg.nameEncoder Utils.mVarEncoder
 
 
-artifactCacheEncoder : ArtifactCache -> Encode.Value
+artifactCacheEncoder : ArtifactCache -> BE.Encoder
 artifactCacheEncoder (ArtifactCache fingerprints artifacts) =
-    Encode.object
-        [ ( "type", Encode.string "ArtifactCache" )
-        , ( "fingerprints", E.everySet (\_ _ -> EQ) fingerprintEncoder fingerprints )
-        , ( "artifacts", artifactsEncoder artifacts )
+    BE.sequence
+        [ BE.everySet (\_ _ -> EQ) fingerprintEncoder fingerprints
+        , artifactsEncoder artifacts
         ]
 
 
-artifactCacheDecoder : Decode.Decoder ArtifactCache
+artifactCacheDecoder : BD.Decoder ArtifactCache
 artifactCacheDecoder =
-    Decode.map2 ArtifactCache
-        (Decode.field "fingerprints" (D.everySet toComparableFingerprint fingerprintDecoder))
-        (Decode.field "artifacts" artifactsDecoder)
+    BD.map2 ArtifactCache
+        (BD.everySet toComparableFingerprint fingerprintDecoder)
+        artifactsDecoder
 
 
-dictPkgNameMVarDepDecoder : Decode.Decoder (Dict ( String, String ) Pkg.Name (MVar Dep))
+dictPkgNameMVarDepDecoder : BD.Decoder (Dict ( String, String ) Pkg.Name (MVar Dep))
 dictPkgNameMVarDepDecoder =
-    D.assocListDict identity Pkg.nameDecoder Utils.mVarDecoder
+    BD.assocListDict identity Pkg.nameDecoder Utils.mVarDecoder
 
 
-statusEncoder : Status -> Encode.Value
+statusEncoder : Status -> BE.Encoder
 statusEncoder status =
     case status of
         SLocal docsStatus deps modul ->
-            Encode.object
-                [ ( "type", Encode.string "SLocal" )
-                , ( "docsStatus", docsStatusEncoder docsStatus )
-                , ( "deps", E.assocListDict compare ModuleName.rawEncoder (\_ -> Encode.object []) deps )
-                , ( "modul", Src.moduleEncoder modul )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , docsStatusEncoder docsStatus
+                , BE.list ModuleName.rawEncoder (Dict.keys compare deps)
+                , Src.moduleEncoder modul
                 ]
 
         SForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "iface", I.interfaceEncoder iface )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , I.interfaceEncoder iface
                 ]
 
         SKernelLocal chunks ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelLocal" )
-                , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.list Kernel.chunkEncoder chunks
                 ]
 
         SKernelForeign ->
-            Encode.object
-                [ ( "type", Encode.string "SKernelForeign" )
-                ]
+            BE.unsignedInt8 3
 
 
-statusDecoder : Decode.Decoder Status
+statusDecoder : BD.Decoder Status
 statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SLocal" ->
-                        Decode.map3 SLocal
-                            (Decode.field "docsStatus" docsStatusDecoder)
-                            (Decode.field "deps" (D.assocListDict identity ModuleName.rawDecoder (Decode.succeed ())))
-                            (Decode.field "modul" Src.moduleDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 SLocal
+                            docsStatusDecoder
+                            (BD.list ModuleName.rawDecoder
+                                |> BD.map (Dict.fromList identity << List.map (\dep -> ( dep, () )))
+                            )
+                            Src.moduleDecoder
 
-                    "SForeign" ->
-                        Decode.map SForeign (Decode.field "iface" I.interfaceDecoder)
+                    1 ->
+                        BD.map SForeign I.interfaceDecoder
 
-                    "SKernelLocal" ->
-                        Decode.map SKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
+                    2 ->
+                        BD.map SKernelLocal (BD.list Kernel.chunkDecoder)
 
-                    "SKernelForeign" ->
-                        Decode.succeed SKernelForeign
+                    3 ->
+                        BD.succeed SKernelForeign
 
                     _ ->
-                        Decode.fail ("Failed to decode Status' type: " ++ type_)
+                        BD.fail
             )
 
 
-dictRawMVarMaybeDResultEncoder : Dict String ModuleName.Raw (MVar (Maybe DResult)) -> Encode.Value
+dictRawMVarMaybeDResultEncoder : Dict String ModuleName.Raw (MVar (Maybe DResult)) -> BE.Encoder
 dictRawMVarMaybeDResultEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
+    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-moduleNameRawMVarMaybeDResultDecoder : Decode.Decoder (Dict String ModuleName.Raw (MVar (Maybe DResult)))
+moduleNameRawMVarMaybeDResultDecoder : BD.Decoder (Dict String ModuleName.Raw (MVar (Maybe DResult)))
 moduleNameRawMVarMaybeDResultDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
+    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-dResultEncoder : DResult -> Encode.Value
+dResultEncoder : DResult -> BE.Encoder
 dResultEncoder dResult =
     case dResult of
         RLocal ifaces objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RLocal" )
-                , ( "ifaces", I.interfaceEncoder ifaces )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , I.interfaceEncoder ifaces
+                , Opt.localGraphEncoder objects
+                , BE.maybe Docs.bytesModuleEncoder docs
                 ]
 
         RForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "RForeign" )
-                , ( "iface", I.interfaceEncoder iface )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , I.interfaceEncoder iface
                 ]
 
         RKernelLocal chunks ->
-            Encode.object
-                [ ( "type", Encode.string "RKernelLocal" )
-                , ( "chunks", Encode.list Kernel.chunkEncoder chunks )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.list Kernel.chunkEncoder chunks
                 ]
 
         RKernelForeign ->
-            Encode.object
-                [ ( "type", Encode.string "RKernelForeign" )
-                ]
+            BE.unsignedInt8 3
 
 
-dResultDecoder : Decode.Decoder DResult
+dResultDecoder : BD.Decoder DResult
 dResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RLocal" ->
-                        Decode.map3 RLocal
-                            (Decode.field "ifaces" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 RLocal
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
+                            (BD.maybe Docs.bytesModuleDecoder)
 
-                    "RForeign" ->
-                        Decode.map RForeign (Decode.field "iface" I.interfaceDecoder)
+                    1 ->
+                        BD.map RForeign I.interfaceDecoder
 
-                    "RKernelLocal" ->
-                        Decode.map RKernelLocal (Decode.field "chunks" (Decode.list Kernel.chunkDecoder))
+                    2 ->
+                        BD.map RKernelLocal (BD.list Kernel.chunkDecoder)
 
-                    "RKernelForeign" ->
-                        Decode.succeed RKernelForeign
+                    3 ->
+                        BD.succeed RKernelForeign
 
                     _ ->
-                        Decode.fail ("Failed to decode DResult's type: " ++ type_)
+                        BD.fail
             )
 
 
-statusDictEncoder : StatusDict -> Encode.Value
+statusDictEncoder : StatusDict -> BE.Encoder
 statusDictEncoder statusDict =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
+    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
 
 
-statusDictDecoder : Decode.Decoder StatusDict
+statusDictDecoder : BD.Decoder StatusDict
 statusDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
+    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-localEncoder : Local -> Encode.Value
+localEncoder : Local -> BE.Encoder
 localEncoder (Local path time deps hasMain lastChange lastCompile) =
-    Encode.object
-        [ ( "type", Encode.string "Local" )
-        , ( "path", Encode.string path )
-        , ( "time", File.timeEncoder time )
-        , ( "deps", Encode.list ModuleName.rawEncoder deps )
-        , ( "hasMain", Encode.bool hasMain )
-        , ( "lastChange", Encode.int lastChange )
-        , ( "lastCompile", Encode.int lastCompile )
+    BE.sequence
+        [ BE.string path
+        , File.timeEncoder time
+        , BE.list ModuleName.rawEncoder deps
+        , BE.bool hasMain
+        , BE.int lastChange
+        , BE.int lastCompile
         ]
 
 
-localDecoder : Decode.Decoder Local
+localDecoder : BD.Decoder Local
 localDecoder =
-    Decode.map6 Local
-        (Decode.field "path" Decode.string)
-        (Decode.field "time" File.timeDecoder)
-        (Decode.field "deps" (Decode.list ModuleName.rawDecoder))
-        (Decode.field "hasMain" Decode.bool)
-        (Decode.field "lastChange" Decode.int)
-        (Decode.field "lastCompile" Decode.int)
+    BD.map6 Local
+        BD.string
+        File.timeDecoder
+        (BD.list ModuleName.rawDecoder)
+        BD.bool
+        BD.int
+        BD.int
 
 
-validOutlineEncoder : ValidOutline -> Encode.Value
+validOutlineEncoder : ValidOutline -> BE.Encoder
 validOutlineEncoder validOutline =
     case validOutline of
         ValidApp srcDirs ->
-            Encode.object
-                [ ( "type", Encode.string "ValidApp" )
-                , ( "srcDirs", E.nonempty Outline.srcDirEncoder srcDirs )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.nonempty Outline.srcDirEncoder srcDirs
                 ]
 
         ValidPkg pkg exposedList exactDeps ->
-            Encode.object
-                [ ( "type", Encode.string "ValidPkg" )
-                , ( "pkg", Pkg.nameEncoder pkg )
-                , ( "exposedList", Encode.list ModuleName.rawEncoder exposedList )
-                , ( "exactDeps", E.assocListDict compare Pkg.nameEncoder V.versionEncoder exactDeps )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Pkg.nameEncoder pkg
+                , BE.list ModuleName.rawEncoder exposedList
+                , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder exactDeps
                 ]
 
 
-validOutlineDecoder : Decode.Decoder ValidOutline
+validOutlineDecoder : BD.Decoder ValidOutline
 validOutlineDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ValidApp" ->
-                        Decode.map ValidApp (Decode.field "srcDirs" (D.nonempty Outline.srcDirDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map ValidApp (BD.nonempty Outline.srcDirDecoder)
 
-                    "ValidPkg" ->
-                        Decode.map3 ValidPkg
-                            (Decode.field "pkg" Pkg.nameDecoder)
-                            (Decode.field "exposedList" (Decode.list ModuleName.rawDecoder))
-                            (Decode.field "exactDeps" (D.assocListDict identity Pkg.nameDecoder V.versionDecoder))
+                    1 ->
+                        BD.map3 ValidPkg
+                            Pkg.nameDecoder
+                            (BD.list ModuleName.rawDecoder)
+                            (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
 
                     _ ->
-                        Decode.fail ("Failed to decode ValidOutline's type: " ++ type_)
+                        BD.fail
             )
 
 
-foreignEncoder : Foreign -> Encode.Value
+foreignEncoder : Foreign -> BE.Encoder
 foreignEncoder (Foreign dep deps) =
-    Encode.object
-        [ ( "type", Encode.string "Foreign" )
-        , ( "dep", Pkg.nameEncoder dep )
-        , ( "deps", Encode.list Pkg.nameEncoder deps )
+    BE.sequence
+        [ Pkg.nameEncoder dep
+        , BE.list Pkg.nameEncoder deps
         ]
 
 
-foreignDecoder : Decode.Decoder Foreign
+foreignDecoder : BD.Decoder Foreign
 foreignDecoder =
-    Decode.map2 Foreign
-        (Decode.field "dep" Pkg.nameDecoder)
-        (Decode.field "deps" (Decode.list Pkg.nameDecoder))
+    BD.map2 Foreign
+        Pkg.nameDecoder
+        (BD.list Pkg.nameDecoder)
 
 
-extrasEncoder : Extras -> Encode.Value
+extrasEncoder : Extras -> BE.Encoder
 extrasEncoder extras =
     case extras of
         ArtifactsCached ->
-            Encode.object
-                [ ( "type", Encode.string "ArtifactsCached" )
-                ]
+            BE.unsignedInt8 0
 
         ArtifactsFresh ifaces objs ->
-            Encode.object
-                [ ( "type", Encode.string "ArtifactsFresh" )
-                , ( "ifaces", interfacesEncoder ifaces )
-                , ( "objs", Opt.globalGraphEncoder objs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , interfacesEncoder ifaces
+                , Opt.globalGraphEncoder objs
                 ]
 
 
-extrasDecoder : Decode.Decoder Extras
+extrasDecoder : BD.Decoder Extras
 extrasDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ArtifactsCached" ->
-                        Decode.succeed ArtifactsCached
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed ArtifactsCached
 
-                    "ArtifactsFresh" ->
-                        Decode.map2 ArtifactsFresh
-                            (Decode.field "ifaces" interfacesDecoder)
-                            (Decode.field "objs" Opt.globalGraphDecoder)
+                    1 ->
+                        BD.map2 ArtifactsFresh
+                            interfacesDecoder
+                            Opt.globalGraphDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Extras' type: " ++ type_)
+                        BD.fail
             )
 
 
-fingerprintEncoder : Fingerprint -> Encode.Value
+fingerprintEncoder : Fingerprint -> BE.Encoder
 fingerprintEncoder =
-    E.assocListDict compare Pkg.nameEncoder V.versionEncoder
+    BE.assocListDict compare Pkg.nameEncoder V.versionEncoder
 
 
-fingerprintDecoder : Decode.Decoder Fingerprint
+fingerprintDecoder : BD.Decoder Fingerprint
 fingerprintDecoder =
-    D.assocListDict identity Pkg.nameDecoder V.versionDecoder
+    BD.assocListDict identity Pkg.nameDecoder V.versionDecoder
 
 
-docsStatusEncoder : DocsStatus -> Encode.Value
+docsStatusEncoder : DocsStatus -> BE.Encoder
 docsStatusEncoder docsStatus =
-    case docsStatus of
-        DocsNeeded ->
-            Encode.string "DocsNeeded"
+    BE.unsignedInt8
+        (case docsStatus of
+            DocsNeeded ->
+                0
 
-        DocsNotNeeded ->
-            Encode.string "DocsNotNeeded"
+            DocsNotNeeded ->
+                1
+        )
 
 
-docsStatusDecoder : Decode.Decoder DocsStatus
+docsStatusDecoder : BD.Decoder DocsStatus
 docsStatusDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "DocsNeeded" ->
-                        Decode.succeed DocsNeeded
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed DocsNeeded
 
-                    "DocsNotNeeded" ->
-                        Decode.succeed DocsNotNeeded
+                    1 ->
+                        BD.succeed DocsNotNeeded
 
                     _ ->
-                        Decode.fail ("Unknown DocsStatus: " ++ str)
+                        BD.fail
             )

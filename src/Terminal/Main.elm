@@ -17,11 +17,21 @@ import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
 import Terminal.Test as Test
 import Terminal.Uninstall as Uninstall
+import Utils.Impure as Impure
 
 
 main : IO.Program
 main =
-    IO.run app
+    IO.run
+        (app
+            |> IO.bind
+                (\() ->
+                    Impure.task "exitWith"
+                        []
+                        (Impure.StringBody "0")
+                        Impure.Crash
+                )
+        )
 
 
 app : IO ()

@@ -24,9 +24,9 @@ import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Utils.Bytes.Decode as BD
 import Utils.Main as Utils exposing (FilePath, MVar)
 
 
@@ -220,7 +220,7 @@ loadObject root modul =
             Utils.newEmptyMVar
                 |> IO.bind
                     (\mvar ->
-                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.elmo root name)))
+                        Utils.forkIO (IO.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
                             |> IO.fmap (\_ -> ( name, mvar ))
                     )
 
@@ -236,10 +236,10 @@ type Objects
 finalizeObjects : LoadingObjects -> Task Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
-        (Utils.readMVar (Decode.maybe Opt.globalGraphDecoder) mvar
+        (Utils.readMVar (BD.maybe Opt.globalGraphDecoder) mvar
             |> IO.bind
                 (\result ->
-                    Utils.mapTraverse identity compare (Utils.readMVar (Decode.maybe Opt.localGraphDecoder)) mvars
+                    Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe Opt.localGraphDecoder)) mvars
                         |> IO.fmap
                             (\results ->
                                 case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
@@ -273,7 +273,7 @@ loadTypes root ifaces modules =
                         foreigns =
                             Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
                     in
-                    Utils.listTraverse (Utils.readMVar (Decode.maybe Extract.typesDecoder)) mvars
+                    Utils.listTraverse (Utils.readMVar (BD.maybe Extract.typesDecoder)) mvars
                         |> IO.fmap
                             (\results ->
                                 case Utils.sequenceListMaybe results of
@@ -303,7 +303,7 @@ loadTypesHelp root modul =
                                     |> IO.bind
                                         (\mvar ->
                                             Utils.forkIO
-                                                (File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                                                (File.readBinary I.interfaceDecoder (Stuff.guidai root name)
                                                     |> IO.bind
                                                         (\maybeIface ->
                                                             Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)

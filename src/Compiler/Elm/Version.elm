@@ -27,6 +27,8 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -239,6 +241,11 @@ isDigit word =
 -- ENCODERS and DECODERS
 
 
+jsonEncoder : Version -> Encode.Value
+jsonEncoder version =
+    Encode.string (toChars version)
+
+
 jsonDecoder : Decode.Decoder Version
 jsonDecoder =
     Decode.string
@@ -253,24 +260,18 @@ jsonDecoder =
             )
 
 
-versionEncoder : Version -> Encode.Value
+versionEncoder : Version -> BE.Encoder
 versionEncoder (Version major_ minor_ patch_) =
-    Encode.object
-        [ ( "type", Encode.string "Version" )
-        , ( "major", Encode.int major_ )
-        , ( "minor", Encode.int minor_ )
-        , ( "patch", Encode.int patch_ )
+    BE.sequence
+        [ BE.int major_
+        , BE.int minor_
+        , BE.int patch_
         ]
 
 
-versionDecoder : Decode.Decoder Version
+versionDecoder : BD.Decoder Version
 versionDecoder =
-    Decode.map3 Version
-        (Decode.field "major" Decode.int)
-        (Decode.field "minor" Decode.int)
-        (Decode.field "patch" Decode.int)
-
-
-jsonEncoder : Version -> Encode.Value
-jsonEncoder version =
-    Encode.string (toChars version)
+    BD.map3 Version
+        BD.int
+        BD.int
+        BD.int

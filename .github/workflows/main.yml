@@ -21,7 +21,9 @@ jobs:
           node-version-file: ".nvmrc"
           cache: "npm"
       - run: npm ci
-      - run: npm run build
+      - run: npm run build:bin
+      - run: npm run build:browser
+      - run: npm run test:eslint
       - run: npm run test:elm-format-validate
       - run: npm run test:jest
       - run: npm run test:elm

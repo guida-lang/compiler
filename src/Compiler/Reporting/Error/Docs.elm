@@ -10,17 +10,15 @@ module Compiler.Reporting.Error.Docs exposing
 
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Parse.Primitives exposing (Col, Row)
-import Compiler.Parse.Symbol exposing (BadOperator)
+import Compiler.Parse.Symbol as Symbol exposing (BadOperator)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Syntax as E
 import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 type Error
@@ -206,244 +204,244 @@ toDefProblemReport source problem =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         NoDocs region ->
-            Encode.object
-                [ ( "type", Encode.string "NoDocs" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
                 ]
 
         ImplicitExposing region ->
-            Encode.object
-                [ ( "type", Encode.string "ImplicitExposing" )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
                 ]
 
         SyntaxProblem problem ->
-            Encode.object
-                [ ( "type", Encode.string "SyntaxProblem" )
-                , ( "problem", syntaxProblemEncoder problem )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , syntaxProblemEncoder problem
                 ]
 
         NameProblems problems ->
-            Encode.object
-                [ ( "type", Encode.string "NameProblems" )
-                , ( "problems", EncodeX.nonempty nameProblemEncoder problems )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.nonempty nameProblemEncoder problems
                 ]
 
         DefProblems problems ->
-            Encode.object
-                [ ( "type", Encode.string "DefProblems" )
-                , ( "problems", EncodeX.nonempty defProblemEncoder problems )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.nonempty defProblemEncoder problems
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoDocs" ->
-                        Decode.map NoDocs (Decode.field "region" A.regionDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map NoDocs A.regionDecoder
 
-                    "ImplicitExposing" ->
-                        Decode.map ImplicitExposing (Decode.field "region" A.regionDecoder)
+                    1 ->
+                        BD.map ImplicitExposing A.regionDecoder
 
-                    "SyntaxProblem" ->
-                        Decode.map SyntaxProblem (Decode.field "problem" syntaxProblemDecoder)
+                    2 ->
+                        BD.map SyntaxProblem syntaxProblemDecoder
 
-                    "NameProblems" ->
-                        Decode.map NameProblems (Decode.field "problems" (DecodeX.nonempty nameProblemDecoder))
+                    3 ->
+                        BD.map NameProblems (BD.nonempty nameProblemDecoder)
 
-                    "DefProblems" ->
-                        Decode.map DefProblems (Decode.field "problems" (DecodeX.nonempty defProblemDecoder))
+                    4 ->
+                        BD.map DefProblems (BD.nonempty defProblemDecoder)
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )
 
 
-syntaxProblemEncoder : SyntaxProblem -> Encode.Value
+syntaxProblemEncoder : SyntaxProblem -> BE.Encoder
 syntaxProblemEncoder syntaxProblem =
     case syntaxProblem of
         Op row col ->
-            Encode.object
-                [ ( "type", Encode.string "Op" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.int row
+                , BE.int col
                 ]
 
         OpBad badOperator row col ->
-            Encode.object
-                [ ( "type", Encode.string "OpBad" )
-                , ( "badOperator", Compiler.Parse.Symbol.badOperatorEncoder badOperator )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Symbol.badOperatorEncoder badOperator
+                , BE.int row
+                , BE.int col
                 ]
 
         Name row col ->
-            Encode.object
-                [ ( "type", Encode.string "Name" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.int row
+                , BE.int col
                 ]
 
         Space name row col ->
-            Encode.object
-                [ ( "type", Encode.string "Space" )
-                , ( "name", E.spaceEncoder name )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , E.spaceEncoder name
+                , BE.int row
+                , BE.int col
                 ]
 
         Comma row col ->
-            Encode.object
-                [ ( "type", Encode.string "Comma" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.int row
+                , BE.int col
                 ]
 
         BadEnd row col ->
-            Encode.object
-                [ ( "type", Encode.string "BadEnd" )
-                , ( "row", Encode.int row )
-                , ( "col", Encode.int col )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.int row
+                , BE.int col
                 ]
 
 
-syntaxProblemDecoder : Decode.Decoder SyntaxProblem
+syntaxProblemDecoder : BD.Decoder SyntaxProblem
 syntaxProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
+    BD.unsignedInt8
+        |> BD.andThen
             (\type_ ->
                 case type_ of
-                    "Op" ->
-                        Decode.map2 Op
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    0 ->
+                        BD.map2 Op
+                            BD.int
+                            BD.int
 
-                    "OpBad" ->
-                        Decode.map3 OpBad
-                            (Decode.field "badOperator" Compiler.Parse.Symbol.badOperatorDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    1 ->
+                        BD.map3 OpBad
+                            Symbol.badOperatorDecoder
+                            BD.int
+                            BD.int
 
-                    "Name" ->
-                        Decode.map2 Name
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    2 ->
+                        BD.map2 Name
+                            BD.int
+                            BD.int
 
-                    "Space" ->
-                        Decode.map3 Space
-                            (Decode.field "name" E.spaceDecoder)
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    3 ->
+                        BD.map3 Space
+                            E.spaceDecoder
+                            BD.int
+                            BD.int
 
-                    "Comma" ->
-                        Decode.map2 Comma
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    4 ->
+                        BD.map2 Comma
+                            BD.int
+                            BD.int
 
-                    "BadEnd" ->
-                        Decode.map2 BadEnd
-                            (Decode.field "row" Decode.int)
-                            (Decode.field "col" Decode.int)
+                    5 ->
+                        BD.map2 BadEnd
+                            BD.int
+                            BD.int
 
                     _ ->
-                        Decode.fail ("Failed to decode SyntaxProblem's type: " ++ type_)
+                        BD.fail
             )
 
 
-nameProblemEncoder : NameProblem -> Encode.Value
+nameProblemEncoder : NameProblem -> BE.Encoder
 nameProblemEncoder nameProblem =
     case nameProblem of
         NameDuplicate name r1 r2 ->
-            Encode.object
-                [ ( "type", Encode.string "NameDuplicate" )
-                , ( "name", Encode.string name )
-                , ( "r1", A.regionEncoder r1 )
-                , ( "r2", A.regionEncoder r2 )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string name
+                , A.regionEncoder r1
+                , A.regionEncoder r2
                 ]
 
         NameOnlyInDocs name region ->
-            Encode.object
-                [ ( "type", Encode.string "NameOnlyInDocs" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
+                , A.regionEncoder region
                 ]
 
         NameOnlyInExports name region ->
-            Encode.object
-                [ ( "type", Encode.string "NameOnlyInExports" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string name
+                , A.regionEncoder region
                 ]
 
 
-nameProblemDecoder : Decode.Decoder NameProblem
+nameProblemDecoder : BD.Decoder NameProblem
 nameProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NameDuplicate" ->
-                        Decode.map3 NameDuplicate
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "r1" A.regionDecoder)
-                            (Decode.field "r2" A.regionDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 NameDuplicate
+                            BD.string
+                            A.regionDecoder
+                            A.regionDecoder
 
-                    "NameOnlyInDocs" ->
-                        Decode.map2 NameOnlyInDocs
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
+                    1 ->
+                        BD.map2 NameOnlyInDocs
+                            BD.string
+                            A.regionDecoder
 
-                    "NameOnlyInExports" ->
-                        Decode.map2 NameOnlyInExports
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
+                    2 ->
+                        BD.map2 NameOnlyInExports
+                            BD.string
+                            A.regionDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode NameProblem's type: " ++ type_)
+                        BD.fail
             )
 
 
-defProblemEncoder : DefProblem -> Encode.Value
+defProblemEncoder : DefProblem -> BE.Encoder
 defProblemEncoder defProblem =
     case defProblem of
         NoComment name region ->
-            Encode.object
-                [ ( "type", Encode.string "NoComment" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string name
+                , A.regionEncoder region
                 ]
 
         NoAnnotation name region ->
-            Encode.object
-                [ ( "type", Encode.string "NoAnnotation" )
-                , ( "name", Encode.string name )
-                , ( "region", A.regionEncoder region )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
+                , A.regionEncoder region
                 ]
 
 
-defProblemDecoder : Decode.Decoder DefProblem
+defProblemDecoder : BD.Decoder DefProblem
 defProblemDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoComment" ->
-                        Decode.map2 NoComment
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 NoComment
+                            BD.string
+                            A.regionDecoder
 
-                    "NoAnnotation" ->
-                        Decode.map2 NoAnnotation
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "region" A.regionDecoder)
+                    1 ->
+                        BD.map2 NoAnnotation
+                            BD.string
+                            A.regionDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode DefProblem's type: " ++ type_)
+                        BD.fail
             )

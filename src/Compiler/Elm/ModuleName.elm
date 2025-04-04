@@ -41,9 +41,9 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.Variable as Var
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO exposing (Canonical(..))
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -320,26 +320,26 @@ matrix4 =
 -- ENCODERS and DECODERS
 
 
-canonicalEncoder : Canonical -> Encode.Value
+canonicalEncoder : Canonical -> BE.Encoder
 canonicalEncoder (Canonical pkgName name) =
-    Encode.object
-        [ ( "pkgName", Pkg.nameEncoder pkgName )
-        , ( "name", Encode.string name )
+    BE.sequence
+        [ Pkg.nameEncoder pkgName
+        , BE.string name
         ]
 
 
-canonicalDecoder : Decode.Decoder Canonical
+canonicalDecoder : BD.Decoder Canonical
 canonicalDecoder =
-    Decode.map2 Canonical
-        (Decode.field "pkgName" Pkg.nameDecoder)
-        (Decode.field "name" Decode.string)
+    BD.map2 Canonical
+        Pkg.nameDecoder
+        BD.string
 
 
-rawEncoder : Raw -> Encode.Value
+rawEncoder : Raw -> BE.Encoder
 rawEncoder =
-    Encode.string
+    BE.string
 
 
-rawDecoder : Decode.Decoder Raw
+rawDecoder : BD.Decoder Raw
 rawDecoder =
-    Decode.string
+    BD.string

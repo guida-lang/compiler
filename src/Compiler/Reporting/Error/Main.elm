@@ -14,8 +14,8 @@ import Compiler.Reporting.Render.Code as Code
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Compiler.Reporting.Report as Report
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -98,56 +98,56 @@ toReport localizer source err =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         BadType region tipe ->
-            Encode.object
-                [ ( "type", Encode.string "BadType" )
-                , ( "region", A.regionEncoder region )
-                , ( "tipe", Can.typeEncoder tipe )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , Can.typeEncoder tipe
                 ]
 
         BadCycle region name names ->
-            Encode.object
-                [ ( "type", Encode.string "BadCycle" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "names", Encode.list Encode.string names )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , BE.string name
+                , BE.list BE.string names
                 ]
 
         BadFlags region subType invalidPayload ->
-            Encode.object
-                [ ( "type", Encode.string "BadFlags" )
-                , ( "region", A.regionEncoder region )
-                , ( "subType", Can.typeEncoder subType )
-                , ( "invalidPayload", E.invalidPayloadEncoder invalidPayload )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
+                , Can.typeEncoder subType
+                , E.invalidPayloadEncoder invalidPayload
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadType" ->
-                        Decode.map2 BadType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "tipe" Can.typeDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 BadType
+                            A.regionDecoder
+                            Can.typeDecoder
 
-                    "BadCycle" ->
-                        Decode.map3 BadCycle
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "names" (Decode.list Decode.string))
+                    1 ->
+                        BD.map3 BadCycle
+                            A.regionDecoder
+                            BD.string
+                            (BD.list BD.string)
 
-                    "BadFlags" ->
-                        Decode.map3 BadFlags
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "subType" Can.typeDecoder)
-                            (Decode.field "invalidPayload" E.invalidPayloadDecoder)
+                    2 ->
+                        BD.map3 BadFlags
+                            A.regionDecoder
+                            Can.typeDecoder
+                            E.invalidPayloadDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )

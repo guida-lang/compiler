@@ -36,7 +36,6 @@ import Compiler.Elm.Docs as Docs
 import Compiler.Elm.Interface as I
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
@@ -49,10 +48,10 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar(..))
 
@@ -112,7 +111,7 @@ addRelative (AbsoluteSrcDir srcDir) path =
 described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 <https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead>
 -}
-fork : (a -> Encode.Value) -> IO a -> IO (MVar a)
+fork : (a -> BE.Encoder) -> IO a -> IO (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
         |> IO.bind
@@ -122,7 +121,7 @@ fork encoder work =
             )
 
 
-forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> Encode.Value) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (MVar b))
+forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> BE.Encoder) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k (MVar b))
 forkWithKey toComparable keyComparison encoder func dict =
     Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork encoder (func k v)) dict
 
@@ -131,7 +130,7 @@ forkWithKey toComparable keyComparison encoder func dict =
 -- FROM EXPOSED
 
 
-fromExposed : Decode.Decoder docs -> (docs -> Encode.Value) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
+fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> IO (Result Exit.BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style <|
         \key ->
@@ -758,7 +757,7 @@ loadInterface root ( name, ciMvar ) =
                             |> IO.fmap (\_ -> Just ( name, iface ))
 
                     Unneeded ->
-                        File.readBinary I.interfaceDecoder (Stuff.elmi root name)
+                        File.readBinary I.interfaceDecoder (Stuff.guidai root name)
                             |> IO.bind
                                 (\maybeIface ->
                                     case maybeIface of
@@ -991,14 +990,14 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                     iface =
                                         I.fromModule pkg canonical annotations
 
-                                    elmi : String
-                                    elmi =
-                                        Stuff.elmi root name
+                                    guidai : String
+                                    guidai =
+                                        Stuff.guidai root name
                                 in
-                                File.writeBinary Opt.localGraphEncoder (Stuff.elmo root name) objects
+                                File.writeBinary Opt.localGraphEncoder (Stuff.guidao root name) objects
                                     |> IO.bind
                                         (\_ ->
-                                            File.readBinary I.interfaceDecoder elmi
+                                            File.readBinary I.interfaceDecoder guidai
                                                 |> IO.bind
                                                     (\maybeOldi ->
                                                         case maybeOldi of
@@ -1017,7 +1016,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                                                             )
 
                                                                 else
-                                                                    File.writeBinary I.interfaceEncoder elmi iface
+                                                                    File.writeBinary I.interfaceEncoder guidai iface
                                                                         |> IO.bind
                                                                             (\_ ->
                                                                                 Reporting.report key Reporting.BDone
@@ -1034,7 +1033,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                                                             _ ->
                                                                 -- iface may be lazy still
-                                                                File.writeBinary I.interfaceEncoder elmi iface
+                                                                File.writeBinary I.interfaceEncoder guidai iface
                                                                     |> IO.bind
                                                                         (\_ ->
                                                                             Reporting.report key Reporting.BDone
@@ -1849,564 +1848,547 @@ addOutside root modules =
 -- ENCODERS and DECODERS
 
 
-dictRawMVarBResultEncoder : Dict String ModuleName.Raw (MVar BResult) -> Encode.Value
+dictRawMVarBResultEncoder : Dict String ModuleName.Raw (MVar BResult) -> BE.Encoder
 dictRawMVarBResultEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
+    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-bResultEncoder : BResult -> Encode.Value
+bResultEncoder : BResult -> BE.Encoder
 bResultEncoder bResult =
     case bResult of
         RNew local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RNew" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs"
-                  , docs
-                        |> Maybe.map Docs.jsonModuleEncoder
-                        |> Maybe.withDefault Encode.null
-                  )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Details.localEncoder local
+                , I.interfaceEncoder iface
+                , Opt.localGraphEncoder objects
+                , BE.maybe Docs.bytesModuleEncoder docs
                 ]
 
         RSame local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "RSame" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objects", Opt.localGraphEncoder objects )
-                , ( "docs", E.maybe Docs.jsonModuleEncoder docs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Details.localEncoder local
+                , I.interfaceEncoder iface
+                , Opt.localGraphEncoder objects
+                , BE.maybe Docs.bytesModuleEncoder docs
                 ]
 
         RCached main lastChange (MVar ref) ->
-            Encode.object
-                [ ( "type", Encode.string "RCached" )
-                , ( "main", Encode.bool main )
-                , ( "lastChange", Encode.int lastChange )
-                , ( "mvar", Encode.int ref )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.bool main
+                , BE.int lastChange
+                , BE.int ref
                 ]
 
         RNotFound importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "RNotFound" )
-                , ( "importProblem", Import.problemEncoder importProblem )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , Import.problemEncoder importProblem
                 ]
 
         RProblem e ->
-            Encode.object
-                [ ( "type", Encode.string "RProblem" )
-                , ( "e", Error.moduleEncoder e )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , Error.moduleEncoder e
                 ]
 
         RBlocked ->
-            Encode.object [ ( "type", Encode.string "RBlocked" ) ]
+            BE.unsignedInt8 5
 
         RForeign iface ->
-            Encode.object
-                [ ( "type", Encode.string "RForeign" )
-                , ( "iface", I.interfaceEncoder iface )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , I.interfaceEncoder iface
                 ]
 
         RKernel ->
-            Encode.object [ ( "type", Encode.string "RKernel" ) ]
+            BE.unsignedInt8 7
 
 
-bResultDecoder : Decode.Decoder BResult
+bResultDecoder : BD.Decoder BResult
 bResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RNew" ->
-                        Decode.map4 RNew
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map4 RNew
+                            Details.localDecoder
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
+                            (BD.maybe Docs.bytesModuleDecoder)
 
-                    "RSame" ->
-                        Decode.map4 RSame
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objects" Opt.localGraphDecoder)
-                            (Decode.field "docs" (Decode.maybe Docs.jsonModuleDecoder))
+                    1 ->
+                        BD.map4 RSame
+                            Details.localDecoder
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
+                            (BD.maybe Docs.bytesModuleDecoder)
 
-                    "RCached" ->
-                        Decode.map3 RCached
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "lastChange" Decode.int)
-                            (Decode.field "mvar" (Decode.map MVar Decode.int))
+                    2 ->
+                        BD.map3 RCached
+                            BD.bool
+                            BD.int
+                            (BD.map MVar BD.int)
 
-                    "RNotFound" ->
-                        Decode.map RNotFound
-                            (Decode.field "importProblem" Import.problemDecoder)
+                    3 ->
+                        BD.map RNotFound Import.problemDecoder
 
-                    "RProblem" ->
-                        Decode.map RProblem
-                            (Decode.field "e" Error.moduleDecoder)
+                    4 ->
+                        BD.map RProblem Error.moduleDecoder
 
-                    "RBlocked" ->
-                        Decode.succeed RBlocked
+                    5 ->
+                        BD.succeed RBlocked
 
-                    "RForeign" ->
-                        Decode.map RForeign
-                            (Decode.field "iface" I.interfaceDecoder)
+                    6 ->
+                        BD.map RForeign I.interfaceDecoder
 
-                    "RKernel" ->
-                        Decode.succeed RKernel
+                    7 ->
+                        BD.succeed RKernel
 
                     _ ->
-                        Decode.fail ("Failed to decode BResult's type: " ++ type_)
+                        BD.fail
             )
 
 
-statusDictEncoder : StatusDict -> Encode.Value
+statusDictEncoder : StatusDict -> BE.Encoder
 statusDictEncoder statusDict =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
+    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
 
 
-statusDictDecoder : Decode.Decoder StatusDict
+statusDictDecoder : BD.Decoder StatusDict
 statusDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
+    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-statusEncoder : Status -> Encode.Value
+statusEncoder : Status -> BE.Encoder
 statusEncoder status =
     case status of
         SCached local ->
-            Encode.object
-                [ ( "type", Encode.string "SCached" )
-                , ( "local", Details.localEncoder local )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Details.localEncoder local
                 ]
 
         SChanged local iface objects docs ->
-            Encode.object
-                [ ( "type", Encode.string "SChanged" )
-                , ( "local", Details.localEncoder local )
-                , ( "iface", Encode.string iface )
-                , ( "objects", Src.moduleEncoder objects )
-                , ( "docs", docsNeedEncoder docs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Details.localEncoder local
+                , BE.string iface
+                , Src.moduleEncoder objects
+                , docsNeedEncoder docs
                 ]
 
         SBadImport importProblem ->
-            Encode.object
-                [ ( "type", Encode.string "SBadImport" )
-                , ( "importProblem", Import.problemEncoder importProblem )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Import.problemEncoder importProblem
                 ]
 
         SBadSyntax path time source err ->
-            Encode.object
-                [ ( "type", Encode.string "SBadSyntax" )
-                , ( "path", Encode.string path )
-                , ( "time", File.timeEncoder time )
-                , ( "source", Encode.string source )
-                , ( "err", Syntax.errorEncoder err )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string path
+                , File.timeEncoder time
+                , BE.string source
+                , Syntax.errorEncoder err
                 ]
 
         SForeign home ->
-            Encode.object
-                [ ( "type", Encode.string "SForeign" )
-                , ( "home", Pkg.nameEncoder home )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , Pkg.nameEncoder home
                 ]
 
         SKernel ->
-            Encode.object
-                [ ( "type", Encode.string "SKernel" )
-                ]
+            BE.unsignedInt8 5
 
 
-statusDecoder : Decode.Decoder Status
+statusDecoder : BD.Decoder Status
 statusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SCached" ->
-                        Decode.map SCached (Decode.field "local" Details.localDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map SCached Details.localDecoder
 
-                    "SChanged" ->
-                        Decode.map4 SChanged
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "iface" Decode.string)
-                            (Decode.field "objects" Src.moduleDecoder)
-                            (Decode.field "docs" docsNeedDecoder)
+                    1 ->
+                        BD.map4 SChanged
+                            Details.localDecoder
+                            BD.string
+                            Src.moduleDecoder
+                            docsNeedDecoder
 
-                    "SBadImport" ->
-                        Decode.map SBadImport (Decode.field "importProblem" Import.problemDecoder)
+                    2 ->
+                        BD.map SBadImport Import.problemDecoder
 
-                    "SBadSyntax" ->
-                        Decode.map4 SBadSyntax
-                            (Decode.field "path" Decode.string)
-                            (Decode.field "time" File.timeDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "err" Syntax.errorDecoder)
+                    3 ->
+                        BD.map4 SBadSyntax
+                            BD.string
+                            File.timeDecoder
+                            BD.string
+                            Syntax.errorDecoder
 
-                    "SForeign" ->
-                        Decode.map SForeign (Decode.field "home" Pkg.nameDecoder)
+                    4 ->
+                        BD.map SForeign Pkg.nameDecoder
 
-                    "SKernel" ->
-                        Decode.succeed SKernel
+                    5 ->
+                        BD.succeed SKernel
 
                     _ ->
-                        Decode.fail ("Failed to decode Status's type: " ++ type_)
+                        BD.fail
             )
 
 
-rootStatusEncoder : RootStatus -> Encode.Value
+rootStatusEncoder : RootStatus -> BE.Encoder
 rootStatusEncoder rootStatus =
     case rootStatus of
         SInside name ->
-            Encode.object
-                [ ( "type", Encode.string "SInside" )
-                , ( "name", ModuleName.rawEncoder name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
                 ]
 
         SOutsideOk local source modul ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideOk" )
-                , ( "local", Details.localEncoder local )
-                , ( "source", Encode.string source )
-                , ( "modul", Src.moduleEncoder modul )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Details.localEncoder local
+                , BE.string source
+                , Src.moduleEncoder modul
                 ]
 
         SOutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "SOutsideErr" )
-                , ( "err", Error.moduleEncoder err )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Error.moduleEncoder err
                 ]
 
 
-rootStatusDecoder : Decode.Decoder RootStatus
+rootStatusDecoder : BD.Decoder RootStatus
 rootStatusDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "SInside" ->
-                        Decode.map SInside (Decode.field "name" ModuleName.rawDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map SInside ModuleName.rawDecoder
 
-                    "SOutsideOk" ->
-                        Decode.map3 SOutsideOk
-                            (Decode.field "local" Details.localDecoder)
-                            (Decode.field "source" Decode.string)
-                            (Decode.field "modul" Src.moduleDecoder)
+                    1 ->
+                        BD.map3 SOutsideOk
+                            Details.localDecoder
+                            BD.string
+                            Src.moduleDecoder
 
-                    "SOutsideErr" ->
-                        Decode.map SOutsideErr (Decode.field "err" Error.moduleDecoder)
+                    2 ->
+                        BD.map SOutsideErr Error.moduleDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode RootStatus' type: " ++ type_)
+                        BD.fail
             )
 
 
-resultDictEncoder : ResultDict -> Encode.Value
+resultDictEncoder : ResultDict -> BE.Encoder
 resultDictEncoder =
-    E.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
+    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
 
 
-resultDictDecoder : Decode.Decoder ResultDict
+resultDictDecoder : BD.Decoder ResultDict
 resultDictDecoder =
-    D.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
+    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
 
 
-rootResultEncoder : RootResult -> Encode.Value
+rootResultEncoder : RootResult -> BE.Encoder
 rootResultEncoder rootResult =
     case rootResult of
         RInside name ->
-            Encode.object
-                [ ( "type", Encode.string "RInside" )
-                , ( "name", ModuleName.rawEncoder name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
                 ]
 
         ROutsideOk name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideOk" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.rawEncoder name
+                , I.interfaceEncoder iface
+                , Opt.localGraphEncoder objs
                 ]
 
         ROutsideErr err ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideErr" )
-                , ( "err", Error.moduleEncoder err )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Error.moduleEncoder err
                 ]
 
         ROutsideBlocked ->
-            Encode.object
-                [ ( "type", Encode.string "ROutsideBlocked" )
-                ]
+            BE.unsignedInt8 3
 
 
-rootResultDecoder : Decode.Decoder RootResult
+rootResultDecoder : BD.Decoder RootResult
 rootResultDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "RInside" ->
-                        Decode.map RInside (Decode.field "name" ModuleName.rawDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map RInside ModuleName.rawDecoder
 
-                    "ROutsideOk" ->
-                        Decode.map3 ROutsideOk
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
+                    1 ->
+                        BD.map3 ROutsideOk
+                            ModuleName.rawDecoder
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
 
-                    "ROutsideErr" ->
-                        Decode.map ROutsideErr (Decode.field "err" Error.moduleDecoder)
+                    2 ->
+                        BD.map ROutsideErr Error.moduleDecoder
 
-                    "ROutsideBlocked" ->
-                        Decode.succeed ROutsideBlocked
+                    3 ->
+                        BD.succeed ROutsideBlocked
 
                     _ ->
-                        Decode.fail ("Failed to decode RootResult's type: " ++ type_)
+                        BD.fail
             )
 
 
-maybeDepEncoder : Maybe Dep -> Encode.Value
+maybeDepEncoder : Maybe Dep -> BE.Encoder
 maybeDepEncoder =
-    E.maybe depEncoder
+    BE.maybe depEncoder
 
 
-maybeDepDecoder : Decode.Decoder (Maybe Dep)
+maybeDepDecoder : BD.Decoder (Maybe Dep)
 maybeDepDecoder =
-    Decode.maybe depDecoder
+    BD.maybe depDecoder
 
 
-depEncoder : Dep -> Encode.Value
+depEncoder : Dep -> BE.Encoder
 depEncoder =
-    E.jsonPair ModuleName.rawEncoder I.interfaceEncoder
+    BE.jsonPair ModuleName.rawEncoder I.interfaceEncoder
 
 
-depDecoder : Decode.Decoder Dep
+depDecoder : BD.Decoder Dep
 depDecoder =
-    D.jsonPair ModuleName.rawDecoder I.interfaceDecoder
+    BD.jsonPair ModuleName.rawDecoder I.interfaceDecoder
 
 
-maybeDependenciesDecoder : Decode.Decoder (Maybe Dependencies)
+maybeDependenciesDecoder : BD.Decoder (Maybe Dependencies)
 maybeDependenciesDecoder =
-    Decode.maybe (D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder)
+    BD.maybe (BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder)
 
 
-resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> Encode.Value
+resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> BE.Encoder
 resultBuildProjectProblemRootInfoEncoder =
-    E.result Exit.buildProjectProblemEncoder rootInfoEncoder
+    BE.result Exit.buildProjectProblemEncoder rootInfoEncoder
 
 
-resultBuildProjectProblemRootInfoDecoder : Decode.Decoder (Result Exit.BuildProjectProblem RootInfo)
+resultBuildProjectProblemRootInfoDecoder : BD.Decoder (Result Exit.BuildProjectProblem RootInfo)
 resultBuildProjectProblemRootInfoDecoder =
-    D.result Exit.buildProjectProblemDecoder rootInfoDecoder
+    BD.result Exit.buildProjectProblemDecoder rootInfoDecoder
 
 
-cachedInterfaceEncoder : CachedInterface -> Encode.Value
+cachedInterfaceEncoder : CachedInterface -> BE.Encoder
 cachedInterfaceEncoder cachedInterface =
     case cachedInterface of
         Unneeded ->
-            Encode.object
-                [ ( "type", Encode.string "Unneeded" )
-                ]
+            BE.unsignedInt8 0
 
         Loaded iface ->
-            Encode.object
-                [ ( "type", Encode.string "Loaded" )
-                , ( "iface", I.interfaceEncoder iface )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , I.interfaceEncoder iface
                 ]
 
         Corrupted ->
-            Encode.object
-                [ ( "type", Encode.string "Corrupted" )
-                ]
+            BE.unsignedInt8 2
 
 
-cachedInterfaceDecoder : Decode.Decoder CachedInterface
+cachedInterfaceDecoder : BD.Decoder CachedInterface
 cachedInterfaceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Unneeded" ->
-                        Decode.succeed Unneeded
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Unneeded
 
-                    "Loaded" ->
-                        Decode.map Loaded (Decode.field "iface" I.interfaceDecoder)
+                    1 ->
+                        BD.map Loaded I.interfaceDecoder
 
-                    "Corrupted" ->
-                        Decode.succeed Corrupted
+                    2 ->
+                        BD.succeed Corrupted
 
                     _ ->
-                        Decode.fail ("Failed to decode CachedInterface's type: " ++ type_)
+                        BD.fail
             )
 
 
-docsNeedEncoder : DocsNeed -> Encode.Value
+docsNeedEncoder : DocsNeed -> BE.Encoder
 docsNeedEncoder (DocsNeed isNeeded) =
-    Encode.bool isNeeded
+    BE.bool isNeeded
 
 
-docsNeedDecoder : Decode.Decoder DocsNeed
+docsNeedDecoder : BD.Decoder DocsNeed
 docsNeedDecoder =
-    Decode.map DocsNeed Decode.bool
+    BD.map DocsNeed BD.bool
 
 
-artifactsEncoder : Artifacts -> Encode.Value
+artifactsEncoder : Artifacts -> BE.Encoder
 artifactsEncoder (Artifacts pkg ifaces roots modules) =
-    Encode.object
-        [ ( "type", Encode.string "Artifacts" )
-        , ( "pkg", Pkg.nameEncoder pkg )
-        , ( "ifaces", dependenciesEncoder ifaces )
-        , ( "roots", E.nonempty rootEncoder roots )
-        , ( "modules", Encode.list moduleEncoder modules )
+    BE.sequence
+        [ Pkg.nameEncoder pkg
+        , dependenciesEncoder ifaces
+        , BE.nonempty rootEncoder roots
+        , BE.list moduleEncoder modules
         ]
 
 
-artifactsDecoder : Decode.Decoder Artifacts
+artifactsDecoder : BD.Decoder Artifacts
 artifactsDecoder =
-    Decode.map4 Artifacts
-        (Decode.field "pkg" Pkg.nameDecoder)
-        (Decode.field "ifaces" dependenciesDecoder)
-        (Decode.field "roots" (D.nonempty rootDecoder))
-        (Decode.field "modules" (Decode.list moduleDecoder))
+    BD.map4 Artifacts
+        Pkg.nameDecoder
+        dependenciesDecoder
+        (BD.nonempty rootDecoder)
+        (BD.list moduleDecoder)
 
 
-dependenciesEncoder : Dependencies -> Encode.Value
+dependenciesEncoder : Dependencies -> BE.Encoder
 dependenciesEncoder =
-    E.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
+    BE.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
 
 
-dependenciesDecoder : Decode.Decoder Dependencies
+dependenciesDecoder : BD.Decoder Dependencies
 dependenciesDecoder =
-    D.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
+    BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
 
 
-rootEncoder : Root -> Encode.Value
+rootEncoder : Root -> BE.Encoder
 rootEncoder root =
     case root of
         Inside name ->
-            Encode.object
-                [ ( "type", Encode.string "Inside" )
-                , ( "name", ModuleName.rawEncoder name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
                 ]
 
         Outside name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Outside" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", I.interfaceEncoder main )
-                , ( "mvar", Opt.localGraphEncoder mvar )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.rawEncoder name
+                , I.interfaceEncoder main
+                , Opt.localGraphEncoder mvar
                 ]
 
 
-rootDecoder : Decode.Decoder Root
+rootDecoder : BD.Decoder Root
 rootDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Inside" ->
-                        Decode.map Inside (Decode.field "name" ModuleName.rawDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Inside ModuleName.rawDecoder
 
-                    "Outside" ->
-                        Decode.map3 Outside
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" I.interfaceDecoder)
-                            (Decode.field "mvar" Opt.localGraphDecoder)
+                    1 ->
+                        BD.map3 Outside
+                            ModuleName.rawDecoder
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Root's type: " ++ type_)
+                        BD.fail
             )
 
 
-moduleEncoder : Module -> Encode.Value
+moduleEncoder : Module -> BE.Encoder
 moduleEncoder modul =
     case modul of
         Fresh name iface objs ->
-            Encode.object
-                [ ( "type", Encode.string "Fresh" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "iface", I.interfaceEncoder iface )
-                , ( "objs", Opt.localGraphEncoder objs )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
+                , I.interfaceEncoder iface
+                , Opt.localGraphEncoder objs
                 ]
 
         Cached name main mvar ->
-            Encode.object
-                [ ( "type", Encode.string "Cached" )
-                , ( "name", ModuleName.rawEncoder name )
-                , ( "main", Encode.bool main )
-                , ( "mvar", Utils.mVarEncoder mvar )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.rawEncoder name
+                , BE.bool main
+                , Utils.mVarEncoder mvar
                 ]
 
 
-moduleDecoder : Decode.Decoder Module
+moduleDecoder : BD.Decoder Module
 moduleDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Fresh" ->
-                        Decode.map3 Fresh
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "iface" I.interfaceDecoder)
-                            (Decode.field "objs" Opt.localGraphDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Fresh
+                            ModuleName.rawDecoder
+                            I.interfaceDecoder
+                            Opt.localGraphDecoder
 
-                    "Cached" ->
-                        Decode.map3 Cached
-                            (Decode.field "name" ModuleName.rawDecoder)
-                            (Decode.field "main" Decode.bool)
-                            (Decode.field "mvar" Utils.mVarDecoder)
+                    1 ->
+                        BD.map3 Cached
+                            ModuleName.rawDecoder
+                            BD.bool
+                            Utils.mVarDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Module's type: " ++ type_)
+                        BD.fail
             )
 
 
-rootInfoEncoder : RootInfo -> Encode.Value
+rootInfoEncoder : RootInfo -> BE.Encoder
 rootInfoEncoder (RootInfo absolute relative location) =
-    Encode.object
-        [ ( "type", Encode.string "RootInfo" )
-        , ( "absolute", Encode.string absolute )
-        , ( "relative", Encode.string relative )
-        , ( "location", rootLocationEncoder location )
+    BE.sequence
+        [ BE.string absolute
+        , BE.string relative
+        , rootLocationEncoder location
         ]
 
 
-rootInfoDecoder : Decode.Decoder RootInfo
+rootInfoDecoder : BD.Decoder RootInfo
 rootInfoDecoder =
-    Decode.map3 RootInfo
-        (Decode.field "absolute" Decode.string)
-        (Decode.field "relative" Decode.string)
-        (Decode.field "location" rootLocationDecoder)
+    BD.map3 RootInfo
+        BD.string
+        BD.string
+        rootLocationDecoder
 
 
-rootLocationEncoder : RootLocation -> Encode.Value
+rootLocationEncoder : RootLocation -> BE.Encoder
 rootLocationEncoder rootLocation =
     case rootLocation of
         LInside name ->
-            Encode.object
-                [ ( "type", Encode.string "LInside" )
-                , ( "name", ModuleName.rawEncoder name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , ModuleName.rawEncoder name
                 ]
 
         LOutside path ->
-            Encode.object
-                [ ( "type", Encode.string "LOutside" )
-                , ( "path", Encode.string path )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string path
                 ]
 
 
-rootLocationDecoder : Decode.Decoder RootLocation
+rootLocationDecoder : BD.Decoder RootLocation
 rootLocationDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "LInside" ->
-                        Decode.map LInside (Decode.field "name" ModuleName.rawDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map LInside ModuleName.rawDecoder
 
-                    "LOutside" ->
-                        Decode.map LOutside (Decode.field "path" Decode.string)
+                    1 ->
+                        BD.map LOutside BD.string
 
                     _ ->
-                        Decode.fail ("Failed to decode RootLocation's type: " ++ type_)
+                        BD.fail
             )

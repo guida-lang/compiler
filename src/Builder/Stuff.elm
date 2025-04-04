@@ -1,12 +1,12 @@
 module Builder.Stuff exposing
     ( PackageCache
     , details
-    , elmi
-    , elmo
     , findRoot
     , getElmHome
     , getPackageCache
     , getReplCache
+    , guidai
+    , guidao
     , interfaces
     , objects
     , package
@@ -22,10 +22,10 @@ module Builder.Stuff exposing
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Json.Decode as Decode
-import Json.Encode as Encode
 import Prelude
 import System.IO as IO exposing (IO)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
 
 
@@ -40,17 +40,17 @@ stuff root =
 
 details : String -> String
 details root =
-    stuff root ++ "/d.json"
+    stuff root ++ "/d.dat"
 
 
 interfaces : String -> String
 interfaces root =
-    stuff root ++ "/i.json"
+    stuff root ++ "/i.dat"
 
 
 objects : String -> String
 objects root =
-    stuff root ++ "/o.json"
+    stuff root ++ "/o.dat"
 
 
 prepublishDir : String -> String
@@ -72,14 +72,14 @@ compilerVersion =
 -- ELMI and ELMO
 
 
-elmi : String -> ModuleName.Raw -> String
-elmi root name =
-    toArtifactPath root name "elmi"
+guidai : String -> ModuleName.Raw -> String
+guidai root name =
+    toArtifactPath root name "guidai"
 
 
-elmo : String -> ModuleName.Raw -> String
-elmo root name =
-    toArtifactPath root name "elmo"
+guidao : String -> ModuleName.Raw -> String
+guidao root name =
+    toArtifactPath root name "guidao"
 
 
 toArtifactPath : String -> ModuleName.Raw -> String -> String
@@ -156,7 +156,7 @@ getPackageCache =
 
 registry : PackageCache -> String
 registry (PackageCache dir) =
-    Utils.fpForwardSlash dir "registry.json"
+    Utils.fpForwardSlash dir "registry.dat"
 
 
 package : PackageCache -> Pkg.Name -> V.Version -> String
@@ -206,14 +206,11 @@ getElmHome =
 -- ENCODERS and DECODERS
 
 
-packageCacheEncoder : PackageCache -> Encode.Value
+packageCacheEncoder : PackageCache -> BE.Encoder
 packageCacheEncoder (PackageCache dir) =
-    Encode.object
-        [ ( "type", Encode.string "PackageCache" )
-        , ( "dir", Encode.string dir )
-        ]
+    BE.string dir
 
 
-packageCacheDecoder : Decode.Decoder PackageCache
+packageCacheDecoder : BD.Decoder PackageCache
 packageCacheDecoder =
-    Decode.map PackageCache (Decode.field "dir" Decode.string)
+    BD.map PackageCache BD.string

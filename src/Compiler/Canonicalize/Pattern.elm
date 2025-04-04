@@ -81,8 +81,7 @@ canonicalize syntaxVersion env (A.At region pattern) =
                 R.ok Can.PUnit
 
             Src.PTuple a b cs ->
-                R.ok Can.PTuple
-                    |> R.apply (canonicalize syntaxVersion env a)
+                R.fmap Can.PTuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
                     |> R.apply (canonicalizeTuple syntaxVersion region env cs)
 
@@ -98,8 +97,7 @@ canonicalize syntaxVersion env (A.At region pattern) =
                 R.fmap Can.PList (canonicalizeList syntaxVersion env patterns)
 
             Src.PCons first rest ->
-                R.ok Can.PCons
-                    |> R.apply (canonicalize syntaxVersion env first)
+                R.fmap Can.PCons (canonicalize syntaxVersion env first)
                     |> R.apply (canonicalize syntaxVersion env rest)
 
             Src.PAlias ptrn (A.At reg name) ->
@@ -170,8 +168,7 @@ canonicalizeList syntaxVersion env list =
             R.ok []
 
         pattern :: otherPatterns ->
-            R.ok (::)
-                |> R.apply (canonicalize syntaxVersion env pattern)
+            R.fmap (::) (canonicalize syntaxVersion env pattern)
                 |> R.apply (canonicalizeList syntaxVersion env otherPatterns)
 
 

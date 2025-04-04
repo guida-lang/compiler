@@ -11,10 +11,9 @@ module Compiler.AST.Utils.Shader exposing
     )
 
 import Compiler.Data.Name exposing (Name)
-import Compiler.Json.Encode as E
-import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Data.Map exposing (Dict)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -99,103 +98,87 @@ escape =
 -- ENCODERS and DECODERS
 
 
-sourceEncoder : Source -> Encode.Value
+sourceEncoder : Source -> BE.Encoder
 sourceEncoder (Source src) =
-    Encode.string src
+    BE.string src
 
 
-sourceDecoder : Decode.Decoder Source
+sourceDecoder : BD.Decoder Source
 sourceDecoder =
-    Decode.map Source Decode.string
+    BD.map Source BD.string
 
 
-typesEncoder : Types -> Encode.Value
+typesEncoder : Types -> BE.Encoder
 typesEncoder (Types attribute uniform varying) =
-    Encode.object
-        [ ( "type", Encode.string "Types" )
-        , ( "attribute", E.assocListDict compare Encode.string typeEncoder attribute )
-        , ( "uniform", E.assocListDict compare Encode.string typeEncoder uniform )
-        , ( "varying", E.assocListDict compare Encode.string typeEncoder varying )
+    BE.sequence
+        [ BE.assocListDict compare BE.string typeEncoder attribute
+        , BE.assocListDict compare BE.string typeEncoder uniform
+        , BE.assocListDict compare BE.string typeEncoder varying
         ]
 
 
-typesDecoder : Decode.Decoder Types
+typesDecoder : BD.Decoder Types
 typesDecoder =
-    Decode.map3 Types
-        (Decode.field "attribute" (assocListDict identity Decode.string typeDecoder))
-        (Decode.field "uniform" (assocListDict identity Decode.string typeDecoder))
-        (Decode.field "varying" (assocListDict identity Decode.string typeDecoder))
+    BD.map3 Types
+        (BD.assocListDict identity BD.string typeDecoder)
+        (BD.assocListDict identity BD.string typeDecoder)
+        (BD.assocListDict identity BD.string typeDecoder)
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : Type -> BE.Encoder
 typeEncoder type_ =
-    case type_ of
-        Int ->
-            Encode.string "Int"
+    BE.unsignedInt8
+        (case type_ of
+            Int ->
+                0
 
-        Float ->
-            Encode.string "Float"
+            Float ->
+                1
 
-        V2 ->
-            Encode.string "V2"
+            V2 ->
+                2
 
-        V3 ->
-            Encode.string "V3"
+            V3 ->
+                3
 
-        V4 ->
-            Encode.string "V4"
+            V4 ->
+                4
 
-        M4 ->
-            Encode.string "M4"
+            M4 ->
+                5
 
-        Texture ->
-            Encode.string "Texture"
+            Texture ->
+                6
+        )
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : BD.Decoder Type
 typeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Int" ->
-                        Decode.succeed Int
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Int
 
-                    "Float" ->
-                        Decode.succeed Float
+                    1 ->
+                        BD.succeed Float
 
-                    "V2" ->
-                        Decode.succeed V2
+                    2 ->
+                        BD.succeed V2
 
-                    "V3" ->
-                        Decode.succeed V3
+                    3 ->
+                        BD.succeed V3
 
-                    "V4" ->
-                        Decode.succeed V4
+                    4 ->
+                        BD.succeed V4
 
-                    "M4" ->
-                        Decode.succeed M4
+                    5 ->
+                        BD.succeed M4
 
-                    "Texture" ->
-                        Decode.succeed Texture
+                    6 ->
+                        BD.succeed Texture
 
                     _ ->
-                        Decode.fail ("Unknown Type: " ++ str)
+                        BD.fail
             )
-
-
-
--- COPIED FROM JSON.DECODEX
-
-
-assocListDict : (k -> comparable) -> Decode.Decoder k -> Decode.Decoder v -> Decode.Decoder (Dict comparable k v)
-assocListDict toComparable keyDecoder valueDecoder =
-    Decode.list (jsonPair keyDecoder valueDecoder)
-        |> Decode.map (Dict.fromList toComparable)
-
-
-jsonPair : Decode.Decoder a -> Decode.Decoder b -> Decode.Decoder ( a, b )
-jsonPair firstDecoder secondDecoder =
-    Decode.map2 Tuple.pair
-        (Decode.field "a" firstDecoder)
-        (Decode.field "b" secondDecoder)

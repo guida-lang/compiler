@@ -3,6 +3,8 @@ module Compiler.Elm.Compiler.Type exposing
     , DebugMetadata(..)
     , Type(..)
     , Union(..)
+    , bytesDecoder
+    , bytesEncoder
     , decoder
     , encode
     , encodeMetadata
@@ -24,6 +26,8 @@ import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 
 
@@ -199,7 +203,7 @@ toVariantObject ( name, args ) =
 
 
 
--- ENCODERS and DECODERS
+-- JSON ENCODERS and DECODERS
 
 
 jsonEncoder : Type -> Encode.Value
@@ -282,4 +286,88 @@ jsonDecoder =
 
                     _ ->
                         Decode.fail ("Failed to decode Type's type: " ++ type_)
+            )
+
+
+
+-- ENCODERS and DECODERS
+
+
+bytesEncoder : Type -> BE.Encoder
+bytesEncoder type_ =
+    case type_ of
+        Lambda arg body ->
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , bytesEncoder arg
+                , bytesEncoder body
+                ]
+
+        Var name ->
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
+                ]
+
+        Type name args ->
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string name
+                , BE.list bytesEncoder args
+                ]
+
+        Record fields ext ->
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.list (BE.jsonPair BE.string bytesEncoder) fields
+                , BE.maybe BE.string ext
+                ]
+
+        Unit ->
+            BE.unsignedInt8 4
+
+        Tuple a b cs ->
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , bytesEncoder a
+                , bytesEncoder b
+                , BE.list bytesEncoder cs
+                ]
+
+
+bytesDecoder : BD.Decoder Type
+bytesDecoder =
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 Lambda
+                            bytesDecoder
+                            bytesDecoder
+
+                    1 ->
+                        BD.map Var BD.string
+
+                    2 ->
+                        BD.map2 Type
+                            BD.string
+                            (BD.list bytesDecoder)
+
+                    3 ->
+                        BD.map2 Record
+                            (BD.list (BD.jsonPair BD.string bytesDecoder))
+                            (BD.maybe BD.string)
+
+                    4 ->
+                        BD.succeed Unit
+
+                    5 ->
+                        BD.map3 Tuple
+                            bytesDecoder
+                            bytesDecoder
+                            (BD.list bytesDecoder)
+
+                    _ ->
+                        BD.fail
             )

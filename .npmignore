@@ -2,10 +2,13 @@
 bin/guida.js
 elm-stuff
 examples
+lib/guida.js
 guida-stuff
-lib
 review
+scripts
 src
 tests
+try
 .nvmrc
 elm.json
+eslint.config.mjs

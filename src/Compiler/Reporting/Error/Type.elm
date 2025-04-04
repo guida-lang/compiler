@@ -18,8 +18,6 @@ module Compiler.Reporting.Error.Type exposing
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -29,8 +27,8 @@ import Compiler.Reporting.Report as Report
 import Compiler.Reporting.Suggest as Suggest
 import Compiler.Type.Error as T
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -2524,711 +2522,654 @@ toInfiniteReport source localizer region name overallType =
 -- ENCODERS and DECODERS
 
 
-errorEncoder : Error -> Encode.Value
+errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
         BadExpr region category actualType expected ->
-            Encode.object
-                [ ( "type", Encode.string "BadExpr" )
-                , ( "region", A.regionEncoder region )
-                , ( "category", categoryEncoder category )
-                , ( "actualType", T.typeEncoder actualType )
-                , ( "expected", expectedEncoder T.typeEncoder expected )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , categoryEncoder category
+                , T.typeEncoder actualType
+                , expectedEncoder T.typeEncoder expected
                 ]
 
         BadPattern region category tipe expected ->
-            Encode.object
-                [ ( "type", Encode.string "BadPattern" )
-                , ( "region", A.regionEncoder region )
-                , ( "category", pCategoryEncoder category )
-                , ( "tipe", T.typeEncoder tipe )
-                , ( "expected", pExpectedEncoder T.typeEncoder expected )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , pCategoryEncoder category
+                , T.typeEncoder tipe
+                , pExpectedEncoder T.typeEncoder expected
                 ]
 
         InfiniteType region name overallType ->
-            Encode.object
-                [ ( "type", Encode.string "InfiniteType" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "overallType", T.typeEncoder overallType )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
+                , BE.string name
+                , T.typeEncoder overallType
                 ]
 
 
-errorDecoder : Decode.Decoder Error
+errorDecoder : BD.Decoder Error
 errorDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "BadExpr" ->
-                        Decode.map4 BadExpr
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "category" categoryDecoder)
-                            (Decode.field "actualType" T.typeDecoder)
-                            (Decode.field "expected" (expectedDecoder T.typeDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map4 BadExpr
+                            A.regionDecoder
+                            categoryDecoder
+                            T.typeDecoder
+                            (expectedDecoder T.typeDecoder)
 
-                    "BadPattern" ->
-                        Decode.map4 BadPattern
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "category" pCategoryDecoder)
-                            (Decode.field "tipe" T.typeDecoder)
-                            (Decode.field "expected" (pExpectedDecoder T.typeDecoder))
+                    1 ->
+                        BD.map4 BadPattern
+                            A.regionDecoder
+                            pCategoryDecoder
+                            T.typeDecoder
+                            (pExpectedDecoder T.typeDecoder)
 
-                    "InfiniteType" ->
-                        Decode.map3 InfiniteType
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "overallType" T.typeDecoder)
+                    2 ->
+                        BD.map3 InfiniteType
+                            A.regionDecoder
+                            BD.string
+                            T.typeDecoder
 
                     _ ->
-                        Decode.fail ("Failed to decode Error's type: " ++ type_)
+                        BD.fail
             )
 
 
-categoryEncoder : Category -> Encode.Value
+categoryEncoder : Category -> BE.Encoder
 categoryEncoder category =
     case category of
         List ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                ]
+            BE.unsignedInt8 0
 
         Number ->
-            Encode.object
-                [ ( "type", Encode.string "Number" )
-                ]
+            BE.unsignedInt8 1
 
         Float ->
-            Encode.object
-                [ ( "type", Encode.string "Float" )
-                ]
+            BE.unsignedInt8 2
 
         String ->
-            Encode.object
-                [ ( "type", Encode.string "String" )
-                ]
+            BE.unsignedInt8 3
 
         Char ->
-            Encode.object
-                [ ( "type", Encode.string "Char" )
-                ]
+            BE.unsignedInt8 4
 
         If ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                ]
+            BE.unsignedInt8 5
 
         Case ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                ]
+            BE.unsignedInt8 6
 
         CallResult maybeName ->
-            Encode.object
-                [ ( "type", Encode.string "CallResult" )
-                , ( "maybeName", maybeNameEncoder maybeName )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , maybeNameEncoder maybeName
                 ]
 
         Lambda ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                ]
+            BE.unsignedInt8 8
 
         Accessor field ->
-            Encode.object
-                [ ( "type", Encode.string "Accessor" )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.string field
                 ]
 
         Access field ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.string field
                 ]
 
         Record ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                ]
+            BE.unsignedInt8 11
 
         Tuple ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                ]
+            BE.unsignedInt8 12
 
         Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
+            BE.unsignedInt8 13
 
         Shader ->
-            Encode.object
-                [ ( "type", Encode.string "Shader" )
-                ]
+            BE.unsignedInt8 14
 
         Effects ->
-            Encode.object
-                [ ( "type", Encode.string "Effects" )
-                ]
+            BE.unsignedInt8 15
 
         Local name ->
-            Encode.object
-                [ ( "type", Encode.string "Local" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , BE.string name
                 ]
 
         Foreign name ->
-            Encode.object
-                [ ( "type", Encode.string "Foreign" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , BE.string name
                 ]
 
 
-categoryDecoder : Decode.Decoder Category
+categoryDecoder : BD.Decoder Category
 categoryDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "List" ->
-                        Decode.succeed List
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed List
 
-                    "Number" ->
-                        Decode.succeed Number
+                    1 ->
+                        BD.succeed Number
 
-                    "Float" ->
-                        Decode.succeed Float
+                    2 ->
+                        BD.succeed Float
 
-                    "String" ->
-                        Decode.succeed String
+                    3 ->
+                        BD.succeed String
 
-                    "Char" ->
-                        Decode.succeed Char
+                    4 ->
+                        BD.succeed Char
 
-                    "If" ->
-                        Decode.succeed If
+                    5 ->
+                        BD.succeed If
 
-                    "Case" ->
-                        Decode.succeed Case
+                    6 ->
+                        BD.succeed Case
 
-                    "CallResult" ->
-                        Decode.map CallResult (Decode.field "maybeName" maybeNameDecoder)
+                    7 ->
+                        BD.map CallResult maybeNameDecoder
 
-                    "Lambda" ->
-                        Decode.succeed Lambda
+                    8 ->
+                        BD.succeed Lambda
 
-                    "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
+                    9 ->
+                        BD.map Accessor BD.string
 
-                    "Access" ->
-                        Decode.map Access (Decode.field "field" Decode.string)
+                    10 ->
+                        BD.map Access BD.string
 
-                    "Record" ->
-                        Decode.succeed Record
+                    11 ->
+                        BD.succeed Record
 
-                    "Tuple" ->
-                        Decode.succeed Tuple
+                    12 ->
+                        BD.succeed Tuple
 
-                    "Unit" ->
-                        Decode.succeed Unit
+                    13 ->
+                        BD.succeed Unit
 
-                    "Shader" ->
-                        Decode.succeed Shader
+                    14 ->
+                        BD.succeed Shader
 
-                    "Effects" ->
-                        Decode.succeed Effects
+                    15 ->
+                        BD.succeed Effects
 
-                    "Local" ->
-                        Decode.map Local (Decode.field "name" Decode.string)
+                    16 ->
+                        BD.map Local BD.string
 
-                    "Foreign" ->
-                        Decode.map Foreign (Decode.field "name" Decode.string)
+                    17 ->
+                        BD.map Foreign BD.string
 
                     _ ->
-                        Decode.fail ("Failed to decode Category's type: " ++ type_)
+                        BD.fail
             )
 
 
-expectedEncoder : (a -> Encode.Value) -> Expected a -> Encode.Value
+expectedEncoder : (a -> BE.Encoder) -> Expected a -> BE.Encoder
 expectedEncoder encoder expected =
     case expected of
         NoExpectation expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "NoExpectation" )
-                , ( "expectedType", encoder expectedType )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , encoder expectedType
                 ]
 
         FromContext region context expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "FromContext" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", contextEncoder context )
-                , ( "expectedType", encoder expectedType )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , contextEncoder context
+                , encoder expectedType
                 ]
 
         FromAnnotation name arity subContext expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "FromAnnotation" )
-                , ( "name", Encode.string name )
-                , ( "arity", Encode.int arity )
-                , ( "subContext", subContextEncoder subContext )
-                , ( "expectedType", encoder expectedType )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string name
+                , BE.int arity
+                , subContextEncoder subContext
+                , encoder expectedType
                 ]
 
 
-expectedDecoder : Decode.Decoder a -> Decode.Decoder (Expected a)
+expectedDecoder : BD.Decoder a -> BD.Decoder (Expected a)
 expectedDecoder decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "NoExpectation" ->
-                        Decode.map NoExpectation
-                            (Decode.field "expectedType" decoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map NoExpectation
+                            decoder
 
-                    "FromContext" ->
-                        Decode.map3 FromContext
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" contextDecoder)
-                            (Decode.field "expectedType" decoder)
+                    1 ->
+                        BD.map3 FromContext
+                            A.regionDecoder
+                            contextDecoder
+                            decoder
 
-                    "FromAnnotation" ->
-                        Decode.map4 FromAnnotation
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "arity" Decode.int)
-                            (Decode.field "subContext" subContextDecoder)
-                            (Decode.field "expectedType" decoder)
+                    2 ->
+                        BD.map4 FromAnnotation
+                            BD.string
+                            BD.int
+                            subContextDecoder
+                            decoder
 
                     _ ->
-                        Decode.fail ("Unknown Expected's type: " ++ type_)
+                        BD.fail
             )
 
 
-contextDecoder : Decode.Decoder Context
-contextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "ListEntry" ->
-                        Decode.map ListEntry (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "Negate" ->
-                        Decode.succeed Negate
-
-                    "OpLeft" ->
-                        Decode.map OpLeft (Decode.field "op" Decode.string)
-
-                    "OpRight" ->
-                        Decode.map OpRight (Decode.field "op" Decode.string)
-
-                    "IfCondition" ->
-                        Decode.succeed IfCondition
-
-                    "IfBranch" ->
-                        Decode.map IfBranch (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "CaseBranch" ->
-                        Decode.map CaseBranch (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "CallArity" ->
-                        Decode.map2 CallArity
-                            (Decode.field "maybeFuncName" maybeNameDecoder)
-                            (Decode.field "numGivenArgs" Decode.int)
-
-                    "CallArg" ->
-                        Decode.map2 CallArg
-                            (Decode.field "maybeFuncName" maybeNameDecoder)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-
-                    "RecordAccess" ->
-                        Decode.map4 RecordAccess
-                            (Decode.field "recordRegion" A.regionDecoder)
-                            (Decode.field "maybeName" (Decode.nullable Decode.string))
-                            (Decode.field "fieldRegion" A.regionDecoder)
-                            (Decode.field "field" Decode.string)
-
-                    "RecordUpdateKeys" ->
-                        Decode.map2 RecordUpdateKeys
-                            (Decode.field "record" Decode.string)
-                            (Decode.field "expectedFields" (DecodeX.assocListDict identity Decode.string Can.fieldUpdateDecoder))
-
-                    "RecordUpdateValue" ->
-                        Decode.map RecordUpdateValue (Decode.field "field" Decode.string)
-
-                    "Destructure" ->
-                        Decode.succeed Destructure
-
-                    _ ->
-                        Decode.fail ("Unknown Context's type: " ++ type_)
-            )
-
-
-contextEncoder : Context -> Encode.Value
+contextEncoder : Context -> BE.Encoder
 contextEncoder context =
     case context of
         ListEntry index ->
-            Encode.object
-                [ ( "type", Encode.string "ListEntry" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Index.zeroBasedEncoder index
                 ]
 
         Negate ->
-            Encode.object
-                [ ( "type", Encode.string "Negate" )
-                ]
+            BE.unsignedInt8 1
 
         OpLeft op ->
-            Encode.object
-                [ ( "type", Encode.string "OpLeft" )
-                , ( "op", Encode.string op )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string op
                 ]
 
         OpRight op ->
-            Encode.object
-                [ ( "type", Encode.string "OpRight" )
-                , ( "op", Encode.string op )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.string op
                 ]
 
         IfCondition ->
-            Encode.object
-                [ ( "type", Encode.string "IfCondition" )
-                ]
+            BE.unsignedInt8 4
 
         IfBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "IfBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , Index.zeroBasedEncoder index
                 ]
 
         CaseBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "CaseBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , Index.zeroBasedEncoder index
                 ]
 
         CallArity maybeFuncName numGivenArgs ->
-            Encode.object
-                [ ( "type", Encode.string "CallArity" )
-                , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
-                , ( "numGivenArgs", Encode.int numGivenArgs )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , maybeNameEncoder maybeFuncName
+                , BE.int numGivenArgs
                 ]
 
         CallArg maybeFuncName index ->
-            Encode.object
-                [ ( "type", Encode.string "CallArg" )
-                , ( "maybeFuncName", maybeNameEncoder maybeFuncName )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , maybeNameEncoder maybeFuncName
+                , Index.zeroBasedEncoder index
                 ]
 
         RecordAccess recordRegion maybeName fieldRegion field ->
-            Encode.object
-                [ ( "type", Encode.string "RecordAccess" )
-                , ( "recordRegion", A.regionEncoder recordRegion )
-                , ( "maybeName", EncodeX.maybe Encode.string maybeName )
-                , ( "fieldRegion", A.regionEncoder fieldRegion )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , A.regionEncoder recordRegion
+                , BE.maybe BE.string maybeName
+                , A.regionEncoder fieldRegion
+                , BE.string field
                 ]
 
         RecordUpdateKeys record expectedFields ->
-            Encode.object
-                [ ( "type", Encode.string "RecordUpdateKeys" )
-                , ( "record", Encode.string record )
-                , ( "expectedFields", EncodeX.assocListDict compare Encode.string Can.fieldUpdateEncoder expectedFields )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.string record
+                , BE.assocListDict compare BE.string Can.fieldUpdateEncoder expectedFields
                 ]
 
         RecordUpdateValue field ->
-            Encode.object
-                [ ( "type", Encode.string "RecordUpdateValue" )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.string field
                 ]
 
         Destructure ->
-            Encode.object
-                [ ( "type", Encode.string "Destructure" )
-                ]
+            BE.unsignedInt8 12
 
 
-subContextDecoder : Decode.Decoder SubContext
-subContextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TypedIfBranch" ->
-                        Decode.map TypedIfBranch
-                            (Decode.field "index" Index.zeroBasedDecoder)
+contextDecoder : BD.Decoder Context
+contextDecoder =
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map ListEntry Index.zeroBasedDecoder
 
-                    "TypedCaseBranch" ->
-                        Decode.map TypedCaseBranch
-                            (Decode.field "index" Index.zeroBasedDecoder)
+                    1 ->
+                        BD.succeed Negate
 
-                    "TypedBody" ->
-                        Decode.succeed TypedBody
+                    2 ->
+                        BD.map OpLeft BD.string
+
+                    3 ->
+                        BD.map OpRight BD.string
+
+                    4 ->
+                        BD.succeed IfCondition
+
+                    5 ->
+                        BD.map IfBranch Index.zeroBasedDecoder
+
+                    6 ->
+                        BD.map CaseBranch Index.zeroBasedDecoder
+
+                    7 ->
+                        BD.map2 CallArity
+                            maybeNameDecoder
+                            BD.int
+
+                    8 ->
+                        BD.map2 CallArg
+                            maybeNameDecoder
+                            Index.zeroBasedDecoder
+
+                    9 ->
+                        BD.map4 RecordAccess
+                            A.regionDecoder
+                            (BD.maybe BD.string)
+                            A.regionDecoder
+                            BD.string
+
+                    10 ->
+                        BD.map2 RecordUpdateKeys
+                            BD.string
+                            (BD.assocListDict identity BD.string Can.fieldUpdateDecoder)
+
+                    11 ->
+                        BD.map RecordUpdateValue BD.string
+
+                    12 ->
+                        BD.succeed Destructure
 
                     _ ->
-                        Decode.fail ("Unknown SubContext's type: " ++ type_)
+                        BD.fail
             )
 
 
-subContextEncoder : SubContext -> Encode.Value
+subContextEncoder : SubContext -> BE.Encoder
 subContextEncoder subContext =
     case subContext of
         TypedIfBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "TypedIfBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Index.zeroBasedEncoder index
                 ]
 
         TypedCaseBranch index ->
-            Encode.object
-                [ ( "type", Encode.string "TypedCaseBranch" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Index.zeroBasedEncoder index
                 ]
 
         TypedBody ->
-            Encode.object
-                [ ( "type", Encode.string "TypedBody" )
-                ]
+            BE.unsignedInt8 2
 
 
-pCategoryEncoder : PCategory -> Encode.Value
+subContextDecoder : BD.Decoder SubContext
+subContextDecoder =
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map TypedIfBranch Index.zeroBasedDecoder
+
+                    1 ->
+                        BD.map TypedCaseBranch Index.zeroBasedDecoder
+
+                    2 ->
+                        BD.succeed TypedBody
+
+                    _ ->
+                        BD.fail
+            )
+
+
+pCategoryEncoder : PCategory -> BE.Encoder
 pCategoryEncoder pCategory =
     case pCategory of
         PRecord ->
-            Encode.object
-                [ ( "type", Encode.string "PRecord" )
-                ]
+            BE.unsignedInt8 0
 
         PUnit ->
-            Encode.object
-                [ ( "type", Encode.string "PUnit" )
-                ]
+            BE.unsignedInt8 1
 
         PTuple ->
-            Encode.object
-                [ ( "type", Encode.string "PTuple" )
-                ]
+            BE.unsignedInt8 2
 
         PList ->
-            Encode.object
-                [ ( "type", Encode.string "PList" )
-                ]
+            BE.unsignedInt8 3
 
         PCtor name ->
-            Encode.object
-                [ ( "type", Encode.string "PCtor" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string name
                 ]
 
         PInt ->
-            Encode.object
-                [ ( "type", Encode.string "PInt" )
-                ]
+            BE.unsignedInt8 5
 
         PStr ->
-            Encode.object
-                [ ( "type", Encode.string "PStr" )
-                ]
+            BE.unsignedInt8 6
 
         PChr ->
-            Encode.object
-                [ ( "type", Encode.string "PChr" )
-                ]
+            BE.unsignedInt8 7
 
         PBool ->
-            Encode.object
-                [ ( "type", Encode.string "PBool" )
-                ]
+            BE.unsignedInt8 8
 
 
-pCategoryDecoder : Decode.Decoder PCategory
+pCategoryDecoder : BD.Decoder PCategory
 pCategoryDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PRecord" ->
-                        Decode.succeed PRecord
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed PRecord
 
-                    "PUnit" ->
-                        Decode.succeed PUnit
+                    1 ->
+                        BD.succeed PUnit
 
-                    "PTuple" ->
-                        Decode.succeed PTuple
+                    2 ->
+                        BD.succeed PTuple
 
-                    "PList" ->
-                        Decode.succeed PList
+                    3 ->
+                        BD.succeed PList
 
-                    "PCtor" ->
-                        Decode.map PCtor (Decode.field "name" Decode.string)
+                    4 ->
+                        BD.map PCtor BD.string
 
-                    "PInt" ->
-                        Decode.succeed PInt
+                    5 ->
+                        BD.succeed PInt
 
-                    "PStr" ->
-                        Decode.succeed PStr
+                    6 ->
+                        BD.succeed PStr
 
-                    "PChr" ->
-                        Decode.succeed PChr
+                    7 ->
+                        BD.succeed PChr
 
-                    "PBool" ->
-                        Decode.succeed PBool
+                    8 ->
+                        BD.succeed PBool
 
                     _ ->
-                        Decode.fail ("Unknown PCategory's type: " ++ type_)
+                        BD.fail
             )
 
 
-pExpectedEncoder : (a -> Encode.Value) -> PExpected a -> Encode.Value
+pExpectedEncoder : (a -> BE.Encoder) -> PExpected a -> BE.Encoder
 pExpectedEncoder encoder pExpected =
     case pExpected of
         PNoExpectation expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "PNoExpectation" )
-                , ( "expectedType", encoder expectedType )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , encoder expectedType
                 ]
 
         PFromContext region context expectedType ->
-            Encode.object
-                [ ( "type", Encode.string "PFromContext" )
-                , ( "region", A.regionEncoder region )
-                , ( "context", pContextEncoder context )
-                , ( "expectedType", encoder expectedType )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , pContextEncoder context
+                , encoder expectedType
                 ]
 
 
-pExpectedDecoder : Decode.Decoder a -> Decode.Decoder (PExpected a)
+pExpectedDecoder : BD.Decoder a -> BD.Decoder (PExpected a)
 pExpectedDecoder decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PNoExpectation" ->
-                        Decode.map PNoExpectation (Decode.field "expectedType" decoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map PNoExpectation decoder
 
-                    --     | PFromContext A.Region PContext tipe
-                    "PFromContext" ->
-                        Decode.map3 PFromContext
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "context" pContextDecoder)
-                            (Decode.field "expectedType" decoder)
+                    1 ->
+                        BD.map3 PFromContext
+                            A.regionDecoder
+                            pContextDecoder
+                            decoder
 
                     _ ->
-                        Decode.fail ("Failed to decode PExpected's type: " ++ type_)
+                        BD.fail
             )
 
 
-maybeNameEncoder : MaybeName -> Encode.Value
+maybeNameEncoder : MaybeName -> BE.Encoder
 maybeNameEncoder maybeName =
     case maybeName of
         FuncName name ->
-            Encode.object
-                [ ( "type", Encode.string "FuncName" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string name
                 ]
 
         CtorName name ->
-            Encode.object
-                [ ( "type", Encode.string "CtorName" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
                 ]
 
         OpName op ->
-            Encode.object
-                [ ( "type", Encode.string "OpName" )
-                , ( "op", Encode.string op )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string op
                 ]
 
         NoName ->
-            Encode.object
-                [ ( "type", Encode.string "NoName" )
-                ]
+            BE.unsignedInt8 3
 
 
-maybeNameDecoder : Decode.Decoder MaybeName
+maybeNameDecoder : BD.Decoder MaybeName
 maybeNameDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "FuncName" ->
-                        Decode.map FuncName (Decode.field "name" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map FuncName BD.string
 
-                    "CtorName" ->
-                        Decode.map CtorName (Decode.field "name" Decode.string)
+                    1 ->
+                        BD.map CtorName BD.string
 
-                    "OpName" ->
-                        Decode.map OpName (Decode.field "op" Decode.string)
+                    2 ->
+                        BD.map OpName BD.string
 
-                    "NoName" ->
-                        Decode.succeed NoName
+                    3 ->
+                        BD.succeed NoName
 
                     _ ->
-                        Decode.fail ("Failed to decode MaybeName's type: " ++ type_)
+                        BD.fail
             )
 
 
-pContextEncoder : PContext -> Encode.Value
+pContextEncoder : PContext -> BE.Encoder
 pContextEncoder pContext =
     case pContext of
         PTypedArg name index ->
-            Encode.object
-                [ ( "type", Encode.string "PTypedArg" )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string name
+                , Index.zeroBasedEncoder index
                 ]
 
         PCaseMatch index ->
-            Encode.object
-                [ ( "type", Encode.string "PCaseMatch" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Index.zeroBasedEncoder index
                 ]
 
         PCtorArg name index ->
-            Encode.object
-                [ ( "type", Encode.string "PCtorArg" )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string name
+                , Index.zeroBasedEncoder index
                 ]
 
         PListEntry index ->
-            Encode.object
-                [ ( "type", Encode.string "PListEntry" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , Index.zeroBasedEncoder index
                 ]
 
         PTail ->
-            Encode.object
-                [ ( "type", Encode.string "PTail" )
-                ]
+            BE.unsignedInt8 4
 
 
-pContextDecoder : Decode.Decoder PContext
+pContextDecoder : BD.Decoder PContext
 pContextDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "PTypedArg" ->
-                        Decode.map2 PTypedArg
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 PTypedArg
+                            BD.string
+                            Index.zeroBasedDecoder
 
-                    "PCaseMatch" ->
-                        Decode.map PCaseMatch (Decode.field "index" Index.zeroBasedDecoder)
+                    1 ->
+                        BD.map PCaseMatch Index.zeroBasedDecoder
 
-                    "PCtorArg" ->
-                        Decode.map2 PCtorArg
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
+                    2 ->
+                        BD.map2 PCtorArg
+                            BD.string
+                            Index.zeroBasedDecoder
 
-                    "PListEntry" ->
-                        Decode.map PListEntry (Decode.field "index" Index.zeroBasedDecoder)
+                    3 ->
+                        BD.map PListEntry Index.zeroBasedDecoder
 
-                    "PTail" ->
-                        Decode.succeed PTail
+                    4 ->
+                        BD.succeed PTail
 
                     _ ->
-                        Decode.fail ("Failed to decode PContext's type: " ++ type_)
+                        BD.fail
             )

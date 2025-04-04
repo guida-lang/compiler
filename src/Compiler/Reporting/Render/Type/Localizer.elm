@@ -12,15 +12,13 @@ module Compiler.Reporting.Render.Type.Localizer exposing
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as DecodeX
-import Compiler.Json.Encode as EncodeX
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -132,59 +130,56 @@ addType exposed types =
 -- ENCODERS and DECODERS
 
 
-localizerEncoder : Localizer -> Encode.Value
+localizerEncoder : Localizer -> BE.Encoder
 localizerEncoder (Localizer localizer) =
-    EncodeX.assocListDict compare Encode.string importEncoder localizer
+    BE.assocListDict compare BE.string importEncoder localizer
 
 
-localizerDecoder : Decode.Decoder Localizer
+localizerDecoder : BD.Decoder Localizer
 localizerDecoder =
-    Decode.map Localizer (DecodeX.assocListDict identity Decode.string importDecoder)
+    BD.map Localizer (BD.assocListDict identity BD.string importDecoder)
 
 
-importEncoder : Import -> Encode.Value
+importEncoder : Import -> BE.Encoder
 importEncoder import_ =
-    Encode.object
-        [ ( "type", Encode.string "Import" )
-        , ( "alias", EncodeX.maybe Encode.string import_.alias )
-        , ( "exposing", exposingEncoder import_.exposing_ )
+    BE.sequence
+        [ BE.maybe BE.string import_.alias
+        , exposingEncoder import_.exposing_
         ]
 
 
-importDecoder : Decode.Decoder Import
+importDecoder : BD.Decoder Import
 importDecoder =
-    Decode.map2 Import
-        (Decode.field "alias" (Decode.maybe Decode.string))
-        (Decode.field "exposing" exposingDecoder)
+    BD.map2 Import
+        (BD.maybe BD.string)
+        exposingDecoder
 
 
-exposingEncoder : Exposing -> Encode.Value
+exposingEncoder : Exposing -> BE.Encoder
 exposingEncoder exposing_ =
     case exposing_ of
         All ->
-            Encode.object
-                [ ( "type", Encode.string "All" )
-                ]
+            BE.unsignedInt8 0
 
         Only set ->
-            Encode.object
-                [ ( "type", Encode.string "Only" )
-                , ( "set", EncodeX.everySet compare Encode.string set )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.everySet compare BE.string set
                 ]
 
 
-exposingDecoder : Decode.Decoder Exposing
+exposingDecoder : BD.Decoder Exposing
 exposingDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
+    BD.unsignedInt8
+        |> BD.andThen
             (\type_ ->
                 case type_ of
-                    "All" ->
-                        Decode.succeed All
+                    0 ->
+                        BD.succeed All
 
-                    "Only" ->
-                        Decode.map Only (Decode.field "set" (DecodeX.everySet identity Decode.string))
+                    1 ->
+                        BD.map Only (BD.everySet identity BD.string)
 
                     _ ->
-                        Decode.fail ("Unknown Exposing's type: " ++ type_)
+                        BD.fail
             )

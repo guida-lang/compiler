@@ -31,15 +31,13 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.Kernel as K
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -255,884 +253,875 @@ toKernelGlobal shortName =
 -- ENCODERS and DECODERS
 
 
-globalGraphEncoder : GlobalGraph -> Encode.Value
+globalGraphEncoder : GlobalGraph -> BE.Encoder
 globalGraphEncoder (GlobalGraph nodes fields) =
-    Encode.object
-        [ ( "type", Encode.string "GlobalGraph" )
-        , ( "nodes", E.assocListDict compareGlobal globalEncoder nodeEncoder nodes )
-        , ( "fields", E.assocListDict compare Encode.string Encode.int fields )
+    BE.sequence
+        [ BE.assocListDict compareGlobal globalEncoder nodeEncoder nodes
+        , BE.assocListDict compare BE.string BE.int fields
         ]
 
 
-globalGraphDecoder : Decode.Decoder GlobalGraph
+globalGraphDecoder : BD.Decoder GlobalGraph
 globalGraphDecoder =
-    Decode.map2 GlobalGraph
-        (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
-        (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
+    BD.map2 GlobalGraph
+        (BD.assocListDict toComparableGlobal globalDecoder nodeDecoder)
+        (BD.assocListDict identity BD.string BD.int)
 
 
-localGraphEncoder : LocalGraph -> Encode.Value
+localGraphEncoder : LocalGraph -> BE.Encoder
 localGraphEncoder (LocalGraph main nodes fields) =
-    Encode.object
-        [ ( "type", Encode.string "LocalGraph" )
-        , ( "main", E.maybe mainEncoder main )
-        , ( "nodes", E.assocListDict compareGlobal globalEncoder nodeEncoder nodes )
-        , ( "fields", E.assocListDict compare Encode.string Encode.int fields )
+    BE.sequence
+        [ BE.maybe mainEncoder main
+        , BE.assocListDict compareGlobal globalEncoder nodeEncoder nodes
+        , BE.assocListDict compare BE.string BE.int fields
         ]
 
 
-localGraphDecoder : Decode.Decoder LocalGraph
+localGraphDecoder : BD.Decoder LocalGraph
 localGraphDecoder =
-    Decode.map3 LocalGraph
-        (Decode.field "main" (Decode.maybe mainDecoder))
-        (Decode.field "nodes" (D.assocListDict toComparableGlobal globalDecoder nodeDecoder))
-        (Decode.field "fields" (D.assocListDict identity Decode.string Decode.int))
+    BD.map3 LocalGraph
+        (BD.maybe mainDecoder)
+        (BD.assocListDict toComparableGlobal globalDecoder nodeDecoder)
+        (BD.assocListDict identity BD.string BD.int)
 
 
-mainEncoder : Main -> Encode.Value
+mainEncoder : Main -> BE.Encoder
 mainEncoder main_ =
     case main_ of
         Static ->
-            Encode.object
-                [ ( "type", Encode.string "Static" )
-                ]
+            BE.unsignedInt8 0
 
         Dynamic msgType decoder ->
-            Encode.object
-                [ ( "type", Encode.string "Dynamic" )
-                , ( "msgType", Can.typeEncoder msgType )
-                , ( "decoder", exprEncoder decoder )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Can.typeEncoder msgType
+                , exprEncoder decoder
                 ]
 
 
-mainDecoder : Decode.Decoder Main
+mainDecoder : BD.Decoder Main
 mainDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Static" ->
-                        Decode.succeed Static
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Static
 
-                    "Dynamic" ->
-                        Decode.map2 Dynamic
-                            (Decode.field "msgType" Can.typeDecoder)
-                            (Decode.field "decoder" exprDecoder)
+                    1 ->
+                        BD.map2 Dynamic
+                            Can.typeDecoder
+                            exprDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Main's type: " ++ type_)
+                        BD.fail
             )
 
 
-globalEncoder : Global -> Encode.Value
+globalEncoder : Global -> BE.Encoder
 globalEncoder (Global home name) =
-    Encode.object
-        [ ( "type", Encode.string "Global" )
-        , ( "home", ModuleName.canonicalEncoder home )
-        , ( "name", Encode.string name )
+    BE.sequence
+        [ ModuleName.canonicalEncoder home
+        , BE.string name
         ]
 
 
-globalDecoder : Decode.Decoder Global
+globalDecoder : BD.Decoder Global
 globalDecoder =
-    Decode.map2 Global
-        (Decode.field "home" ModuleName.canonicalDecoder)
-        (Decode.field "name" Decode.string)
+    BD.map2 Global
+        ModuleName.canonicalDecoder
+        BD.string
 
 
-nodeEncoder : Node -> Encode.Value
+nodeEncoder : Node -> BE.Encoder
 nodeEncoder node =
     case node of
         Define expr deps ->
-            Encode.object
-                [ ( "type", Encode.string "Define" )
-                , ( "expr", exprEncoder expr )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , exprEncoder expr
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         TrackedDefine region expr deps ->
-            Encode.object
-                [ ( "type", Encode.string "TrackedDefine" )
-                , ( "region", A.regionEncoder region )
-                , ( "expr", exprEncoder expr )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , exprEncoder expr
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         DefineTailFunc region argNames body deps ->
-            Encode.object
-                [ ( "type", Encode.string "DefineTailFunc" )
-                , ( "region", A.regionEncoder region )
-                , ( "argNames", Encode.list (A.locatedEncoder Encode.string) argNames )
-                , ( "body", exprEncoder body )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
+                , BE.list (A.locatedEncoder BE.string) argNames
+                , exprEncoder body
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         Ctor index arity ->
-            Encode.object
-                [ ( "type", Encode.string "Ctor" )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "arity", Encode.int arity )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , Index.zeroBasedEncoder index
+                , BE.int arity
                 ]
 
         Enum index ->
-            Encode.object
-                [ ( "type", Encode.string "Enum" )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , Index.zeroBasedEncoder index
                 ]
 
         Box ->
-            Encode.object
-                [ ( "type", Encode.string "Box" )
-                ]
+            BE.unsignedInt8 5
 
         Link linkedGlobal ->
-            Encode.object
-                [ ( "type", Encode.string "Link" )
-                , ( "linkedGlobal", globalEncoder linkedGlobal )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , globalEncoder linkedGlobal
                 ]
 
         Cycle names values functions deps ->
-            Encode.object
-                [ ( "type", Encode.string "Cycle" )
-                , ( "names", Encode.list Encode.string names )
-                , ( "values", Encode.list (E.jsonPair Encode.string exprEncoder) values )
-                , ( "functions", Encode.list defEncoder functions )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.list BE.string names
+                , BE.list (BE.jsonPair BE.string exprEncoder) values
+                , BE.list defEncoder functions
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         Manager effectsType ->
-            Encode.object
-                [ ( "type", Encode.string "Manager" )
-                , ( "effectsType", effectsTypeEncoder effectsType )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , effectsTypeEncoder effectsType
                 ]
 
         Kernel chunks deps ->
-            Encode.object
-                [ ( "type", Encode.string "Kernel" )
-                , ( "chunks", Encode.list K.chunkEncoder chunks )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.list K.chunkEncoder chunks
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         PortIncoming decoder deps ->
-            Encode.object
-                [ ( "type", Encode.string "PortIncoming" )
-                , ( "decoder", exprEncoder decoder )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , exprEncoder decoder
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         PortOutgoing encoder deps ->
-            Encode.object
-                [ ( "type", Encode.string "PortOutgoing" )
-                , ( "encoder", exprEncoder encoder )
-                , ( "deps", E.everySet compareGlobal globalEncoder deps )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , exprEncoder encoder
+                , BE.everySet compareGlobal globalEncoder deps
                 ]
 
 
-nodeDecoder : Decode.Decoder Node
+nodeDecoder : BD.Decoder Node
 nodeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Define" ->
-                        Decode.map2 Define
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 Define
+                            exprDecoder
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "TrackedDefine" ->
-                        Decode.map3 TrackedDefine
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    1 ->
+                        BD.map3 TrackedDefine
+                            A.regionDecoder
+                            exprDecoder
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "DefineTailFunc" ->
-                        Decode.map4 DefineTailFunc
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "argNames" (Decode.list (A.locatedDecoder Decode.string)))
-                            (Decode.field "body" exprDecoder)
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    2 ->
+                        BD.map4 DefineTailFunc
+                            A.regionDecoder
+                            (BD.list (A.locatedDecoder BD.string))
+                            exprDecoder
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "Ctor" ->
-                        Decode.map2 Ctor
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "arity" Decode.int)
+                    3 ->
+                        BD.map2 Ctor
+                            Index.zeroBasedDecoder
+                            BD.int
 
-                    "Enum" ->
-                        Decode.map Enum
-                            (Decode.field "index" Index.zeroBasedDecoder)
+                    4 ->
+                        BD.map Enum
+                            Index.zeroBasedDecoder
 
-                    "Box" ->
-                        Decode.succeed Box
+                    5 ->
+                        BD.succeed Box
 
-                    "Link" ->
-                        Decode.map Link (Decode.field "linkedGlobal" globalDecoder)
+                    6 ->
+                        BD.map Link globalDecoder
 
-                    "Cycle" ->
-                        Decode.map4 Cycle
-                            (Decode.field "names" (Decode.list Decode.string))
-                            (Decode.field "values" (Decode.list (D.jsonPair Decode.string exprDecoder)))
-                            (Decode.field "functions" (Decode.list defDecoder))
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    7 ->
+                        BD.map4 Cycle
+                            (BD.list BD.string)
+                            (BD.list (BD.jsonPair BD.string exprDecoder))
+                            (BD.list defDecoder)
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "Manager" ->
-                        Decode.map Manager (Decode.field "effectsType" effectsTypeDecoder)
+                    8 ->
+                        BD.map Manager effectsTypeDecoder
 
-                    "Kernel" ->
-                        Decode.map2 Kernel
-                            (Decode.field "chunks" (Decode.list K.chunkDecoder))
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    9 ->
+                        BD.map2 Kernel
+                            (BD.list K.chunkDecoder)
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "PortIncoming" ->
-                        Decode.map2 PortIncoming
-                            (Decode.field "decoder" exprDecoder)
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    10 ->
+                        BD.map2 PortIncoming
+                            exprDecoder
+                            (BD.everySet toComparableGlobal globalDecoder)
 
-                    "PortOutgoing" ->
-                        Decode.map2 PortOutgoing
-                            (Decode.field "encoder" exprDecoder)
-                            (Decode.field "deps" (D.everySet toComparableGlobal globalDecoder))
+                    11 ->
+                        BD.map2 PortOutgoing
+                            exprDecoder
+                            (BD.everySet toComparableGlobal globalDecoder)
 
                     _ ->
-                        Decode.fail ("Unknown Node's type: " ++ type_)
+                        BD.fail
             )
 
 
-exprEncoder : Expr -> Encode.Value
+exprEncoder : Expr -> BE.Encoder
 exprEncoder expr =
     case expr of
         Bool region value ->
-            Encode.object
-                [ ( "type", Encode.string "Bool" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.bool value )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , BE.bool value
                 ]
 
         Chr region value ->
-            Encode.object
-                [ ( "type", Encode.string "Chr" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , BE.string value
                 ]
 
         Str region value ->
-            Encode.object
-                [ ( "type", Encode.string "Str" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , A.regionEncoder region
+                , BE.string value
                 ]
 
         Int region value ->
-            Encode.object
-                [ ( "type", Encode.string "Int" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.int value )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , A.regionEncoder region
+                , BE.int value
                 ]
 
         Float region value ->
-            Encode.object
-                [ ( "type", Encode.string "Float" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.float value )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , A.regionEncoder region
+                , BE.float value
                 ]
 
         VarLocal value ->
-            Encode.object
-                [ ( "type", Encode.string "VarLocal" )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , BE.string value
                 ]
 
         TrackedVarLocal region value ->
-            Encode.object
-                [ ( "type", Encode.string "TrackedVarLocal" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.string value )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , A.regionEncoder region
+                , BE.string value
                 ]
 
         VarGlobal region value ->
-            Encode.object
-                [ ( "type", Encode.string "VarGlobal" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", globalEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , A.regionEncoder region
+                , globalEncoder value
                 ]
 
         VarEnum region global index ->
-            Encode.object
-                [ ( "type", Encode.string "VarEnum" )
-                , ( "region", A.regionEncoder region )
-                , ( "global", globalEncoder global )
-                , ( "index", Index.zeroBasedEncoder index )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , A.regionEncoder region
+                , globalEncoder global
+                , Index.zeroBasedEncoder index
                 ]
 
         VarBox region value ->
-            Encode.object
-                [ ( "type", Encode.string "VarBox" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", globalEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , A.regionEncoder region
+                , globalEncoder value
                 ]
 
         VarCycle region home name ->
-            Encode.object
-                [ ( "type", Encode.string "VarCycle" )
-                , ( "region", A.regionEncoder region )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , A.regionEncoder region
+                , ModuleName.canonicalEncoder home
+                , BE.string name
                 ]
 
         VarDebug region name home unhandledValueName ->
-            Encode.object
-                [ ( "type", Encode.string "VarDebug" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "unhandledValueName", E.maybe Encode.string unhandledValueName )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , A.regionEncoder region
+                , BE.string name
+                , ModuleName.canonicalEncoder home
+                , BE.maybe BE.string unhandledValueName
                 ]
 
         VarKernel region home name ->
-            Encode.object
-                [ ( "type", Encode.string "VarKernel" )
-                , ( "region", A.regionEncoder region )
-                , ( "home", Encode.string home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , A.regionEncoder region
+                , BE.string home
+                , BE.string name
                 ]
 
         List region value ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", Encode.list exprEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , A.regionEncoder region
+                , BE.list exprEncoder value
                 ]
 
         Function args body ->
-            Encode.object
-                [ ( "type", Encode.string "Function" )
-                , ( "args", Encode.list Encode.string args )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 14
+                , BE.list BE.string args
+                , exprEncoder body
                 ]
 
         TrackedFunction args body ->
-            Encode.object
-                [ ( "type", Encode.string "TrackedFunction" )
-                , ( "args", Encode.list (A.locatedEncoder Encode.string) args )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 15
+                , BE.list (A.locatedEncoder BE.string) args
+                , exprEncoder body
                 ]
 
         Call region func args ->
-            Encode.object
-                [ ( "type", Encode.string "Call" )
-                , ( "region", A.regionEncoder region )
-                , ( "func", exprEncoder func )
-                , ( "args", Encode.list exprEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , A.regionEncoder region
+                , exprEncoder func
+                , BE.list exprEncoder args
                 ]
 
         TailCall name args ->
-            Encode.object
-                [ ( "type", Encode.string "TailCall" )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list (E.jsonPair Encode.string exprEncoder) args )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , BE.string name
+                , BE.list (BE.jsonPair BE.string exprEncoder) args
                 ]
 
         If branches final ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                , ( "branches", Encode.list (E.jsonPair exprEncoder exprEncoder) branches )
-                , ( "final", exprEncoder final )
+            BE.sequence
+                [ BE.unsignedInt8 18
+                , BE.list (BE.jsonPair exprEncoder exprEncoder) branches
+                , exprEncoder final
                 ]
 
         Let def body ->
-            Encode.object
-                [ ( "type", Encode.string "Let" )
-                , ( "def", defEncoder def )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 19
+                , defEncoder def
+                , exprEncoder body
                 ]
 
         Destruct destructor body ->
-            Encode.object
-                [ ( "type", Encode.string "Destruct" )
-                , ( "destructor", destructorEncoder destructor )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 20
+                , destructorEncoder destructor
+                , exprEncoder body
                 ]
 
         Case label root decider jumps ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                , ( "label", Encode.string label )
-                , ( "root", Encode.string root )
-                , ( "decider", deciderEncoder choiceEncoder decider )
-                , ( "jumps", Encode.list (E.jsonPair Encode.int exprEncoder) jumps )
+            BE.sequence
+                [ BE.unsignedInt8 21
+                , BE.string label
+                , BE.string root
+                , deciderEncoder choiceEncoder decider
+                , BE.list (BE.jsonPair BE.int exprEncoder) jumps
                 ]
 
         Accessor region field ->
-            Encode.object
-                [ ( "type", Encode.string "Accessor" )
-                , ( "region", A.regionEncoder region )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 22
+                , A.regionEncoder region
+                , BE.string field
                 ]
 
         Access record region field ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "record", exprEncoder record )
-                , ( "region", A.regionEncoder region )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 23
+                , exprEncoder record
+                , A.regionEncoder region
+                , BE.string field
                 ]
 
         Update region record fields ->
-            Encode.object
-                [ ( "type", Encode.string "Update" )
-                , ( "region", A.regionEncoder region )
-                , ( "record", exprEncoder record )
-                , ( "fields", E.assocListDict A.compareLocated (A.locatedEncoder Encode.string) exprEncoder fields )
+            BE.sequence
+                [ BE.unsignedInt8 24
+                , A.regionEncoder region
+                , exprEncoder record
+                , BE.assocListDict A.compareLocated (A.locatedEncoder BE.string) exprEncoder fields
                 ]
 
         Record value ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "value", E.assocListDict compare Encode.string exprEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 25
+                , BE.assocListDict compare BE.string exprEncoder value
                 ]
 
         TrackedRecord region value ->
-            Encode.object
-                [ ( "type", Encode.string "TrackedRecord" )
-                , ( "region", A.regionEncoder region )
-                , ( "value", E.assocListDict A.compareLocated (A.locatedEncoder Encode.string) exprEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 26
+                , A.regionEncoder region
+                , BE.assocListDict A.compareLocated (A.locatedEncoder BE.string) exprEncoder value
                 ]
 
         Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
+            BE.unsignedInt8 27
 
         Tuple region a b cs ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "region", A.regionEncoder region )
-                , ( "a", exprEncoder a )
-                , ( "b", exprEncoder b )
-                , ( "cs", Encode.list exprEncoder cs )
+            BE.sequence
+                [ BE.unsignedInt8 28
+                , A.regionEncoder region
+                , exprEncoder a
+                , exprEncoder b
+                , BE.list exprEncoder cs
                 ]
 
         Shader src attributes uniforms ->
-            Encode.object
-                [ ( "type", Encode.string "Shader" )
-                , ( "src", Shader.sourceEncoder src )
-                , ( "attributes", E.everySet compare Encode.string attributes )
-                , ( "uniforms", E.everySet compare Encode.string uniforms )
+            BE.sequence
+                [ BE.unsignedInt8 29
+                , Shader.sourceEncoder src
+                , BE.everySet compare BE.string attributes
+                , BE.everySet compare BE.string uniforms
                 ]
 
 
-exprDecoder : Decode.Decoder Expr
+exprDecoder : BD.Decoder Expr
 exprDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Bool" ->
-                        Decode.map2 Bool
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.bool)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 Bool
+                            A.regionDecoder
+                            BD.bool
 
-                    "Chr" ->
-                        Decode.map2 Chr
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.string)
+                    1 ->
+                        BD.map2 Chr
+                            A.regionDecoder
+                            BD.string
 
-                    "Str" ->
-                        Decode.map2 Str
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.string)
+                    2 ->
+                        BD.map2 Str
+                            A.regionDecoder
+                            BD.string
 
-                    "Int" ->
-                        Decode.map2 Int
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.int)
+                    3 ->
+                        BD.map2 Int
+                            A.regionDecoder
+                            BD.int
 
-                    "Float" ->
-                        Decode.map2 Float
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.float)
+                    4 ->
+                        BD.map2 Float
+                            A.regionDecoder
+                            BD.float
 
-                    "VarLocal" ->
-                        Decode.map VarLocal
-                            (Decode.field "value" Decode.string)
+                    5 ->
+                        BD.map VarLocal BD.string
 
-                    "TrackedVarLocal" ->
-                        Decode.map2 TrackedVarLocal
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" Decode.string)
+                    6 ->
+                        BD.map2 TrackedVarLocal
+                            A.regionDecoder
+                            BD.string
 
-                    "VarGlobal" ->
-                        Decode.map2 VarGlobal
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" globalDecoder)
+                    7 ->
+                        BD.map2 VarGlobal
+                            A.regionDecoder
+                            globalDecoder
 
-                    "VarEnum" ->
-                        Decode.map3 VarEnum
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "global" globalDecoder)
-                            (Decode.field "index" Index.zeroBasedDecoder)
+                    8 ->
+                        BD.map3 VarEnum
+                            A.regionDecoder
+                            globalDecoder
+                            Index.zeroBasedDecoder
 
-                    "VarBox" ->
-                        Decode.map2 VarBox
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" globalDecoder)
+                    9 ->
+                        BD.map2 VarBox
+                            A.regionDecoder
+                            globalDecoder
 
-                    "VarCycle" ->
-                        Decode.map3 VarCycle
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
+                    10 ->
+                        BD.map3 VarCycle
+                            A.regionDecoder
+                            ModuleName.canonicalDecoder
+                            BD.string
 
-                    "VarDebug" ->
-                        Decode.map4 VarDebug
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "unhandledValueName" (Decode.maybe Decode.string))
+                    11 ->
+                        BD.map4 VarDebug
+                            A.regionDecoder
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            (BD.maybe BD.string)
 
-                    "VarKernel" ->
-                        Decode.map3 VarKernel
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "home" Decode.string)
-                            (Decode.field "name" Decode.string)
+                    12 ->
+                        BD.map3 VarKernel
+                            A.regionDecoder
+                            BD.string
+                            BD.string
 
-                    "List" ->
-                        Decode.map2 List
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" (Decode.list exprDecoder))
+                    13 ->
+                        BD.map2 List
+                            A.regionDecoder
+                            (BD.list exprDecoder)
 
-                    "Function" ->
-                        Decode.map2 Function
-                            (Decode.field "args" (Decode.list Decode.string))
-                            (Decode.field "body" exprDecoder)
+                    14 ->
+                        BD.map2 Function
+                            (BD.list BD.string)
+                            exprDecoder
 
-                    "TrackedFunction" ->
-                        Decode.map2 TrackedFunction
-                            (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
-                            (Decode.field "body" exprDecoder)
+                    15 ->
+                        BD.map2 TrackedFunction
+                            (BD.list (A.locatedDecoder BD.string))
+                            exprDecoder
 
-                    "Call" ->
-                        Decode.map3 Call
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "func" exprDecoder)
-                            (Decode.field "args" (Decode.list exprDecoder))
+                    16 ->
+                        BD.map3 Call
+                            A.regionDecoder
+                            exprDecoder
+                            (BD.list exprDecoder)
 
-                    "TailCall" ->
-                        Decode.map2 TailCall
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list (D.jsonPair Decode.string exprDecoder)))
+                    17 ->
+                        BD.map2 TailCall
+                            BD.string
+                            (BD.list (BD.jsonPair BD.string exprDecoder))
 
-                    "If" ->
-                        Decode.map2 If
-                            (Decode.field "branches" (Decode.list (D.jsonPair exprDecoder exprDecoder)))
-                            (Decode.field "final" exprDecoder)
+                    18 ->
+                        BD.map2 If
+                            (BD.list (BD.jsonPair exprDecoder exprDecoder))
+                            exprDecoder
 
-                    "Let" ->
-                        Decode.map2 Let
-                            (Decode.field "def" defDecoder)
-                            (Decode.field "body" exprDecoder)
+                    19 ->
+                        BD.map2 Let
+                            defDecoder
+                            exprDecoder
 
-                    "Destruct" ->
-                        Decode.map2 Destruct
-                            (Decode.field "destructor" destructorDecoder)
-                            (Decode.field "body" exprDecoder)
+                    20 ->
+                        BD.map2 Destruct
+                            destructorDecoder
+                            exprDecoder
 
-                    "Case" ->
-                        Decode.map4 Case
-                            (Decode.field "label" Decode.string)
-                            (Decode.field "root" Decode.string)
-                            (Decode.field "decider" (deciderDecoder choiceDecoder))
-                            (Decode.field "jumps" (Decode.list (D.jsonPair Decode.int exprDecoder)))
+                    21 ->
+                        BD.map4 Case
+                            BD.string
+                            BD.string
+                            (deciderDecoder choiceDecoder)
+                            (BD.list (BD.jsonPair BD.int exprDecoder))
 
-                    "Accessor" ->
-                        Decode.map2 Accessor
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "field" Decode.string)
+                    22 ->
+                        BD.map2 Accessor
+                            A.regionDecoder
+                            BD.string
 
-                    "Access" ->
-                        Decode.map3 Access
-                            (Decode.field "record" exprDecoder)
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "field" Decode.string)
+                    23 ->
+                        BD.map3 Access
+                            exprDecoder
+                            A.regionDecoder
+                            BD.string
 
-                    "Update" ->
-                        Decode.map3 Update
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "record" exprDecoder)
-                            (Decode.field "fields" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
+                    24 ->
+                        BD.map3 Update
+                            A.regionDecoder
+                            exprDecoder
+                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
 
-                    "Record" ->
-                        Decode.map Record
-                            (Decode.field "value" (D.assocListDict identity Decode.string exprDecoder))
+                    25 ->
+                        BD.map Record
+                            (BD.assocListDict identity BD.string exprDecoder)
 
-                    "TrackedRecord" ->
-                        Decode.map2 TrackedRecord
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "value" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
+                    26 ->
+                        BD.map2 TrackedRecord
+                            A.regionDecoder
+                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
 
-                    "Unit" ->
-                        Decode.succeed Unit
+                    27 ->
+                        BD.succeed Unit
 
-                    "Tuple" ->
-                        Decode.map4 Tuple
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "a" exprDecoder)
-                            (Decode.field "b" exprDecoder)
-                            (Decode.field "cs" (Decode.list exprDecoder))
+                    28 ->
+                        BD.map4 Tuple
+                            A.regionDecoder
+                            exprDecoder
+                            exprDecoder
+                            (BD.list exprDecoder)
 
-                    "Shader" ->
-                        Decode.map3 Shader
-                            (Decode.field "src" Shader.sourceDecoder)
-                            (Decode.field "attributes" (D.everySet identity Decode.string))
-                            (Decode.field "uniforms" (D.everySet identity Decode.string))
+                    29 ->
+                        BD.map3 Shader
+                            Shader.sourceDecoder
+                            (BD.everySet identity BD.string)
+                            (BD.everySet identity BD.string)
 
                     _ ->
-                        Decode.fail ("Unknown Expr's type: " ++ type_)
+                        BD.fail
             )
 
 
-defEncoder : Def -> Encode.Value
+defEncoder : Def -> BE.Encoder
 defEncoder def =
     case def of
         Def region name expr ->
-            Encode.object
-                [ ( "type", Encode.string "Def" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "expr", exprEncoder expr )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.regionEncoder region
+                , BE.string name
+                , exprEncoder expr
                 ]
 
         TailDef region name args expr ->
-            Encode.object
-                [ ( "type", Encode.string "TailDef" )
-                , ( "region", A.regionEncoder region )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list (A.locatedEncoder Encode.string) args )
-                , ( "expr", exprEncoder expr )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.regionEncoder region
+                , BE.string name
+                , BE.list (A.locatedEncoder BE.string) args
+                , exprEncoder expr
                 ]
 
 
-defDecoder : Decode.Decoder Def
+defDecoder : BD.Decoder Def
 defDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Def" ->
-                        Decode.map3 Def
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "expr" exprDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Def
+                            A.regionDecoder
+                            BD.string
+                            exprDecoder
 
-                    "TailDef" ->
-                        Decode.map4 TailDef
-                            (Decode.field "region" A.regionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list (A.locatedDecoder Decode.string)))
-                            (Decode.field "expr" exprDecoder)
+                    1 ->
+                        BD.map4 TailDef
+                            A.regionDecoder
+                            BD.string
+                            (BD.list (A.locatedDecoder BD.string))
+                            exprDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Def's type: " ++ type_)
+                        BD.fail
             )
 
 
-destructorEncoder : Destructor -> Encode.Value
+destructorEncoder : Destructor -> BE.Encoder
 destructorEncoder (Destructor name path) =
-    Encode.object
-        [ ( "type", Encode.string "Destructor" )
-        , ( "name", Encode.string name )
-        , ( "path", pathEncoder path )
+    BE.sequence
+        [ BE.string name
+        , pathEncoder path
         ]
 
 
-destructorDecoder : Decode.Decoder Destructor
+destructorDecoder : BD.Decoder Destructor
 destructorDecoder =
-    Decode.map2 Destructor
-        (Decode.field "name" Decode.string)
-        (Decode.field "path" pathDecoder)
+    BD.map2 Destructor
+        BD.string
+        pathDecoder
 
 
-deciderEncoder : (a -> Encode.Value) -> Decider a -> Encode.Value
+deciderEncoder : (a -> BE.Encoder) -> Decider a -> BE.Encoder
 deciderEncoder encoder decider =
     case decider of
         Leaf value ->
-            Encode.object
-                [ ( "type", Encode.string "Leaf" )
-                , ( "value", encoder value )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , encoder value
                 ]
 
         Chain testChain success failure ->
-            Encode.object
-                [ ( "type", Encode.string "Chain" )
-                , ( "testChain", Encode.list (E.jsonPair DT.pathEncoder DT.testEncoder) testChain )
-                , ( "success", deciderEncoder encoder success )
-                , ( "failure", deciderEncoder encoder failure )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.list (BE.jsonPair DT.pathEncoder DT.testEncoder) testChain
+                , deciderEncoder encoder success
+                , deciderEncoder encoder failure
                 ]
 
         FanOut path edges fallback ->
-            Encode.object
-                [ ( "type", Encode.string "FanOut" )
-                , ( "path", DT.pathEncoder path )
-                , ( "edges", Encode.list (E.jsonPair DT.testEncoder (deciderEncoder encoder)) edges )
-                , ( "fallback", deciderEncoder encoder fallback )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , DT.pathEncoder path
+                , BE.list (BE.jsonPair DT.testEncoder (deciderEncoder encoder)) edges
+                , deciderEncoder encoder fallback
                 ]
 
 
-deciderDecoder : Decode.Decoder a -> Decode.Decoder (Decider a)
+deciderDecoder : BD.Decoder a -> BD.Decoder (Decider a)
 deciderDecoder decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Leaf" ->
-                        Decode.map Leaf (Decode.field "value" decoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Leaf decoder
 
-                    "Chain" ->
-                        Decode.map3 Chain
-                            (Decode.field "testChain" (Decode.list (D.jsonPair DT.pathDecoder DT.testDecoder)))
-                            (Decode.field "success" (deciderDecoder decoder))
-                            (Decode.field "failure" (deciderDecoder decoder))
+                    1 ->
+                        BD.map3 Chain
+                            (BD.list (BD.jsonPair DT.pathDecoder DT.testDecoder))
+                            (deciderDecoder decoder)
+                            (deciderDecoder decoder)
 
-                    "FanOut" ->
-                        Decode.map3 FanOut
-                            (Decode.field "path" DT.pathDecoder)
-                            (Decode.field "edges" (Decode.list (D.jsonPair DT.testDecoder (deciderDecoder decoder))))
-                            (Decode.field "fallback" (deciderDecoder decoder))
+                    2 ->
+                        BD.map3 FanOut
+                            DT.pathDecoder
+                            (BD.list (BD.jsonPair DT.testDecoder (deciderDecoder decoder)))
+                            (deciderDecoder decoder)
 
                     _ ->
-                        Decode.fail ("Unknown Decider's type: " ++ type_)
+                        BD.fail
             )
 
 
-choiceEncoder : Choice -> Encode.Value
+choiceEncoder : Choice -> BE.Encoder
 choiceEncoder choice =
     case choice of
         Inline value ->
-            Encode.object
-                [ ( "type", Encode.string "Inline" )
-                , ( "value", exprEncoder value )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , exprEncoder value
                 ]
 
         Jump value ->
-            Encode.object
-                [ ( "type", Encode.string "Jump" )
-                , ( "value", Encode.int value )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int value
                 ]
 
 
-choiceDecoder : Decode.Decoder Choice
+choiceDecoder : BD.Decoder Choice
 choiceDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Inline" ->
-                        Decode.map Inline (Decode.field "value" exprDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Inline exprDecoder
 
-                    "Jump" ->
-                        Decode.map Jump (Decode.field "value" Decode.int)
+                    1 ->
+                        BD.map Jump BD.int
 
                     _ ->
-                        Decode.fail ("Unknown Choice's type: " ++ type_)
+                        BD.fail
             )
 
 
-pathEncoder : Path -> Encode.Value
+pathEncoder : Path -> BE.Encoder
 pathEncoder path =
     case path of
         Index index subPath ->
-            Encode.object
-                [ ( "type", Encode.string "Index" )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "subPath", pathEncoder subPath )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Index.zeroBasedEncoder index
+                , pathEncoder subPath
                 ]
 
         ArrayIndex index subPath ->
-            Encode.object
-                [ ( "type", Encode.string "ArrayIndex" )
-                , ( "index", Encode.int index )
-                , ( "subPath", pathEncoder subPath )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.int index
+                , pathEncoder subPath
                 ]
 
         Field field subPath ->
-            Encode.object
-                [ ( "type", Encode.string "Field" )
-                , ( "field", Encode.string field )
-                , ( "subPath", pathEncoder subPath )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string field
+                , pathEncoder subPath
                 ]
 
         Unbox subPath ->
-            Encode.object
-                [ ( "type", Encode.string "Unbox" )
-                , ( "subPath", pathEncoder subPath )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , pathEncoder subPath
                 ]
 
         Root name ->
-            Encode.object
-                [ ( "type", Encode.string "Root" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string name
                 ]
 
 
-pathDecoder : Decode.Decoder Path
+pathDecoder : BD.Decoder Path
 pathDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Index" ->
-                        Decode.map2 Index
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "subPath" pathDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 Index
+                            Index.zeroBasedDecoder
+                            pathDecoder
 
-                    "ArrayIndex" ->
-                        Decode.map2 ArrayIndex
-                            (Decode.field "index" Decode.int)
-                            (Decode.field "subPath" pathDecoder)
+                    1 ->
+                        BD.map2 ArrayIndex
+                            BD.int
+                            pathDecoder
 
-                    "Field" ->
-                        Decode.map2 Field
-                            (Decode.field "field" Decode.string)
-                            (Decode.field "subPath" pathDecoder)
+                    2 ->
+                        BD.map2 Field
+                            BD.string
+                            pathDecoder
 
-                    "Unbox" ->
-                        Decode.map Unbox (Decode.field "subPath" pathDecoder)
+                    3 ->
+                        BD.map Unbox pathDecoder
 
-                    "Root" ->
-                        Decode.map Root (Decode.field "name" Decode.string)
+                    4 ->
+                        BD.map Root BD.string
 
                     _ ->
-                        Decode.fail ("Unknown Path's type: " ++ type_)
+                        BD.fail
             )
 
 
-effectsTypeEncoder : EffectsType -> Encode.Value
+effectsTypeEncoder : EffectsType -> BE.Encoder
 effectsTypeEncoder effectsType =
-    case effectsType of
-        Cmd ->
-            Encode.string "Cmd"
+    BE.unsignedInt8
+        (case effectsType of
+            Cmd ->
+                0
 
-        Sub ->
-            Encode.string "Sub"
+            Sub ->
+                1
 
-        Fx ->
-            Encode.string "Fx"
+            Fx ->
+                2
+        )
 
 
-effectsTypeDecoder : Decode.Decoder EffectsType
+effectsTypeDecoder : BD.Decoder EffectsType
 effectsTypeDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Cmd" ->
-                        Decode.succeed Cmd
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Cmd
 
-                    "Sub" ->
-                        Decode.succeed Sub
+                    1 ->
+                        BD.succeed Sub
 
-                    "Fx" ->
-                        Decode.succeed Fx
+                    2 ->
+                        BD.succeed Fx
 
                     _ ->
-                        Decode.fail ("Unknown EffectsType: " ++ str)
+                        BD.fail
             )

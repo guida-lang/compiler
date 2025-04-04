@@ -373,9 +373,25 @@ destructHelp path (A.At region pattern) revDs =
             destructTwo path a b revDs
 
         Can.PTuple a b [ c ] ->
-            destructHelp (Opt.Index Index.first path) a revDs
-                |> Names.bind (destructHelp (Opt.Index Index.second path) b)
-                |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+            case path of
+                Opt.Root _ ->
+                    destructHelp (Opt.Index Index.first path) a revDs
+                        |> Names.bind (destructHelp (Opt.Index Index.second path) b)
+                        |> Names.bind (destructHelp (Opt.Index Index.third path) c)
+
+                _ ->
+                    Names.generate
+                        |> Names.bind
+                            (\name ->
+                                let
+                                    newRoot : Opt.Path
+                                    newRoot =
+                                        Opt.Root name
+                                in
+                                destructHelp (Opt.Index Index.first newRoot) a (Opt.Destructor name path :: revDs)
+                                    |> Names.bind (destructHelp (Opt.Index Index.second newRoot) b)
+                                    |> Names.bind (destructHelp (Opt.Index Index.third newRoot) c)
+                            )
 
         Can.PTuple a b cs ->
             case path of

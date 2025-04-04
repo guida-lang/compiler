@@ -26,9 +26,9 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.IO as IO exposing (IO)
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 
@@ -646,52 +646,50 @@ foldM f b =
 -- ENCODERS and DECODERS
 
 
-envEncoder : Env -> Encode.Value
+envEncoder : Env -> BE.Encoder
 envEncoder (Env cache manager connection registry) =
-    Encode.object
-        [ ( "cache", Stuff.packageCacheEncoder cache )
-        , ( "manager", Http.managerEncoder manager )
-        , ( "connection", connectionEncoder connection )
-        , ( "registry", Registry.registryEncoder registry )
+    BE.sequence
+        [ Stuff.packageCacheEncoder cache
+        , Http.managerEncoder manager
+        , connectionEncoder connection
+        , Registry.registryEncoder registry
         ]
 
 
-envDecoder : Decode.Decoder Env
+envDecoder : BD.Decoder Env
 envDecoder =
-    Decode.map4 Env
-        (Decode.field "cache" Stuff.packageCacheDecoder)
-        (Decode.field "manager" Http.managerDecoder)
-        (Decode.field "connection" connectionDecoder)
-        (Decode.field "registry" Registry.registryDecoder)
+    BD.map4 Env
+        Stuff.packageCacheDecoder
+        Http.managerDecoder
+        connectionDecoder
+        Registry.registryDecoder
 
 
-connectionEncoder : Connection -> Encode.Value
+connectionEncoder : Connection -> BE.Encoder
 connectionEncoder connection =
     case connection of
         Online manager ->
-            Encode.object
-                [ ( "type", Encode.string "Online" )
-                , ( "manager", Http.managerEncoder manager )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Http.managerEncoder manager
                 ]
 
         Offline ->
-            Encode.object
-                [ ( "type", Encode.string "Offline" )
-                ]
+            BE.unsignedInt8 1
 
 
-connectionDecoder : Decode.Decoder Connection
+connectionDecoder : BD.Decoder Connection
 connectionDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Online" ->
-                        Decode.map Online (Decode.field "manager" Http.managerDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Online Http.managerDecoder
 
-                    "Offline" ->
-                        Decode.succeed Offline
+                    1 ->
+                        BD.succeed Offline
 
                     _ ->
-                        Decode.fail ("Failed to decode Connection's type: " ++ type_)
+                        BD.fail
             )

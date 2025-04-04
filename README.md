@@ -74,7 +74,7 @@ You should now be able to run `guida`:
 guida --help
 ```
 
-To compare the performance of guida with elm, you can run `./performance-comparison.sh`.
+To compare the performance of guida with elm, you can run `./scripts/performance-comparison.sh`.
 
 # Examples
 
@@ -86,6 +86,10 @@ guida make --debug src/Hello.elm
 ```
 
 You can then `open index.html`.
+
+# Try
+
+Find an example of how to use the browser version of the compiler on the [`try` folder](try/README.md).
 
 ## Clear cache
 

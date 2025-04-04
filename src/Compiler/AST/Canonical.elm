@@ -64,13 +64,11 @@ import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Json.Decode as D
-import Compiler.Json.Encode as E
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
-import Json.Encode as Encode
 import System.TypeCheck.IO as IO
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
 
 
 
@@ -319,805 +317,792 @@ type Manager
 -- ENCODERS and DECODERS
 
 
-annotationEncoder : Annotation -> Encode.Value
+annotationEncoder : Annotation -> BE.Encoder
 annotationEncoder (Forall freeVars tipe) =
-    Encode.object
-        [ ( "type", Encode.string "Forall" )
-        , ( "freeVars", freeVarsEncoder freeVars )
-        , ( "tipe", typeEncoder tipe )
+    BE.sequence
+        [ freeVarsEncoder freeVars
+        , typeEncoder tipe
         ]
 
 
-annotationDecoder : Decode.Decoder Annotation
+annotationDecoder : BD.Decoder Annotation
 annotationDecoder =
-    Decode.map2 Forall
-        (Decode.field "freeVars" freeVarsDecoder)
-        (Decode.field "tipe" typeDecoder)
+    BD.map2 Forall
+        freeVarsDecoder
+        typeDecoder
 
 
-freeVarsEncoder : FreeVars -> Encode.Value
-freeVarsEncoder =
-    E.assocListDict compare Encode.string (\_ -> Encode.object [])
+freeVarsEncoder : FreeVars -> BE.Encoder
+freeVarsEncoder freeVars =
+    BE.list BE.string (Dict.keys compare freeVars)
 
 
-freeVarsDecoder : Decode.Decoder FreeVars
+freeVarsDecoder : BD.Decoder FreeVars
 freeVarsDecoder =
-    D.assocListDict identity Decode.string (Decode.succeed ())
+    BD.list BD.string
+        |> BD.map (List.map (\key -> ( key, () )) >> Dict.fromList identity)
 
 
-aliasEncoder : Alias -> Encode.Value
+aliasEncoder : Alias -> BE.Encoder
 aliasEncoder (Alias vars tipe) =
-    Encode.object
-        [ ( "vars", Encode.list Encode.string vars )
-        , ( "tipe", typeEncoder tipe )
+    BE.sequence
+        [ BE.list BE.string vars
+        , typeEncoder tipe
         ]
 
 
-aliasDecoder : Decode.Decoder Alias
+aliasDecoder : BD.Decoder Alias
 aliasDecoder =
-    Decode.map2 Alias
-        (Decode.field "vars" (Decode.list Decode.string))
-        (Decode.field "tipe" typeDecoder)
+    BD.map2 Alias
+        (BD.list BD.string)
+        typeDecoder
 
 
-typeEncoder : Type -> Encode.Value
+typeEncoder : Type -> BE.Encoder
 typeEncoder type_ =
     case type_ of
         TLambda a b ->
-            Encode.object
-                [ ( "type", Encode.string "TLambda" )
-                , ( "a", typeEncoder a )
-                , ( "b", typeEncoder b )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , typeEncoder a
+                , typeEncoder b
                 ]
 
         TVar name ->
-            Encode.object
-                [ ( "type", Encode.string "TVar" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
                 ]
 
         TType home name args ->
-            Encode.object
-                [ ( "type", Encode.string "TType" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list typeEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , BE.list typeEncoder args
                 ]
 
         TRecord fields ext ->
-            Encode.object
-                [ ( "type", Encode.string "TRecord" )
-                , ( "fields", E.assocListDict compare Encode.string fieldTypeEncoder fields )
-                , ( "ext", E.maybe Encode.string ext )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , BE.assocListDict compare BE.string fieldTypeEncoder fields
+                , BE.maybe BE.string ext
                 ]
 
         TUnit ->
-            Encode.object
-                [ ( "type", Encode.string "TUnit" )
-                ]
+            BE.unsignedInt8 4
 
         TTuple a b cs ->
-            Encode.object
-                [ ( "type", Encode.string "TTuple" )
-                , ( "a", typeEncoder a )
-                , ( "b", typeEncoder b )
-                , ( "cs", Encode.list typeEncoder cs )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , typeEncoder a
+                , typeEncoder b
+                , BE.list typeEncoder cs
                 ]
 
         TAlias home name args tipe ->
-            Encode.object
-                [ ( "type", Encode.string "TAlias" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "args", Encode.list (E.jsonPair Encode.string typeEncoder) args )
-                , ( "tipe", aliasTypeEncoder tipe )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , BE.list (BE.jsonPair BE.string typeEncoder) args
+                , aliasTypeEncoder tipe
                 ]
 
 
-typeDecoder : Decode.Decoder Type
+typeDecoder : BD.Decoder Type
 typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "TLambda" ->
-                        Decode.map2 TLambda
-                            (Decode.field "a" typeDecoder)
-                            (Decode.field "b" typeDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map2 TLambda
+                            typeDecoder
+                            typeDecoder
 
-                    "TVar" ->
-                        Decode.map TVar
-                            (Decode.field "name" Decode.string)
+                    1 ->
+                        BD.map TVar BD.string
 
-                    "TType" ->
-                        Decode.map3 TType
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list typeDecoder))
+                    2 ->
+                        BD.map3 TType
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            (BD.list typeDecoder)
 
-                    "TRecord" ->
-                        Decode.map2 TRecord
-                            (Decode.field "fields" (D.assocListDict identity Decode.string fieldTypeDecoder))
-                            (Decode.field "ext" (Decode.maybe Decode.string))
+                    3 ->
+                        BD.map2 TRecord
+                            (BD.assocListDict identity BD.string fieldTypeDecoder)
+                            (BD.maybe BD.string)
 
-                    "TUnit" ->
-                        Decode.succeed TUnit
+                    4 ->
+                        BD.succeed TUnit
 
-                    "TTuple" ->
-                        Decode.map3 TTuple
-                            (Decode.field "a" typeDecoder)
-                            (Decode.field "b" typeDecoder)
-                            (Decode.field "cs" (Decode.list typeDecoder))
+                    5 ->
+                        BD.map3 TTuple
+                            typeDecoder
+                            typeDecoder
+                            (BD.list typeDecoder)
 
-                    "TAlias" ->
-                        Decode.map4 TAlias
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "args" (Decode.list (D.jsonPair Decode.string typeDecoder)))
-                            (Decode.field "tipe" aliasTypeDecoder)
+                    6 ->
+                        BD.map4 TAlias
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            (BD.list (BD.jsonPair BD.string typeDecoder))
+                            aliasTypeDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Type's type: " ++ type_)
+                        BD.fail
             )
 
 
-fieldTypeEncoder : FieldType -> Encode.Value
+fieldTypeEncoder : FieldType -> BE.Encoder
 fieldTypeEncoder (FieldType index tipe) =
-    Encode.object
-        [ ( "type", Encode.string "FieldType" )
-        , ( "index", Encode.int index )
-        , ( "tipe", typeEncoder tipe )
+    BE.sequence
+        [ BE.int index
+        , typeEncoder tipe
         ]
 
 
-aliasTypeEncoder : AliasType -> Encode.Value
+aliasTypeEncoder : AliasType -> BE.Encoder
 aliasTypeEncoder aliasType =
     case aliasType of
         Holey tipe ->
-            Encode.object
-                [ ( "type", Encode.string "Holey" )
-                , ( "tipe", typeEncoder tipe )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , typeEncoder tipe
                 ]
 
         Filled tipe ->
-            Encode.object
-                [ ( "type", Encode.string "Filled" )
-                , ( "tipe", typeEncoder tipe )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , typeEncoder tipe
                 ]
 
 
-fieldTypeDecoder : Decode.Decoder FieldType
+fieldTypeDecoder : BD.Decoder FieldType
 fieldTypeDecoder =
-    Decode.map2 FieldType
-        (Decode.field "index" Decode.int)
-        (Decode.field "tipe" typeDecoder)
+    BD.map2 FieldType
+        BD.int
+        typeDecoder
 
 
-aliasTypeDecoder : Decode.Decoder AliasType
+aliasTypeDecoder : BD.Decoder AliasType
 aliasTypeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Holey" ->
-                        Decode.map Holey
-                            (Decode.field "tipe" typeDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map Holey typeDecoder
 
-                    "Filled" ->
-                        Decode.map Filled
-                            (Decode.field "tipe" typeDecoder)
+                    1 ->
+                        BD.map Filled typeDecoder
 
                     _ ->
-                        Decode.fail ("Unknown AliasType's type: " ++ type_)
+                        BD.fail
             )
 
 
-unionEncoder : Union -> Encode.Value
+unionEncoder : Union -> BE.Encoder
 unionEncoder (Union vars ctors numAlts opts) =
-    Encode.object
-        [ ( "type", Encode.string "Union" )
-        , ( "vars", Encode.list Encode.string vars )
-        , ( "ctors", Encode.list ctorEncoder ctors )
-        , ( "numAlts", Encode.int numAlts )
-        , ( "opts", ctorOptsEncoder opts )
+    BE.sequence
+        [ BE.list BE.string vars
+        , BE.list ctorEncoder ctors
+        , BE.int numAlts
+        , ctorOptsEncoder opts
         ]
 
 
-unionDecoder : Decode.Decoder Union
+unionDecoder : BD.Decoder Union
 unionDecoder =
-    Decode.map4 Union
-        (Decode.field "vars" (Decode.list Decode.string))
-        (Decode.field "ctors" (Decode.list ctorDecoder))
-        (Decode.field "numAlts" Decode.int)
-        (Decode.field "opts" ctorOptsDecoder)
+    BD.map4 Union
+        (BD.list BD.string)
+        (BD.list ctorDecoder)
+        BD.int
+        ctorOptsDecoder
 
 
-ctorEncoder : Ctor -> Encode.Value
+ctorEncoder : Ctor -> BE.Encoder
 ctorEncoder (Ctor ctor index numArgs args) =
-    Encode.object
-        [ ( "type", Encode.string "Ctor" )
-        , ( "ctor", Encode.string ctor )
-        , ( "index", Index.zeroBasedEncoder index )
-        , ( "numArgs", Encode.int numArgs )
-        , ( "args", Encode.list typeEncoder args )
+    BE.sequence
+        [ BE.string ctor
+        , Index.zeroBasedEncoder index
+        , BE.int numArgs
+        , BE.list typeEncoder args
         ]
 
 
-ctorDecoder : Decode.Decoder Ctor
+ctorDecoder : BD.Decoder Ctor
 ctorDecoder =
-    Decode.map4 Ctor
-        (Decode.field "ctor" Decode.string)
-        (Decode.field "index" Index.zeroBasedDecoder)
-        (Decode.field "numArgs" Decode.int)
-        (Decode.field "args" (Decode.list typeDecoder))
+    BD.map4 Ctor
+        BD.string
+        Index.zeroBasedDecoder
+        BD.int
+        (BD.list typeDecoder)
 
 
-ctorOptsEncoder : CtorOpts -> Encode.Value
+ctorOptsEncoder : CtorOpts -> BE.Encoder
 ctorOptsEncoder ctorOpts =
-    case ctorOpts of
-        Normal ->
-            Encode.string "Normal"
+    BE.unsignedInt8
+        (case ctorOpts of
+            Normal ->
+                0
 
-        Enum ->
-            Encode.string "Enum"
+            Enum ->
+                1
 
-        Unbox ->
-            Encode.string "Unbox"
+            Unbox ->
+                2
+        )
 
 
-ctorOptsDecoder : Decode.Decoder CtorOpts
+ctorOptsDecoder : BD.Decoder CtorOpts
 ctorOptsDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\str ->
-                case str of
-                    "Normal" ->
-                        Decode.succeed Normal
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed Normal
 
-                    "Enum" ->
-                        Decode.succeed Enum
+                    1 ->
+                        BD.succeed Enum
 
-                    "Unbox" ->
-                        Decode.succeed Unbox
+                    2 ->
+                        BD.succeed Unbox
 
                     _ ->
-                        Decode.fail ("Unknown CtorOpts: " ++ str)
+                        BD.fail
             )
 
 
-fieldUpdateEncoder : FieldUpdate -> Encode.Value
+fieldUpdateEncoder : FieldUpdate -> BE.Encoder
 fieldUpdateEncoder (FieldUpdate fieldRegion expr) =
-    Encode.object
-        [ ( "type", Encode.string "FieldUpdate" )
-        , ( "fieldRegion", A.regionEncoder fieldRegion )
-        , ( "expr", exprEncoder expr )
+    BE.sequence
+        [ A.regionEncoder fieldRegion
+        , exprEncoder expr
         ]
 
 
-fieldUpdateDecoder : Decode.Decoder FieldUpdate
+fieldUpdateDecoder : BD.Decoder FieldUpdate
 fieldUpdateDecoder =
-    Decode.map2 FieldUpdate
-        (Decode.field "fieldRegion" A.regionDecoder)
-        (Decode.field "expr" exprDecoder)
+    BD.map2 FieldUpdate
+        A.regionDecoder
+        exprDecoder
 
 
-exprEncoder : Expr -> Encode.Value
+exprEncoder : Expr -> BE.Encoder
 exprEncoder =
     A.locatedEncoder expr_Encoder
 
 
-exprDecoder : Decode.Decoder Expr
+exprDecoder : BD.Decoder Expr
 exprDecoder =
     A.locatedDecoder expr_Decoder
 
 
-expr_Encoder : Expr_ -> Encode.Value
+expr_Encoder : Expr_ -> BE.Encoder
 expr_Encoder expr_ =
     case expr_ of
         VarLocal name ->
-            Encode.object
-                [ ( "type", Encode.string "VarLocal" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.string name
                 ]
 
         VarTopLevel home name ->
-            Encode.object
-                [ ( "type", Encode.string "VarTopLevel" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , ModuleName.canonicalEncoder home
+                , BE.string name
                 ]
 
         VarKernel home name ->
-            Encode.object
-                [ ( "type", Encode.string "VarKernel" )
-                , ( "home", Encode.string home )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.string home
+                , BE.string name
                 ]
 
         VarForeign home name annotation ->
-            Encode.object
-                [ ( "type", Encode.string "VarForeign" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "annotation", annotationEncoder annotation )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , annotationEncoder annotation
                 ]
 
         VarCtor opts home name index annotation ->
-            Encode.object
-                [ ( "type", Encode.string "VarCtor" )
-                , ( "opts", ctorOptsEncoder opts )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "annotation", annotationEncoder annotation )
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , ctorOptsEncoder opts
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , Index.zeroBasedEncoder index
+                , annotationEncoder annotation
                 ]
 
         VarDebug home name annotation ->
-            Encode.object
-                [ ( "type", Encode.string "VarDebug" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "annotation", annotationEncoder annotation )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , annotationEncoder annotation
                 ]
 
         VarOperator op home name annotation ->
-            Encode.object
-                [ ( "type", Encode.string "VarOperator" )
-                , ( "op", Encode.string op )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "annotation", annotationEncoder annotation )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.string op
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , annotationEncoder annotation
                 ]
 
         Chr chr ->
-            Encode.object
-                [ ( "type", Encode.string "Chr" )
-                , ( "chr", Encode.string chr )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , BE.string chr
                 ]
 
         Str str ->
-            Encode.object
-                [ ( "type", Encode.string "Str" )
-                , ( "str", Encode.string str )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , BE.string str
                 ]
 
         Int int ->
-            Encode.object
-                [ ( "type", Encode.string "Int" )
-                , ( "int", Encode.int int )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.int int
                 ]
 
         Float float ->
-            Encode.object
-                [ ( "type", Encode.string "Float" )
-                , ( "float", Encode.float float )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.float float
                 ]
 
         List entries ->
-            Encode.object
-                [ ( "type", Encode.string "List" )
-                , ( "entries", Encode.list exprEncoder entries )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.list exprEncoder entries
                 ]
 
         Negate expr ->
-            Encode.object
-                [ ( "type", Encode.string "Negate" )
-                , ( "expr", exprEncoder expr )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , exprEncoder expr
                 ]
 
         Binop op home name annotation left right ->
-            Encode.object
-                [ ( "type", Encode.string "Binop" )
-                , ( "op", Encode.string op )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "name", Encode.string name )
-                , ( "annotation", annotationEncoder annotation )
-                , ( "left", exprEncoder left )
-                , ( "right", exprEncoder right )
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , BE.string op
+                , ModuleName.canonicalEncoder home
+                , BE.string name
+                , annotationEncoder annotation
+                , exprEncoder left
+                , exprEncoder right
                 ]
 
         Lambda args body ->
-            Encode.object
-                [ ( "type", Encode.string "Lambda" )
-                , ( "args", Encode.list patternEncoder args )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 14
+                , BE.list patternEncoder args
+                , exprEncoder body
                 ]
 
         Call func args ->
-            Encode.object
-                [ ( "type", Encode.string "Call" )
-                , ( "func", exprEncoder func )
-                , ( "args", Encode.list exprEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 15
+                , exprEncoder func
+                , BE.list exprEncoder args
                 ]
 
         If branches finally ->
-            Encode.object
-                [ ( "type", Encode.string "If" )
-                , ( "branches", Encode.list (E.jsonPair exprEncoder exprEncoder) branches )
-                , ( "finally", exprEncoder finally )
+            BE.sequence
+                [ BE.unsignedInt8 16
+                , BE.list (BE.jsonPair exprEncoder exprEncoder) branches
+                , exprEncoder finally
                 ]
 
         Let def body ->
-            Encode.object
-                [ ( "type", Encode.string "Let" )
-                , ( "def", defEncoder def )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 17
+                , defEncoder def
+                , exprEncoder body
                 ]
 
         LetRec defs body ->
-            Encode.object
-                [ ( "type", Encode.string "LetRec" )
-                , ( "defs", Encode.list defEncoder defs )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 18
+                , BE.list defEncoder defs
+                , exprEncoder body
                 ]
 
         LetDestruct pattern expr body ->
-            Encode.object
-                [ ( "type", Encode.string "LetDestruct" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "expr", exprEncoder expr )
-                , ( "body", exprEncoder body )
+            BE.sequence
+                [ BE.unsignedInt8 19
+                , patternEncoder pattern
+                , exprEncoder expr
+                , exprEncoder body
                 ]
 
         Case expr branches ->
-            Encode.object
-                [ ( "type", Encode.string "Case" )
-                , ( "expr", exprEncoder expr )
-                , ( "branches", Encode.list caseBranchEncoder branches )
+            BE.sequence
+                [ BE.unsignedInt8 20
+                , exprEncoder expr
+                , BE.list caseBranchEncoder branches
                 ]
 
         Accessor field ->
-            Encode.object
-                [ ( "type", Encode.string "Accessor" )
-                , ( "field", Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 21
+                , BE.string field
                 ]
 
         Access record field ->
-            Encode.object
-                [ ( "type", Encode.string "Access" )
-                , ( "record", exprEncoder record )
-                , ( "field", A.locatedEncoder Encode.string field )
+            BE.sequence
+                [ BE.unsignedInt8 22
+                , exprEncoder record
+                , A.locatedEncoder BE.string field
                 ]
 
         Update namespace name record updates ->
-            Encode.object
-                [ ( "type", Encode.string "Update" )
-                , ( "namespace", E.maybe Encode.string namespace )
-                , ( "name", Encode.string name )
-                , ( "record", exprEncoder record )
-                , ( "updates", E.assocListDict A.compareLocated (A.toValue >> Encode.string) fieldUpdateEncoder updates )
+            BE.sequence
+                [ BE.unsignedInt8 23
+                , BE.maybe BE.string namespace
+                , BE.string name
+                , exprEncoder record
+                , BE.assocListDict A.compareLocated (A.toValue >> BE.string) fieldUpdateEncoder updates
                 ]
 
         Record fields ->
-            Encode.object
-                [ ( "type", Encode.string "Record" )
-                , ( "fields", E.assocListDict A.compareLocated (A.toValue >> Encode.string) exprEncoder fields )
+            BE.sequence
+                [ BE.unsignedInt8 24
+                , BE.assocListDict A.compareLocated (A.toValue >> BE.string) exprEncoder fields
                 ]
 
         Unit ->
-            Encode.object
-                [ ( "type", Encode.string "Unit" )
-                ]
+            BE.unsignedInt8 25
 
         Tuple a b cs ->
-            Encode.object
-                [ ( "type", Encode.string "Tuple" )
-                , ( "a", exprEncoder a )
-                , ( "b", exprEncoder b )
-                , ( "cs", Encode.list exprEncoder cs )
+            BE.sequence
+                [ BE.unsignedInt8 26
+                , exprEncoder a
+                , exprEncoder b
+                , BE.list exprEncoder cs
                 ]
 
         Shader src types ->
-            Encode.object
-                [ ( "type", Encode.string "Shader" )
-                , ( "src", Shader.sourceEncoder src )
-                , ( "types", Shader.typesEncoder types )
+            BE.sequence
+                [ BE.unsignedInt8 27
+                , Shader.sourceEncoder src
+                , Shader.typesEncoder types
                 ]
 
 
-expr_Decoder : Decode.Decoder Expr_
+expr_Decoder : BD.Decoder Expr_
 expr_Decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "VarLocal" ->
-                        Decode.map VarLocal (Decode.field "name" Decode.string)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map VarLocal BD.string
 
-                    "VarTopLevel" ->
-                        Decode.map2 VarTopLevel
-                            (Decode.field "moduleName" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
+                    1 ->
+                        BD.map2 VarTopLevel
+                            ModuleName.canonicalDecoder
+                            BD.string
 
-                    "VarKernel" ->
-                        Decode.map2 VarKernel
-                            (Decode.field "home" Decode.string)
-                            (Decode.field "name" Decode.string)
+                    2 ->
+                        BD.map2 VarKernel
+                            BD.string
+                            BD.string
 
-                    "VarForeign" ->
-                        Decode.map3 VarForeign
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "annotation" annotationDecoder)
+                    3 ->
+                        BD.map3 VarForeign
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            annotationDecoder
 
-                    "VarCtor" ->
-                        Decode.map5 VarCtor
-                            (Decode.field "opts" ctorOptsDecoder)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "annotation" annotationDecoder)
+                    4 ->
+                        BD.map5 VarCtor
+                            ctorOptsDecoder
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            Index.zeroBasedDecoder
+                            annotationDecoder
 
-                    "VarDebug" ->
-                        Decode.map3 VarDebug
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "annotation" annotationDecoder)
+                    5 ->
+                        BD.map3 VarDebug
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            annotationDecoder
 
-                    "VarOperator" ->
-                        Decode.map4 VarOperator
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "annotation" annotationDecoder)
+                    6 ->
+                        BD.map4 VarOperator
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            annotationDecoder
 
-                    "Chr" ->
-                        Decode.map Chr (Decode.field "chr" Decode.string)
+                    7 ->
+                        BD.map Chr BD.string
 
-                    "Str" ->
-                        Decode.map Str (Decode.field "str" Decode.string)
+                    8 ->
+                        BD.map Str BD.string
 
-                    "Int" ->
-                        Decode.map Int (Decode.field "int" Decode.int)
+                    9 ->
+                        BD.map Int BD.int
 
-                    "Float" ->
-                        Decode.map Float (Decode.field "float" Decode.float)
+                    10 ->
+                        BD.map Float BD.float
 
-                    "List" ->
-                        Decode.map List (Decode.field "entries" (Decode.list exprDecoder))
+                    11 ->
+                        BD.map List (BD.list exprDecoder)
 
-                    "Negate" ->
-                        Decode.map Negate (Decode.field "expr" exprDecoder)
+                    12 ->
+                        BD.map Negate exprDecoder
 
-                    "Binop" ->
-                        Decode.map6 Binop
-                            (Decode.field "op" Decode.string)
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "annotation" annotationDecoder)
-                            (Decode.field "left" exprDecoder)
-                            (Decode.field "right" exprDecoder)
+                    13 ->
+                        BD.map6 Binop
+                            BD.string
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            annotationDecoder
+                            exprDecoder
+                            exprDecoder
 
-                    "Lambda" ->
-                        Decode.map2 Lambda
-                            (Decode.field "args" (Decode.list patternDecoder))
-                            (Decode.field "body" exprDecoder)
+                    14 ->
+                        BD.map2 Lambda
+                            (BD.list patternDecoder)
+                            exprDecoder
 
-                    "Call" ->
-                        Decode.map2 Call
-                            (Decode.field "func" exprDecoder)
-                            (Decode.field "args" (Decode.list exprDecoder))
+                    15 ->
+                        BD.map2 Call
+                            exprDecoder
+                            (BD.list exprDecoder)
 
-                    "If" ->
-                        Decode.map2 If
-                            (Decode.field "branches" (Decode.list (D.jsonPair exprDecoder exprDecoder)))
-                            (Decode.field "finally" exprDecoder)
+                    16 ->
+                        BD.map2 If
+                            (BD.list (BD.jsonPair exprDecoder exprDecoder))
+                            exprDecoder
 
-                    "Let" ->
-                        Decode.map2 Let
-                            (Decode.field "def" defDecoder)
-                            (Decode.field "body" exprDecoder)
+                    17 ->
+                        BD.map2 Let
+                            defDecoder
+                            exprDecoder
 
-                    "LetRec" ->
-                        Decode.map2 LetRec
-                            (Decode.field "defs" (Decode.list defDecoder))
-                            (Decode.field "body" exprDecoder)
+                    18 ->
+                        BD.map2 LetRec
+                            (BD.list defDecoder)
+                            exprDecoder
 
-                    "LetDestruct" ->
-                        Decode.map3 LetDestruct
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "body" exprDecoder)
+                    19 ->
+                        BD.map3 LetDestruct
+                            patternDecoder
+                            exprDecoder
+                            exprDecoder
 
-                    "Case" ->
-                        Decode.map2 Case
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "branches" (Decode.list caseBranchDecoder))
+                    20 ->
+                        BD.map2 Case
+                            exprDecoder
+                            (BD.list caseBranchDecoder)
 
-                    "Accessor" ->
-                        Decode.map Accessor (Decode.field "field" Decode.string)
+                    21 ->
+                        BD.map Accessor BD.string
 
-                    "Access" ->
-                        Decode.map2 Access
-                            (Decode.field "record" exprDecoder)
-                            (Decode.field "field" (A.locatedDecoder Decode.string))
+                    22 ->
+                        BD.map2 Access
+                            exprDecoder
+                            (A.locatedDecoder BD.string)
 
-                    "Update" ->
-                        Decode.map4 Update
-                            (Decode.field "namespace" (Decode.maybe Decode.string))
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "record" exprDecoder)
-                            (Decode.field "updates" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) fieldUpdateDecoder))
+                    23 ->
+                        BD.map4 Update
+                            (BD.maybe BD.string)
+                            BD.string
+                            exprDecoder
+                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) fieldUpdateDecoder)
 
-                    "Record" ->
-                        Decode.map Record
-                            (Decode.field "fields" (D.assocListDict A.toValue (A.locatedDecoder Decode.string) exprDecoder))
+                    24 ->
+                        BD.map Record
+                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
 
-                    "Unit" ->
-                        Decode.succeed Unit
+                    25 ->
+                        BD.succeed Unit
 
-                    "Tuple" ->
-                        Decode.map3 Tuple
-                            (Decode.field "a" exprDecoder)
-                            (Decode.field "b" exprDecoder)
-                            (Decode.field "cs" (Decode.list exprDecoder))
+                    26 ->
+                        BD.map3 Tuple
+                            exprDecoder
+                            exprDecoder
+                            (BD.list exprDecoder)
 
-                    "Shader" ->
-                        Decode.map2 Shader
-                            (Decode.field "src" Shader.sourceDecoder)
-                            (Decode.field "types" Shader.typesDecoder)
+                    27 ->
+                        BD.map2 Shader
+                            Shader.sourceDecoder
+                            Shader.typesDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Expr_'s type: " ++ type_)
+                        BD.fail
             )
 
 
-patternEncoder : Pattern -> Encode.Value
+patternEncoder : Pattern -> BE.Encoder
 patternEncoder =
     A.locatedEncoder pattern_Encoder
 
 
-patternDecoder : Decode.Decoder Pattern
+patternDecoder : BD.Decoder Pattern
 patternDecoder =
     A.locatedDecoder pattern_Decoder
 
 
-pattern_Encoder : Pattern_ -> Encode.Value
+pattern_Encoder : Pattern_ -> BE.Encoder
 pattern_Encoder pattern_ =
     case pattern_ of
         PAnything ->
-            Encode.object
-                [ ( "type", Encode.string "PAnything" )
-                ]
+            BE.unsignedInt8 0
 
         PVar name ->
-            Encode.object
-                [ ( "type", Encode.string "PVar" )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string name
                 ]
 
         PRecord names ->
-            Encode.object
-                [ ( "type", Encode.string "PRecord" )
-                , ( "names", Encode.list Encode.string names )
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , BE.list BE.string names
                 ]
 
         PAlias pattern name ->
-            Encode.object
-                [ ( "type", Encode.string "PAlias" )
-                , ( "pattern", patternEncoder pattern )
-                , ( "name", Encode.string name )
+            BE.sequence
+                [ BE.unsignedInt8 3
+                , patternEncoder pattern
+                , BE.string name
                 ]
 
         PUnit ->
-            Encode.object
-                [ ( "type", Encode.string "PUnit" )
-                ]
+            BE.unsignedInt8 4
 
         PTuple pattern1 pattern2 otherPatterns ->
-            Encode.object
-                [ ( "type", Encode.string "PTuple" )
-                , ( "pattern1", patternEncoder pattern1 )
-                , ( "pattern2", patternEncoder pattern2 )
-                , ( "otherPatterns", Encode.list patternEncoder otherPatterns )
+            BE.sequence
+                [ BE.unsignedInt8 5
+                , patternEncoder pattern1
+                , patternEncoder pattern2
+                , BE.list patternEncoder otherPatterns
                 ]
 
         PList patterns ->
-            Encode.object
-                [ ( "type", Encode.string "PList" )
-                , ( "patterns", Encode.list patternEncoder patterns )
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , BE.list patternEncoder patterns
                 ]
 
         PCons pattern1 pattern2 ->
-            Encode.object
-                [ ( "type", Encode.string "PCons" )
-                , ( "pattern1", patternEncoder pattern1 )
-                , ( "pattern2", patternEncoder pattern2 )
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , patternEncoder pattern1
+                , patternEncoder pattern2
                 ]
 
         PBool union bool ->
-            Encode.object
-                [ ( "type", Encode.string "PBool" )
-                , ( "union", unionEncoder union )
-                , ( "bool", Encode.bool bool )
+            BE.sequence
+                [ BE.unsignedInt8 8
+                , unionEncoder union
+                , BE.bool bool
                 ]
 
         PChr chr ->
-            Encode.object
-                [ ( "type", Encode.string "PChr" )
-                , ( "chr", Encode.string chr )
+            BE.sequence
+                [ BE.unsignedInt8 9
+                , BE.string chr
                 ]
 
         PStr str ->
-            Encode.object
-                [ ( "type", Encode.string "PStr" )
-                , ( "str", Encode.string str )
+            BE.sequence
+                [ BE.unsignedInt8 10
+                , BE.string str
                 ]
 
         PInt int ->
-            Encode.object
-                [ ( "type", Encode.string "PInt" )
-                , ( "int", Encode.int int )
+            BE.sequence
+                [ BE.unsignedInt8 11
+                , BE.int int
                 ]
 
         PCtor { home, type_, union, name, index, args } ->
-            Encode.object
-                [ ( "type", Encode.string "PCtor" )
-                , ( "home", ModuleName.canonicalEncoder home )
-                , ( "type_", Encode.string type_ )
-                , ( "union", unionEncoder union )
-                , ( "name", Encode.string name )
-                , ( "index", Index.zeroBasedEncoder index )
-                , ( "args", Encode.list patternCtorArgEncoder args )
+            BE.sequence
+                [ BE.unsignedInt8 12
+                , ModuleName.canonicalEncoder home
+                , BE.string type_
+                , unionEncoder union
+                , BE.string name
+                , Index.zeroBasedEncoder index
+                , BE.list patternCtorArgEncoder args
                 ]
 
 
-pattern_Decoder : Decode.Decoder Pattern_
+pattern_Decoder : BD.Decoder Pattern_
 pattern_Decoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\patternType ->
-                case patternType of
-                    "PAnything" ->
-                        Decode.succeed PAnything
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.succeed PAnything
 
-                    "PVar" ->
-                        Decode.map PVar
-                            (Decode.field "name" Decode.string)
+                    1 ->
+                        BD.map PVar
+                            BD.string
 
-                    "PRecord" ->
-                        Decode.map PRecord
-                            (Decode.field "names" (Decode.list Decode.string))
+                    2 ->
+                        BD.map PRecord
+                            (BD.list BD.string)
 
-                    "PAlias" ->
-                        Decode.map2 PAlias
-                            (Decode.field "pattern" patternDecoder)
-                            (Decode.field "name" Decode.string)
+                    3 ->
+                        BD.map2 PAlias
+                            patternDecoder
+                            BD.string
 
-                    "PUnit" ->
-                        Decode.succeed PUnit
+                    4 ->
+                        BD.succeed PUnit
 
-                    "PTuple" ->
-                        Decode.map3 PTuple
-                            (Decode.field "pattern1" patternDecoder)
-                            (Decode.field "pattern2" patternDecoder)
-                            (Decode.field "otherPatterns" (Decode.list patternDecoder))
+                    5 ->
+                        BD.map3 PTuple
+                            patternDecoder
+                            patternDecoder
+                            (BD.list patternDecoder)
 
-                    "PList" ->
-                        Decode.map PList
-                            (Decode.field "patterns" (Decode.list patternDecoder))
+                    6 ->
+                        BD.map PList
+                            (BD.list patternDecoder)
 
-                    "PCons" ->
-                        Decode.map2 PCons
-                            (Decode.field "pattern1" patternDecoder)
-                            (Decode.field "pattern2" patternDecoder)
+                    7 ->
+                        BD.map2 PCons
+                            patternDecoder
+                            patternDecoder
 
-                    "PBool" ->
-                        Decode.map2 PBool
-                            (Decode.field "union" unionDecoder)
-                            (Decode.field "bool" Decode.bool)
+                    8 ->
+                        BD.map2 PBool
+                            unionDecoder
+                            BD.bool
 
-                    "PChr" ->
-                        Decode.map PChr (Decode.field "chr" Decode.string)
+                    9 ->
+                        BD.map PChr BD.string
 
-                    "PStr" ->
-                        Decode.map PStr (Decode.field "str" Decode.string)
+                    10 ->
+                        BD.map PStr BD.string
 
-                    "PInt" ->
-                        Decode.map PInt (Decode.field "int" Decode.int)
+                    11 ->
+                        BD.map PInt BD.int
 
-                    "PCtor" ->
-                        Decode.map6
+                    12 ->
+                        BD.map6
                             (\home type_ union name index args ->
                                 PCtor
                                     { home = home
@@ -1128,94 +1113,92 @@ pattern_Decoder =
                                     , args = args
                                     }
                             )
-                            (Decode.field "home" ModuleName.canonicalDecoder)
-                            (Decode.field "type_" Decode.string)
-                            (Decode.field "union" unionDecoder)
-                            (Decode.field "name" Decode.string)
-                            (Decode.field "index" Index.zeroBasedDecoder)
-                            (Decode.field "args" (Decode.list patternCtorArgDecoder))
+                            ModuleName.canonicalDecoder
+                            BD.string
+                            unionDecoder
+                            BD.string
+                            Index.zeroBasedDecoder
+                            (BD.list patternCtorArgDecoder)
 
                     _ ->
-                        Decode.fail ("Unknown Pattern_'s type: " ++ patternType)
+                        BD.fail
             )
 
 
-patternCtorArgEncoder : PatternCtorArg -> Encode.Value
+patternCtorArgEncoder : PatternCtorArg -> BE.Encoder
 patternCtorArgEncoder (PatternCtorArg index srcType pattern) =
-    Encode.object
-        [ ( "type", Encode.string "PatternCtorArg" )
-        , ( "index", Index.zeroBasedEncoder index )
-        , ( "srcType", typeEncoder srcType )
-        , ( "pattern", patternEncoder pattern )
+    BE.sequence
+        [ Index.zeroBasedEncoder index
+        , typeEncoder srcType
+        , patternEncoder pattern
         ]
 
 
-patternCtorArgDecoder : Decode.Decoder PatternCtorArg
+patternCtorArgDecoder : BD.Decoder PatternCtorArg
 patternCtorArgDecoder =
-    Decode.map3 PatternCtorArg
-        (Decode.field "index" Index.zeroBasedDecoder)
-        (Decode.field "srcType" typeDecoder)
-        (Decode.field "pattern" patternDecoder)
+    BD.map3 PatternCtorArg
+        Index.zeroBasedDecoder
+        typeDecoder
+        patternDecoder
 
 
-defEncoder : Def -> Encode.Value
+defEncoder : Def -> BE.Encoder
 defEncoder def =
     case def of
         Def name args expr ->
-            Encode.object
-                [ ( "type", Encode.string "Def" )
-                , ( "name", A.locatedEncoder Encode.string name )
-                , ( "args", Encode.list patternEncoder args )
-                , ( "expr", exprEncoder expr )
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , A.locatedEncoder BE.string name
+                , BE.list patternEncoder args
+                , exprEncoder expr
                 ]
 
         TypedDef name freeVars typedArgs expr srcResultType ->
-            Encode.object
-                [ ( "type", Encode.string "TypedDef" )
-                , ( "name", A.locatedEncoder Encode.string name )
-                , ( "freeVars", freeVarsEncoder freeVars )
-                , ( "typedArgs", Encode.list (E.jsonPair patternEncoder typeEncoder) typedArgs )
-                , ( "expr", exprEncoder expr )
-                , ( "srcResultType", typeEncoder srcResultType )
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , A.locatedEncoder BE.string name
+                , freeVarsEncoder freeVars
+                , BE.list (BE.jsonPair patternEncoder typeEncoder) typedArgs
+                , exprEncoder expr
+                , typeEncoder srcResultType
                 ]
 
 
-defDecoder : Decode.Decoder Def
+defDecoder : BD.Decoder Def
 defDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                case type_ of
-                    "Def" ->
-                        Decode.map3 Def
-                            (Decode.field "name" (A.locatedDecoder Decode.string))
-                            (Decode.field "args" (Decode.list patternDecoder))
-                            (Decode.field "expr" exprDecoder)
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map3 Def
+                            (A.locatedDecoder BD.string)
+                            (BD.list patternDecoder)
+                            exprDecoder
 
-                    "TypedDef" ->
-                        Decode.map5 TypedDef
-                            (Decode.field "name" (A.locatedDecoder Decode.string))
-                            (Decode.field "freeVars" freeVarsDecoder)
-                            (Decode.field "typedArgs" (Decode.list (D.jsonPair patternDecoder typeDecoder)))
-                            (Decode.field "expr" exprDecoder)
-                            (Decode.field "srcResultType" typeDecoder)
+                    1 ->
+                        BD.map5 TypedDef
+                            (A.locatedDecoder BD.string)
+                            freeVarsDecoder
+                            (BD.list (BD.jsonPair patternDecoder typeDecoder))
+                            exprDecoder
+                            typeDecoder
 
                     _ ->
-                        Decode.fail ("Unknown Def's type: " ++ type_)
+                        BD.fail
             )
 
 
-caseBranchEncoder : CaseBranch -> Encode.Value
+caseBranchEncoder : CaseBranch -> BE.Encoder
 caseBranchEncoder (CaseBranch pattern expr) =
-    Encode.object
-        [ ( "type", Encode.string "CaseBranch" )
-        , ( "pattern", patternEncoder pattern )
-        , ( "expr", exprEncoder expr )
+    BE.sequence
+        [ patternEncoder pattern
+        , exprEncoder expr
         ]
 
 
-caseBranchDecoder : Decode.Decoder CaseBranch
+caseBranchDecoder : BD.Decoder CaseBranch
 caseBranchDecoder =
-    Decode.map2 CaseBranch
-        (Decode.field "pattern" patternDecoder)
-        (Decode.field "expr" exprDecoder)
+    BD.map2 CaseBranch
+        patternDecoder
+        exprDecoder
