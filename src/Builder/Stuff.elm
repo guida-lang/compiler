@@ -14,6 +14,7 @@ module Builder.Stuff exposing
     , packageCacheEncoder
     , prepublishDir
     , registry
+    , testDir
     , withRegistryLock
     , withRootLock
     )
@@ -55,6 +56,11 @@ objects root =
 prepublishDir : String -> String
 prepublishDir root =
     stuff root ++ "/prepublish"
+
+
+testDir : String -> String
+testDir root =
+    stuff root ++ "/test"
 
 
 compilerVersion : String
