@@ -3652,7 +3652,7 @@ toNumberReport source number row col =
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I do not accept numbers with leading or trailing underscores:"
                     , D.stack
-                        [ D.reflow "Just delete the leading or trailing underscores and it should work!"
+                        [ D.reflow "Just delete the leading or trailing underscore and it should work!"
                         , D.toSimpleNote "Numbers should not have leading or trailing underscores, as this can make them ambiguous and harder to read or parse correctly. To maintain clarity and follow syntax rules, underscores should only appear between digits."
                         ]
                     )
@@ -3662,7 +3662,7 @@ toNumberReport source number row col =
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I do not accept numbers with consecutive underscores:"
                     , D.stack
-                        [ D.reflow "Just delete the consecutive underscores and it should work!"
+                        [ D.reflow "Just delete the consecutive underscore and it should work!"
                         , D.toSimpleNote "Numbers should not contain consecutive underscores, as this can lead to confusion and misinterpretation of the value. Use single underscores only between digits to improve readability without breaking the format."
                         ]
                     )
