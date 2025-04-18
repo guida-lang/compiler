@@ -10,7 +10,6 @@ import Compiler.AST.Utils.Binop as Binop
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Error.Syntax as E
-import Utils.Crash exposing (crash)
 
 
 
@@ -45,11 +44,13 @@ number toExpectation toError =
 
             else
                 let
-                    word : Char
                     word =
-                        String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                        charAtPos pos src
                 in
-                if not (isDecimalDigit word) then
+                if word == '_' then
+                    P.Cerr row col (toError E.NumberNoLeadingOrTrailingUnderscores)
+
+                else if not (isDecimalDigit word) then
                     P.Eerr row col toExpectation
 
                 else
@@ -93,28 +94,20 @@ number toExpectation toError =
                                 newCol =
                                     col + (newPos - pos)
 
-                                copySrc : String
-                                copySrc =
+                                raw : String
+                                raw =
                                     String.slice pos newPos src
-
-                                copy : Float
-                                copy =
-                                    case String.toFloat copySrc of
-                                        Just copy_ ->
-                                            copy_
-
-                                        Nothing ->
-                                            crash "Failed `String.toFloat`"
-
-                                float : Number
-                                float =
-                                    Float copy copySrc
 
                                 newState : P.State
                                 newState =
                                     P.State src newPos end indent row newCol
                             in
-                            P.Cok float newState
+                            case String.toFloat (raw |> String.replace "_" "") of
+                                Just copy_ ->
+                                    P.Cok (Float copy_ raw) newState
+
+                                Nothing ->
+                                    P.Eerr row newCol toExpectation
 
 
 
@@ -138,9 +131,8 @@ chompInt src pos end n =
 
     else
         let
-            word : Char
             word =
-                String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                charAtPos pos src
         in
         if isDecimalDigit word then
             chompInt src (pos + 1) end (10 * n + (Char.toCode word - Char.toCode '0'))
@@ -151,8 +143,76 @@ chompInt src pos end n =
         else if word == 'e' || word == 'E' then
             chompExponent src (pos + 1) end
 
+        else if word == '_' then
+            chompUnderscore_ src pos end n
+
         else if isDirtyEnd src pos end word then
             Err_ pos E.NumberEnd
+
+        else
+            OkInt pos n
+
+
+
+-- CHOMP UNDERSCORE
+
+
+chompUnderscore_ : String -> Int -> Int -> Int -> Outcome
+chompUnderscore_ src pos end n =
+    let
+        nextWord =
+            charAtPos (pos + 1) src
+    in
+    if pos >= end then
+        Err_ pos E.NumberNoLeadingOrTrailingUnderscores
+
+    else if nextWord == '_' then
+        Err_ pos E.NumberNoConsecutiveUnderscores
+
+    else if nextWord == 'e' || nextWord == 'E' then
+        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+    else if nextWord == '.' then
+        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+    else if isDecimalDigit nextWord then
+        chompUnderscoreHelp src (pos + 1) end n
+
+    else
+        Err_ pos (E.NumberDot n)
+
+
+chompUnderscoreHelp : String -> Int -> Int -> Int -> Outcome
+chompUnderscoreHelp src pos end n =
+    if pos >= end then
+        OkInt pos n
+
+    else
+        let
+            word =
+                charAtPos pos src
+
+            nextWord =
+                charAtPos (pos + 1) src
+        in
+        if word == '_' then
+            if nextWord == '_' then
+                Err_ pos E.NumberNoConsecutiveUnderscores
+
+            else if nextWord == 'e' || nextWord == 'E' || nextWord == '.' then
+                Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+            else if pos + 1 == end then
+                Err_ pos E.NumberNoLeadingOrTrailingUnderscores
+
+            else
+                chompUnderscoreHelp src (pos + 1) end n
+
+        else if word == '.' then
+            chompFraction src pos end n
+
+        else if isDecimalDigit word then
+            chompUnderscoreHelp src (pos + 1) end (10 * n + (Char.toCode word - Char.toCode '0'))
 
         else
             OkInt pos n
@@ -168,11 +228,17 @@ chompFraction src pos end n =
         pos1 : Int
         pos1 =
             pos + 1
+
+        nextWord =
+            charAtPos pos1 src
     in
     if pos1 >= end then
         Err_ pos (E.NumberDot n)
 
-    else if isDecimalDigit (String.uncons (String.dropLeft pos1 src) |> Maybe.map Tuple.first |> Maybe.withDefault ' ') then
+    else if nextWord == '_' then
+        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+    else if isDecimalDigit nextWord then
         chompFractionHelp src (pos1 + 1) end
 
     else
@@ -186,12 +252,27 @@ chompFractionHelp src pos end =
 
     else
         let
-            word : Char
             word =
-                String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                charAtPos pos src
+
+            nextWord =
+                charAtPos (pos + 1) src
         in
         if isDecimalDigit word then
             chompFractionHelp src (pos + 1) end
+
+        else if word == '_' then
+            if (pos + 1) == end then
+                Err_ pos E.NumberNoLeadingOrTrailingUnderscores
+
+            else if nextWord == '_' then
+                Err_ pos E.NumberNoConsecutiveUnderscores
+
+            else if nextWord == 'e' || nextWord == 'E' then
+                Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+            else
+                chompFractionHelp src (pos + 1) end
 
         else if word == 'e' || word == 'E' then
             chompExponent src (pos + 1) end
@@ -214,20 +295,28 @@ chompExponent src pos end =
 
     else
         let
-            word : Char
             word =
-                String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                charAtPos pos src
         in
         if isDecimalDigit word then
             chompExponentHelp src (pos + 1) end
+
+        else if word == '_' then
+            Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
         else if word == '+' || word == '-' then
             let
                 pos1 : Int
                 pos1 =
                     pos + 1
+
+                nextWord =
+                    charAtPos pos1 src
             in
-            if pos1 < end && isDecimalDigit (String.uncons (String.dropLeft pos1 src) |> Maybe.map Tuple.first |> Maybe.withDefault ' ') then
+            if nextWord == '_' then
+                Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+            else if pos1 < end && isDecimalDigit nextWord then
                 chompExponentHelp src (pos + 2) end
 
             else
@@ -239,10 +328,14 @@ chompExponent src pos end =
 
 chompExponentHelp : String -> Int -> Int -> Outcome
 chompExponentHelp src pos end =
+    let
+        word =
+            charAtPos pos src
+    in
     if pos >= end then
         OkFloat pos
 
-    else if isDecimalDigit (String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' ') then
+    else if isDecimalDigit word || word == '_' then
         chompExponentHelp src (pos + 1) end
 
     else
@@ -260,9 +353,8 @@ chompZero src pos end =
 
     else
         let
-            word : Char
             word =
-                String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                charAtPos pos src
         in
         if word == 'x' then
             chompHexInt src (pos + 1) end
@@ -311,7 +403,7 @@ chompHexHelp src pos end answer accumulator =
         let
             newAnswer : Int
             newAnswer =
-                stepHex src pos end (String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' ') accumulator
+                stepHex src pos end (charAtPos pos src) accumulator
         in
         if newAnswer < 0 then
             ( pos
@@ -357,9 +449,8 @@ precedence toExpectation =
 
             else
                 let
-                    word : Char
                     word =
-                        String.uncons (String.dropLeft pos src) |> Maybe.map Tuple.first |> Maybe.withDefault ' '
+                        charAtPos pos src
                 in
                 if isDecimalDigit word then
                     P.Cok
@@ -368,3 +459,15 @@ precedence toExpectation =
 
                 else
                     P.Eerr row col toExpectation
+
+
+
+-- helpers
+
+
+charAtPos : Int -> String -> Char
+charAtPos pos src =
+    String.dropLeft pos src
+        |> String.uncons
+        |> Maybe.map Tuple.first
+        |> Maybe.withDefault ' '

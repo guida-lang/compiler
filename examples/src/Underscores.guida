@@ -1,0 +1,27 @@
+module Underscores exposing (main)
+
+import Html exposing (text)
+
+
+ints : List Int
+ints =
+    [ 2_000, 42_000_000 ]
+
+
+floats : List Float
+floats =
+    [ 111_000.602, 1_000.4_205 ]
+
+
+tableRow : (a -> String) -> a -> Html.Html msg
+tableRow toString value =
+    Html.tr []
+        [ Html.td [] [ text (toString value) ] ]
+
+
+main =
+  Html.table []
+    ( List.map (tableRow String.fromInt) ints
+        ++ List.map (tableRow String.fromFloat) floats
+    )
+

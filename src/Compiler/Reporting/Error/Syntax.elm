@@ -461,6 +461,9 @@ type Number
     | NumberDot Int
     | NumberHexDigit
     | NumberNoLeadingZero
+    | NumberNoLeadingOrTrailingUnderscores
+    | NumberNoConsecutiveUnderscores
+    | NumberNoUnderscoresAdjacentToDecimalOrExponent
 
 
 
@@ -3641,6 +3644,36 @@ toNumberReport source number row col =
                     , D.stack
                         [ D.reflow "Just delete the leading zeros and it should work!"
                         , D.toSimpleNote "Some languages let you to specify octal numbers by adding a leading zero. So in C, writing 0111 is the same as writing 73. Some people are used to that, but others probably want it to equal 111. Either path is going to surprise people from certain backgrounds, so Elm tries to avoid this whole situation."
+                        ]
+                    )
+
+        NumberNoLeadingOrTrailingUnderscores ->
+            Report.Report "LEADING OR TRAILING UNDERSCORE" region [] <|
+                Code.toSnippet source region Nothing <|
+                    ( D.reflow "I do not accept numbers with leading or trailing underscores:"
+                    , D.stack
+                        [ D.reflow "Just delete the leading or trailing underscores and it should work!"
+                        , D.toSimpleNote "Numbers should not have leading or trailing underscores, as this can make them ambiguous and harder to read or parse correctly. To maintain clarity and follow syntax rules, underscores should only appear between digits."
+                        ]
+                    )
+
+        NumberNoConsecutiveUnderscores ->
+            Report.Report "CONSICUTIVE UNDERSCORES" region [] <|
+                Code.toSnippet source region Nothing <|
+                    ( D.reflow "I do not accept numbers with consecutive underscores:"
+                    , D.stack
+                        [ D.reflow "Just delete the consecutive underscores and it should work!"
+                        , D.toSimpleNote "Numbers should not contain consecutive underscores, as this can lead to confusion and misinterpretation of the value. Use single underscores only between digits to improve readability without breaking the format."
+                        ]
+                    )
+
+        NumberNoUnderscoresAdjacentToDecimalOrExponent ->
+            Report.Report "UNDERSCORE ADJACENT TO DECIMAL POINT, E, OR +/-" region [] <|
+                Code.toSnippet source region Nothing <|
+                    ( D.reflow "I do not accept numbers with underscores directly next to a decimal point, e, or the +/- signs:"
+                    , D.stack
+                        [ D.reflow "Just delete the underscores directly next to a decimal point, e, or the +/- signs and it should work!"
+                        , D.toSimpleNote "Underscores must not appear directly next to a decimal point, e, or the +/- signs in scientific notation, as this disrupts the structure of the number. Keep underscores between digits only to ensure the number remains valid and clearly formatted."
                         ]
                     )
 
@@ -10475,6 +10508,15 @@ numberEncoder number =
         NumberNoLeadingZero ->
             BE.unsignedInt8 3
 
+        NumberNoLeadingOrTrailingUnderscores ->
+            BE.unsignedInt8 4
+
+        NumberNoConsecutiveUnderscores ->
+            BE.unsignedInt8 5
+
+        NumberNoUnderscoresAdjacentToDecimalOrExponent ->
+            BE.unsignedInt8 6
+
 
 numberDecoder : BD.Decoder Number
 numberDecoder =
@@ -10493,6 +10535,15 @@ numberDecoder =
 
                     3 ->
                         BD.succeed NumberNoLeadingZero
+
+                    4 ->
+                        BD.succeed NumberNoLeadingOrTrailingUnderscores
+
+                    5 ->
+                        BD.succeed NumberNoConsecutiveUnderscores
+
+                    6 ->
+                        BD.succeed NumberNoUnderscoresAdjacentToDecimalOrExponent
 
                     _ ->
                         BD.fail
