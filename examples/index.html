@@ -4433,11 +4433,26 @@ var $elm$virtual_dom$VirtualDom$toHandlerInt = function (handler) {
 			return 3;
 	}
 };
+var $elm$html$Html$div = _VirtualDom_node('div');
 var $author$project$Underscores$floats = _List_fromArray(
-	[111000.602, 1000.4205]);
+	[
+		_Utils_Tuple2('111_000.602', 111000.602),
+		_Utils_Tuple2('1_000.4_205', 1000.4205),
+		_Utils_Tuple2('0.000_1', 0.0001),
+		_Utils_Tuple2('0.000_000_1', 1e-7)
+	]);
 var $elm$core$String$fromFloat = _String_fromNumber;
+var $author$project$Underscores$hexadecimals = _List_fromArray(
+	[
+		_Utils_Tuple2('0x1F_2A', 7978),
+		_Utils_Tuple2('0xDEADBEEF', 3735928559),
+		_Utils_Tuple2('0xDE_AD_BE_EF', 3735928559)
+	]);
 var $author$project$Underscores$ints = _List_fromArray(
-	[2000, 42000000]);
+	[
+		_Utils_Tuple2('2_000', 2000),
+		_Utils_Tuple2('42_000_000', 42000000)
+	]);
 var $elm$core$List$foldrHelper = F4(
 	function (fn, acc, ctr, ls) {
 		if (!ls.b) {
@@ -4507,13 +4522,17 @@ var $elm$core$List$map = F2(
 			_List_Nil,
 			xs);
 	});
+var $elm$virtual_dom$VirtualDom$style = _VirtualDom_style;
+var $elm$html$Html$Attributes$style = $elm$virtual_dom$VirtualDom$style;
 var $elm$html$Html$table = _VirtualDom_node('table');
 var $elm$html$Html$td = _VirtualDom_node('td');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
 var $elm$html$Html$tr = _VirtualDom_node('tr');
 var $author$project$Underscores$tableRow = F2(
-	function (toString, value) {
+	function (toString, _v0) {
+		var label = _v0.a;
+		var value = _v0.b;
 		return A2(
 			$elm$html$Html$tr,
 			_List_Nil,
@@ -4521,7 +4540,22 @@ var $author$project$Underscores$tableRow = F2(
 				[
 					A2(
 					$elm$html$Html$td,
-					_List_Nil,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'min-width', '150px'),
+							A2($elm$html$Html$Attributes$style, 'padding', '7px')
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text(label)
+						])),
+					A2(
+					$elm$html$Html$td,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'min-width', '150px'),
+							A2($elm$html$Html$Attributes$style, 'padding', '7px')
+						]),
 					_List_fromArray(
 						[
 							$elm$html$Html$text(
@@ -4530,17 +4564,39 @@ var $author$project$Underscores$tableRow = F2(
 				]));
 	});
 var $author$project$Underscores$main = A2(
-	$elm$html$Html$table,
-	_List_Nil,
-	_Utils_ap(
-		A2(
-			$elm$core$List$map,
-			$author$project$Underscores$tableRow($elm$core$String$fromInt),
-			$author$project$Underscores$ints),
-		A2(
-			$elm$core$List$map,
-			$author$project$Underscores$tableRow($elm$core$String$fromFloat),
-			$author$project$Underscores$floats)));
+	$elm$html$Html$div,
+	_List_fromArray(
+		[
+			A2($elm$html$Html$Attributes$style, 'width', '100%'),
+			A2($elm$html$Html$Attributes$style, 'width', '100%'),
+			A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+			A2($elm$html$Html$Attributes$style, 'justify-content', 'center'),
+			A2($elm$html$Html$Attributes$style, 'align-item', 'center')
+		]),
+	_List_fromArray(
+		[
+			A2(
+			$elm$html$Html$table,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'margin', '150px'),
+					A2($elm$html$Html$Attributes$style, 'padding', '20px')
+				]),
+			_Utils_ap(
+				A2(
+					$elm$core$List$map,
+					$author$project$Underscores$tableRow($elm$core$String$fromInt),
+					$author$project$Underscores$ints),
+				_Utils_ap(
+					A2(
+						$elm$core$List$map,
+						$author$project$Underscores$tableRow($elm$core$String$fromFloat),
+						$author$project$Underscores$floats),
+					A2(
+						$elm$core$List$map,
+						$author$project$Underscores$tableRow($elm$core$String$fromInt),
+						$author$project$Underscores$hexadecimals))))
+		]));
 _Platform_export({'Underscores':{'init':_VirtualDom_init($author$project$Underscores$main)(0)(0)}});//__START__
 // EXTRA GUIDA CORE
 

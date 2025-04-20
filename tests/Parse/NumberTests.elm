@@ -185,6 +185,32 @@ suite =
             \_ ->
                 singleNumber "6_000.1_222_e+36"
                     |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+
+        --  HEXADECIMAL
+        , Test.test "0xDEADBEEF" <|
+            \_ ->
+                singleNumber "0xDEADBEEF"
+                    |> Expect.equal (Ok (N.Int 3735928559))
+        , Test.test "0xDE_AD_BE_EF" <|
+            \_ ->
+                singleNumber "0xDE_AD_BE_EF"
+                    |> Expect.equal (Ok (N.Int 3735928559))
+        , Test.test "_0xDEADBEEF" <|
+            \_ ->
+                singleNumber "_0xDEADBEEF"
+                    |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+        , Test.test "0xDEADBEEF_" <|
+            \_ ->
+                singleNumber "0xDEADBEEF_"
+                    |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+        , Test.test "0xDE__ADBEEF" <|
+            \_ ->
+                singleNumber "0xDE__ADBEEF"
+                    |> Expect.equal (Err E.NumberNoConsecutiveUnderscores)
+        , Test.test "0x_DE_ADBEEF" <|
+            \_ ->
+                singleNumber "0x_DE_ADBEEF"
+                    |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToHexadecimalPreFix)
         ]
 
 
