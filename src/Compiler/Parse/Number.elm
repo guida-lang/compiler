@@ -357,7 +357,11 @@ chompZero src pos end =
                 charAtPos pos src
         in
         if word == 'x' then
-            chompHexInt src (pos + 1) end
+            if charAtPos (pos + 1) src == '_' then
+                Err_ pos E.NumberNoUnderscoresAdjacentToHexadecimalPreFix
+
+            else
+                chompHexInt src (pos + 1) end
 
         else if word == '.' then
             chompFraction src pos end 0
@@ -378,7 +382,13 @@ chompHexInt src pos end =
         ( newPos, answer ) =
             chompHex src pos end
     in
-    if answer < 0 then
+    if answer == -4 then
+        Err_ newPos E.NumberNoConsecutiveUnderscores
+
+    else if answer == -3 then
+        Err_ newPos E.NumberNoLeadingOrTrailingUnderscores
+
+    else if answer < 0 then
         Err_ newPos E.NumberHexDigit
 
     else
@@ -410,6 +420,12 @@ chompHexHelp src pos end answer accumulator =
             , if newAnswer == -1 then
                 answer
 
+              else if newAnswer == -3 then
+                -3
+
+              else if newAnswer == -4 then
+                -4
+
               else
                 -2
             )
@@ -428,6 +444,25 @@ stepHex src pos end word acc =
 
     else if 'A' <= word && word <= 'F' then
         16 * acc + 10 + (Char.toCode word - Char.toCode 'A')
+
+    else if '_' == word then
+        let
+            nextWord =
+                charAtPos (pos + 1) src
+
+            validNextWord =
+                ('0' <= nextWord && nextWord <= '9')
+                    || ('a' <= nextWord && nextWord <= 'f')
+                    || ('A' <= nextWord && nextWord <= 'F')
+        in
+        if nextWord == '_' then
+            -4
+
+        else if pos + 1 == end || not validNextWord then
+            -3
+
+        else
+            acc
 
     else if isDirtyEnd src pos end word then
         -2
