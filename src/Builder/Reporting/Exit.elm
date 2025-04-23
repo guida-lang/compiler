@@ -2751,7 +2751,7 @@ toModuleNameConventionTable srcDir names =
         toPair : String -> ( String, FilePath )
         toPair name =
             ( name
-            , Utils.fpForwardSlash srcDir
+            , Utils.fpCombine srcDir
                 (Utils.fpAddExtension
                     (String.map
                         (\c ->

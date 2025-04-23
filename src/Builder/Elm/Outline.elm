@@ -242,7 +242,7 @@ toAbsolute root srcDir =
             dir
 
         RelativeSrcDir dir ->
-            Utils.fpForwardSlash root dir
+            Utils.fpCombine root dir
 
 
 detectDuplicates : FilePath -> List SrcDir -> IO (Maybe ( FilePath, ( FilePath, FilePath ) ))

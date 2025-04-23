@@ -84,7 +84,7 @@ guidao root name =
 
 toArtifactPath : String -> ModuleName.Raw -> String -> String
 toArtifactPath root name ext =
-    Utils.fpForwardSlash (stuff root) (Utils.fpAddExtension (ModuleName.toHyphenPath name) ext)
+    Utils.fpCombine (stuff root) (Utils.fpAddExtension (ModuleName.toHyphenPath name) ext)
 
 
 
@@ -156,12 +156,12 @@ getPackageCache =
 
 registry : PackageCache -> String
 registry (PackageCache dir) =
-    Utils.fpForwardSlash dir "registry.dat"
+    Utils.fpCombine dir "registry.dat"
 
 
 package : PackageCache -> Pkg.Name -> V.Version -> String
 package (PackageCache dir) name version =
-    Utils.fpForwardSlash dir (Utils.fpForwardSlash (Pkg.toString name) (V.toChars version))
+    Utils.fpCombine dir (Utils.fpCombine (Pkg.toString name) (V.toChars version))
 
 
 
@@ -181,7 +181,7 @@ getCacheDir projectName =
                 let
                     root : Utils.FilePath
                     root =
-                        Utils.fpForwardSlash home (Utils.fpForwardSlash compilerVersion projectName)
+                        Utils.fpCombine home (Utils.fpCombine compilerVersion projectName)
                 in
                 Utils.dirCreateDirectoryIfMissing True root
                     |> IO.fmap (\_ -> root)

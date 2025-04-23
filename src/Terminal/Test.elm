@@ -2,6 +2,8 @@ module Terminal.Test exposing (run)
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
+import Builder.Deps.Registry as Registry
+import Builder.Deps.Solver as Solver
 import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.File as File
@@ -11,6 +13,7 @@ import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Elm.Constraint as C
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
@@ -21,7 +24,14 @@ import Data.Map as Dict exposing (Dict)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
+import Regex exposing (Regex)
+import System.Exit as Exit
 import System.IO as IO exposing (IO)
+import System.Process as Process
+import Terminal.Make as Make
+import Utils.Bytes.Decode as BD
+import Utils.Bytes.Encode as BE
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
 
@@ -70,147 +80,610 @@ runHelp root testFileGlobs style () =
                                     |> Task.io
                                     |> Task.bind
                                         (\_ ->
-                                            let
-                                                _ =
-                                                    -- FIXME change these details to make it for tests
-                                                    Debug.log "details" (String.left 2000 (Debug.toString details))
-                                            in
-                                            case Debug.log "testFileGlobs" testFileGlobs of
-                                                [] ->
-                                                    getExposed details
-                                                        |> Task.bind
-                                                            (\exposed ->
-                                                                Task.eio
-                                                                    (\_ ->
-                                                                        -- Exit.InstallBadOutline
-                                                                        Exit.MakeNoOutline
-                                                                    )
-                                                                    (Outline.read root)
-                                                                    |> Task.bind
-                                                                        (\oldOutline ->
-                                                                            Utils.dirDoesDirectoryExist "tests"
-                                                                                |> IO.bind
-                                                                                    (\testsDirExists ->
-                                                                                        let
-                                                                                            newOutline =
-                                                                                                case oldOutline of
-                                                                                                    Outline.App (Outline.AppOutline elmVersion srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                                                        let
-                                                                                                            addOptionalTests =
-                                                                                                                if testsDirExists then
-                                                                                                                    NE.cons (Outline.RelativeSrcDir "tests")
+                                            getExposed details
+                                                |> Task.bind
+                                                    (\exposed ->
+                                                        Task.eio
+                                                            (\_ ->
+                                                                -- Exit.InstallBadOutline
+                                                                Exit.MakeNoOutline
+                                                            )
+                                                            (Outline.read root)
+                                                            |> Task.bind
+                                                                (\oldOutline ->
+                                                                    Task.io (Utils.dirDoesDirectoryExist "tests")
+                                                                        |> Task.bind
+                                                                            (\testsDirExists ->
+                                                                                let
+                                                                                    newOutline =
+                                                                                        case oldOutline of
+                                                                                            Outline.App (Outline.AppOutline elmVersion srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                                                let
+                                                                                                    addOptionalTests =
+                                                                                                        if testsDirExists then
+                                                                                                            NE.cons (Outline.RelativeSrcDir "tests")
 
-                                                                                                                else
-                                                                                                                    identity
+                                                                                                        else
+                                                                                                            identity
 
-                                                                                                            newSrcDirs =
-                                                                                                                srcDirs
-                                                                                                                    -- TODO/FIXME we shouldn't need to install elm-test...
-                                                                                                                    |> NE.cons (Outline.RelativeSrcDir "node_modules/elm-test/elm/src")
-                                                                                                                    |> addOptionalTests
-                                                                                                                    |> NE.map
-                                                                                                                        (\srcDir ->
-                                                                                                                            case srcDir of
-                                                                                                                                Outline.AbsoluteSrcDir _ ->
-                                                                                                                                    srcDir
+                                                                                                    newSrcDirs =
+                                                                                                        srcDirs
+                                                                                                            -- TODO/FIXME we shouldn't need to install elm-test...
+                                                                                                            |> NE.cons (Outline.RelativeSrcDir "node_modules/elm-test/elm/src")
+                                                                                                            |> addOptionalTests
+                                                                                                            |> NE.map
+                                                                                                                (\srcDir ->
+                                                                                                                    case srcDir of
+                                                                                                                        Outline.AbsoluteSrcDir _ ->
+                                                                                                                            srcDir
 
-                                                                                                                                Outline.RelativeSrcDir path ->
-                                                                                                                                    Outline.RelativeSrcDir ("../../" ++ path)
-                                                                                                                        )
-                                                                                                                    |> NE.cons (Outline.RelativeSrcDir "src")
-                                                                                                        in
-                                                                                                        Outline.App (Outline.AppOutline elmVersion newSrcDirs depsDirect depsTrans testDirect testTrans)
+                                                                                                                        Outline.RelativeSrcDir path ->
+                                                                                                                            Outline.RelativeSrcDir ("../../../" ++ path)
+                                                                                                                )
+                                                                                                            |> NE.cons (Outline.RelativeSrcDir "src")
+                                                                                                in
+                                                                                                Outline.App (Outline.AppOutline elmVersion newSrcDirs depsDirect depsTrans testDirect testTrans)
 
-                                                                                                    Outline.Pkg _ ->
-                                                                                                        oldOutline
-                                                                                        in
-                                                                                        -- TODO
-                                                                                        -- // Note: These are the dependencies listed in `elm/elm.json`, except
-                                                                                        -- // `elm-explorations/test`. `elm/elm.json` is only used during development of
-                                                                                        -- // this CLI (for editor integrations and unit tests). When running `elm-test`
-                                                                                        -- // we add the `elm/` folder in the npm package as a source directory. The
-                                                                                        -- // dependencies listed here and the ones in `elm/elm.json` need to be in sync.
-                                                                                        -- const extra = {
-                                                                                        --     'elm/core': '1.0.0 <= v < 2.0.0',
-                                                                                        --     'elm/json': '1.0.0 <= v < 2.0.0',
-                                                                                        --     'elm/time': '1.0.0 <= v < 2.0.0',
-                                                                                        --     'elm/random': '1.0.0 <= v < 2.0.0',
-                                                                                        -- };
-                                                                                        Outline.write (Stuff.testDir root) newOutline
+                                                                                            Outline.Pkg _ ->
+                                                                                                oldOutline
+                                                                                in
+                                                                                -- TODO
+                                                                                -- // Note: These are the dependencies listed in `elm/elm.json`, except
+                                                                                -- // `elm-explorations/test`. `elm/elm.json` is only used during development of
+                                                                                -- // this CLI (for editor integrations and unit tests). When running `elm-test`
+                                                                                -- // we add the `elm/` folder in the npm package as a source directory. The
+                                                                                -- // dependencies listed here and the ones in `elm/elm.json` need to be in sync.
+                                                                                -- const extra = {
+                                                                                --     'elm/core': '1.0.0 <= v < 2.0.0',
+                                                                                --     'elm/json': '1.0.0 <= v < 2.0.0',
+                                                                                --     'elm/time': '1.0.0 <= v < 2.0.0',
+                                                                                --     'elm/random': '1.0.0 <= v < 2.0.0',
+                                                                                -- };
+                                                                                Task.eio
+                                                                                    (\_ ->
+                                                                                        -- Exit.InstallBadRegistry
+                                                                                        Exit.MakeNoOutline
                                                                                     )
-                                                                                |> Task.io
-                                                                        )
-                                                                    |> Task.bind
-                                                                        (\_ ->
-                                                                            buildExposed style root details Nothing exposed
-                                                                        )
-                                                            )
+                                                                                    Solver.initEnv
+                                                                                    |> Task.bind
+                                                                                        (\env ->
+                                                                                            case newOutline of
+                                                                                                Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                                                    let
+                                                                                                        outline =
+                                                                                                            Outline.AppOutline elm
+                                                                                                                srcDirs
+                                                                                                                (Dict.union depsDirect testDirect)
+                                                                                                                (Dict.union depsTrans testTrans)
+                                                                                                                Dict.empty
+                                                                                                                Dict.empty
+                                                                                                    in
+                                                                                                    makeAppPlan env ( "elm", "core" ) outline
+                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "json" ))
+                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "time" ))
+                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "random" ))
+                                                                                                        |> Task.bind (attemptChanges root env << Outline.App)
 
-                                                p :: ps ->
-                                                    buildPaths style root details (NE.Nonempty p ps)
-                                                        |> Task.bind
-                                                            (\artifacts ->
-                                                                Task.eio
-                                                                    (\_ ->
-                                                                        -- Exit.InstallBadOutline
-                                                                        Exit.MakeNoOutline
-                                                                    )
-                                                                    (Outline.read root)
-                                                                    |> Task.bind
-                                                                        (\oldOutline ->
-                                                                            case oldOutline of
-                                                                                Outline.App outline ->
-                                                                                    makeAppPlan env pkg outline forTest
-                                                                                        |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes autoYes)
+                                                                                                Outline.Pkg outline ->
+                                                                                                    -- makePkgPlan env pkg outline
+                                                                                                    --     |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                                                    Debug.todo "TODO: makePkgPlan"
+                                                                                        )
+                                                                            )
+                                                                )
+                                                            |> Task.bind
+                                                                (\_ ->
+                                                                    let
+                                                                        paths =
+                                                                            case testFileGlobs of
+                                                                                [] ->
+                                                                                    [ root ++ "/tests" ]
 
-                                                                                Outline.Pkg outline ->
-                                                                                    makePkgPlan env pkg outline forTest
-                                                                                        |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes autoYes)
-                                                                        )
-                                                             -- case maybeOutput of
-                                                             --     Nothing ->
-                                                             --         case getMains artifacts of
-                                                             --             [] ->
-                                                             --                 Task.pure ()
-                                                             --             [ name ] ->
-                                                             --                 toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                             --                     |> Task.bind
-                                                             --                         (\builder ->
-                                                             --                             generate style "index.html" (Html.sandwich name builder) (NE.Nonempty name [])
-                                                             --                         )
-                                                             --             name :: names ->
-                                                             --                 toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                             --                     |> Task.bind
-                                                             --                         (\builder ->
-                                                             --                             generate style "elm.js" builder (NE.Nonempty name names)
-                                                             --                         )
-                                                             --     Just DevNull ->
-                                                             --         Task.pure ()
-                                                             --     Just (JS target) ->
-                                                             --         case getNoMains artifacts of
-                                                             --             [] ->
-                                                             --                 toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                             --                     |> Task.bind
-                                                             --                         (\builder ->
-                                                             --                             generate style target builder (Build.getRootNames artifacts)
-                                                             --                         )
-                                                             --             name :: names ->
-                                                             --                 Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
-                                                             --     Just (Html target) ->
-                                                             --         hasOneMain artifacts
-                                                             --             |> Task.bind
-                                                             --                 (\name ->
-                                                             --                     toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                             --                         |> Task.bind
-                                                             --                             (\builder ->
-                                                             --                                 generate style target (Html.sandwich name builder) (NE.Nonempty name [])
-                                                             --                             )
-                                                             --                 )
-                                                            )
+                                                                                _ ->
+                                                                                    testFileGlobs
+                                                                    in
+                                                                    resolveElmFiles paths
+                                                                        |> IO.bind
+                                                                            (\resolvedInputFiles ->
+                                                                                case resolvedInputFiles of
+                                                                                    Ok inputFiles ->
+                                                                                        inputFiles
+                                                                                            |> Utils.listTraverse
+                                                                                                (\inputFile ->
+                                                                                                    case List.filter (\path -> String.startsWith path inputFile) paths of
+                                                                                                        [] ->
+                                                                                                            Debug.todo "TODO: handle empty paths"
+
+                                                                                                        [ _ ] ->
+                                                                                                            extractExposedPossiblyTests inputFile
+                                                                                                                |> IO.fmap (Maybe.map (Tuple.pair (root ++ "/" ++ inputFile)))
+
+                                                                                                        _ ->
+                                                                                                            Debug.todo "TODO: handle multiple paths"
+                                                                                                )
+
+                                                                                    Err _ ->
+                                                                                        IO.pure []
+                                                                            )
+                                                                        |> IO.fmap (List.filterMap identity)
+                                                                        |> IO.bind
+                                                                            (\exposedList ->
+                                                                                let
+                                                                                    testModules =
+                                                                                        List.map
+                                                                                            (\( _, ( moduleName, possiblyTests ) ) ->
+                                                                                                { moduleName = moduleName
+                                                                                                , possiblyTests = possiblyTests
+                                                                                                }
+                                                                                            )
+                                                                                            exposedList
+                                                                                in
+                                                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
+                                                                                    |> IO.bind
+                                                                                        (\_ ->
+                                                                                            IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm") (testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList))
+                                                                                        )
+                                                                            )
+                                                                        |> IO.bind
+                                                                            (\_ ->
+                                                                                Utils.dirWithCurrentDirectory (Stuff.testDir root) <|
+                                                                                    Make.run [ "src/Test/Generated/Main.elm" ] (Make.Flags False False False (Just (Make.JS "tmp.js")) Nothing Nothing)
+                                                                            )
+                                                                        |> IO.bind
+                                                                            (\_ ->
+                                                                                File.readUtf8 (Stuff.testDir root ++ "/tmp.js")
+                                                                                    |> IO.bind
+                                                                                        (\content ->
+                                                                                            let
+                                                                                                pipeFilename =
+                                                                                                    "/tmp/elm-test-somefile.sock"
+
+                                                                                                finalContent =
+                                                                                                    before
+                                                                                                        ++ "\nvar Elm = (function(module) {\n"
+                                                                                                        ++ addKernelTestChecking content
+                                                                                                        ++ "\nreturn this.Elm;\n})({});\nvar pipeFilename = "
+                                                                                                        ++ Encode.encode 0 (Encode.string pipeFilename)
+                                                                                                        ++ ";\n"
+                                                                                                        ++ after
+                                                                                            in
+                                                                                            IO.writeString (Stuff.testDir root ++ "/index.js") finalContent
+                                                                                        )
+                                                                                    |> IO.bind (\_ -> IO.hPutStrLn IO.stdout "Starting tests")
+                                                                            )
+                                                                        |> IO.bind
+                                                                            (\_ ->
+                                                                                getInterpreter
+                                                                                    |> IO.bind
+                                                                                        (\interpreter ->
+                                                                                            interpret interpreter (Stuff.testDir root ++ "/index.js")
+                                                                                        )
+                                                                            )
+                                                                        |> Task.io
+                                                                )
+                                                            |> Task.fmap (\_ -> ())
+                                                    )
                                         )
                             )
                     )
         )
+
+
+interpret : FilePath -> String -> IO Exit.ExitCode
+interpret interpreter path =
+    let
+        createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
+        createProcess =
+            Process.proc interpreter [ path ]
+    in
+    Process.withCreateProcess createProcess <|
+        \_ _ _ handle ->
+            Process.waitForProcess handle
+
+
+testVariantDefinition : Regex
+testVariantDefinition =
+    Maybe.withDefault Regex.never <|
+        Regex.fromStringWith { caseInsensitive = False, multiline = True }
+            "^var\\s+\\$elm_explorations\\$test\\$Test\\$Internal\\$(?:ElmTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
+
+
+checkDefinition : Regex
+checkDefinition =
+    Maybe.withDefault Regex.never <|
+        Regex.fromStringWith { caseInsensitive = False, multiline = True }
+            "^(var\\s+\\$author\\$project\\$Test\\$Runner\\$Node\\$check)\\s*=\\s*\\$author\\$project\\$Test\\$Runner\\$Node\\$checkHelperReplaceMe___;?$"
+
+
+addKernelTestChecking : String -> String
+addKernelTestChecking content =
+    "var __elmTestSymbol = Symbol(\"elmTestSymbol\");\n"
+        ++ (content
+                |> Regex.replace testVariantDefinition (\{ match } -> match ++ "__elmTestSymbol: __elmTestSymbol, ")
+                |> Regex.replaceAtMost 1
+                    checkDefinition
+                    (\{ submatches } ->
+                        case submatches of
+                            (Just firstSubmatch) :: _ ->
+                                firstSubmatch ++ " = value => value && value.__elmTestSymbol === __elmTestSymbol ? $elm$core$Maybe$Just(value) : $elm$core$Maybe$Nothing;"
+
+                            _ ->
+                                crash "addKernelTestChecking: no submatches found"
+                    )
+           )
+
+
+before : String
+before =
+    """// Apply Node polyfills as necessary.
+var window = {
+  Date: Date,
+  addEventListener: function () {},
+  removeEventListener: function () {},
+};
+
+var location = {
+  href: '',
+  host: '',
+  hostname: '',
+  protocol: '',
+  origin: '',
+  port: '',
+  pathname: '',
+  search: '',
+  hash: '',
+  username: '',
+  password: '',
+};
+var document = { body: {}, createTextNode: function () {}, location: location };
+
+if (typeof FileList === 'undefined') {
+  FileList = function () {};
+}
+
+if (typeof File === 'undefined') {
+  File = function () {};
+}
+
+if (typeof XMLHttpRequest === 'undefined') {
+  XMLHttpRequest = function () {
+    return {
+      addEventListener: function () {},
+      open: function () {},
+      send: function () {},
+    };
+  };
+
+  var oldConsoleWarn = console.warn;
+  console.warn = function () {
+    if (
+      arguments.length === 1 &&
+      arguments[0].indexOf('Compiled in DEV mode') === 0
+    )
+      return;
+    return oldConsoleWarn.apply(console, arguments);
+  };
+}
+
+if (typeof FormData === 'undefined') {
+  FormData = function () {
+    this._data = [];
+  };
+  FormData.prototype.append = function () {
+    this._data.push(Array.prototype.slice.call(arguments));
+  };
+}
+"""
+
+
+after : String
+after =
+    """// Run the Elm app.
+var app = Elm.Test.Generated.Main.init({ flags: Date.now() });
+
+var report = 'console';
+
+var nextResultToPrint = null;
+var results = new Map();
+var failures = 0;
+var todos = [];
+var testsToRun = -1;
+var startingTime = Date.now();
+
+function printResult(result) {
+    switch (report) {
+        case 'console':
+            switch (result.type) {
+                case 'begin':
+                    console.log(makeWindowsSafe(result.output));
+                    break;
+                case 'complete':
+                    switch (result.status) {
+                        case 'pass':
+                            // passed tests should be printed only if they contain distributionReport
+                            if (result.distributionReport !== undefined) {
+                                console.log(makeWindowsSafe(result.distributionReport));
+                            }
+                            break;
+                        case 'todo':
+                            // todos will be shown in the SUMMARY only.
+                            break;
+                        case 'fail':
+                            console.log(makeWindowsSafe(result.failure));
+                            break;
+                        default:
+                            throw new Error(`Unexpected result.status: ${result.status}`);
+                    }
+                    break;
+                case 'summary':
+                    console.log(makeWindowsSafe(result.summary));
+                    break;
+                default:
+                    throw new Error(`Unexpected result.type: ${result.type}`);
+            }
+            break;
+
+        case 'json':
+            console.log(JSON.stringify(result));
+            break;
+
+        case 'junit':
+            // JUnit does everything at once in SUMMARY, elsewhere
+            break;
+    }
+}
+
+function flushResults() {
+    // Only print any results if we're ready - that is, nextResultToPrint
+    // is no longer null. (BEGIN changes it from null to 0.)
+    if (nextResultToPrint !== null) {
+        var result = results.get(nextResultToPrint);
+
+        while (
+            // If there are no more results to print, then we're done.
+            nextResultToPrint < testsToRun &&
+            // Otherwise, keep going until we have no result available to print.
+            typeof result !== 'undefined'
+        ) {
+            printResult(result);
+            nextResultToPrint++;
+            result = results.get(nextResultToPrint);
+        }
+    }
+}
+
+function handleResults(response) {
+    // TODO print progress bar - e.g. "Running test 5 of 20" on a bar!
+    // -- yikes, be careful though...test the scenario where test
+    // authors put Debug.log in their tests - does that mess
+    // everything up re: the line feed? Seems like it would...
+    // ...so maybe a bar is not best. Can we do better? Hm.
+    // Maybe the answer is to print the thing, then Immediately
+    // backtrack the line feed, so that if someone else does more
+    // logging, it will overwrite our status update and that's ok?
+
+    Object.keys(response.results).forEach(function (index) {
+        var result = response.results[index];
+        results.set(parseInt(index), result);
+
+        switch (report) {
+            case 'console':
+                switch (result.status) {
+                    case 'pass':
+                        // It's a PASS; no need to take any action.
+                        break;
+                    case 'todo':
+                        todos.push(result);
+                        break;
+                    case 'fail':
+                        failures++;
+                        break;
+                    default:
+                        throw new Error(`Unexpected result.status: ${result.status}`);
+                }
+                break;
+            case 'junit':
+                if (typeof result.failure !== 'undefined') {
+                    failures++;
+                }
+                break;
+            case 'json':
+                if (result.status === 'fail') {
+                    failures++;
+                } else if (result.status === 'todo') {
+                    todos.push({ labels: result.labels, todo: result.failures[0] });
+                }
+                break;
+        }
+    });
+
+    flushResults();
+}
+
+function makeWindowsSafe(text) {
+    return process.platform === 'win32' ? windowsify(text) : text;
+}
+
+// Fix Windows Unicode problems. Credit to https://github.com/sindresorhus/figures for the Windows compat idea!
+var windowsSubstitutions = [
+    [/[↓✗►]/g, '>'],
+    [/╵│╷╹┃╻/g, '|'],
+    [/═/g, '='],
+    [/▔/g, '-'],
+    [/✔/g, '√'],
+];
+
+function windowsify(str) {
+    return windowsSubstitutions.reduce(function (result /*: string */, sub) {
+        return result.replace(sub[0], sub[1]);
+    }, str);
+}
+
+// Use ports for inter-process communication.
+app.ports.elmTestPort__send.subscribe(function (msg) {
+    var response = JSON.parse(msg);
+
+    switch (response.type) {
+        case 'FINISHED':
+            handleResults(response);
+
+            // Print the summmary.
+            app.ports.elmTestPort__receive.send(
+                {
+                    type: 'SUMMARY',
+                    duration: Date.now() - startingTime,
+                    failures: failures,
+                    todos: todos,
+                }
+            );
+
+            break;
+        case 'SUMMARY':
+            flushResults();
+
+            if (response.exitCode === 1) {
+                // The tests could not even run. At the time of this writing, the
+                // only case is “No exposed values of type Test found”. That
+                // _could_ have been caught at compile time, but the current
+                // architecture needs to actually run the JS to figure out which
+                // exposed values are of type Test. That’s why this type of
+                // response is handled differently than others.
+                console.error(response.message);
+            } else {
+                printResult(response.message);
+
+                if (report === 'junit') {
+                    var xml = response.message;
+                    var values = Array.from(results.values());
+
+                    xml.testsuite.testcase = xml.testsuite.testcase.concat(values);
+
+                    // The XmlBuilder by default does not remove characters that are
+                    // invalid in XML, like backspaces. However, we can pass it an
+                    // `invalidCharReplacement` option to tell it how to handle
+                    // those characters, rather than crashing. In an attempt to
+                    // retain useful information in the output, we try and output a
+                    // hex-encoded unicode codepoint for the invalid character. For
+                    // example, the start of a terminal escape (`\u{001B}` in Elm) will be output as a
+                    // literal `\u{001B}`.
+                    var invalidCharReplacement = function (char) {
+                        return (
+                            '\\\\u{' +
+                            char.codePointAt(0).toString(16).padStart(4, '0') +
+                            '}'
+                        );
+                    };
+
+                    console.log(
+                        XmlBuilder.create(xml, {
+                            invalidCharReplacement: invalidCharReplacement,
+                        }).end()
+                    );
+                }
+            }
+
+            // resolve(response.exitCode);
+            break;
+        case 'BEGIN':
+            testsToRun = response.testCount;
+
+            // TODO
+            // if (!Report.isMachineReadable(report)) {
+            //     var headline = 'elm-test ' + elmTestVersion;
+            //     var bar = '-'.repeat(headline.length);
+
+            //     console.log('\\n' + headline + '\\n' + bar + '\\n');
+            // }
+
+            printResult(response.message);
+
+            // Now we're ready to print results!
+            nextResultToPrint = 0;
+
+            flushResults();
+
+            break;
+        case 'RESULTS':
+            handleResults(response);
+
+            break;
+        case 'ERROR':
+            throw new Error(response.message);
+        default:
+            throw new Error(
+                'Unrecognized message from worker:' + response.type
+            );
+    }
+});
+
+app.ports.elmTestPort__receive.send({ type: 'TEST', index: -1 });"""
+
+
+testGeneratedMain :
+    List
+        { moduleName : String
+        , possiblyTests : List String
+        }
+    -> List String
+    -> List String
+    -> String
+testGeneratedMain testModules testFileGlobs testFilePaths =
+    let
+        imports =
+            List.map (\mod -> "import " ++ mod.moduleName) testModules
+
+        possiblyTestsList =
+            List.map makeModuleTuple testModules
+    in
+    """module Test.Generated.Main exposing (main)
+
+""" ++ String.join "\n" imports ++ """
+
+import Test.Reporter.Reporter exposing (Report(..))
+import Console.Text exposing (UseColor(..))
+import Test.Runner.Node
+import Test
+
+main : Test.Runner.Node.TestProgram
+main =
+    Test.Runner.Node.run
+        { runs = 100
+        , report = ConsoleReport UseColor
+        , seed = 342047891320010
+        , processes = 8
+        , globs =
+            """ ++ indentAllButFirstLine 12 (List.map (Encode.encode 0 << Encode.string) testFileGlobs) ++ """
+        , paths =
+            """ ++ indentAllButFirstLine 12 (List.map (Encode.encode 0 << Encode.string) testFilePaths) ++ """
+        }
+        """ ++ indentAllButFirstLine 8 possiblyTestsList
+
+
+indentAllButFirstLine : Int -> List String -> String
+indentAllButFirstLine indent list =
+    "[ "
+        ++ String.join ("\n" ++ String.repeat indent " " ++ ", ") list
+        ++ "\n"
+        ++ String.repeat indent " "
+        ++ "]"
+
+
+makeModuleTuple : { moduleName : String, possiblyTests : List String } -> String
+makeModuleTuple mod =
+    let
+        list =
+            List.map (\test -> "Test.Runner.Node.check " ++ mod.moduleName ++ "." ++ test)
+                mod.possiblyTests
+    in
+    "( \""
+        ++ mod.moduleName
+        ++ "\"\n"
+        ++ String.repeat 10 " "
+        ++ ", "
+        ++ indentAllButFirstLine 12 list
+        ++ "\n"
+        ++ String.repeat 10 " "
+        ++ ")"
 
 
 
@@ -224,7 +697,7 @@ getStyle =
 
 getExposed : Details.Details -> Task (NE.Nonempty ModuleName.Raw)
 getExposed (Details.Details _ validOutline _ _ _ _) =
-    case Debug.log "validOutline" validOutline of
+    case validOutline of
         Details.ValidApp _ ->
             -- Task.throw Exit.MakeAppNeedsFileNames
             Task.pure (NE.Nonempty "tests" [])
@@ -246,41 +719,31 @@ extractExposedPossiblyTests path =
                 case Parse.fromByteString (SV.fileSyntaxVersion path) Parse.Application bytes of
                     Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
                         let
-                            _ =
+                            exposed =
                                 case exposing_ of
                                     Src.Open ->
-                                        Debug.todo "Open"
+                                        Debug.todo "TODO: Open"
 
                                     Src.Explicit exposedList ->
-                                        Debug.todo "Explicit"
+                                        List.filterMap
+                                            (\exposedValue ->
+                                                case exposedValue of
+                                                    Src.Lower (A.At _ lowerName) ->
+                                                        Just lowerName
+
+                                                    Src.Upper _ _ ->
+                                                        Nothing
+
+                                                    Src.Operator _ _ ->
+                                                        Nothing
+                                            )
+                                            exposedList
                         in
-                        IO.pure (Just ( name, [] ))
+                        IO.pure (Just ( name, exposed ))
 
                     _ ->
                         IO.pure Nothing
             )
-
-
-
--- BUILD PROJECTS
-
-
-buildExposed : Reporting.Style -> FilePath -> Details.Details -> Maybe FilePath -> NE.Nonempty ModuleName.Raw -> Task ()
-buildExposed style root details maybeDocs exposed =
-    let
-        docsGoal : Build.DocsGoal ()
-        docsGoal =
-            Maybe.unwrap Build.ignoreDocs Build.writeDocs maybeDocs
-                |> Debug.log "docsGoal"
-    in
-    Task.eio Exit.MakeCannotBuild <|
-        Build.fromExposed (Decode.succeed ()) (\_ -> Encode.object []) style root details docsGoal exposed
-
-
-buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts
-buildPaths style root details paths =
-    Task.eio Exit.MakeCannotBuild <|
-        Build.fromPaths style root details paths
 
 
 
@@ -456,102 +919,12 @@ hasFilename name path =
 -- ATTEMPT CHANGES
 
 
-attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task ()
-attemptChanges root env oldOutline toChars changes =
-    case changes of
-        AlreadyInstalled ->
-            Task.io (IO.putStrLn "It is already installed!")
-
-        PromoteIndirect newOutline ->
-            attemptChangesHelp root env oldOutline newOutline autoYes <|
-                D.vcat
-                    [ D.fillSep
-                        [ D.fromChars "I"
-                        , D.fromChars "found"
-                        , D.fromChars "it"
-                        , D.fromChars "in"
-                        , D.fromChars "your"
-                        , D.fromChars "elm.json"
-                        , D.fromChars "file,"
-                        , D.fromChars "but"
-                        , D.fromChars "in"
-                        , D.fromChars "the"
-                        , D.dullyellow (D.fromChars "\"indirect\"")
-                        , D.fromChars "dependencies."
-                        ]
-                    , D.fillSep
-                        [ D.fromChars "Should"
-                        , D.fromChars "I"
-                        , D.fromChars "move"
-                        , D.fromChars "it"
-                        , D.fromChars "into"
-                        , D.green (D.fromChars "\"direct\"")
-                        , D.fromChars "dependencies"
-                        , D.fromChars "for"
-                        , D.fromChars "more"
-                        , D.fromChars "general"
-                        , D.fromChars "use?"
-                        , D.fromChars "[Y/n]: "
-                        ]
-                    ]
-
-        PromoteTest newOutline ->
-            attemptChangesHelp root env oldOutline newOutline autoYes <|
-                D.vcat
-                    [ D.fillSep
-                        [ D.fromChars "I"
-                        , D.fromChars "found"
-                        , D.fromChars "it"
-                        , D.fromChars "in"
-                        , D.fromChars "your"
-                        , D.fromChars "elm.json"
-                        , D.fromChars "file,"
-                        , D.fromChars "but"
-                        , D.fromChars "in"
-                        , D.fromChars "the"
-                        , D.dullyellow (D.fromChars "\"test-dependencies\"")
-                        , D.fromChars "field."
-                        ]
-                    , D.fillSep
-                        [ D.fromChars "Should"
-                        , D.fromChars "I"
-                        , D.fromChars "move"
-                        , D.fromChars "it"
-                        , D.fromChars "into"
-                        , D.green (D.fromChars "\"dependencies\"")
-                        , D.fromChars "for"
-                        , D.fromChars "more"
-                        , D.fromChars "general"
-                        , D.fromChars "use?"
-                        , D.fromChars "[Y/n]: "
-                        ]
-                    ]
-
-        Changes changeDict newOutline ->
-            let
-                widths : Widths
-                widths =
-                    Dict.foldr compare (widen toChars) (Widths 0 0 0) changeDict
-
-                changeDocs : ChangeDocs
-                changeDocs =
-                    Dict.foldr compare (addChange toChars widths) (Docs [] [] []) changeDict
-            in
-            attemptChangesHelp root env oldOutline newOutline autoYes <|
-                D.vcat
-                    [ D.fromChars "Here is my plan:"
-                    , viewChangeDocs changeDocs
-                    , D.fromChars ""
-                    , D.fromChars "Would you like me to update your elm.json accordingly? [Y/n]: "
-                    ]
-
-
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Task (Result Exit.Details ())
-attemptChangesHelp root env newOutline =
-    Task.eio Exit.InstallBadDetails <|
+attemptChanges : FilePath -> Solver.Env -> Outline.Outline -> Task ()
+attemptChanges root env newOutline =
+    Task.eio Exit.MakeBadDetails <|
         BW.withScope
             (\scope ->
-                Outline.write root newOutline
+                Outline.write (Stuff.testDir root) newOutline
                     |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
             )
 
@@ -560,291 +933,217 @@ attemptChangesHelp root env newOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Bool -> Task (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) forTest =
-    if forTest then
-        if Dict.member identity pkg testDirect then
-            Task.pure AlreadyInstalled
-
-        else
-            (-- is it already an indirect test dependency?
-             case Dict.get identity pkg testIndirect of
-                Just vsn ->
-                    Task.pure <|
-                        PromoteTest <|
-                            Outline.App <|
-                                Outline.AppOutline elmVersion
-                                    sourceDirs
-                                    direct
-                                    indirect
-                                    (Dict.insert identity pkg vsn testDirect)
-                                    (Dict.remove identity pkg testIndirect)
-
-                Nothing ->
-                    -- finally try to add it from scratch
-                    case Registry.getVersions_ pkg registry of
-                        Err suggestions ->
-                            case connection of
-                                Solver.Online _ ->
-                                    Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
-
-                                Solver.Offline ->
-                                    Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
-
-                        Ok _ ->
-                            Task.io (Solver.addToApp cache connection registry pkg outline forTest)
-                                |> Task.bind
-                                    (\result ->
-                                        case result of
-                                            Solver.SolverOk (Solver.AppSolution old new app) ->
-                                                Task.pure (Changes (detectChanges old new) (Outline.App app))
-
-                                            Solver.NoSolution ->
-                                                Task.throw (Exit.InstallNoOnlineAppSolution pkg)
-
-                                            Solver.NoOfflineSolution ->
-                                                Task.throw (Exit.InstallNoOfflineAppSolution pkg)
-
-                                            Solver.SolverErr exit ->
-                                                Task.throw (Exit.InstallHadSolverTrouble exit)
-                                    )
-            )
-
-    else if Dict.member identity pkg direct then
-        Task.pure AlreadyInstalled
+makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Outline.AppOutline
+makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
+    if Dict.member identity pkg direct then
+        Task.pure outline
 
     else
         -- is it already indirect?
         case Dict.get identity pkg indirect of
             Just vsn ->
                 Task.pure <|
-                    PromoteIndirect <|
-                        Outline.App <|
-                            Outline.AppOutline elmVersion
-                                sourceDirs
-                                (Dict.insert identity pkg vsn direct)
-                                (Dict.remove identity pkg indirect)
-                                testDirect
-                                testIndirect
+                    Outline.AppOutline elmVersion
+                        sourceDirs
+                        (Dict.insert identity pkg vsn direct)
+                        (Dict.remove identity pkg indirect)
+                        testDirect
+                        testIndirect
 
             Nothing ->
                 -- is it already a test dependency?
                 case Dict.get identity pkg testDirect of
                     Just vsn ->
                         Task.pure <|
-                            PromoteTest <|
-                                Outline.App <|
-                                    Outline.AppOutline elmVersion
-                                        sourceDirs
-                                        (Dict.insert identity pkg vsn direct)
-                                        indirect
-                                        (Dict.remove identity pkg testDirect)
-                                        testIndirect
+                            Outline.AppOutline elmVersion
+                                sourceDirs
+                                (Dict.insert identity pkg vsn direct)
+                                indirect
+                                (Dict.remove identity pkg testDirect)
+                                testIndirect
 
                     Nothing ->
                         -- is it already an indirect test dependency?
                         case Dict.get identity pkg testIndirect of
                             Just vsn ->
                                 Task.pure <|
-                                    PromoteTest <|
-                                        Outline.App <|
-                                            Outline.AppOutline elmVersion
-                                                sourceDirs
-                                                (Dict.insert identity pkg vsn direct)
-                                                indirect
-                                                testDirect
-                                                (Dict.remove identity pkg testIndirect)
+                                    Outline.AppOutline elmVersion
+                                        sourceDirs
+                                        (Dict.insert identity pkg vsn direct)
+                                        indirect
+                                        testDirect
+                                        (Dict.remove identity pkg testIndirect)
 
                             Nothing ->
                                 -- finally try to add it from scratch
                                 case Registry.getVersions_ pkg registry of
-                                    Err suggestions ->
+                                    Err _ ->
                                         case connection of
                                             Solver.Online _ ->
-                                                Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                                -- Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                                Task.throw Exit.MakeNoOutline
 
                                             Solver.Offline ->
-                                                Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                                -- Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                                Task.throw Exit.MakeNoOutline
 
                                     Ok _ ->
-                                        Task.io (Solver.addToApp cache connection registry pkg outline forTest)
+                                        Task.io (Solver.addToApp cache connection registry pkg outline False)
                                             |> Task.bind
                                                 (\result ->
                                                     case result of
-                                                        Solver.SolverOk (Solver.AppSolution old new app) ->
-                                                            Task.pure (Changes (detectChanges old new) (Outline.App app))
+                                                        Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                                            Task.pure app
 
                                                         Solver.NoSolution ->
-                                                            Task.throw (Exit.InstallNoOnlineAppSolution pkg)
+                                                            -- Task.throw (Exit.InstallNoOnlineAppSolution pkg)
+                                                            Task.throw Exit.MakeNoOutline
 
                                                         Solver.NoOfflineSolution ->
-                                                            Task.throw (Exit.InstallNoOfflineAppSolution pkg)
+                                                            -- Task.throw (Exit.InstallNoOfflineAppSolution pkg)
+                                                            Task.throw Exit.MakeNoOutline
 
                                                         Solver.SolverErr exit ->
-                                                            Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                            -- Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                            Task.throw Exit.MakeNoOutline
                                                 )
 
 
 
 -- MAKE PACKAGE PLAN
-
-
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Bool -> Task (Changes C.Constraint)
-makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) forTest =
-    if forTest then
-        if Dict.member identity pkg test then
-            Task.pure AlreadyInstalled
-
-        else
-            -- try to add a new dependency
-            case Registry.getVersions_ pkg registry of
-                Err suggestions ->
-                    case connection of
-                        Solver.Online _ ->
-                            Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
-
-                        Solver.Offline ->
-                            Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
-
-                Ok (Registry.KnownVersions _ _) ->
-                    let
-                        cons : Dict ( String, String ) Pkg.Name C.Constraint
-                        cons =
-                            Dict.insert identity pkg C.anything test
-                    in
-                    Task.io (Solver.verify cache connection registry cons)
-                        |> Task.bind
-                            (\result ->
-                                case result of
-                                    Solver.SolverOk solution ->
-                                        let
-                                            (Solver.Details vsn _) =
-                                                Utils.find identity pkg solution
-
-                                            con : C.Constraint
-                                            con =
-                                                C.untilNextMajor vsn
-
-                                            newTest : Dict ( String, String ) Pkg.Name C.Constraint
-                                            newTest =
-                                                Dict.insert identity pkg con test
-
-                                            changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
-                                            changes =
-                                                detectChanges test newTest
-
-                                            news : Dict ( String, String ) Pkg.Name C.Constraint
-                                            news =
-                                                Utils.mapMapMaybe identity Pkg.compareName keepNew changes
-                                        in
-                                        Task.pure <|
-                                            Changes changes <|
-                                                Outline.Pkg <|
-                                                    Outline.PkgOutline name
-                                                        summary
-                                                        license
-                                                        version
-                                                        exposed
-                                                        deps
-                                                        (addNews (Just pkg) news test)
-                                                        elmVersion
-
-                                    Solver.NoSolution ->
-                                        Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
-
-                                    Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
-
-                                    Solver.SolverErr exit ->
-                                        Task.throw (Exit.InstallHadSolverTrouble exit)
-                            )
-
-    else if Dict.member identity pkg deps then
-        Task.pure AlreadyInstalled
-
-    else
-        -- is already in test dependencies?
-        case Dict.get identity pkg test of
-            Just con ->
-                Task.pure <|
-                    PromoteTest <|
-                        Outline.Pkg <|
-                            Outline.PkgOutline name
-                                summary
-                                license
-                                version
-                                exposed
-                                (Dict.insert identity pkg con deps)
-                                (Dict.remove identity pkg test)
-                                elmVersion
-
-            Nothing ->
-                -- try to add a new dependency
-                case Registry.getVersions_ pkg registry of
-                    Err suggestions ->
-                        case connection of
-                            Solver.Online _ ->
-                                Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
-
-                            Solver.Offline ->
-                                Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
-
-                    Ok (Registry.KnownVersions _ _) ->
-                        let
-                            old : Dict ( String, String ) Pkg.Name C.Constraint
-                            old =
-                                Dict.union deps test
-
-                            cons : Dict ( String, String ) Pkg.Name C.Constraint
-                            cons =
-                                Dict.insert identity pkg C.anything old
-                        in
-                        Task.io (Solver.verify cache connection registry cons)
-                            |> Task.bind
-                                (\result ->
-                                    case result of
-                                        Solver.SolverOk solution ->
-                                            let
-                                                (Solver.Details vsn _) =
-                                                    Utils.find identity pkg solution
-
-                                                con : C.Constraint
-                                                con =
-                                                    C.untilNextMajor vsn
-
-                                                new : Dict ( String, String ) Pkg.Name C.Constraint
-                                                new =
-                                                    Dict.insert identity pkg con old
-
-                                                changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
-                                                changes =
-                                                    detectChanges old new
-
-                                                news : Dict ( String, String ) Pkg.Name C.Constraint
-                                                news =
-                                                    Utils.mapMapMaybe identity Pkg.compareName keepNew changes
-                                            in
-                                            Task.pure <|
-                                                Changes changes <|
-                                                    Outline.Pkg <|
-                                                        Outline.PkgOutline name
-                                                            summary
-                                                            license
-                                                            version
-                                                            exposed
-                                                            (addNews (Just pkg) news deps)
-                                                            (addNews Nothing news test)
-                                                            elmVersion
-
-                                        Solver.NoSolution ->
-                                            Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
-
-                                        Solver.NoOfflineSolution ->
-                                            Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
-
-                                        Solver.SolverErr exit ->
-                                            Task.throw (Exit.InstallHadSolverTrouble exit)
-                                )
+-- makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Bool -> Task (Changes C.Constraint)
+-- makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) forTest =
+--     if forTest then
+--         if Dict.member identity pkg test then
+--             Task.pure AlreadyInstalled
+--         else
+--             -- try to add a new dependency
+--             case Registry.getVersions_ pkg registry of
+--                 Err suggestions ->
+--                     case connection of
+--                         Solver.Online _ ->
+--                             Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+--                         Solver.Offline ->
+--                             Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+--                 Ok (Registry.KnownVersions _ _) ->
+--                     let
+--                         cons : Dict ( String, String ) Pkg.Name C.Constraint
+--                         cons =
+--                             Dict.insert identity pkg C.anything test
+--                     in
+--                     Task.io (Solver.verify cache connection registry cons)
+--                         |> Task.bind
+--                             (\result ->
+--                                 case result of
+--                                     Solver.SolverOk solution ->
+--                                         let
+--                                             (Solver.Details vsn _) =
+--                                                 Utils.find identity pkg solution
+--                                             con : C.Constraint
+--                                             con =
+--                                                 C.untilNextMajor vsn
+--                                             newTest : Dict ( String, String ) Pkg.Name C.Constraint
+--                                             newTest =
+--                                                 Dict.insert identity pkg con test
+--                                             changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
+--                                             changes =
+--                                                 detectChanges test newTest
+--                                             news : Dict ( String, String ) Pkg.Name C.Constraint
+--                                             news =
+--                                                 Utils.mapMapMaybe identity Pkg.compareName keepNew changes
+--                                         in
+--                                         Task.pure <|
+--                                             Changes changes <|
+--                                                 Outline.Pkg <|
+--                                                     Outline.PkgOutline name
+--                                                         summary
+--                                                         license
+--                                                         version
+--                                                         exposed
+--                                                         deps
+--                                                         (addNews (Just pkg) news test)
+--                                                         elmVersion
+--                                     Solver.NoSolution ->
+--                                         Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
+--                                     Solver.NoOfflineSolution ->
+--                                         Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
+--                                     Solver.SolverErr exit ->
+--                                         Task.throw (Exit.InstallHadSolverTrouble exit)
+--                             )
+--     else if Dict.member identity pkg deps then
+--         Task.pure AlreadyInstalled
+--     else
+--         -- is already in test dependencies?
+--         case Dict.get identity pkg test of
+--             Just con ->
+--                 Task.pure <|
+--                     PromoteTest <|
+--                         Outline.Pkg <|
+--                             Outline.PkgOutline name
+--                                 summary
+--                                 license
+--                                 version
+--                                 exposed
+--                                 (Dict.insert identity pkg con deps)
+--                                 (Dict.remove identity pkg test)
+--                                 elmVersion
+--             Nothing ->
+--                 -- try to add a new dependency
+--                 case Registry.getVersions_ pkg registry of
+--                     Err suggestions ->
+--                         case connection of
+--                             Solver.Online _ ->
+--                                 Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+--                             Solver.Offline ->
+--                                 Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+--                     Ok (Registry.KnownVersions _ _) ->
+--                         let
+--                             old : Dict ( String, String ) Pkg.Name C.Constraint
+--                             old =
+--                                 Dict.union deps test
+--                             cons : Dict ( String, String ) Pkg.Name C.Constraint
+--                             cons =
+--                                 Dict.insert identity pkg C.anything old
+--                         in
+--                         Task.io (Solver.verify cache connection registry cons)
+--                             |> Task.bind
+--                                 (\result ->
+--                                     case result of
+--                                         Solver.SolverOk solution ->
+--                                             let
+--                                                 (Solver.Details vsn _) =
+--                                                     Utils.find identity pkg solution
+--                                                 con : C.Constraint
+--                                                 con =
+--                                                     C.untilNextMajor vsn
+--                                                 new : Dict ( String, String ) Pkg.Name C.Constraint
+--                                                 new =
+--                                                     Dict.insert identity pkg con old
+--                                                 changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
+--                                                 changes =
+--                                                     detectChanges old new
+--                                                 news : Dict ( String, String ) Pkg.Name C.Constraint
+--                                                 news =
+--                                                     Utils.mapMapMaybe identity Pkg.compareName keepNew changes
+--                                             in
+--                                             Task.pure <|
+--                                                 Changes changes <|
+--                                                     Outline.Pkg <|
+--                                                         Outline.PkgOutline name
+--                                                             summary
+--                                                             license
+--                                                             version
+--                                                             exposed
+--                                                             (addNews (Just pkg) news deps)
+--                                                             (addNews Nothing news test)
+--                                                             elmVersion
+--                                         Solver.NoSolution ->
+--                                             Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
+--                                         Solver.NoOfflineSolution ->
+--                                             Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
+--                                         Solver.SolverErr exit ->
+--                                             Task.throw (Exit.InstallHadSolverTrouble exit)
+--                                 )
 
 
 addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
@@ -912,3 +1211,44 @@ keepNew change =
 
         Remove _ ->
             Nothing
+
+
+
+-- GET INTERPRETER
+
+
+getInterpreter : IO FilePath
+getInterpreter =
+    getInterpreterHelp "node` or `nodejs" <|
+        (Utils.dirFindExecutable "node"
+            |> IO.bind
+                (\exe1 ->
+                    Utils.dirFindExecutable "nodejs"
+                        |> IO.fmap (\exe2 -> Maybe.or exe1 exe2)
+                )
+        )
+
+
+getInterpreterHelp : String -> IO (Maybe FilePath) -> IO FilePath
+getInterpreterHelp name findExe =
+    findExe
+        |> IO.bind
+            (\maybePath ->
+                case maybePath of
+                    Just path ->
+                        IO.pure path
+
+                    Nothing ->
+                        IO.hPutStrLn IO.stderr (exeNotFound name)
+                            |> IO.bind (\_ -> Exit.exitFailure)
+            )
+
+
+exeNotFound : String -> String
+exeNotFound name =
+    "The REPL relies on node.js to execute JavaScript code outside the browser.\n"
+        ++ "I could not find executable `"
+        ++ name
+        ++ "` on your PATH though!\n\n"
+        ++ "You can install node.js from <http://nodejs.org/>. If it is already installed\n"
+        ++ "but has a different name, use the --interpreter flag."

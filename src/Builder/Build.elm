@@ -93,14 +93,14 @@ toAbsoluteSrcDir root srcDir =
                     dir
 
                 Outline.RelativeSrcDir dir ->
-                    Utils.fpForwardSlash root dir
+                    Utils.fpCombine root dir
             )
         )
 
 
 addRelative : AbsoluteSrcDir -> FilePath -> FilePath
 addRelative (AbsoluteSrcDir srcDir) path =
-    Utils.fpForwardSlash srcDir path
+    Utils.fpCombine srcDir path
 
 
 
@@ -439,7 +439,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
 
 crawlFile : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> IO Status
 crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
-    File.readUtf8 (Utils.fpForwardSlash root path)
+    File.readUtf8 (Utils.fpCombine root path)
         |> IO.bind
             (\source ->
                 case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of

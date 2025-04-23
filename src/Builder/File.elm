@@ -156,10 +156,10 @@ writeEntry destination root entry =
             || (path == "elm.json")
     then
         if not (String.isEmpty path) && String.endsWith "/" path then
-            Utils.dirCreateDirectoryIfMissing True (Utils.fpForwardSlash destination path)
+            Utils.dirCreateDirectoryIfMissing True (Utils.fpCombine destination path)
 
         else
-            writeUtf8 (Utils.fpForwardSlash destination path) (Zip.fromEntry entry)
+            writeUtf8 (Utils.fpCombine destination path) (Zip.fromEntry entry)
 
     else
         IO.pure ()

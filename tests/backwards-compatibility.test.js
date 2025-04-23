@@ -120,14 +120,14 @@ describe("backwards compatibility", () => {
     try {
       childProcess.execSync(
         `elm make src/Invalid.elm --report=json &> ${elmOutput}`,
-        { cwd: path.join(__dirname, "assets", "some-application") }
+        { cwd: path.join(__dirname, "..", "assets", "some-application") }
       );
     } catch (_) { }
 
     try {
       childProcess.execSync(
         `../../../bin/index.js make src/Invalid.elm --report=json &> ${guidaOutput}`,
-        { cwd: path.join(__dirname, "assets", "some-application") }
+        { cwd: path.join(__dirname, "..", "assets", "some-application") }
       );
     } catch (_) { }
 
@@ -141,7 +141,7 @@ describe("backwards compatibility", () => {
     try {
       childProcess.execSync(
         `elm make --docs=${elmOutput}`,
-        { cwd: path.join(__dirname, "assets", "some-package") }
+        { cwd: path.join(__dirname, "..", "assets", "some-package") }
       );
     } catch (e) {
       console.error(e);
@@ -150,7 +150,7 @@ describe("backwards compatibility", () => {
     try {
       childProcess.execSync(
         `../../../bin/index.js make --docs=${guidaOutput}`,
-        { cwd: path.join(__dirname, "assets", "some-package") }
+        { cwd: path.join(__dirname, "..", "assets", "some-package") }
       );
     } catch (e) {
       console.error(e);
@@ -160,21 +160,21 @@ describe("backwards compatibility", () => {
   });
 
   describe("tuples", () => {
-    test.skip("fails on 3+ tuples on elm files", () => {
+    test("fails on 3+ tuples on elm files", () => {
       const elmOutput = `${tmpDir}/guida-test-elm-tuple-n-${process.pid}.json`;
       const guidaOutput = `${tmpDir}/guida-test-guida-tuple-n-${process.pid}.json`;
 
       try {
         childProcess.execSync(
           `elm make src/ElmTupleN.elm --report=json &> ${elmOutput}`,
-          { cwd: path.join(__dirname, "assets", "some-application") }
+          { cwd: path.join(__dirname, "..", "assets", "some-application") }
         );
       } catch (_) { }
 
       try {
         childProcess.execSync(
           `../../../bin/index.js make src/ElmTupleN.elm --report=json &> ${guidaOutput}`,
-          { cwd: path.join(__dirname, "assets", "some-application") }
+          { cwd: path.join(__dirname, "..", "assets", "some-application") }
         );
       } catch (_) { }
 

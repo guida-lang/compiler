@@ -795,7 +795,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
     let
         path : String -> FilePath
         path extension =
-            Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) extension)
+            Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) extension)
 
         guidaPath : FilePath
         guidaPath =
@@ -886,7 +886,7 @@ crawlKernel foreignDeps mvar pkg src name =
     let
         path : FilePath
         path =
-            Utils.fpForwardSlash src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
+            Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
     in
     File.exists path
         |> IO.bind

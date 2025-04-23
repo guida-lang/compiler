@@ -47,9 +47,9 @@ module Utils.Main exposing
     , forkIO
     , fpAddExtension
     , fpAddTrailingPathSeparator
+    , fpCombine
     , fpDropExtension
     , fpDropFileName
-    , fpForwardSlash
     , fpIsRelative
     , fpJoinPath
     , fpMakeRelative
@@ -171,9 +171,17 @@ fpDropFileName path =
             ""
 
 
-fpForwardSlash : FilePath -> FilePath -> FilePath
-fpForwardSlash path1 path2 =
-    if String.startsWith path1 path2 then
+{-| An alias for `</>`.
+
+Combine two paths with a path separator. If the second path starts with a
+path separator or a drive letter, then it returns the second.
+The intention is that readFile `(dir </> file)` will access the same file
+as `setCurrentDirectory dir; readFile file`.
+
+-}
+fpCombine : FilePath -> FilePath -> FilePath
+fpCombine path1 path2 =
+    if String.startsWith "/" path2 || String.startsWith path1 path2 then
         path2
 
     else
