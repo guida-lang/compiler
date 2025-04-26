@@ -126,7 +126,7 @@ describe("backwards compatibility", () => {
 
     try {
       childProcess.execSync(
-        `../../../bin/index.js make src/Invalid.elm --report=json &> ${guidaOutput}`,
+        `../../bin/index.js make src/Invalid.elm --report=json &> ${guidaOutput}`,
         { cwd: path.join(__dirname, "..", "assets", "some-application") }
       );
     } catch (_) { }
@@ -149,7 +149,7 @@ describe("backwards compatibility", () => {
 
     try {
       childProcess.execSync(
-        `../../../bin/index.js make --docs=${guidaOutput}`,
+        `../../bin/index.js make --docs=${guidaOutput}`,
         { cwd: path.join(__dirname, "..", "assets", "some-package") }
       );
     } catch (e) {
@@ -173,7 +173,7 @@ describe("backwards compatibility", () => {
 
       try {
         childProcess.execSync(
-          `../../../bin/index.js make src/ElmTupleN.elm --report=json &> ${guidaOutput}`,
+          `../../bin/index.js make src/ElmTupleN.elm --report=json &> ${guidaOutput}`,
           { cwd: path.join(__dirname, "..", "assets", "some-application") }
         );
       } catch (_) { }

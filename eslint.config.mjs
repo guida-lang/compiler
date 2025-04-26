@@ -11,7 +11,7 @@ export default defineConfig([
     "lib/guida.js",
     "lib/guida.min.js",
     "elm-stuff",
-    "guida-stuff"
+    "guida-stuff",
   ]),
   { files: ["**/*.{js,mjs,cjs}"] },
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
