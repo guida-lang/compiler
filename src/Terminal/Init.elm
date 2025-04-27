@@ -146,8 +146,9 @@ init package =
                                                                                 packageDefaults
                                                                     in
                                                                     Outline.Pkg <|
-                                                                        Outline.PkgOutline ( "author", "project" )
-                                                                            "Update this with a brief description before publishing."
+                                                                        Outline.PkgOutline
+                                                                            Pkg.dummyName
+                                                                            Outline.defaultSummary
                                                                             Licenses.bsd3
                                                                             V.one
                                                                             (Outline.ExposedList [])

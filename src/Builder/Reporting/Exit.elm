@@ -17,6 +17,7 @@ module Builder.Reporting.Exit exposing
     , RegistryProblem(..)
     , Repl(..)
     , Solver(..)
+    , Test(..)
     , Uninstall(..)
     , buildProblemDecoder
     , buildProblemEncoder
@@ -34,6 +35,7 @@ module Builder.Reporting.Exit exposing
     , registryProblemDecoder
     , registryProblemEncoder
     , replToReport
+    , testToReport
     , toJson
     , toStderr
     , uninstallToReport
@@ -2895,6 +2897,39 @@ replToReport problem =
 
         ReplBlocked ->
             corruptCacheReport
+
+
+
+-- TEST
+
+
+type Test
+    = TestNoOutline
+    | TestBadOutline Outline
+    | TestBadRegistry RegistryProblem
+    | TestBadDetails Details
+
+
+testToReport : Test -> Help.Report
+testToReport test =
+    case test of
+        TestNoOutline ->
+            Help.report "TEST WHAT?"
+                Nothing
+                "I cannot find an elm.json so I am not sure what you want me to test."
+                [ D.reflow <|
+                    "Elm packages always have an elm.json that states the version number, dependencies, exposed modules, etc."
+                ]
+
+        TestBadOutline outline ->
+            toOutlineReport outline
+
+        TestBadRegistry problem ->
+            toRegistryProblemReport "PROBLEM LOADING PACKAGE LIST" problem <|
+                "I need the list of published packages to figure out how to install things"
+
+        TestBadDetails details ->
+            toDetailsReport details
 
 
 

@@ -176,27 +176,27 @@ server.post("withCreateProcess", (request) => {
   tmp.file((err, path, fd) => {
     if (err) throw err;
 
-      nextCounter += 1;
+    nextCounter += 1;
 
     fs.createReadStream(path)
       .on("data", (chunk) => {
         processes[nextCounter].stdin.end(chunk);
       });
 
-      processes[nextCounter] = child_process.spawn(
-        createProcess.cmdspec.cmd,
-        createProcess.cmdspec.args,
-        {
-          stdio: [
-            createProcess.stdin,
-            createProcess.stdout,
-            createProcess.stderr,
-          ],
-        }
-      );
+    processes[nextCounter] = child_process.spawn(
+      createProcess.cmdspec.cmd,
+      createProcess.cmdspec.args,
+      {
+        stdio: [
+          createProcess.stdin,
+          createProcess.stdout,
+          createProcess.stderr,
+        ],
+      }
+    );
 
-      request.respond(200, null, JSON.stringify({ stdinHandle: fd, ph: nextCounter }));
-    });
+    request.respond(200, null, JSON.stringify({ stdinHandle: fd, ph: nextCounter }));
+  });
 });
 
 server.post("hClose", (request) => {

@@ -40,233 +40,192 @@ import Utils.Main as Utils exposing (FilePath)
 
 
 type alias Task a =
-    Task.Task Exit.Make a
+    Task.Task Exit.Test a
 
 
 run : List String -> () -> IO ()
 run paths flags =
-    getStyle
+    Stuff.findRoot
         |> IO.bind
-            (\style ->
-                Stuff.findRoot
-                    |> IO.bind
-                        (\maybeRoot ->
-                            Reporting.attemptWithStyle style Exit.makeToReport <|
-                                case maybeRoot of
-                                    Just root ->
-                                        runHelp root paths style flags
+            (\maybeRoot ->
+                Reporting.attemptWithStyle style Exit.testToReport <|
+                    case maybeRoot of
+                        Just root ->
+                            runHelp root paths flags
 
-                                    Nothing ->
-                                        IO.pure (Err Exit.MakeNoOutline)
-                        )
+                        Nothing ->
+                            IO.pure (Err Exit.TestNoOutline)
             )
 
 
-runHelp : String -> List String -> Reporting.Style -> () -> IO (Result Exit.Make ())
-runHelp root testFileGlobs style () =
-    BW.withScope
-        (\scope ->
-            Stuff.withRootLock root <|
-                Task.run <|
-                    (Task.eio Exit.MakeBadDetails (Details.load style scope root)
-                        |> Task.bind
-                            (\details ->
-                                -- TODO: we might want to consider wrapping the code into a task that creates and removes the folder for tests
-                                -- Utils.bracket_
-                                --     (Utils.dirCreateDirectoryIfMissing True dir)
-                                --     (Utils.dirRemoveDirectoryRecursive dir)
-                                --     (Task.run (callback dir))
-                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
-                                    |> Task.io
-                                    |> Task.bind
-                                        (\_ ->
-                                            getExposed details
-                                                |> Task.bind
-                                                    (\exposed ->
-                                                        Task.eio
-                                                            (\_ ->
-                                                                -- Exit.InstallBadOutline
-                                                                Exit.MakeNoOutline
-                                                            )
-                                                            (Outline.read root)
-                                                            |> Task.bind
-                                                                (\oldOutline ->
-                                                                    Task.io (Utils.dirDoesDirectoryExist "tests")
-                                                                        |> Task.bind
-                                                                            (\testsDirExists ->
-                                                                                let
-                                                                                    newOutline =
-                                                                                        case oldOutline of
-                                                                                            Outline.App (Outline.AppOutline elmVersion srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                                                let
-                                                                                                    addOptionalTests =
-                                                                                                        if testsDirExists then
-                                                                                                            NE.cons (Outline.RelativeSrcDir "tests")
-
-                                                                                                        else
-                                                                                                            identity
-
-                                                                                                    newSrcDirs =
-                                                                                                        srcDirs
-                                                                                                            -- TODO/FIXME we shouldn't need to install elm-test...
-                                                                                                            |> NE.cons (Outline.RelativeSrcDir "node_modules/elm-test/elm/src")
-                                                                                                            |> addOptionalTests
-                                                                                                            |> NE.map
-                                                                                                                (\srcDir ->
-                                                                                                                    case srcDir of
-                                                                                                                        Outline.AbsoluteSrcDir _ ->
-                                                                                                                            srcDir
-
-                                                                                                                        Outline.RelativeSrcDir path ->
-                                                                                                                            Outline.RelativeSrcDir ("../../../" ++ path)
-                                                                                                                )
-                                                                                                            |> NE.cons (Outline.RelativeSrcDir "src")
-                                                                                                in
-                                                                                                Outline.App (Outline.AppOutline elmVersion newSrcDirs depsDirect depsTrans testDirect testTrans)
-
-                                                                                            Outline.Pkg _ ->
-                                                                                                oldOutline
-                                                                                in
-                                                                                -- TODO
-                                                                                -- // Note: These are the dependencies listed in `elm/elm.json`, except
-                                                                                -- // `elm-explorations/test`. `elm/elm.json` is only used during development of
-                                                                                -- // this CLI (for editor integrations and unit tests). When running `elm-test`
-                                                                                -- // we add the `elm/` folder in the npm package as a source directory. The
-                                                                                -- // dependencies listed here and the ones in `elm/elm.json` need to be in sync.
-                                                                                -- const extra = {
-                                                                                --     'elm/core': '1.0.0 <= v < 2.0.0',
-                                                                                --     'elm/json': '1.0.0 <= v < 2.0.0',
-                                                                                --     'elm/time': '1.0.0 <= v < 2.0.0',
-                                                                                --     'elm/random': '1.0.0 <= v < 2.0.0',
-                                                                                -- };
-                                                                                Task.eio
-                                                                                    (\_ ->
-                                                                                        -- Exit.InstallBadRegistry
-                                                                                        Exit.MakeNoOutline
-                                                                                    )
-                                                                                    Solver.initEnv
-                                                                                    |> Task.bind
-                                                                                        (\env ->
-                                                                                            case newOutline of
-                                                                                                Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                                                    let
-                                                                                                        outline =
-                                                                                                            Outline.AppOutline elm
-                                                                                                                srcDirs
-                                                                                                                (Dict.union depsDirect testDirect)
-                                                                                                                (Dict.union depsTrans testTrans)
-                                                                                                                Dict.empty
-                                                                                                                Dict.empty
-                                                                                                    in
-                                                                                                    makeAppPlan env ( "elm", "core" ) outline
-                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "json" ))
-                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "time" ))
-                                                                                                        |> Task.bind (makeAppPlan env ( "elm", "random" ))
-                                                                                                        |> Task.bind (attemptChanges root env << Outline.App)
-
-                                                                                                Outline.Pkg outline ->
-                                                                                                    -- makePkgPlan env pkg outline
-                                                                                                    --     |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
-                                                                                                    Debug.todo "TODO: makePkgPlan"
-                                                                                        )
-                                                                            )
-                                                                )
-                                                            |> Task.bind
-                                                                (\_ ->
+runHelp : String -> List String -> () -> IO (Result Exit.Test ())
+runHelp root testFileGlobs () =
+    Stuff.withRootLock root <|
+        Task.run <|
+            (-- TODO: we might want to consider wrapping the code into a task that creates and removes the folder for tests
+             -- Utils.bracket_
+             --     (Utils.dirCreateDirectoryIfMissing True dir)
+             --     (Utils.dirRemoveDirectoryRecursive dir)
+             --     (Task.run (callback dir))
+             Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
+                |> Task.io
+                |> Task.bind
+                    (\_ ->
+                        Task.eio Exit.TestBadOutline (Outline.read root)
+                            |> Task.bind
+                                (\oldOutline ->
+                                    Task.io (Utils.dirDoesDirectoryExist "tests")
+                                        |> Task.bind
+                                            (\testsDirExists ->
+                                                -- TODO
+                                                -- // Note: These are the dependencies listed in `elm/elm.json`, except
+                                                -- // `elm-explorations/test`. `elm/elm.json` is only used during development of
+                                                -- // this CLI (for editor integrations and unit tests). When running `elm-test`
+                                                -- // we add the `elm/` folder in the npm package as a source directory. The
+                                                -- // dependencies listed here and the ones in `elm/elm.json` need to be in sync.
+                                                -- const extra = {
+                                                --     'elm/core': '1.0.0 <= v < 2.0.0',
+                                                --     'elm/json': '1.0.0 <= v < 2.0.0',
+                                                --     'elm/time': '1.0.0 <= v < 2.0.0',
+                                                --     'elm/random': '1.0.0 <= v < 2.0.0',
+                                                -- };
+                                                Task.eio Exit.TestBadRegistry Solver.initEnv
+                                                    |> Task.bind
+                                                        (\env ->
+                                                            case oldOutline of
+                                                                Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
                                                                     let
-                                                                        paths =
-                                                                            case testFileGlobs of
-                                                                                [] ->
-                                                                                    [ root ++ "/tests" ]
+                                                                        addOptionalTests =
+                                                                            if testsDirExists then
+                                                                                NE.cons (Outline.RelativeSrcDir "tests")
 
-                                                                                _ ->
-                                                                                    testFileGlobs
+                                                                            else
+                                                                                identity
+
+                                                                        newSrcDirs =
+                                                                            srcDirs
+                                                                                -- TODO/FIXME we shouldn't need to install elm-test...
+                                                                                |> NE.cons (Outline.RelativeSrcDir "node_modules/elm-test/elm/src")
+                                                                                |> addOptionalTests
+                                                                                |> NE.map
+                                                                                    (\srcDir ->
+                                                                                        case srcDir of
+                                                                                            Outline.AbsoluteSrcDir _ ->
+                                                                                                srcDir
+
+                                                                                            Outline.RelativeSrcDir path ->
+                                                                                                Outline.RelativeSrcDir ("../../../" ++ path)
+                                                                                    )
+                                                                                |> NE.cons (Outline.RelativeSrcDir "src")
                                                                     in
-                                                                    resolveElmFiles paths
-                                                                        |> IO.bind
-                                                                            (\resolvedInputFiles ->
-                                                                                case resolvedInputFiles of
-                                                                                    Ok inputFiles ->
-                                                                                        inputFiles
-                                                                                            |> Utils.listTraverse
-                                                                                                (\inputFile ->
-                                                                                                    case List.filter (\path -> String.startsWith path inputFile) paths of
-                                                                                                        [] ->
-                                                                                                            Debug.todo "TODO: handle empty paths"
+                                                                    Outline.AppOutline elm newSrcDirs (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                        |> makeAppPlan env ( "elm", "core" )
+                                                                        |> Task.bind (makeAppPlan env ( "elm", "json" ))
+                                                                        |> Task.bind (makeAppPlan env ( "elm", "time" ))
+                                                                        |> Task.bind (makeAppPlan env ( "elm", "random" ))
+                                                                        |> Task.bind (attemptChanges root env << Outline.App)
 
-                                                                                                        [ _ ] ->
-                                                                                                            extractExposedPossiblyTests inputFile
-                                                                                                                |> IO.fmap (Maybe.map (Tuple.pair (root ++ "/" ++ inputFile)))
+                                                                Outline.Pkg outline ->
+                                                                    -- makePkgPlan env pkg outline
+                                                                    --     |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    Debug.todo "TODO: makePkgPlan"
+                                                        )
+                                            )
+                                )
+                            |> Task.bind
+                                (\_ ->
+                                    let
+                                        paths =
+                                            case testFileGlobs of
+                                                [] ->
+                                                    [ root ++ "/tests" ]
 
-                                                                                                        _ ->
-                                                                                                            Debug.todo "TODO: handle multiple paths"
-                                                                                                )
+                                                _ ->
+                                                    testFileGlobs
+                                    in
+                                    resolveElmFiles paths
+                                        |> IO.bind
+                                            (\resolvedInputFiles ->
+                                                case resolvedInputFiles of
+                                                    Ok inputFiles ->
+                                                        inputFiles
+                                                            |> Utils.listTraverse
+                                                                (\inputFile ->
+                                                                    case List.filter (\path -> String.startsWith path inputFile) paths of
+                                                                        [] ->
+                                                                            Debug.todo "TODO: handle empty paths"
 
-                                                                                    Err _ ->
-                                                                                        IO.pure []
-                                                                            )
-                                                                        |> IO.fmap (List.filterMap identity)
-                                                                        |> IO.bind
-                                                                            (\exposedList ->
-                                                                                let
-                                                                                    testModules =
-                                                                                        List.map
-                                                                                            (\( _, ( moduleName, possiblyTests ) ) ->
-                                                                                                { moduleName = moduleName
-                                                                                                , possiblyTests = possiblyTests
-                                                                                                }
-                                                                                            )
-                                                                                            exposedList
-                                                                                in
-                                                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
-                                                                                    |> IO.bind
-                                                                                        (\_ ->
-                                                                                            IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm") (testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList))
-                                                                                        )
-                                                                            )
-                                                                        |> IO.bind
-                                                                            (\_ ->
-                                                                                Utils.dirWithCurrentDirectory (Stuff.testDir root) <|
-                                                                                    Make.run [ "src/Test/Generated/Main.elm" ] (Make.Flags False False False (Just (Make.JS "tmp.js")) Nothing Nothing)
-                                                                            )
-                                                                        |> IO.bind
-                                                                            (\_ ->
-                                                                                File.readUtf8 (Stuff.testDir root ++ "/tmp.js")
-                                                                                    |> IO.bind
-                                                                                        (\content ->
-                                                                                            let
-                                                                                                pipeFilename =
-                                                                                                    "/tmp/elm-test-somefile.sock"
+                                                                        [ _ ] ->
+                                                                            extractExposedPossiblyTests inputFile
+                                                                                |> IO.fmap (Maybe.map (Tuple.pair (root ++ "/" ++ inputFile)))
 
-                                                                                                finalContent =
-                                                                                                    before
-                                                                                                        ++ "\nvar Elm = (function(module) {\n"
-                                                                                                        ++ addKernelTestChecking content
-                                                                                                        ++ "\nreturn this.Elm;\n})({});\nvar pipeFilename = "
-                                                                                                        ++ Encode.encode 0 (Encode.string pipeFilename)
-                                                                                                        ++ ";\n"
-                                                                                                        ++ after
-                                                                                            in
-                                                                                            IO.writeString (Stuff.testDir root ++ "/index.js") finalContent
-                                                                                        )
-                                                                                    |> IO.bind (\_ -> IO.hPutStrLn IO.stdout "Starting tests")
-                                                                            )
-                                                                        |> IO.bind
-                                                                            (\_ ->
-                                                                                getInterpreter
-                                                                                    |> IO.bind
-                                                                                        (\interpreter ->
-                                                                                            interpret interpreter (Stuff.testDir root ++ "/index.js")
-                                                                                        )
-                                                                            )
-                                                                        |> Task.io
+                                                                        _ ->
+                                                                            Debug.todo "TODO: handle multiple paths"
                                                                 )
-                                                            |> Task.fmap (\_ -> ())
-                                                    )
-                                        )
-                            )
+
+                                                    Err _ ->
+                                                        -- TODO
+                                                        IO.pure []
+                                            )
+                                        |> IO.fmap (List.filterMap identity)
+                                        |> IO.bind
+                                            (\exposedList ->
+                                                let
+                                                    testModules =
+                                                        List.map
+                                                            (\( _, ( moduleName, possiblyTests ) ) ->
+                                                                { moduleName = moduleName
+                                                                , possiblyTests = possiblyTests
+                                                                }
+                                                            )
+                                                            exposedList
+                                                in
+                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
+                                                    |> IO.bind
+                                                        (\_ ->
+                                                            IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm") (testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList))
+                                                        )
+                                            )
+                                        |> IO.bind
+                                            (\_ ->
+                                                Utils.dirWithCurrentDirectory (Stuff.testDir root) <|
+                                                    Make.run [ "src/Test/Generated/Main.elm" ] (Make.Flags False False False (Just (Make.JS "tmp.js")) Nothing Nothing)
+                                            )
+                                        |> IO.bind
+                                            (\_ ->
+                                                File.readUtf8 (Stuff.testDir root ++ "/tmp.js")
+                                                    |> IO.bind
+                                                        (\content ->
+                                                            let
+                                                                pipeFilename =
+                                                                    "/tmp/elm-test-somefile.sock"
+
+                                                                finalContent =
+                                                                    before
+                                                                        ++ "\nvar Elm = (function(module) {\n"
+                                                                        ++ addKernelTestChecking content
+                                                                        ++ "\nreturn this.Elm;\n})({});\nvar pipeFilename = "
+                                                                        ++ Encode.encode 0 (Encode.string pipeFilename)
+                                                                        ++ ";\n"
+                                                                        ++ after
+                                                            in
+                                                            IO.writeString (Stuff.testDir root ++ "/index.js") finalContent
+                                                        )
+                                                    |> IO.bind (\_ -> IO.hPutStrLn IO.stdout "Starting tests")
+                                            )
+                                        |> IO.bind
+                                            (\_ ->
+                                                getInterpreter
+                                                    |> IO.bind
+                                                        (\interpreter ->
+                                                            interpret interpreter (Stuff.testDir root ++ "/index.js")
+                                                        )
+                                            )
+                                        |> Task.io
+                                )
+                            |> Task.fmap (\_ -> ())
                     )
-        )
+            )
 
 
 interpret : FilePath -> String -> IO Exit.ExitCode
@@ -690,25 +649,9 @@ makeModuleTuple mod =
 -- GET INFORMATION
 
 
-getStyle : IO Reporting.Style
-getStyle =
-    Reporting.terminal
-
-
-getExposed : Details.Details -> Task (NE.Nonempty ModuleName.Raw)
-getExposed (Details.Details _ validOutline _ _ _ _) =
-    case validOutline of
-        Details.ValidApp _ ->
-            -- Task.throw Exit.MakeAppNeedsFileNames
-            Task.pure (NE.Nonempty "tests" [])
-
-        Details.ValidPkg _ exposed _ ->
-            case exposed of
-                [] ->
-                    Task.throw Exit.MakePkgNeedsExposing
-
-                m :: ms ->
-                    Task.pure (NE.Nonempty m ms)
+style : Reporting.Style
+style =
+    Reporting.silent
 
 
 extractExposedPossiblyTests : String -> IO (Maybe ( String, List String ))
@@ -921,7 +864,7 @@ hasFilename name path =
 
 attemptChanges : FilePath -> Solver.Env -> Outline.Outline -> Task ()
 attemptChanges root env newOutline =
-    Task.eio Exit.MakeBadDetails <|
+    Task.eio Exit.TestBadDetails <|
         BW.withScope
             (\scope ->
                 Outline.write (Stuff.testDir root) newOutline
@@ -981,11 +924,11 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                                         case connection of
                                             Solver.Online _ ->
                                                 -- Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
-                                                Task.throw Exit.MakeNoOutline
+                                                Task.throw Exit.TestNoOutline
 
                                             Solver.Offline ->
                                                 -- Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
-                                                Task.throw Exit.MakeNoOutline
+                                                Task.throw Exit.TestNoOutline
 
                                     Ok _ ->
                                         Task.io (Solver.addToApp cache connection registry pkg outline False)
@@ -997,15 +940,15 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 
                                                         Solver.NoSolution ->
                                                             -- Task.throw (Exit.InstallNoOnlineAppSolution pkg)
-                                                            Task.throw Exit.MakeNoOutline
+                                                            Task.throw Exit.TestNoOutline
 
                                                         Solver.NoOfflineSolution ->
                                                             -- Task.throw (Exit.InstallNoOfflineAppSolution pkg)
-                                                            Task.throw Exit.MakeNoOutline
+                                                            Task.throw Exit.TestNoOutline
 
                                                         Solver.SolverErr exit ->
                                                             -- Task.throw (Exit.InstallHadSolverTrouble exit)
-                                                            Task.throw Exit.MakeNoOutline
+                                                            Task.throw Exit.TestNoOutline
                                                 )
 
 

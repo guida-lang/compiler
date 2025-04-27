@@ -158,7 +158,7 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 
 
 
--- LOAD -- used by Make, Repl, Reactor
+-- LOAD -- used by Make, Repl, Reactor, Test
 
 
 load : Reporting.Style -> BW.Scope -> FilePath -> IO (Result Exit.Details Details)
