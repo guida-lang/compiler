@@ -2908,6 +2908,8 @@ type Test
     | TestBadOutline Outline
     | TestBadRegistry RegistryProblem
     | TestBadDetails Details
+    | TestCannotBuild BuildProblem
+    | TestBadGenerate Generate
 
 
 testToReport : Test -> Help.Report
@@ -2930,6 +2932,12 @@ testToReport test =
 
         TestBadDetails details ->
             toDetailsReport details
+
+        TestCannotBuild buildProblem ->
+            toBuildProblemReport buildProblem
+
+        TestBadGenerate generateProblem ->
+            toGenerateReport generateProblem
 
 
 

@@ -180,7 +180,10 @@ server.post("withCreateProcess", (request) => {
 
     fs.createReadStream(path)
       .on("data", (chunk) => {
-        processes[nextCounter].stdin.end(chunk);
+        processes[nextCounter].stdin.write(chunk);
+      })
+      .on("close", () => {
+        processes[nextCounter].stdin.end();
       });
 
     processes[nextCounter] = child_process.spawn(

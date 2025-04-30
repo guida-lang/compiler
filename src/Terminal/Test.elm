@@ -7,6 +7,7 @@ import Builder.Deps.Solver as Solver
 import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
@@ -62,37 +63,20 @@ runHelp : String -> List String -> () -> IO (Result Exit.Test ())
 runHelp root testFileGlobs () =
     Stuff.withRootLock root <|
         Task.run <|
-            (-- TODO: we might want to consider wrapping the code into a task that creates and removes the folder for tests
-             -- Utils.bracket_
-             --     (Utils.dirCreateDirectoryIfMissing True dir)
-             --     (Utils.dirRemoveDirectoryRecursive dir)
-             --     (Task.run (callback dir))
-             Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
+            (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
                 |> Task.io
                 |> Task.bind
                     (\_ ->
                         Task.eio Exit.TestBadOutline (Outline.read root)
                             |> Task.bind
-                                (\oldOutline ->
+                                (\baseOutline ->
                                     Task.io (Utils.dirDoesDirectoryExist "tests")
                                         |> Task.bind
                                             (\testsDirExists ->
-                                                -- TODO
-                                                -- // Note: These are the dependencies listed in `elm/elm.json`, except
-                                                -- // `elm-explorations/test`. `elm/elm.json` is only used during development of
-                                                -- // this CLI (for editor integrations and unit tests). When running `elm-test`
-                                                -- // we add the `elm/` folder in the npm package as a source directory. The
-                                                -- // dependencies listed here and the ones in `elm/elm.json` need to be in sync.
-                                                -- const extra = {
-                                                --     'elm/core': '1.0.0 <= v < 2.0.0',
-                                                --     'elm/json': '1.0.0 <= v < 2.0.0',
-                                                --     'elm/time': '1.0.0 <= v < 2.0.0',
-                                                --     'elm/random': '1.0.0 <= v < 2.0.0',
-                                                -- };
                                                 Task.eio Exit.TestBadRegistry Solver.initEnv
                                                     |> Task.bind
                                                         (\env ->
-                                                            case oldOutline of
+                                                            case baseOutline of
                                                                 Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
                                                                     let
                                                                         addOptionalTests =
@@ -123,11 +107,13 @@ runHelp root testFileGlobs () =
                                                                         |> Task.bind (makeAppPlan env ( "elm", "json" ))
                                                                         |> Task.bind (makeAppPlan env ( "elm", "time" ))
                                                                         |> Task.bind (makeAppPlan env ( "elm", "random" ))
+                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env << Outline.App)
 
                                                                 Outline.Pkg outline ->
+                                                                    -- TODO
                                                                     -- makePkgPlan env pkg outline
-                                                                    --     |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    --     |> Task.bind (\changes -> attemptChanges root env baseOutline changes)
                                                                     Debug.todo "TODO: makePkgPlan"
                                                         )
                                             )
@@ -157,7 +143,7 @@ runHelp root testFileGlobs () =
 
                                                                         [ _ ] ->
                                                                             extractExposedPossiblyTests inputFile
-                                                                                |> IO.fmap (Maybe.map (Tuple.pair (root ++ "/" ++ inputFile)))
+                                                                                |> IO.fmap (Maybe.map (Tuple.pair inputFile))
 
                                                                         _ ->
                                                                             Debug.todo "TODO: handle multiple paths"
@@ -185,40 +171,32 @@ runHelp root testFileGlobs () =
                                                         (\_ ->
                                                             IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm") (testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList))
                                                         )
-                                            )
-                                        |> IO.bind
-                                            (\_ ->
-                                                Utils.dirWithCurrentDirectory (Stuff.testDir root) <|
-                                                    Make.run [ "src/Test/Generated/Main.elm" ] (Make.Flags False False False (Just (Make.JS "tmp.js")) Nothing Nothing)
-                                            )
-                                        |> IO.bind
-                                            (\_ ->
-                                                File.readUtf8 (Stuff.testDir root ++ "/tmp.js")
+                                                    |> IO.bind (\_ -> Reporting.terminal)
+                                                    |> IO.bind
+                                                        (\terminalStyle ->
+                                                            Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
+                                                                Utils.dirWithCurrentDirectory (Stuff.testDir root)
+                                                                    (runMake (Stuff.testDir root) "src/Test/Generated/Main.elm")
+                                                        )
                                                     |> IO.bind
                                                         (\content ->
-                                                            let
-                                                                pipeFilename =
-                                                                    "/tmp/elm-test-somefile.sock"
-
-                                                                finalContent =
-                                                                    before
-                                                                        ++ "\nvar Elm = (function(module) {\n"
-                                                                        ++ addKernelTestChecking content
-                                                                        ++ "\nreturn this.Elm;\n})({});\nvar pipeFilename = "
-                                                                        ++ Encode.encode 0 (Encode.string pipeFilename)
-                                                                        ++ ";\n"
-                                                                        ++ after
-                                                            in
-                                                            IO.writeString (Stuff.testDir root ++ "/index.js") finalContent
-                                                        )
-                                                    |> IO.bind (\_ -> IO.hPutStrLn IO.stdout "Starting tests")
-                                            )
-                                        |> IO.bind
-                                            (\_ ->
-                                                getInterpreter
-                                                    |> IO.bind
-                                                        (\interpreter ->
-                                                            interpret interpreter (Stuff.testDir root ++ "/index.js")
+                                                            IO.hPutStrLn IO.stdout "Starting tests"
+                                                                |> IO.bind
+                                                                    (\_ ->
+                                                                        getInterpreter
+                                                                            |> IO.bind
+                                                                                (\interpreter ->
+                                                                                    let
+                                                                                        finalContent =
+                                                                                            before
+                                                                                                ++ "\nvar Elm = (function(module) {\n"
+                                                                                                ++ addKernelTestChecking content
+                                                                                                ++ "\nreturn this.Elm;\n})({});\n"
+                                                                                                ++ after
+                                                                                    in
+                                                                                    interpret interpreter finalContent
+                                                                                )
+                                                                    )
                                                         )
                                             )
                                         |> Task.io
@@ -229,15 +207,23 @@ runHelp root testFileGlobs () =
 
 
 interpret : FilePath -> String -> IO Exit.ExitCode
-interpret interpreter path =
+interpret interpreter javascript =
     let
         createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
         createProcess =
-            Process.proc interpreter [ path ]
+            Process.proc interpreter []
+                |> (\cp -> { cp | std_in = Process.CreatePipe })
     in
     Process.withCreateProcess createProcess <|
-        \_ _ _ handle ->
-            Process.waitForProcess handle
+        \stdinHandle _ _ handle ->
+            case stdinHandle of
+                Just stdin ->
+                    Utils.builderHPutBuilder stdin javascript
+                        |> IO.bind (\_ -> IO.hClose stdin)
+                        |> IO.bind (\_ -> Process.waitForProcess handle)
+
+                Nothing ->
+                    crash "not implemented"
 
 
 testVariantDefinition : Regex
@@ -594,6 +580,7 @@ testGeneratedMain testModules testFileGlobs testFilePaths =
         possiblyTestsList =
             List.map makeModuleTuple testModules
     in
+    -- TODO fix runs, report and seed entries!
     """module Test.Generated.Main exposing (main)
 
 """ ++ String.join "\n" imports ++ """
@@ -609,7 +596,7 @@ main =
         { runs = 100
         , report = ConsoleReport UseColor
         , seed = 342047891320010
-        , processes = 8
+        , processes = 1
         , globs =
             """ ++ indentAllButFirstLine 12 (List.map (Encode.encode 0 << Encode.string) testFileGlobs) ++ """
         , paths =
@@ -854,7 +841,7 @@ hasFilename name path =
     name == Utils.fpTakeFileName path
 
 
-{-| FROM INSTALL!!!
+{-| FROM INSTALL
 -}
 
 
@@ -1189,9 +1176,45 @@ getInterpreterHelp name findExe =
 
 exeNotFound : String -> String
 exeNotFound name =
-    "The REPL relies on node.js to execute JavaScript code outside the browser.\n"
+    "The TEST relies on node.js to execute JavaScript code outside the browser.\n"
         ++ "I could not find executable `"
         ++ name
         ++ "` on your PATH though!\n\n"
         ++ "You can install node.js from <http://nodejs.org/>. If it is already installed\n"
         ++ "but has a different name, use the --interpreter flag."
+
+
+{-| FROM MAKE
+-}
+runMake : String -> String -> IO (Result Exit.Test String)
+runMake root path =
+    BW.withScope
+        (\scope ->
+            Task.run <|
+                (Task.eio Exit.TestBadDetails (Details.load style scope root)
+                    |> Task.bind
+                        (\details ->
+                            buildPaths root details (NE.Nonempty path [])
+                                |> Task.bind
+                                    (\artifacts ->
+                                        toBuilder 0 root details artifacts
+                                    )
+                        )
+                )
+        )
+
+
+buildPaths : FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts
+buildPaths root details paths =
+    Task.eio Exit.TestCannotBuild <|
+        Build.fromPaths style root details paths
+
+
+
+-- TO BUILDER
+
+
+toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
+toBuilder leadingLines root details artifacts =
+    Task.mapError Exit.TestBadGenerate <|
+        Generate.dev False leadingLines root details artifacts
