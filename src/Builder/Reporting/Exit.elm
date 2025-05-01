@@ -2907,6 +2907,13 @@ type Test
     = TestNoOutline
     | TestBadOutline Outline
     | TestBadRegistry RegistryProblem
+    | TestNoOnlineAppSolution Pkg.Name
+    | TestNoOfflineAppSolution Pkg.Name
+    | TestNoOnlinePkgSolution Pkg.Name
+    | TestNoOfflinePkgSolution Pkg.Name
+    | TestHadSolverTrouble Solver
+    | TestUnknownPackageOnline Pkg.Name (List Pkg.Name)
+    | TestUnknownPackageOffline Pkg.Name (List Pkg.Name)
     | TestBadDetails Details
     | TestCannotBuild BuildProblem
     | TestBadGenerate Generate
@@ -2929,6 +2936,93 @@ testToReport test =
         TestBadRegistry problem ->
             toRegistryProblemReport "PROBLEM LOADING PACKAGE LIST" problem <|
                 "I need the list of published packages to figure out how to install things"
+
+        TestNoOnlineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
+                , D.reflow <|
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Elm came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://elm-lang.org/community to learn what might be going on with this package."
+                , D.toSimpleNote <|
+                    "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
+                ]
+
+        TestNoOfflineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        TestNoOnlinePkgSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
+                [ D.reflow <|
+                    "With applications, I try to broaden the constraints to see if anything works, but messing with package constraints is much more delicate business. E.g. making your constraints stricter may make it harder for applications to find compatible dependencies. So fixing something here may break it for a lot of other people!"
+                , D.reflow <|
+                    "So I recommend making an application with the same dependencies as your package. See if there is a solution at all. From there it may be easier to figure out how to proceed in a way that will disrupt your users as little as possible. And the solution may be to help other package authors to get their packages updated, or to drop a dependency entirely."
+                ]
+
+        TestNoOfflinePkgSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
+                [ D.reflow <|
+                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        TestHadSolverTrouble solver ->
+            toSolverReport solver
+
+        TestUnknownPackageOnline pkg suggestions ->
+            Help.docReport "UNKNOWN PACKAGE"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "find"
+                    , D.fromChars "a"
+                    , D.fromChars "package"
+                    , D.fromChars "named"
+                    , D.red (D.fromPackage pkg)
+                        |> D.a (D.fromChars ".")
+                    ]
+                )
+                [ D.reflow <|
+                    "I looked through https://package.elm-lang.org for packages with similar names and found these:"
+                , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
+                , D.reflow <| "Maybe you want one of these instead?"
+                ]
+
+        TestUnknownPackageOffline pkg suggestions ->
+            Help.docReport "UNKNOWN PACKAGE"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "find"
+                    , D.fromChars "a"
+                    , D.fromChars "package"
+                    , D.fromChars "named"
+                    , D.red (D.fromPackage pkg)
+                        |> D.a (D.fromChars ".")
+                    ]
+                )
+                [ D.reflow <|
+                    "I could not connect to https://package.elm-lang.org though, so new packages may have been published since I last updated my local cache of package names."
+                , D.reflow <|
+                    "Looking through the locally cached names, the closest ones are:"
+                , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
+                , D.reflow <| "Maybe you want one of these instead?"
+                ]
 
         TestBadDetails details ->
             toDetailsReport details

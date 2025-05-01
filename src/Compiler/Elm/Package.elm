@@ -18,7 +18,9 @@ module Compiler.Elm.Package exposing
     , nameEncoder
     , nearbyNames
     , parser
+    , random
     , suggestions
+    , time
     , toChars
     , toJsonString
     , toString
@@ -146,6 +148,16 @@ http =
     toName elm "http"
 
 
+random : Name
+random =
+    toName elm "random"
+
+
+time : Name
+time =
+    toName elm "time"
+
+
 url : Name
 url =
     toName elm "url"
@@ -178,14 +190,6 @@ elmExplorations =
 suggestions : Dict String String Name
 suggestions =
     let
-        random : Name
-        random =
-            toName elm "random"
-
-        time : Name
-        time =
-            toName elm "time"
-
         file : Name
         file =
             toName elm "file"

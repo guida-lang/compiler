@@ -15,23 +15,17 @@ import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Constraint as C
-import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
 import Compiler.Parse.Module as Parse
-import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
-import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Regex exposing (Regex)
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
-import Terminal.Make as Make
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -103,18 +97,21 @@ runHelp root testFileGlobs () =
                                                                                 |> NE.cons (Outline.RelativeSrcDir "src")
                                                                     in
                                                                     Outline.AppOutline elm newSrcDirs (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
-                                                                        |> makeAppPlan env ( "elm", "core" )
-                                                                        |> Task.bind (makeAppPlan env ( "elm", "json" ))
-                                                                        |> Task.bind (makeAppPlan env ( "elm", "time" ))
-                                                                        |> Task.bind (makeAppPlan env ( "elm", "random" ))
+                                                                        |> makeAppPlan env Pkg.core
+                                                                        |> Task.bind (makeAppPlan env Pkg.json)
+                                                                        |> Task.bind (makeAppPlan env Pkg.time)
+                                                                        |> Task.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env << Outline.App)
 
-                                                                Outline.Pkg outline ->
-                                                                    -- TODO
-                                                                    -- makePkgPlan env pkg outline
-                                                                    --     |> Task.bind (\changes -> attemptChanges root env baseOutline changes)
-                                                                    Debug.todo "TODO: makePkgPlan"
+                                                                Outline.Pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) ->
+                                                                    Outline.PkgOutline name summary license version exposed (Dict.union deps test) Dict.empty elmVersion
+                                                                        |> makePkgPlan env Pkg.core
+                                                                        |> Task.bind (makePkgPlan env Pkg.json)
+                                                                        |> Task.bind (makePkgPlan env Pkg.time)
+                                                                        |> Task.bind (makePkgPlan env Pkg.random)
+                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                        |> Task.bind (attemptChanges root env << Outline.Pkg)
                                                         )
                                             )
                                 )
@@ -907,15 +904,13 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                             Nothing ->
                                 -- finally try to add it from scratch
                                 case Registry.getVersions_ pkg registry of
-                                    Err _ ->
+                                    Err suggestions ->
                                         case connection of
                                             Solver.Online _ ->
-                                                -- Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
-                                                Task.throw Exit.TestNoOutline
+                                                Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
 
                                             Solver.Offline ->
-                                                -- Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
-                                                Task.throw Exit.TestNoOutline
+                                                Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
 
                                     Ok _ ->
                                         Task.io (Solver.addToApp cache connection registry pkg outline False)
@@ -926,154 +921,104 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                                                             Task.pure app
 
                                                         Solver.NoSolution ->
-                                                            -- Task.throw (Exit.InstallNoOnlineAppSolution pkg)
-                                                            Task.throw Exit.TestNoOutline
+                                                            Task.throw (Exit.TestNoOnlineAppSolution pkg)
 
                                                         Solver.NoOfflineSolution ->
-                                                            -- Task.throw (Exit.InstallNoOfflineAppSolution pkg)
-                                                            Task.throw Exit.TestNoOutline
+                                                            Task.throw (Exit.TestNoOfflineAppSolution pkg)
 
                                                         Solver.SolverErr exit ->
-                                                            -- Task.throw (Exit.InstallHadSolverTrouble exit)
-                                                            Task.throw Exit.TestNoOutline
+                                                            Task.throw (Exit.TestHadSolverTrouble exit)
                                                 )
 
 
 
 -- MAKE PACKAGE PLAN
--- makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Bool -> Task (Changes C.Constraint)
--- makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) forTest =
---     if forTest then
---         if Dict.member identity pkg test then
---             Task.pure AlreadyInstalled
---         else
---             -- try to add a new dependency
---             case Registry.getVersions_ pkg registry of
---                 Err suggestions ->
---                     case connection of
---                         Solver.Online _ ->
---                             Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
---                         Solver.Offline ->
---                             Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
---                 Ok (Registry.KnownVersions _ _) ->
---                     let
---                         cons : Dict ( String, String ) Pkg.Name C.Constraint
---                         cons =
---                             Dict.insert identity pkg C.anything test
---                     in
---                     Task.io (Solver.verify cache connection registry cons)
---                         |> Task.bind
---                             (\result ->
---                                 case result of
---                                     Solver.SolverOk solution ->
---                                         let
---                                             (Solver.Details vsn _) =
---                                                 Utils.find identity pkg solution
---                                             con : C.Constraint
---                                             con =
---                                                 C.untilNextMajor vsn
---                                             newTest : Dict ( String, String ) Pkg.Name C.Constraint
---                                             newTest =
---                                                 Dict.insert identity pkg con test
---                                             changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
---                                             changes =
---                                                 detectChanges test newTest
---                                             news : Dict ( String, String ) Pkg.Name C.Constraint
---                                             news =
---                                                 Utils.mapMapMaybe identity Pkg.compareName keepNew changes
---                                         in
---                                         Task.pure <|
---                                             Changes changes <|
---                                                 Outline.Pkg <|
---                                                     Outline.PkgOutline name
---                                                         summary
---                                                         license
---                                                         version
---                                                         exposed
---                                                         deps
---                                                         (addNews (Just pkg) news test)
---                                                         elmVersion
---                                     Solver.NoSolution ->
---                                         Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
---                                     Solver.NoOfflineSolution ->
---                                         Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
---                                     Solver.SolverErr exit ->
---                                         Task.throw (Exit.InstallHadSolverTrouble exit)
---                             )
---     else if Dict.member identity pkg deps then
---         Task.pure AlreadyInstalled
---     else
---         -- is already in test dependencies?
---         case Dict.get identity pkg test of
---             Just con ->
---                 Task.pure <|
---                     PromoteTest <|
---                         Outline.Pkg <|
---                             Outline.PkgOutline name
---                                 summary
---                                 license
---                                 version
---                                 exposed
---                                 (Dict.insert identity pkg con deps)
---                                 (Dict.remove identity pkg test)
---                                 elmVersion
---             Nothing ->
---                 -- try to add a new dependency
---                 case Registry.getVersions_ pkg registry of
---                     Err suggestions ->
---                         case connection of
---                             Solver.Online _ ->
---                                 Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
---                             Solver.Offline ->
---                                 Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
---                     Ok (Registry.KnownVersions _ _) ->
---                         let
---                             old : Dict ( String, String ) Pkg.Name C.Constraint
---                             old =
---                                 Dict.union deps test
---                             cons : Dict ( String, String ) Pkg.Name C.Constraint
---                             cons =
---                                 Dict.insert identity pkg C.anything old
---                         in
---                         Task.io (Solver.verify cache connection registry cons)
---                             |> Task.bind
---                                 (\result ->
---                                     case result of
---                                         Solver.SolverOk solution ->
---                                             let
---                                                 (Solver.Details vsn _) =
---                                                     Utils.find identity pkg solution
---                                                 con : C.Constraint
---                                                 con =
---                                                     C.untilNextMajor vsn
---                                                 new : Dict ( String, String ) Pkg.Name C.Constraint
---                                                 new =
---                                                     Dict.insert identity pkg con old
---                                                 changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
---                                                 changes =
---                                                     detectChanges old new
---                                                 news : Dict ( String, String ) Pkg.Name C.Constraint
---                                                 news =
---                                                     Utils.mapMapMaybe identity Pkg.compareName keepNew changes
---                                             in
---                                             Task.pure <|
---                                                 Changes changes <|
---                                                     Outline.Pkg <|
---                                                         Outline.PkgOutline name
---                                                             summary
---                                                             license
---                                                             version
---                                                             exposed
---                                                             (addNews (Just pkg) news deps)
---                                                             (addNews Nothing news test)
---                                                             elmVersion
---                                         Solver.NoSolution ->
---                                             Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
---                                         Solver.NoOfflineSolution ->
---                                             Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
---                                         Solver.SolverErr exit ->
---                                             Task.throw (Exit.InstallHadSolverTrouble exit)
---                                 )
+
+
+makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Outline.PkgOutline
+makePkgPlan (Solver.Env cache _ connection registry) pkg ((Outline.PkgOutline name summary license version exposed deps test elmVersion) as outline) =
+    if Dict.member identity pkg deps then
+        Task.pure outline
+
+    else
+        -- is already in test dependencies?
+        case Dict.get identity pkg test of
+            Just con ->
+                Task.pure <|
+                    Outline.PkgOutline name
+                        summary
+                        license
+                        version
+                        exposed
+                        (Dict.insert identity pkg con deps)
+                        (Dict.remove identity pkg test)
+                        elmVersion
+
+            Nothing ->
+                -- try to add a new dependency
+                case Registry.getVersions_ pkg registry of
+                    Err suggestions ->
+                        case connection of
+                            Solver.Online _ ->
+                                Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
+
+                            Solver.Offline ->
+                                Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
+
+                    Ok (Registry.KnownVersions _ _) ->
+                        let
+                            old : Dict ( String, String ) Pkg.Name C.Constraint
+                            old =
+                                Dict.union deps test
+
+                            cons : Dict ( String, String ) Pkg.Name C.Constraint
+                            cons =
+                                Dict.insert identity pkg C.anything old
+                        in
+                        Task.io (Solver.verify cache connection registry cons)
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Solver.SolverOk solution ->
+                                            let
+                                                (Solver.Details vsn _) =
+                                                    Utils.find identity pkg solution
+
+                                                con : C.Constraint
+                                                con =
+                                                    C.untilNextMajor vsn
+
+                                                new : Dict ( String, String ) Pkg.Name C.Constraint
+                                                new =
+                                                    Dict.insert identity pkg con old
+
+                                                changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
+                                                changes =
+                                                    detectChanges old new
+
+                                                news : Dict ( String, String ) Pkg.Name C.Constraint
+                                                news =
+                                                    Utils.mapMapMaybe identity Pkg.compareName keepNew changes
+                                            in
+                                            Task.pure <|
+                                                Outline.PkgOutline name
+                                                    summary
+                                                    license
+                                                    version
+                                                    exposed
+                                                    (addNews (Just pkg) news deps)
+                                                    (addNews Nothing news test)
+                                                    elmVersion
+
+                                        Solver.NoSolution ->
+                                            Task.throw (Exit.TestNoOnlinePkgSolution pkg)
+
+                                        Solver.NoOfflineSolution ->
+                                            Task.throw (Exit.TestNoOfflinePkgSolution pkg)
+
+                                        Solver.SolverErr exit ->
+                                            Task.throw (Exit.TestHadSolverTrouble exit)
+                                )
 
 
 addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
