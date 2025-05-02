@@ -103,6 +103,7 @@ module Utils.Main exposing
     , newChan
     , newEmptyMVar
     , newMVar
+    , nodeGetDirname
     , nonEmptyListTraverse
     , putMVar
     , readChan
@@ -1213,6 +1214,18 @@ replGetInputLine prompt =
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
     replGetInputLine (left ++ prompt ++ right)
+
+
+
+-- NODE
+
+
+nodeGetDirname : IO String
+nodeGetDirname =
+    Impure.task "nodeGetDirname"
+        []
+        Impure.EmptyBody
+        (Impure.StringResolver identity)
 
 
 

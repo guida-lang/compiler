@@ -16,6 +16,7 @@ import Compiler.AST.Source as Src
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
+import Compiler.Elm.Version as V
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -58,9 +59,10 @@ runHelp root testFileGlobs () =
     Stuff.withRootLock root <|
         Task.run <|
             (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
+                |> IO.bind (\_ -> Utils.nodeGetDirname)
                 |> Task.io
                 |> Task.bind
-                    (\_ ->
+                    (\nodeDirname ->
                         Task.eio Exit.TestBadOutline (Outline.read root)
                             |> Task.bind
                                 (\baseOutline ->
@@ -70,48 +72,48 @@ runHelp root testFileGlobs () =
                                                 Task.eio Exit.TestBadRegistry Solver.initEnv
                                                     |> Task.bind
                                                         (\env ->
+                                                            let
+                                                                addOptionalTests =
+                                                                    if testsDirExists then
+                                                                        NE.cons (Outline.RelativeSrcDir "tests")
+
+                                                                    else
+                                                                        identity
+
+                                                                newSrcDirs srcDirs =
+                                                                    srcDirs
+                                                                        |> addOptionalTests
+                                                                        |> NE.map
+                                                                            (\srcDir ->
+                                                                                case srcDir of
+                                                                                    Outline.AbsoluteSrcDir _ ->
+                                                                                        srcDir
+
+                                                                                    Outline.RelativeSrcDir path ->
+                                                                                        Outline.RelativeSrcDir ("../../../" ++ path)
+                                                                            )
+                                                                        |> NE.cons (Outline.AbsoluteSrcDir (Utils.fpCombine nodeDirname "../libraries/test/src"))
+                                                                        |> NE.cons (Outline.RelativeSrcDir "src")
+                                                            in
                                                             case baseOutline of
                                                                 Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                    let
-                                                                        addOptionalTests =
-                                                                            if testsDirExists then
-                                                                                NE.cons (Outline.RelativeSrcDir "tests")
-
-                                                                            else
-                                                                                identity
-
-                                                                        newSrcDirs =
-                                                                            srcDirs
-                                                                                -- TODO/FIXME we shouldn't need to install elm-test...
-                                                                                |> NE.cons (Outline.RelativeSrcDir "node_modules/elm-test/elm/src")
-                                                                                |> addOptionalTests
-                                                                                |> NE.map
-                                                                                    (\srcDir ->
-                                                                                        case srcDir of
-                                                                                            Outline.AbsoluteSrcDir _ ->
-                                                                                                srcDir
-
-                                                                                            Outline.RelativeSrcDir path ->
-                                                                                                Outline.RelativeSrcDir ("../../../" ++ path)
-                                                                                    )
-                                                                                |> NE.cons (Outline.RelativeSrcDir "src")
-                                                                    in
-                                                                    Outline.AppOutline elm newSrcDirs (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                    Outline.AppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
                                                                         |> makeAppPlan env Pkg.core
                                                                         |> Task.bind (makeAppPlan env Pkg.json)
                                                                         |> Task.bind (makeAppPlan env Pkg.time)
                                                                         |> Task.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.bind (attemptChanges root env << Outline.App)
+                                                                        |> Task.bind (attemptChanges root env)
 
-                                                                Outline.Pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) ->
-                                                                    Outline.PkgOutline name summary license version exposed (Dict.union deps test) Dict.empty elmVersion
-                                                                        |> makePkgPlan env Pkg.core
-                                                                        |> Task.bind (makePkgPlan env Pkg.json)
-                                                                        |> Task.bind (makePkgPlan env Pkg.time)
-                                                                        |> Task.bind (makePkgPlan env Pkg.random)
+                                                                Outline.Pkg (Outline.PkgOutline _ _ _ _ _ deps test _) ->
+                                                                    Outline.AppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                        |> makePkgPlan env (Dict.union deps test)
+                                                                        |> Task.bind (makeAppPlan env Pkg.core)
+                                                                        |> Task.bind (makeAppPlan env Pkg.json)
+                                                                        |> Task.bind (makeAppPlan env Pkg.time)
+                                                                        |> Task.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.bind (attemptChanges root env << Outline.Pkg)
+                                                                        |> Task.bind (attemptChanges root env)
                                                         )
                                             )
                                 )
@@ -846,11 +848,15 @@ hasFilename name path =
 -- ATTEMPT CHANGES
 
 
-attemptChanges : FilePath -> Solver.Env -> Outline.Outline -> Task ()
-attemptChanges root env newOutline =
+attemptChanges : FilePath -> Solver.Env -> Outline.AppOutline -> Task ()
+attemptChanges root env appOutline =
     Task.eio Exit.TestBadDetails <|
         BW.withScope
             (\scope ->
+                let
+                    newOutline =
+                        Outline.App appOutline
+                in
                 Outline.write (Stuff.testDir root) newOutline
                     |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
             )
@@ -935,157 +941,34 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Outline.PkgOutline
-makePkgPlan (Solver.Env cache _ connection registry) pkg ((Outline.PkgOutline name summary license version exposed deps test elmVersion) as outline) =
-    if Dict.member identity pkg deps then
-        Task.pure outline
-
-    else
-        -- is already in test dependencies?
-        case Dict.get identity pkg test of
-            Just con ->
-                Task.pure <|
-                    Outline.PkgOutline name
-                        summary
-                        license
-                        version
-                        exposed
-                        (Dict.insert identity pkg con deps)
-                        (Dict.remove identity pkg test)
-                        elmVersion
-
-            Nothing ->
-                -- try to add a new dependency
-                case Registry.getVersions_ pkg registry of
-                    Err suggestions ->
-                        case connection of
-                            Solver.Online _ ->
-                                Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
-
-                            Solver.Offline ->
-                                Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
-
-                    Ok (Registry.KnownVersions _ _) ->
-                        let
-                            old : Dict ( String, String ) Pkg.Name C.Constraint
-                            old =
-                                Dict.union deps test
-
-                            cons : Dict ( String, String ) Pkg.Name C.Constraint
-                            cons =
-                                Dict.insert identity pkg C.anything old
-                        in
-                        Task.io (Solver.verify cache connection registry cons)
-                            |> Task.bind
-                                (\result ->
-                                    case result of
-                                        Solver.SolverOk solution ->
-                                            let
-                                                (Solver.Details vsn _) =
-                                                    Utils.find identity pkg solution
-
-                                                con : C.Constraint
-                                                con =
-                                                    C.untilNextMajor vsn
-
-                                                new : Dict ( String, String ) Pkg.Name C.Constraint
-                                                new =
-                                                    Dict.insert identity pkg con old
-
-                                                changes : Dict ( String, String ) Pkg.Name (Change C.Constraint)
-                                                changes =
-                                                    detectChanges old new
-
-                                                news : Dict ( String, String ) Pkg.Name C.Constraint
-                                                news =
-                                                    Utils.mapMapMaybe identity Pkg.compareName keepNew changes
-                                            in
-                                            Task.pure <|
-                                                Outline.PkgOutline name
-                                                    summary
-                                                    license
-                                                    version
-                                                    exposed
-                                                    (addNews (Just pkg) news deps)
-                                                    (addNews Nothing news test)
-                                                    elmVersion
-
-                                        Solver.NoSolution ->
-                                            Task.throw (Exit.TestNoOnlinePkgSolution pkg)
-
-                                        Solver.NoOfflineSolution ->
-                                            Task.throw (Exit.TestNoOfflinePkgSolution pkg)
-
-                                        Solver.SolverErr exit ->
-                                            Task.throw (Exit.TestHadSolverTrouble exit)
-                                )
+makePkgPlan : Solver.Env -> Dict ( String, String ) Pkg.Name C.Constraint -> Outline.AppOutline -> Task Outline.AppOutline
+makePkgPlan env cons outline =
+    makePkgPlanHelp env (Dict.toList Pkg.compareName cons) outline
 
 
-addNews : Maybe Pkg.Name -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint
-addNews pkg new old =
-    Dict.merge compare
-        (Dict.insert identity)
-        (\k _ n -> Dict.insert identity k n)
-        (\k c acc ->
-            if Just k == pkg then
-                Dict.insert identity k c acc
+makePkgPlanHelp : Solver.Env -> List ( Pkg.Name, C.Constraint ) -> Outline.AppOutline -> Task Outline.AppOutline
+makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
+    case cons of
+        [] ->
+            Task.pure outline
 
-            else
-                acc
-        )
-        old
-        new
-        Dict.empty
+        ( pkg, con ) :: remainingCons ->
+            Task.io (Solver.addToTestApp cache connection registry pkg con outline)
+                |> Task.bind
+                    (\result ->
+                        case result of
+                            Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                makePkgPlanHelp env remainingCons app
 
+                            Solver.NoSolution ->
+                                Task.throw (Exit.TestNoOnlinePkgSolution pkg)
 
+                            Solver.NoOfflineSolution ->
+                                Task.throw (Exit.TestNoOfflinePkgSolution pkg)
 
--- CHANGES
-
-
-type Change a
-    = Insert a
-    | Change a a
-    | Remove a
-
-
-detectChanges : Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name a -> Dict ( String, String ) Pkg.Name (Change a)
-detectChanges old new =
-    Dict.merge compare
-        (\k v -> Dict.insert identity k (Remove v))
-        (\k oldElem newElem acc ->
-            case keepChange k oldElem newElem of
-                Just change ->
-                    Dict.insert identity k change acc
-
-                Nothing ->
-                    acc
-        )
-        (\k v -> Dict.insert identity k (Insert v))
-        old
-        new
-        Dict.empty
-
-
-keepChange : k -> v -> v -> Maybe (Change v)
-keepChange _ old new =
-    if old == new then
-        Nothing
-
-    else
-        Just (Change old new)
-
-
-keepNew : Change a -> Maybe a
-keepNew change =
-    case change of
-        Insert a ->
-            Just a
-
-        Change _ a ->
-            Just a
-
-        Remove _ ->
-            Nothing
+                            Solver.SolverErr exit ->
+                                Task.throw (Exit.TestHadSolverTrouble exit)
+                    )
 
 
 

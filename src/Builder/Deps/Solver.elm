@@ -7,6 +7,7 @@ module Builder.Deps.Solver exposing
     , SolverResult(..)
     , State
     , addToApp
+    , addToTestApp
     , envDecoder
     , envEncoder
     , initEnv
@@ -213,6 +214,72 @@ addToApp cache connection registry pkg (Outline.AppOutline elm srcDirs direct in
 
                                             else
                                                 Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
+
+                                        ti : Dict ( String, String ) Pkg.Name V.Version
+                                        ti =
+                                            Dict.diff new (Utils.mapUnions [ d, i, td ])
+                                    in
+                                    SolverOk (AppSolution allDeps new (Outline.AppOutline elm srcDirs d i td ti))
+
+                                ISBack _ ->
+                                    noSolution connection
+
+                                ISErr e ->
+                                    SolverErr e
+                        )
+
+
+
+-- ADD TO APP - used in Test
+
+
+addToTestApp : Stuff.PackageCache -> Connection -> Registry.Registry -> Pkg.Name -> C.Constraint -> Outline.AppOutline -> IO (SolverResult AppSolution)
+addToTestApp cache connection registry pkg con (Outline.AppOutline elm srcDirs direct indirect testDirect testIndirect) =
+    Stuff.withRegistryLock cache <|
+        let
+            allIndirects : Dict ( String, String ) Pkg.Name V.Version
+            allIndirects =
+                Dict.union indirect testIndirect
+
+            allDirects : Dict ( String, String ) Pkg.Name V.Version
+            allDirects =
+                Dict.union direct testDirect
+
+            allDeps : Dict ( String, String ) Pkg.Name V.Version
+            allDeps =
+                Dict.union allDirects allIndirects
+
+            attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
+            attempt toConstraint deps =
+                try (Dict.insert identity pkg con (Dict.map (\_ -> toConstraint) deps))
+        in
+        case
+            oneOf
+                (attempt C.exactly allDeps)
+                [ attempt C.exactly allDirects
+                , attempt C.untilNextMinor allDirects
+                , attempt C.untilNextMajor allDirects
+                , attempt (\_ -> C.anything) allDirects
+                ]
+        of
+            Solver solver ->
+                solver (State cache connection registry Dict.empty)
+                    |> IO.fmap
+                        (\result ->
+                            case result of
+                                ISOk (State _ _ _ constraints) new ->
+                                    let
+                                        d : Dict ( String, String ) Pkg.Name V.Version
+                                        d =
+                                            Dict.intersection Pkg.compareName new (Dict.insert identity pkg V.one direct)
+
+                                        i : Dict ( String, String ) Pkg.Name V.Version
+                                        i =
+                                            Dict.diff (getTransitive constraints new (Dict.toList compare d) Dict.empty) d
+
+                                        td : Dict ( String, String ) Pkg.Name V.Version
+                                        td =
+                                            Dict.intersection Pkg.compareName new (Dict.remove identity pkg testDirect)
 
                                         ti : Dict ( String, String ) Pkg.Name V.Version
                                         ti =

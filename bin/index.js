@@ -431,6 +431,12 @@ server.post("putMVar", (request) => {
   }
 });
 
+// Node.js specific
+
+server.post("nodeGetDirname", (request) => {
+  request.respond(200, null, __dirname);
+});
+
 server.setDefaultHandler((request) => {
   const url = new URL(request.url);
   const client = url.protocol == "https:" ? https : http;
