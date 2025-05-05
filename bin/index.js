@@ -431,10 +431,13 @@ server.post("putMVar", (request) => {
   }
 });
 
-// Node.js specific
-
+// NODE.JS SPECIFIC
 server.post("nodeGetDirname", (request) => {
   request.respond(200, null, __dirname);
+});
+
+server.post("nodeMathRandom", (request) => {
+  request.respond(200, null, Math.random());
 });
 
 server.setDefaultHandler((request) => {

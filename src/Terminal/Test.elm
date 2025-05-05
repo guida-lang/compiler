@@ -1,4 +1,10 @@
-module Terminal.Test exposing (run)
+module Terminal.Test exposing
+    ( Flags(..)
+    , Report(..)
+    , format
+    , parseReport
+    , run
+    )
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
@@ -13,6 +19,7 @@ import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
+import Compiler.Data.Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
@@ -27,6 +34,7 @@ import Regex exposing (Regex)
 import System.Exit as Exit
 import System.IO as IO exposing (IO)
 import System.Process as Process
+import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
 
@@ -39,7 +47,11 @@ type alias Task a =
     Task.Task Exit.Test a
 
 
-run : List String -> () -> IO ()
+type Flags
+    = Flags (Maybe Int) (Maybe Int) (Maybe Report)
+
+
+run : List String -> Flags -> IO ()
 run paths flags =
     Stuff.findRoot
         |> IO.bind
@@ -54,8 +66,8 @@ run paths flags =
             )
 
 
-runHelp : String -> List String -> () -> IO (Result Exit.Test ())
-runHelp root testFileGlobs () =
+runHelp : String -> List String -> Flags -> IO (Result Exit.Test ())
+runHelp root testFileGlobs flags =
     Stuff.withRootLock root <|
         Task.run <|
             (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
@@ -73,6 +85,7 @@ runHelp root testFileGlobs () =
                                                     |> Task.bind
                                                         (\env ->
                                                             let
+                                                                addOptionalTests : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
                                                                 addOptionalTests =
                                                                     if testsDirExists then
                                                                         NE.cons (Outline.RelativeSrcDir "tests")
@@ -80,6 +93,7 @@ runHelp root testFileGlobs () =
                                                                     else
                                                                         identity
 
+                                                                newSrcDirs : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
                                                                 newSrcDirs srcDirs =
                                                                     srcDirs
                                                                         |> addOptionalTests
@@ -120,6 +134,7 @@ runHelp root testFileGlobs () =
                             |> Task.bind
                                 (\_ ->
                                     let
+                                        paths : List String
                                         paths =
                                             case testFileGlobs of
                                                 [] ->
@@ -137,39 +152,37 @@ runHelp root testFileGlobs () =
                                                             |> Utils.listTraverse
                                                                 (\inputFile ->
                                                                     case List.filter (\path -> String.startsWith path inputFile) paths of
-                                                                        [] ->
-                                                                            Debug.todo "TODO: handle empty paths"
-
-                                                                        [ _ ] ->
+                                                                        _ :: [] ->
                                                                             extractExposedPossiblyTests inputFile
                                                                                 |> IO.fmap (Maybe.map (Tuple.pair inputFile))
 
                                                                         _ ->
-                                                                            Debug.todo "TODO: handle multiple paths"
+                                                                            IO.pure Nothing
                                                                 )
 
                                                     Err _ ->
-                                                        -- TODO
                                                         IO.pure []
                                             )
                                         |> IO.fmap (List.filterMap identity)
                                         |> IO.bind
                                             (\exposedList ->
-                                                let
-                                                    testModules =
-                                                        List.map
-                                                            (\( _, ( moduleName, possiblyTests ) ) ->
-                                                                { moduleName = moduleName
-                                                                , possiblyTests = possiblyTests
-                                                                }
-                                                            )
-                                                            exposedList
-                                                in
                                                 Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
                                                     |> IO.bind
                                                         (\_ ->
-                                                            IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm") (testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList))
+                                                            let
+                                                                testModules : List { moduleName : a, possiblyTests : b }
+                                                                testModules =
+                                                                    List.map
+                                                                        (\( _, ( moduleName, possiblyTests ) ) ->
+                                                                            { moduleName = moduleName
+                                                                            , possiblyTests = possiblyTests
+                                                                            }
+                                                                        )
+                                                                        exposedList
+                                                            in
+                                                            testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
                                                         )
+                                                    |> IO.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
                                                     |> IO.bind (\_ -> Reporting.terminal)
                                                     |> IO.bind
                                                         (\terminalStyle ->
@@ -186,6 +199,7 @@ runHelp root testFileGlobs () =
                                                                             |> IO.bind
                                                                                 (\interpreter ->
                                                                                     let
+                                                                                        finalContent : String
                                                                                         finalContent =
                                                                                             before
                                                                                                 ++ "\nvar Elm = (function(module) {\n"
@@ -531,13 +545,12 @@ app.ports.elmTestPort__send.subscribe(function (msg) {
         case 'BEGIN':
             testsToRun = response.testCount;
 
-            // TODO
-            // if (!Report.isMachineReadable(report)) {
-            //     var headline = 'elm-test ' + elmTestVersion;
-            //     var bar = '-'.repeat(headline.length);
+            if (!isMachineReadable(report)) {
+                var headline = 'elm-test """ ++ V.toChars V.elmCompiler ++ """';
+                var bar = '-'.repeat(headline.length);
 
-            //     console.log('\\n' + headline + '\\n' + bar + '\\n');
-            // }
+                console.log('\\n' + headline + '\\n' + bar + '\\n');
+            }
 
             printResult(response.message);
 
@@ -560,6 +573,16 @@ app.ports.elmTestPort__send.subscribe(function (msg) {
     }
 });
 
+function isMachineReadable(report) {
+  switch (report) {
+    case 'json':
+    case 'junit':
+      return true;
+    case 'console':
+      return false;
+  }
+}
+
 app.ports.elmTestPort__receive.send({ type: 'TEST', index: -1 });"""
 
 
@@ -570,17 +593,32 @@ testGeneratedMain :
         }
     -> List String
     -> List String
-    -> String
-testGeneratedMain testModules testFileGlobs testFilePaths =
+    -> Flags
+    -> IO String
+testGeneratedMain testModules testFileGlobs testFilePaths (Flags maybeSeed maybeRuns report) =
     let
+        seedIO : IO Int
+        seedIO =
+            case maybeSeed of
+                Just seedValue ->
+                    IO.pure seedValue
+
+                Nothing ->
+                    Utils.nodeMathRandom
+                        |> IO.fmap (\seedRandom -> floor (seedRandom * 407199254740991) + 1000)
+
+        imports : List String
         imports =
             List.map (\mod -> "import " ++ mod.moduleName) testModules
 
+        possiblyTestsList : List String
         possiblyTestsList =
             List.map makeModuleTuple testModules
     in
-    -- TODO fix runs, report and seed entries!
-    """module Test.Generated.Main exposing (main)
+    seedIO
+        |> IO.fmap
+            (\seedValue ->
+                """module Test.Generated.Main exposing (main)
 
 """ ++ String.join "\n" imports ++ """
 
@@ -592,9 +630,9 @@ import Test
 main : Test.Runner.Node.TestProgram
 main =
     Test.Runner.Node.run
-        { runs = 100
-        , report = ConsoleReport UseColor
-        , seed = 342047891320010
+        { runs = """ ++ String.fromInt (Maybe.withDefault 100 maybeRuns) ++ """
+        , report = """ ++ generateElmReportVariant report ++ """
+        , seed = """ ++ String.fromInt seedValue ++ """
         , processes = 1
         , globs =
             """ ++ indentAllButFirstLine 12 (List.map (Encode.encode 0 << Encode.string) testFileGlobs) ++ """
@@ -602,20 +640,28 @@ main =
             """ ++ indentAllButFirstLine 12 (List.map (Encode.encode 0 << Encode.string) testFilePaths) ++ """
         }
         """ ++ indentAllButFirstLine 8 possiblyTestsList
+            )
 
 
 indentAllButFirstLine : Int -> List String -> String
 indentAllButFirstLine indent list =
-    "[ "
-        ++ String.join ("\n" ++ String.repeat indent " " ++ ", ") list
-        ++ "\n"
-        ++ String.repeat indent " "
-        ++ "]"
+    case list of
+        [] ->
+            "[]"
+
+        head :: rest ->
+            "[ "
+                ++ head
+                ++ String.concat (List.map (\entry -> "\n" ++ String.repeat indent " " ++ ", " ++ entry) rest)
+                ++ "\n"
+                ++ String.repeat indent " "
+                ++ "]"
 
 
 makeModuleTuple : { moduleName : String, possiblyTests : List String } -> String
 makeModuleTuple mod =
     let
+        list : List String
         list =
             List.map (\test -> "Test.Runner.Node.check " ++ mod.moduleName ++ "." ++ test)
                 mod.possiblyTests
@@ -629,6 +675,19 @@ makeModuleTuple mod =
         ++ "\n"
         ++ String.repeat 10 " "
         ++ ")"
+
+
+generateElmReportVariant : Maybe Report -> String
+generateElmReportVariant maybeReport =
+    case maybeReport of
+        Just Json ->
+            "JsonReport"
+
+        Just JUnit ->
+            "JUnitReport"
+
+        _ ->
+            "ConsoleReport UseColor"
 
 
 
@@ -648,10 +707,11 @@ extractExposedPossiblyTests path =
                 case Parse.fromByteString (SV.fileSyntaxVersion path) Parse.Application bytes of
                     Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
                         let
+                            exposed : List Name
                             exposed =
                                 case exposing_ of
                                     Src.Open ->
-                                        Debug.todo "TODO: Open"
+                                        []
 
                                     Src.Explicit exposedList ->
                                         List.filterMap
@@ -725,7 +785,7 @@ resolveFile path =
                         IO.pure (Ok [ path ])
 
                     IsDirectory ->
-                        findAllElmFiles path
+                        findAllGuidaAndElmFiles path
                             |> IO.fmap
                                 (\elmFiles ->
                                     case elmFiles of
@@ -829,10 +889,10 @@ hasExtension ext path =
     ext == Utils.fpTakeExtension path
 
 
-findAllElmFiles : FilePath -> IO (List FilePath)
-findAllElmFiles inputFile =
+findAllGuidaAndElmFiles : FilePath -> IO (List FilePath)
+findAllGuidaAndElmFiles inputFile =
     fileList inputFile
-        |> IO.fmap (List.filter (hasExtension ".elm"))
+        |> IO.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
 
 
 hasFilename : String -> FilePath -> Bool
@@ -854,6 +914,7 @@ attemptChanges root env appOutline =
         BW.withScope
             (\scope ->
                 let
+                    newOutline : Outline.Outline
                     newOutline =
                         Outline.App appOutline
                 in
@@ -1046,3 +1107,39 @@ toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
 toBuilder leadingLines root details artifacts =
     Task.mapError Exit.TestBadGenerate <|
         Generate.dev False leadingLines root details artifacts
+
+
+
+-- PARSERS
+
+
+type Report
+    = Json
+    | JUnit
+    | Console
+
+
+format : Parser
+format =
+    Parser
+        { singular = "format"
+        , plural = "formats"
+        , suggest = \_ -> IO.pure []
+        , examples = \_ -> IO.pure [ "json", "junit", "console" ]
+        }
+
+
+parseReport : String -> Maybe Report
+parseReport report =
+    case report of
+        "json" ->
+            Just Json
+
+        "junit" ->
+            Just JUnit
+
+        "console" ->
+            Just Console
+
+        _ ->
+            Nothing

@@ -104,6 +104,7 @@ module Utils.Main exposing
     , newEmptyMVar
     , newMVar
     , nodeGetDirname
+    , nodeMathRandom
     , nonEmptyListTraverse
     , putMVar
     , readChan
@@ -1226,6 +1227,14 @@ nodeGetDirname =
         []
         Impure.EmptyBody
         (Impure.StringResolver identity)
+
+
+nodeMathRandom : IO Float
+nodeMathRandom =
+    Impure.task "nodeMathRandom"
+        []
+        Impure.EmptyBody
+        (Impure.DecoderResolver Decode.float)
 
 
 

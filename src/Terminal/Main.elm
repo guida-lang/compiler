@@ -614,7 +614,10 @@ test =
 
         testFlags : Terminal.Flags
         testFlags =
-            Terminal.noFlags
+            Terminal.flags
+                |> Terminal.more (Terminal.flag "fuzz" int "Run with a specific fuzzer seed (default: random)")
+                |> Terminal.more (Terminal.flag "seed" int "Define how many times each fuzz-test should run (default: 100)")
+                |> Terminal.more (Terminal.flag "report" Test.format "Specify which format to use for reporting test results (choices: \"json\", \"junit\", \"console\", default: \"console\")")
     in
     Terminal.Command "test" Terminal.Uncommon details example testArgs testFlags <|
         \chunks ->
@@ -622,7 +625,10 @@ test =
                 chunks
                 [ Chomp.chompMultiple (Chomp.pure identity) Terminal.filePath Terminal.parseFilePath
                 ]
-                (Chomp.pure ()
+                (Chomp.pure Test.Flags
+                    |> Chomp.apply (Chomp.chompNormalFlag "seed" int parseInt)
+                    |> Chomp.apply (Chomp.chompNormalFlag "fuzz" int parseInt)
+                    |> Chomp.apply (Chomp.chompNormalFlag "report" Test.format Test.parseReport)
                     |> Chomp.bind
                         (\value ->
                             Chomp.checkForUnknownFlags testFlags
@@ -631,6 +637,21 @@ test =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Test.run args flags)
+
+
+int : Terminal.Parser
+int =
+    Terminal.Parser
+        { singular = "int"
+        , plural = "ints"
+        , suggest = \_ -> IO.pure []
+        , examples = \_ -> IO.pure []
+        }
+
+
+parseInt : String -> Maybe Int
+parseInt =
+    String.toInt
 
 
 

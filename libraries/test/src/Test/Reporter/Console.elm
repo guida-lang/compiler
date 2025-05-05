@@ -117,7 +117,7 @@ reportBegin useColor { globs, fuzzRuns, testCount, initialSeed } =
         prefix =
             "Running "
                 ++ pluralize "test" "tests" testCount
-                ++ ". To reproduce these results, run: elm-test --fuzz "
+                ++ ". To reproduce these results, run: guida test --fuzz "
                 ++ String.fromInt fuzzRuns
                 ++ " --seed "
                 ++ String.fromInt initialSeed
