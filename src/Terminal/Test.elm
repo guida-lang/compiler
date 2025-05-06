@@ -170,7 +170,7 @@ runHelp root testFileGlobs flags =
                                                     |> IO.bind
                                                         (\_ ->
                                                             let
-                                                                testModules : List { moduleName : a, possiblyTests : b }
+                                                                testModules : List { moduleName : String, possiblyTests : List String }
                                                                 testModules =
                                                                     List.map
                                                                         (\( _, ( moduleName, possiblyTests ) ) ->
