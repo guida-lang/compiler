@@ -161,29 +161,30 @@ bind callback (RResult ka) =
 
 traverse : (a -> RResult i w x b) -> List a -> RResult i w x (List b)
 traverse func list =
-    List.foldr
-        (\(RResult kv) (RResult acc) ->
-            RResult <|
-                \i w ->
-                    case acc i w of
-                        ROk i1 w1 accList ->
-                            case kv i1 w1 of
-                                ROk i2 w2 value ->
-                                    ROk i2 w2 (value :: accList)
+    List.map func list
+        |> List.foldl
+            (\(RResult kv) (RResult acc) ->
+                RResult <|
+                    \i w ->
+                        case acc i w of
+                            ROk i1 w1 accList ->
+                                case kv i1 w1 of
+                                    ROk i2 w2 value ->
+                                        ROk i2 w2 (value :: accList)
 
-                                RErr i2 w2 e2 ->
-                                    RErr i2 w2 e2
+                                    RErr i2 w2 e2 ->
+                                        RErr i2 w2 e2
 
-                        RErr i1 w1 e1 ->
-                            case kv i1 w1 of
-                                ROk i2 w2 _ ->
-                                    RErr i2 w2 e1
+                            RErr i1 w1 e1 ->
+                                case kv i1 w1 of
+                                    ROk i2 w2 _ ->
+                                        RErr i2 w2 e1
 
-                                RErr i2 w2 e2 ->
-                                    RErr i2 w2 (OneOrMore.more e1 e2)
-        )
-        (pure [])
-        (List.map func list)
+                                    RErr i2 w2 e2 ->
+                                        RErr i2 w2 (OneOrMore.more e1 e2)
+            )
+            (pure [])
+        |> fmap List.reverse
 
 
 traverseHelp : (a -> RResult i w e b) -> ( List a, List b ) -> RResult i w e (Step ( List a, List b ) (List b))
