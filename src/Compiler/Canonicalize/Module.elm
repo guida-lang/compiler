@@ -85,6 +85,7 @@ canonicalizeBinop (A.At _ (Src.Infix op associativity precedence func)) =
 --
 -- 1. Detect cycles using ALL dependencies => needed for type inference
 -- 2. Detect cycles using DIRECT dependencies => nonterminating recursion
+--
 
 
 canonicalizeValues : SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls

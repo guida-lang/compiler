@@ -160,7 +160,7 @@ describe("backwards compatibility", () => {
   });
 
   describe("tuples", () => {
-    test.skip("fails on 3+ tuples on elm files", () => {
+    test("fails on 3+ tuples on elm files", () => {
       const elmOutput = `${tmpDir}/guida-test-elm-tuple-n-${process.pid}.json`;
       const guidaOutput = `${tmpDir}/guida-test-guida-tuple-n-${process.pid}.json`;
 
