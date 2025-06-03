@@ -1,7 +1,11 @@
 module Compiler.Parse.Module exposing
-    ( ProjectType(..)
+    ( Effects(..)
+    , Header
+    , Module
+    , ProjectType(..)
     , chompImport
     , chompImports
+    , chompModule
     , fromByteString
     , isKernel
     )
@@ -142,7 +146,7 @@ checkModule syntaxVersion projectType module_ =
                 (Src.Module syntaxVersion
                     Nothing
                     (A.At A.one Src.Open)
-                    (Src.NoDocs A.one)
+                    (toDocs (Err A.one) module_.decls)
                     module_.imports
                     values
                     unions
@@ -232,7 +236,7 @@ toDocs comment decls =
             Src.YesDocs overview (getComments decls [])
 
         Err region ->
-            Src.NoDocs region
+            Src.NoDocs region (getComments decls [])
 
 
 getComments : List Decl.Decl -> List ( Name.Name, Src.Comment ) -> List ( Name.Name, Src.Comment )

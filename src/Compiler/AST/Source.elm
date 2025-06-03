@@ -188,7 +188,7 @@ type Manager
 
 
 type Docs
-    = NoDocs A.Region
+    = NoDocs A.Region (List ( Name, Comment ))
     | YesDocs Comment (List ( Name, Comment ))
 
 
@@ -390,10 +390,11 @@ exposingDecoder =
 docsEncoder : Docs -> BE.Encoder
 docsEncoder docs =
     case docs of
-        NoDocs region ->
+        NoDocs region comments ->
             BE.sequence
                 [ BE.unsignedInt8 0
                 , A.regionEncoder region
+                , BE.list (BE.jsonPair BE.string commentEncoder) comments
                 ]
 
         YesDocs overview comments ->
@@ -411,7 +412,9 @@ docsDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map NoDocs A.regionDecoder
+                        BD.map2 NoDocs
+                            A.regionDecoder
+                            (BD.list (BD.jsonPair BD.string commentDecoder))
 
                     1 ->
                         BD.map2 YesDocs

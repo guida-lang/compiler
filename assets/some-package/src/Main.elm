@@ -1,6 +1,6 @@
 module Main exposing (add1)
 
-{-| This library is a test library for testing the Elm compiler.
+{-| This a test package for testing the Elm compiler.
 
 
 # Example
