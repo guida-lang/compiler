@@ -18,6 +18,7 @@ module Compiler.Elm.Docs exposing
     , jsonEncoder
     , jsonModuleDecoder
     , jsonModuleEncoder
+    , parseOverview
     )
 
 import Basics.Extra exposing (flip)
@@ -328,7 +329,7 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 
         Can.Export exportDict ->
             case docs of
-                Src.NoDocs region ->
+                Src.NoDocs region _ ->
                     Err (E.NoDocs region)
 
                 Src.YesDocs overview comments ->

@@ -1,5 +1,5 @@
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 const childProcess = require("child_process");
 const os = require("os");
 const tmpDir = os.tmpdir();
