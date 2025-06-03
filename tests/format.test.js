@@ -45,6 +45,7 @@ const examples = [
         { title: "var type", filename: "VarTypeDeclarations", module: { ...defaultModule, declarations: ["fn : a -> a\nfn a = a"] } },
         { title: "unqualified type", filename: "UnqualifiedTypeDeclarations", module: { ...defaultModule, declarations: ["fn : List a -> List a\nfn list = list"] } },
         { title: "qualified type", filename: "QualifiedTypeDeclarations", module: { ...defaultModule, declarations: ["fn : Dict.Dict a -> Dict.Dict a\nfn dict = dict"] } },
+        { title: "argument w/ parentheses type", filename: "ArgumentWithParenthesesTypeDeclarations", module: { ...defaultModule, declarations: ["fn : List (Maybe a)\nfn = []"] } },
         { title: "multiple declarations", filename: "MultipleDeclarations", module: { ...defaultModule, declarations: ["fn1 = ()\nfn2 = ()"] } },
         { title: "let block", filename: "LetBlockDeclarations", module: { ...defaultModule, declarations: ["fn = let _ = () in ()"] } },
         { title: "anonymous function", filename: "AnonymousFunctionDeclarations", module: { ...defaultModule, declarations: ["fn = \\_ -> ()"] } },
@@ -52,6 +53,7 @@ const examples = [
         { title: "pipe operator", filename: "PipeOperatorDeclarations", module: { ...defaultModule, declarations: ["fn = \"\"\n |> String.trim"] } },
         { title: "list", filename: "ListDeclarations", module: { ...defaultModule, declarations: ["fn = [1,2,3]"] } },
         { title: "multi-line list", filename: "MultiLineListDeclarations", module: { ...defaultModule, declarations: ["fn = [\n 1,\n 2,3]"] } },
+        { title: "argument w/ parentheses", filename: "ArgumentWithParenthesesDeclarations", module: { ...defaultModule, declarations: ["fn input = String.toInt (String.trim input)"] } },
     ]],
     // UNION DECLARATIONS
     ["Union", [
