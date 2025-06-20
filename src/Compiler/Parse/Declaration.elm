@@ -26,7 +26,7 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type Decl
-    = Value (Maybe Src.Comment) (A.Located Src.Value)
+    = Value (Maybe Src.Comment) (List Space.Comment) (A.Located Src.Value)
     | Union (Maybe Src.Comment) (A.Located Src.Union)
     | Alias (Maybe Src.Comment) (A.Located Src.Alias)
     | Port (Maybe Src.Comment) Src.Port
@@ -36,14 +36,14 @@ declaration : SyntaxVersion -> Space.Parser E.Decl Decl
 declaration syntaxVersion =
     chompDocComment
         |> P.bind
-            (\maybeDocs ->
+            (\( comments, maybeDocs ) ->
                 P.getPosition
                     |> P.bind
                         (\start ->
                             P.oneOf E.DeclStart
                                 [ typeDecl maybeDocs start
                                 , portDecl maybeDocs
-                                , valueDecl syntaxVersion maybeDocs start
+                                , valueDecl syntaxVersion maybeDocs comments start
                                 ]
                         )
             )
@@ -53,26 +53,33 @@ declaration syntaxVersion =
 -- DOC COMMENT
 
 
-chompDocComment : P.Parser E.Decl (Maybe Src.Comment)
+chompDocComment : P.Parser E.Decl ( List Space.Comment, Maybe Src.Comment )
 chompDocComment =
     P.oneOfWithFallback
         [ Space.docComment E.DeclStart E.DeclSpace
             |> P.bind
                 (\docComment ->
                     Space.chomp E.DeclSpace
-                        |> P.bind (\_ -> Space.checkFreshLine E.DeclFreshLineAfterDocComment)
-                        |> P.fmap (\_ -> Just docComment)
+                        |> P.bind
+                            (\comments ->
+                                let
+                                    _ =
+                                        Debug.log "c108" comments
+                                in
+                                Space.checkFreshLine E.DeclFreshLineAfterDocComment
+                                    |> P.fmap (\_ -> ( comments, Just docComment ))
+                            )
                 )
         ]
-        Nothing
+        ( [], Nothing )
 
 
 
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : SyntaxVersion -> Maybe Src.Comment -> A.Position -> Space.Parser E.Decl Decl
-valueDecl syntaxVersion maybeDocs start =
+valueDecl : SyntaxVersion -> Maybe Src.Comment -> List Space.Comment -> A.Position -> Space.Parser E.Decl Decl
+valueDecl syntaxVersion maybeDocs comments start =
     Var.lower E.DeclStart
         |> P.bind
             (\name ->
@@ -82,11 +89,22 @@ valueDecl syntaxVersion maybeDocs start =
                             P.specialize (E.DeclDef name) <|
                                 (Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                                     |> P.bind
-                                        (\_ ->
+                                        (\c1 ->
+                                            let
+                                                _ =
+                                                    Debug.log "c1" c1
+                                            in
                                             P.oneOf E.DeclDefEquals
                                                 [ P.word1 ':' E.DeclDefEquals
                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentType)
-                                                    |> P.bind (\_ -> P.specialize E.DeclDefType Type.expression)
+                                                    |> P.bind
+                                                        (\c2 ->
+                                                            let
+                                                                _ =
+                                                                    Debug.log "c2" c2
+                                                            in
+                                                            P.specialize E.DeclDefType Type.expression
+                                                        )
                                                     |> P.bind
                                                         (\( tipe, _ ) ->
                                                             Space.checkFreshLine E.DeclDefNameRepeat
@@ -94,10 +112,17 @@ valueDecl syntaxVersion maybeDocs start =
                                                                 |> P.bind
                                                                     (\defName ->
                                                                         Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
-                                                                            |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion maybeDocs start defName (Just tipe) [])
+                                                                            |> P.bind
+                                                                                (\c3 ->
+                                                                                    let
+                                                                                        _ =
+                                                                                            Debug.log "c3" c3
+                                                                                    in
+                                                                                    chompDefArgsAndBody syntaxVersion maybeDocs comments start defName (Just tipe) []
+                                                                                )
                                                                     )
                                                         )
-                                                , chompDefArgsAndBody syntaxVersion maybeDocs start (A.at start end name) Nothing []
+                                                , chompDefArgsAndBody syntaxVersion maybeDocs comments start (A.at start end name) Nothing []
                                                 ]
                                         )
                                 )
@@ -105,18 +130,32 @@ valueDecl syntaxVersion maybeDocs start =
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
-chompDefArgsAndBody syntaxVersion maybeDocs start name tipe revArgs =
+chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> List Space.Comment -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
+chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
     P.oneOf E.DeclDefEquals
         [ P.specialize E.DeclDefArg (Pattern.term syntaxVersion)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
-                        |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion maybeDocs start name tipe (arg :: revArgs))
+                        |> P.bind
+                            (\c4 ->
+                                let
+                                    _ =
+                                        Debug.log "c4" c4
+                                in
+                                chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe (arg :: revArgs)
+                            )
                 )
         , P.word1 '=' E.DeclDefEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DeclDefBody (Expr.expression syntaxVersion))
+            |> P.bind
+                (\c5 ->
+                    let
+                        _ =
+                            Debug.log "c5" c5
+                    in
+                    P.specialize E.DeclDefBody (Expr.expression syntaxVersion)
+                )
             |> P.fmap
                 (\( body, end ) ->
                     let
@@ -128,7 +167,7 @@ chompDefArgsAndBody syntaxVersion maybeDocs start name tipe revArgs =
                         avalue =
                             A.at start end value
                     in
-                    ( Value maybeDocs avalue, end )
+                    ( Value maybeDocs comments avalue, end )
                 )
         ]
 
@@ -172,11 +211,22 @@ typeDecl maybeDocs start =
     P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
             |> P.bind
-                (\_ ->
+                (\c6 ->
+                    let
+                        _ =
+                            Debug.log "c6" c6
+                    in
                     P.oneOf E.DT_Name
                         [ P.inContext E.DT_Alias (Keyword.alias_ E.DT_Name) <|
                             (Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
-                                |> P.bind (\_ -> chompAliasNameToEquals)
+                                |> P.bind
+                                    (\c7 ->
+                                        let
+                                            _ =
+                                                Debug.log "c7" c7
+                                        in
+                                        chompAliasNameToEquals
+                                    )
                                 |> P.bind
                                     (\( name, args ) ->
                                         P.specialize E.AliasBody Type.expression
@@ -226,7 +276,14 @@ chompAliasNameToEquals =
         |> P.bind
             (\name ->
                 Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
-                    |> P.bind (\_ -> chompAliasNameToEqualsHelp name [])
+                    |> P.bind
+                        (\c8 ->
+                            let
+                                _ =
+                                    Debug.log "c8" c8
+                            in
+                            chompAliasNameToEqualsHelp name []
+                        )
             )
 
 
@@ -237,11 +294,25 @@ chompAliasNameToEqualsHelp name args =
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
-                        |> P.bind (\_ -> chompAliasNameToEqualsHelp name (arg :: args))
+                        |> P.bind
+                            (\c9 ->
+                                let
+                                    _ =
+                                        Debug.log "c9" c9
+                                in
+                                chompAliasNameToEqualsHelp name (arg :: args)
+                            )
                 )
         , P.word1 '=' E.AliasEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.AliasSpace E.AliasIndentBody)
-            |> P.fmap (\_ -> ( name, List.reverse args ))
+            |> P.fmap
+                (\c10 ->
+                    let
+                        _ =
+                            Debug.log "c10" c10
+                    in
+                    ( name, List.reverse args )
+                )
         ]
 
 
@@ -255,7 +326,14 @@ chompCustomNameToEquals =
         |> P.bind
             (\name ->
                 Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
-                    |> P.bind (\_ -> chompCustomNameToEqualsHelp name [])
+                    |> P.bind
+                        (\c11 ->
+                            let
+                                _ =
+                                    Debug.log "c11" c11
+                            in
+                            chompCustomNameToEqualsHelp name []
+                        )
             )
 
 
@@ -266,11 +344,25 @@ chompCustomNameToEqualsHelp name args =
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
-                        |> P.bind (\_ -> chompCustomNameToEqualsHelp name (arg :: args))
+                        |> P.bind
+                            (\c12 ->
+                                let
+                                    _ =
+                                        Debug.log "c12" c12
+                                in
+                                chompCustomNameToEqualsHelp name (arg :: args)
+                            )
                 )
         , P.word1 '=' E.CT_Equals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterEquals)
-            |> P.fmap (\_ -> ( name, List.reverse args ))
+            |> P.fmap
+                (\c13 ->
+                    let
+                        _ =
+                            Debug.log "c13" c13
+                    in
+                    ( name, List.reverse args )
+                )
         ]
 
 
@@ -280,7 +372,14 @@ chompVariants variants end =
         [ Space.checkIndent end E.CT_IndentBar
             |> P.bind (\_ -> P.word1 '|' E.CT_Bar)
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterBar)
-            |> P.bind (\_ -> Type.variant)
+            |> P.bind
+                (\c14 ->
+                    let
+                        _ =
+                            Debug.log "c14" c14
+                    in
+                    Type.variant
+                )
             |> P.bind (\( variant, newEnd ) -> chompVariants (variant :: variants) newEnd)
         ]
         ( List.reverse variants, end )
@@ -294,14 +393,32 @@ portDecl : Maybe Src.Comment -> Space.Parser E.Decl Decl
 portDecl maybeDocs =
     P.inContext E.Port (Keyword.port_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.PortSpace E.PortIndentName
-            |> P.bind (\_ -> P.addLocation (Var.lower E.PortName))
+            |> P.bind
+                (\c15 ->
+                    let
+                        _ =
+                            Debug.log "c15" c15
+                    in
+                    P.addLocation (Var.lower E.PortName)
+                )
             |> P.bind
                 (\name ->
                     Space.chompAndCheckIndent E.PortSpace E.PortIndentColon
-                        |> P.bind (\_ -> P.word1 ':' E.PortColon)
+                        |> P.bind
+                            (\c16 ->
+                                let
+                                    _ =
+                                        Debug.log "c16" c16
+                                in
+                                P.word1 ':' E.PortColon
+                            )
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.PortSpace E.PortIndentType)
                         |> P.bind
-                            (\_ ->
+                            (\c17 ->
+                                let
+                                    _ =
+                                        Debug.log "c17" c17
+                                in
                                 P.specialize E.PortType Type.expression
                                     |> P.fmap
                                         (\( tipe, end ) ->
@@ -337,7 +454,11 @@ infix_ =
                 Keyword.infix_ err
                     |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
                     |> P.bind
-                        (\_ ->
+                        (\c18 ->
+                            let
+                                _ =
+                                    Debug.log "c18" c18
+                            in
                             P.oneOf err
                                 [ Keyword.left_ err |> P.fmap (\_ -> Binop.Left)
                                 , Keyword.right_ err |> P.fmap (\_ -> Binop.Right)
@@ -347,26 +468,61 @@ infix_ =
                     |> P.bind
                         (\associativity ->
                             Space.chompAndCheckIndent err_ err
-                                |> P.bind (\_ -> Number.precedence err)
+                                |> P.bind
+                                    (\c19 ->
+                                        let
+                                            _ =
+                                                Debug.log "c19" c19
+                                        in
+                                        Number.precedence err
+                                    )
                                 |> P.bind
                                     (\precedence ->
                                         Space.chompAndCheckIndent err_ err
-                                            |> P.bind (\_ -> P.word1 '(' err)
+                                            |> P.bind
+                                                (\c20 ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "c20" c20
+                                                    in
+                                                    P.word1 '(' err
+                                                )
                                             |> P.bind (\_ -> Symbol.operator err err_)
                                             |> P.bind
                                                 (\op ->
                                                     P.word1 ')' err
                                                         |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
-                                                        |> P.bind (\_ -> P.word1 '=' err)
+                                                        |> P.bind
+                                                            (\c21 ->
+                                                                let
+                                                                    _ =
+                                                                        Debug.log "c21" c21
+                                                                in
+                                                                P.word1 '=' err
+                                                            )
                                                         |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
-                                                        |> P.bind (\_ -> Var.lower err)
+                                                        |> P.bind
+                                                            (\c22 ->
+                                                                let
+                                                                    _ =
+                                                                        Debug.log "c22" c22
+                                                                in
+                                                                Var.lower err
+                                                            )
                                                         |> P.bind
                                                             (\name ->
                                                                 P.getPosition
                                                                     |> P.bind
                                                                         (\end ->
                                                                             Space.chomp err_
-                                                                                |> P.bind (\_ -> Space.checkFreshLine err)
+                                                                                |> P.bind
+                                                                                    (\c109 ->
+                                                                                        let
+                                                                                            _ =
+                                                                                                Debug.log "c109" c109
+                                                                                        in
+                                                                                        Space.checkFreshLine err
+                                                                                    )
                                                                                 |> P.fmap (\_ -> A.at start end (Src.Infix op associativity precedence name))
                                                                         )
                                                             )

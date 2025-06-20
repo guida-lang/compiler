@@ -108,7 +108,14 @@ parser : Pkg.Name -> Foreigns -> P.Parser () Content
 parser pkg foreigns =
     P.word2 '/' '*' toError
         |> P.bind (\_ -> Space.chomp ignoreError)
-        |> P.bind (\_ -> Space.checkFreshLine toError)
+        |> P.bind
+            (\c107 ->
+                let
+                    _ =
+                        Debug.log "c107" c107
+                in
+                Space.checkFreshLine toError
+            )
         |> P.bind (\_ -> P.specialize ignoreError (Module.chompImports []))
         |> P.bind
             (\imports ->

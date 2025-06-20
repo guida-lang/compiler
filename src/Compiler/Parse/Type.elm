@@ -56,7 +56,11 @@ term =
                                 |> P.bind (\_ -> P.addEnd start Src.TUnit)
                             , Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentType1
                                 |> P.bind
-                                    (\_ ->
+                                    (\c94 ->
+                                        let
+                                            _ =
+                                                Debug.log "c94" c94
+                                        in
                                         P.specialize E.TTupleType expression
                                             |> P.bind
                                                 (\( tipe, end ) ->
@@ -69,7 +73,11 @@ term =
                       P.inContext E.TRecord (P.word1 '{' E.TStart) <|
                         (Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentOpen
                             |> P.bind
-                                (\_ ->
+                                (\c95 ->
+                                    let
+                                        _ =
+                                            Debug.log "c95" c95
+                                    in
                                     P.oneOf E.TRecordOpen
                                         [ P.word1 '}' E.TRecordEnd
                                             |> P.bind (\_ -> P.addEnd start (Src.TRecord [] Nothing))
@@ -78,14 +86,22 @@ term =
                                                 (\name ->
                                                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                                                         |> P.bind
-                                                            (\_ ->
+                                                            (\c96 ->
+                                                                let
+                                                                    _ =
+                                                                        Debug.log "c96" c96
+                                                                in
                                                                 P.oneOf E.TRecordColon
                                                                     [ P.word1 '|' E.TRecordColon
                                                                         |> P.bind
                                                                             (\_ ->
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                                                                                     |> P.bind
-                                                                                        (\_ ->
+                                                                                        (\c97 ->
+                                                                                            let
+                                                                                                _ =
+                                                                                                    Debug.log "c97" c97
+                                                                                            in
                                                                                             chompField
                                                                                                 |> P.bind
                                                                                                     (\field ->
@@ -99,7 +115,11 @@ term =
                                                                             (\_ ->
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                                                                     |> P.bind
-                                                                                        (\_ ->
+                                                                                        (\c98 ->
+                                                                                            let
+                                                                                                _ =
+                                                                                                    Debug.log "c98" c98
+                                                                                            in
                                                                                             P.specialize E.TRecordType expression
                                                                                                 |> P.bind
                                                                                                     (\( tipe, end ) ->
@@ -140,7 +160,14 @@ expression =
                                     |> P.bind
                                         (\end ->
                                             Space.chomp E.TSpace
-                                                |> P.fmap (\_ -> ( eterm, end ))
+                                                |> P.fmap
+                                                    (\c122 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c122" c122
+                                                        in
+                                                        ( eterm, end )
+                                                    )
                                         )
                             )
                     ]
@@ -157,7 +184,11 @@ expression =
                                                     (\_ ->
                                                         Space.chompAndCheckIndent E.TSpace E.TIndentStart
                                                             |> P.bind
-                                                                (\_ ->
+                                                                (\c99 ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "c99" c99
+                                                                    in
                                                                     expression
                                                                         |> P.fmap
                                                                             (\( tipe2, end2 ) ->
@@ -191,7 +222,11 @@ app start =
                         (\upperEnd ->
                             Space.chomp E.TSpace
                                 |> P.bind
-                                    (\_ ->
+                                    (\c123 ->
+                                        let
+                                            _ =
+                                                Debug.log "c123" c123
+                                        in
                                         chompArgs [] upperEnd
                                             |> P.fmap
                                                 (\( args, end ) ->
@@ -230,7 +265,11 @@ chompArgs args end =
                                         (\newEnd ->
                                             Space.chomp E.TSpace
                                                 |> P.bind
-                                                    (\_ ->
+                                                    (\c124 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c124" c124
+                                                        in
                                                         chompArgs (arg :: args) newEnd
                                                     )
                                         )
@@ -252,7 +291,11 @@ chompTupleEnd start firstType revTypes =
                 (\_ ->
                     Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentTypeN
                         |> P.bind
-                            (\_ ->
+                            (\c100 ->
+                                let
+                                    _ =
+                                        Debug.log "c100" c100
+                                in
                                 P.specialize E.TTupleType expression
                                     |> P.bind
                                         (\( tipe, end ) ->
@@ -293,7 +336,11 @@ chompRecordEnd fields =
                 (\_ ->
                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                         |> P.bind
-                            (\_ ->
+                            (\c101 ->
+                                let
+                                    _ =
+                                        Debug.log "c101" c101
+                                in
                                 chompField
                                     |> P.bind
                                         (\field ->
@@ -313,13 +360,21 @@ chompField =
             (\name ->
                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                     |> P.bind
-                        (\_ ->
+                        (\c102 ->
+                            let
+                                _ =
+                                    Debug.log "c102" c102
+                            in
                             P.word1 ':' E.TRecordColon
                                 |> P.bind
                                     (\_ ->
                                         Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                             |> P.bind
-                                                (\_ ->
+                                                (\c103 ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "c103" c103
+                                                    in
                                                     P.specialize E.TRecordType expression
                                                         |> P.bind
                                                             (\( tipe, end ) ->
@@ -343,7 +398,11 @@ variant =
             (\((A.At (A.Region _ nameEnd) _) as name) ->
                 Space.chomp E.CT_Space
                     |> P.bind
-                        (\_ ->
+                        (\c125 ->
+                            let
+                                _ =
+                                    Debug.log "c125" c125
+                            in
                             P.specialize E.CT_VariantArg (chompArgs [] nameEnd)
                                 |> P.fmap
                                     (\( args, end ) ->

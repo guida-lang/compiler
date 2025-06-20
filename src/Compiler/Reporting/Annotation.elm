@@ -4,6 +4,7 @@ module Compiler.Reporting.Annotation exposing
     , Region(..)
     , at
     , compareLocated
+    , isMultiline
     , locatedDecoder
     , locatedEncoder
     , merge
@@ -89,6 +90,11 @@ zero =
 one : Region
 one =
     Region (Position 1 1) (Position 1 1)
+
+
+isMultiline : Region -> Bool
+isMultiline (Region (Position startRow _) (Position endRow _)) =
+    startRow /= endRow
 
 
 

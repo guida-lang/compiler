@@ -70,6 +70,13 @@ const examples = [
         { title: "in", filename: "InPortDeclarations", module: { ...defaultModule, declarations: ["port messageReceiver : (String -> msg) -> Sub msg"] } },
         { title: "out", filename: "OutPortDeclarations", module: { ...defaultModule, declarations: ["port sendMessage : String -> Cmd msg"] } },
     ]],
+    // COMMENTS
+    ["Comments", [
+        { title: "single-line before header", filename: "SingleLineBeforeHeaderComments", module: { ...defaultModule, header: ["-- COMMENT\nmodule Main exposing (..)"] } },
+        { title: "multi-line header", filename: "MultiLineHeaderComments", module: { ...defaultModule, header: ["module {- C1 -} Main {- C2 -} exposing {- C3 -} ({- C4 -}..{- C5 -})"] } },
+        { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
+        { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
+    ]],
 ]
 
 describe("format", () => {

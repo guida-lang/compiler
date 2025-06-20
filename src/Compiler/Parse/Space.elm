@@ -1,5 +1,6 @@
 module Compiler.Parse.Space exposing
-    ( Parser
+    ( Comment(..)
+    , Parser
     , checkAligned
     , checkFreshLine
     , checkIndent
@@ -15,6 +16,18 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 
+-- COMMENT
+
+
+type Comment
+    = BlockComment (List String)
+    | LineComment String
+    | CommentTrickOpener
+    | CommentTrickCloser
+    | CommentTrickBlock String
+
+
+
 -- SPACE PARSING
 
 
@@ -26,13 +39,13 @@ type alias Parser x a =
 -- CHOMP
 
 
-chomp : (E.Space -> Row -> Col -> x) -> P.Parser x ()
+chomp : (E.Space -> Row -> Col -> x) -> P.Parser x (List Comment)
 chomp toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             let
-                ( ( status, newPos ), ( newRow, newCol ) ) =
-                    eat Spaces src pos end row col
+                ( ( status, comments, newPos ), ( newRow, newCol ) ) =
+                    eat EatSpaces [] src pos end row col
             in
             case status of
                 Good ->
@@ -41,7 +54,7 @@ chomp toError =
                         newState =
                             P.State src newPos end indent newRow newCol
                     in
-                    P.Cok () newState
+                    P.Cok (List.reverse comments) newState
 
                 HasTab ->
                     P.Cerr newRow newCol (toError E.HasTab)
@@ -91,13 +104,13 @@ checkFreshLine toError =
 -- CHOMP AND CHECK
 
 
-chompAndCheckIndent : (E.Space -> Row -> Col -> x) -> (Row -> Col -> x) -> P.Parser x ()
+chompAndCheckIndent : (E.Space -> Row -> Col -> x) -> (Row -> Col -> x) -> P.Parser x (List Comment)
 chompAndCheckIndent toSpaceError toIndentError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
             let
-                ( ( status, newPos ), ( newRow, newCol ) ) =
-                    eat Spaces src pos end row col
+                ( ( status, comments, newPos ), ( newRow, newCol ) ) =
+                    eat EatSpaces [] src pos end row col
             in
             case status of
                 Good ->
@@ -107,7 +120,7 @@ chompAndCheckIndent toSpaceError toIndentError =
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        P.Cok () newState
+                        P.Cok (List.reverse comments) newState
 
                     else
                         P.Cerr row col toIndentError
@@ -129,9 +142,9 @@ chompAndCheckIndent toSpaceError toIndentError =
 
 
 type EatType
-    = Spaces
-    | LineComment
-    | MultiComment
+    = EatSpaces
+    | EatLineComment Int
+    | EatMultiComment
 
 
 type Status
@@ -140,23 +153,23 @@ type Status
     | EndlessMultiComment
 
 
-eat : EatType -> String -> Int -> Int -> Row -> Col -> ( ( Status, Int ), ( Row, Col ) )
-eat eatType src pos end row col =
+eat : EatType -> List Comment -> String -> Int -> Int -> Row -> Col -> ( ( Status, List Comment, Int ), ( Row, Col ) )
+eat eatType comments src pos end row col =
     case eatType of
-        Spaces ->
+        EatSpaces ->
             if pos >= end then
-                ( ( Good, pos ), ( row, col ) )
+                ( ( Good, comments, pos ), ( row, col ) )
 
             else
                 case P.unsafeIndex src pos of
                     ' ' ->
-                        eat Spaces src (pos + 1) end row (col + 1)
+                        eat EatSpaces comments src (pos + 1) end row (col + 1)
 
                     '\n' ->
-                        eat Spaces src (pos + 1) end (row + 1) 1
+                        eat EatSpaces comments src (pos + 1) end (row + 1) 1
 
                     '{' ->
-                        eat MultiComment src pos end row col
+                        eat EatMultiComment comments src pos end row col
 
                     '-' ->
                         let
@@ -165,23 +178,23 @@ eat eatType src pos end row col =
                                 pos + 1
                         in
                         if pos1 < end && P.unsafeIndex src pos1 == '-' then
-                            eat LineComment src (pos + 2) end row (col + 2)
+                            eat (EatLineComment (pos + 2)) comments src (pos + 2) end row (col + 2)
 
                         else
-                            ( ( Good, pos ), ( row, col ) )
+                            ( ( Good, comments, pos ), ( row, col ) )
 
                     '\u{000D}' ->
-                        eat Spaces src (pos + 1) end row col
+                        eat EatSpaces comments src (pos + 1) end row col
 
                     '\t' ->
-                        ( ( HasTab, pos ), ( row, col ) )
+                        ( ( HasTab, comments, pos ), ( row, col ) )
 
                     _ ->
-                        ( ( Good, pos ), ( row, col ) )
+                        ( ( Good, comments, pos ), ( row, col ) )
 
-        LineComment ->
+        EatLineComment startPos ->
             if pos >= end then
-                ( ( Good, pos ), ( row, col ) )
+                ( ( Good, comments, pos ), ( row, col ) )
 
             else
                 let
@@ -190,7 +203,11 @@ eat eatType src pos end row col =
                         P.unsafeIndex src pos
                 in
                 if word == '\n' then
-                    eat Spaces src (pos + 1) end (row + 1) 1
+                    let
+                        newComment =
+                            LineComment (String.slice startPos pos src)
+                    in
+                    eat EatSpaces (newComment :: comments) src (pos + 1) end (row + 1) 1
 
                 else
                     let
@@ -198,16 +215,16 @@ eat eatType src pos end row col =
                         newPos =
                             pos + P.getCharWidth word
                     in
-                    eat LineComment src newPos end row (col + 1)
+                    eat (EatLineComment startPos) comments src newPos end row (col + 1)
 
-        MultiComment ->
+        EatMultiComment ->
             let
                 pos2 : Int
                 pos2 =
                     pos + 2
             in
             if pos2 >= end then
-                ( ( Good, pos ), ( row, col ) )
+                ( ( Good, comments, pos ), ( row, col ) )
 
             else
                 let
@@ -217,7 +234,7 @@ eat eatType src pos end row col =
                 in
                 if P.unsafeIndex src pos1 == '-' then
                     if P.unsafeIndex src pos2 == '|' then
-                        ( ( Good, pos ), ( row, col ) )
+                        ( ( Good, comments, pos ), ( row, col ) )
 
                     else
                         let
@@ -226,16 +243,20 @@ eat eatType src pos end row col =
                         in
                         case status of
                             MultiGood ->
-                                eat Spaces src newPos end newRow newCol
+                                let
+                                    newComment =
+                                        BlockComment (String.lines (String.slice pos2 (newPos - 2) src))
+                                in
+                                eat EatSpaces (newComment :: comments) src newPos end newRow newCol
 
                             MultiTab ->
-                                ( ( HasTab, newPos ), ( newRow, newCol ) )
+                                ( ( HasTab, comments, newPos ), ( newRow, newCol ) )
 
                             MultiEndless ->
-                                ( ( EndlessMultiComment, pos ), ( row, col ) )
+                                ( ( EndlessMultiComment, comments, pos ), ( row, col ) )
 
                 else
-                    ( ( Good, pos ), ( row, col ) )
+                    ( ( Good, comments, pos ), ( row, col ) )
 
 
 type MultiStatus

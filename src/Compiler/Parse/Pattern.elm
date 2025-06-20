@@ -158,13 +158,24 @@ record start =
     P.inContext E.PRecord (P.word1 '{' E.PStart) <|
         (Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentOpen
             |> P.bind
-                (\_ ->
+                (\c84 ->
+                    let
+                        _ =
+                            Debug.log "c84" c84
+                    in
                     P.oneOf E.PRecordOpen
                         [ P.addLocation (Var.lower E.PRecordField)
                             |> P.bind
                                 (\var ->
                                     Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
-                                        |> P.bind (\_ -> recordHelp start [ var ])
+                                        |> P.bind
+                                            (\c85 ->
+                                                let
+                                                    _ =
+                                                        Debug.log "c85" c85
+                                                in
+                                                recordHelp start [ var ]
+                                            )
                                 )
                         , P.word1 '}' E.PRecordEnd
                             |> P.bind (\_ -> P.addEnd start (Src.PRecord []))
@@ -178,11 +189,25 @@ recordHelp start vars =
     P.oneOf E.PRecordEnd
         [ P.word1 ',' E.PRecordEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentField)
-            |> P.bind (\_ -> P.addLocation (Var.lower E.PRecordField))
+            |> P.bind
+                (\c86 ->
+                    let
+                        _ =
+                            Debug.log "c86" c86
+                    in
+                    P.addLocation (Var.lower E.PRecordField)
+                )
             |> P.bind
                 (\var ->
                     Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
-                        |> P.bind (\_ -> recordHelp start (var :: vars))
+                        |> P.bind
+                            (\c87 ->
+                                let
+                                    _ =
+                                        Debug.log "c87" c87
+                                in
+                                recordHelp start (var :: vars)
+                            )
                 )
         , P.word1 '}' E.PRecordEnd
             |> P.bind (\_ -> P.addEnd start (Src.PRecord vars))
@@ -198,7 +223,11 @@ tuple syntaxVersion start =
     P.inContext E.PTuple (P.word1 '(' E.PStart) <|
         (Space.chompAndCheckIndent E.PTupleSpace E.PTupleIndentExpr1
             |> P.bind
-                (\_ ->
+                (\c88 ->
+                    let
+                        _ =
+                            Debug.log "c88" c88
+                    in
                     P.oneOf E.PTupleOpen
                         [ P.specialize E.PTupleExpr (expression syntaxVersion)
                             |> P.bind
@@ -218,7 +247,14 @@ tupleHelp syntaxVersion start firstPattern revPatterns =
     P.oneOf E.PTupleEnd
         [ P.word1 ',' E.PTupleEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PTupleSpace E.PTupleIndentExprN)
-            |> P.bind (\_ -> P.specialize E.PTupleExpr (expression syntaxVersion))
+            |> P.bind
+                (\c89 ->
+                    let
+                        _ =
+                            Debug.log "c89" c89
+                    in
+                    P.specialize E.PTupleExpr (expression syntaxVersion)
+                )
             |> P.bind
                 (\( pattern, end ) ->
                     Space.checkIndent end E.PTupleIndentEnd
@@ -246,7 +282,11 @@ list syntaxVersion start =
     P.inContext E.PList (P.word1 '[' E.PStart) <|
         (Space.chompAndCheckIndent E.PListSpace E.PListIndentOpen
             |> P.bind
-                (\_ ->
+                (\c90 ->
+                    let
+                        _ =
+                            Debug.log "c90" c90
+                    in
                     P.oneOf E.PListOpen
                         [ P.specialize E.PListExpr (expression syntaxVersion)
                             |> P.bind
@@ -266,7 +306,14 @@ listHelp syntaxVersion start patterns =
     P.oneOf E.PListEnd
         [ P.word1 ',' E.PListEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PListSpace E.PListIndentExpr)
-            |> P.bind (\_ -> P.specialize E.PListExpr (expression syntaxVersion))
+            |> P.bind
+                (\c91 ->
+                    let
+                        _ =
+                            Debug.log "c91" c91
+                    in
+                    P.specialize E.PListExpr (expression syntaxVersion)
+                )
             |> P.bind
                 (\( pattern, end ) ->
                     Space.checkIndent end E.PListIndentEnd
@@ -300,12 +347,26 @@ exprHelp syntaxVersion start revPatterns ( pattern, end ) =
         [ Space.checkIndent end E.PIndentStart
             |> P.bind (\_ -> P.word2 ':' ':' E.PStart)
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PSpace E.PIndentStart)
-            |> P.bind (\_ -> exprPart syntaxVersion)
+            |> P.bind
+                (\c92 ->
+                    let
+                        _ =
+                            Debug.log "c92" c92
+                    in
+                    exprPart syntaxVersion
+                )
             |> P.bind (\ePart -> exprHelp syntaxVersion start (pattern :: revPatterns) ePart)
         , Space.checkIndent end E.PIndentStart
             |> P.bind (\_ -> Keyword.as_ E.PStart)
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PSpace E.PIndentAlias)
-            |> P.bind (\_ -> P.getPosition)
+            |> P.bind
+                (\c93 ->
+                    let
+                        _ =
+                            Debug.log "c93" c93
+                    in
+                    P.getPosition
+                )
             |> P.bind
                 (\nameStart ->
                     Var.lower E.PAlias
@@ -316,8 +377,11 @@ exprHelp syntaxVersion start revPatterns ( pattern, end ) =
                                         (\newEnd ->
                                             Space.chomp E.PSpace
                                                 |> P.fmap
-                                                    (\_ ->
+                                                    (\c119 ->
                                                         let
+                                                            _ =
+                                                                Debug.log "c119" c119
+
                                                             alias_ : A.Located Name.Name
                                                             alias_ =
                                                                 A.at nameStart newEnd name
@@ -361,7 +425,14 @@ exprPart syntaxVersion =
             |> P.bind
                 (\((A.At (A.Region _ end) _) as eterm) ->
                     Space.chomp E.PSpace
-                        |> P.fmap (\_ -> ( eterm, end ))
+                        |> P.fmap
+                            (\c120 ->
+                                let
+                                    _ =
+                                        Debug.log "c120" c120
+                                in
+                                ( eterm, end )
+                            )
                 )
         ]
 
@@ -373,7 +444,11 @@ exprTermHelp syntaxVersion region upper start revArgs =
             (\end ->
                 Space.chomp E.PSpace
                     |> P.bind
-                        (\_ ->
+                        (\c121 ->
+                            let
+                                _ =
+                                    Debug.log "c121" c121
+                            in
                             P.oneOfWithFallback
                                 [ Space.checkIndent end E.PIndentStart
                                     |> P.bind (\_ -> term syntaxVersion)

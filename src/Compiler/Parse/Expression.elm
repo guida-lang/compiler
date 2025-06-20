@@ -114,7 +114,11 @@ list syntaxVersion start =
     P.inContext E.List (P.word1 '[' E.Start) <|
         (Space.chompAndCheckIndent E.ListSpace E.ListIndentOpen
             |> P.bind
-                (\_ ->
+                (\c23 ->
+                    let
+                        _ =
+                            Debug.log "c23" c23
+                    in
                     P.oneOf E.ListOpen
                         [ P.specialize E.ListExpr (expression syntaxVersion)
                             |> P.bind
@@ -134,7 +138,14 @@ chompListEnd syntaxVersion start entries =
     P.oneOf E.ListEnd
         [ P.word1 ',' E.ListEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ListSpace E.ListIndentExpr)
-            |> P.bind (\_ -> P.specialize E.ListExpr (expression syntaxVersion))
+            |> P.bind
+                (\c24 ->
+                    let
+                        _ =
+                            Debug.log "c24" c24
+                    in
+                    P.specialize E.ListExpr (expression syntaxVersion)
+                )
             |> P.bind
                 (\( entry, end ) ->
                     Space.checkIndent end E.ListIndentEnd
@@ -158,7 +169,11 @@ tuple syntaxVersion ((A.Position row col) as start) =
                 (\before ->
                     Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExpr1
                         |> P.bind
-                            (\_ ->
+                            (\c25 ->
+                                let
+                                    _ =
+                                        Debug.log "c25" c25
+                                in
                                 P.getPosition
                                     |> P.bind
                                         (\after ->
@@ -185,8 +200,11 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                                                     (\((A.At (A.Region _ end) _) as negatedExpr) ->
                                                                                         Space.chomp E.Space
                                                                                             |> P.bind
-                                                                                                (\_ ->
+                                                                                                (\c110 ->
                                                                                                     let
+                                                                                                        _ =
+                                                                                                            Debug.log "c110" c110
+
                                                                                                         exprStart : A.Position
                                                                                                         exprStart =
                                                                                                             A.Position row (col + 2)
@@ -241,7 +259,11 @@ chompTupleEnd syntaxVersion start firstExpr revExprs =
                 (\_ ->
                     Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExprN
                         |> P.bind
-                            (\_ ->
+                            (\c26 ->
+                                let
+                                    _ =
+                                        Debug.log "c26" c26
+                                in
                                 P.specialize E.TupleExpr (expression syntaxVersion)
                                     |> P.bind
                                         (\( entry, end ) ->
@@ -274,7 +296,11 @@ record syntaxVersion start =
             P.inContext E.Record (P.word1 '{' E.Start) <|
                 (Space.chompAndCheckIndent E.RecordSpace E.RecordIndentOpen
                     |> P.bind
-                        (\_ ->
+                        (\c27 ->
+                            let
+                                _ =
+                                    Debug.log "c27" c27
+                            in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
                                     |> P.bind (\_ -> P.addEnd start (Src.Record []))
@@ -283,16 +309,34 @@ record syntaxVersion start =
                                         (\((A.At starterPosition starterName) as starter) ->
                                             Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
                                                 |> P.bind
-                                                    (\_ ->
+                                                    (\c28 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c28" c28
+                                                        in
                                                         P.oneOf E.RecordEquals
                                                             [ P.word1 '|' E.RecordEquals
                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-                                                                |> P.bind (\_ -> chompField syntaxVersion)
+                                                                |> P.bind
+                                                                    (\c29 ->
+                                                                        let
+                                                                            _ =
+                                                                                Debug.log "c29" c29
+                                                                        in
+                                                                        chompField syntaxVersion
+                                                                    )
                                                                 |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
                                                                 |> P.bind (\fields -> P.addEnd start (Src.Update (A.At starterPosition (Src.Var Src.LowVar starterName)) fields))
                                                             , P.word1 '=' E.RecordEquals
                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                                                                |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
+                                                                |> P.bind
+                                                                    (\c30 ->
+                                                                        let
+                                                                            _ =
+                                                                                Debug.log "c30" c30
+                                                                        in
+                                                                        P.specialize E.RecordExpr (expression syntaxVersion)
+                                                                    )
                                                                 |> P.bind
                                                                     (\( value, end ) ->
                                                                         Space.checkIndent end E.RecordIndentEnd
@@ -310,7 +354,11 @@ record syntaxVersion start =
             P.inContext E.Record (P.word1 '{' E.Start) <|
                 (Space.chompAndCheckIndent E.RecordSpace E.RecordIndentOpen
                     |> P.bind
-                        (\_ ->
+                        (\c31 ->
+                            let
+                                _ =
+                                    Debug.log "c31" c31
+                            in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
                                     |> P.bind (\_ -> P.addEnd start (Src.Record []))
@@ -323,9 +371,23 @@ record syntaxVersion start =
                                                 |> P.bind
                                                     (\starter ->
                                                         Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
-                                                            |> P.bind (\_ -> P.word1 '|' E.RecordEquals)
+                                                            |> P.bind
+                                                                (\c32 ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "c32" c32
+                                                                    in
+                                                                    P.word1 '|' E.RecordEquals
+                                                                )
                                                             |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-                                                            |> P.bind (\_ -> chompField syntaxVersion)
+                                                            |> P.bind
+                                                                (\c33 ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "c33" c33
+                                                                    in
+                                                                    chompField syntaxVersion
+                                                                )
                                                             |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
                                                             |> P.bind (\fields -> P.addEnd start (Src.Update starter fields))
                                                     )
@@ -334,9 +396,23 @@ record syntaxVersion start =
                                     |> P.bind
                                         (\starter ->
                                             Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
-                                                |> P.bind (\_ -> P.word1 '=' E.RecordEquals)
+                                                |> P.bind
+                                                    (\c34 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c34" c34
+                                                        in
+                                                        P.word1 '=' E.RecordEquals
+                                                    )
                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                                                |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
+                                                |> P.bind
+                                                    (\c35 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c35" c35
+                                                        in
+                                                        P.specialize E.RecordExpr (expression syntaxVersion)
+                                                    )
                                                 |> P.bind
                                                     (\( value, end ) ->
                                                         Space.checkIndent end E.RecordIndentEnd
@@ -450,7 +526,14 @@ chompFields syntaxVersion fields =
     P.oneOf E.RecordEnd
         [ P.word1 ',' E.RecordEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
-            |> P.bind (\_ -> chompField syntaxVersion)
+            |> P.bind
+                (\c36 ->
+                    let
+                        _ =
+                            Debug.log "c36" c36
+                    in
+                    chompField syntaxVersion
+                )
             |> P.bind (\f -> chompFields syntaxVersion (f :: fields))
         , P.word1 '}' E.RecordEnd
             |> P.fmap (\_ -> List.reverse fields)
@@ -463,9 +546,23 @@ chompField syntaxVersion =
         |> P.bind
             (\key ->
                 Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
-                    |> P.bind (\_ -> P.word1 '=' E.RecordEquals)
+                    |> P.bind
+                        (\c37 ->
+                            let
+                                _ =
+                                    Debug.log "c37" c37
+                            in
+                            P.word1 '=' E.RecordEquals
+                        )
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                    |> P.bind (\_ -> P.specialize E.RecordExpr (expression syntaxVersion))
+                    |> P.bind
+                        (\c38 ->
+                            let
+                                _ =
+                                    Debug.log "c38" c38
+                            in
+                            P.specialize E.RecordExpr (expression syntaxVersion)
+                        )
                     |> P.bind
                         (\( value, end ) ->
                             Space.checkIndent end E.RecordIndentEnd
@@ -496,7 +593,11 @@ expression syntaxVersion =
                                         (\end ->
                                             Space.chomp E.Space
                                                 |> P.bind
-                                                    (\_ ->
+                                                    (\c111 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c111" c111
+                                                        in
                                                         chompExprEnd syntaxVersion
                                                             start
                                                             (State
@@ -535,7 +636,11 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) =
                             (\newEnd ->
                                 Space.chomp E.Space
                                     |> P.bind
-                                        (\_ ->
+                                        (\c112 ->
+                                            let
+                                                _ =
+                                                    Debug.log "c112" c112
+                                            in
                                             chompExprEnd syntaxVersion
                                                 start
                                                 (State
@@ -554,7 +659,14 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) =
             |> P.bind
                 (\((A.At (A.Region opStart opEnd) opName) as op) ->
                     Space.chompAndCheckIndent E.Space (E.IndentOperatorRight opName)
-                        |> P.bind (\_ -> P.getPosition)
+                        |> P.bind
+                            (\c39 ->
+                                let
+                                    _ =
+                                        Debug.log "c39" c39
+                                in
+                                P.getPosition
+                            )
                         |> P.bind
                             (\newStart ->
                                 if "-" == opName && end /= opStart && opEnd == newStart then
@@ -567,8 +679,11 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) =
                                                         (\newEnd ->
                                                             Space.chomp E.Space
                                                                 |> P.bind
-                                                                    (\_ ->
+                                                                    (\c113 ->
                                                                         let
+                                                                            _ =
+                                                                                Debug.log "c113" c113
+
                                                                             arg : A.Located Src.Expr_
                                                                             arg =
                                                                                 A.at opStart newEnd (Src.Negate negatedExpr)
@@ -602,8 +717,11 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) =
                                                             (\newEnd ->
                                                                 Space.chomp E.Space
                                                                     |> P.bind
-                                                                        (\_ ->
+                                                                        (\c114 ->
                                                                             let
+                                                                                _ =
+                                                                                    Debug.log "c114" c114
+
                                                                                 newOps : List ( Src.Expr, A.Located Name.Name )
                                                                                 newOps =
                                                                                     ( toCall expr args, op ) :: ops
@@ -697,21 +815,38 @@ if_ syntaxVersion start =
 chompIfEnd : SyntaxVersion -> A.Position -> List ( Src.Expr, Src.Expr ) -> Space.Parser E.If Src.Expr
 chompIfEnd syntaxVersion start branches =
     Space.chompAndCheckIndent E.IfSpace E.IfIndentCondition
-        |> P.bind (\_ -> P.specialize E.IfCondition (expression syntaxVersion))
+        |> P.bind
+            (\c40 ->
+                let
+                    _ =
+                        Debug.log "c40" c40
+                in
+                P.specialize E.IfCondition (expression syntaxVersion)
+            )
         |> P.bind
             (\( condition, condEnd ) ->
                 Space.checkIndent condEnd E.IfIndentThen
                     |> P.bind (\_ -> Keyword.then_ E.IfThen)
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentThenBranch)
-                    |> P.bind (\_ -> P.specialize E.IfThenBranch (expression syntaxVersion))
+                    |> P.bind
+                        (\c41 ->
+                            let
+                                _ =
+                                    Debug.log "c41" c41
+                            in
+                            P.specialize E.IfThenBranch (expression syntaxVersion)
+                        )
                     |> P.bind
                         (\( thenBranch, thenEnd ) ->
                             Space.checkIndent thenEnd E.IfIndentElse
                                 |> P.bind (\_ -> Keyword.else_ E.IfElse)
                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentElseBranch)
                                 |> P.bind
-                                    (\_ ->
+                                    (\c42 ->
                                         let
+                                            _ =
+                                                Debug.log "c42" c42
+
                                             newBranches : List ( Src.Expr, Src.Expr )
                                             newBranches =
                                                 ( condition, thenBranch ) :: branches
@@ -743,15 +878,36 @@ function : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
 function syntaxVersion start =
     P.inContext E.Func (P.word1 '\\' E.Start) <|
         (Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArg
-            |> P.bind (\_ -> P.specialize E.FuncArg (Pattern.term syntaxVersion))
+            |> P.bind
+                (\c43 ->
+                    let
+                        _ =
+                            Debug.log "c43" c43
+                    in
+                    P.specialize E.FuncArg (Pattern.term syntaxVersion)
+                )
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
-                        |> P.bind (\_ -> chompArgs syntaxVersion [ arg ])
+                        |> P.bind
+                            (\c44 ->
+                                let
+                                    _ =
+                                        Debug.log "c44" c44
+                                in
+                                chompArgs syntaxVersion [ arg ]
+                            )
                         |> P.bind
                             (\revArgs ->
                                 Space.chompAndCheckIndent E.FuncSpace E.FuncIndentBody
-                                    |> P.bind (\_ -> P.specialize E.FuncBody (expression syntaxVersion))
+                                    |> P.bind
+                                        (\c45 ->
+                                            let
+                                                _ =
+                                                    Debug.log "c45" c45
+                                            in
+                                            P.specialize E.FuncBody (expression syntaxVersion)
+                                        )
                                     |> P.fmap
                                         (\( body, end ) ->
                                             let
@@ -773,7 +929,14 @@ chompArgs syntaxVersion revArgs =
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
-                        |> P.bind (\_ -> chompArgs syntaxVersion (arg :: revArgs))
+                        |> P.bind
+                            (\c46 ->
+                                let
+                                    _ =
+                                        Debug.log "c46" c46
+                                in
+                                chompArgs syntaxVersion (arg :: revArgs)
+                            )
                 )
         , P.word2 '-' '>' E.FuncArrow
             |> P.fmap (\_ -> revArgs)
@@ -788,14 +951,25 @@ case_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
 case_ syntaxVersion start =
     P.inContext E.Case (Keyword.case_ E.Start) <|
         (Space.chompAndCheckIndent E.CaseSpace E.CaseIndentExpr
-            |> P.bind (\_ -> P.specialize E.CaseExpr (expression syntaxVersion))
+            |> P.bind
+                (\c47 ->
+                    let
+                        _ =
+                            Debug.log "c47" c47
+                    in
+                    P.specialize E.CaseExpr (expression syntaxVersion)
+                )
             |> P.bind
                 (\( expr, exprEnd ) ->
                     Space.checkIndent exprEnd E.CaseIndentOf
                         |> P.bind (\_ -> Keyword.of_ E.CaseOf)
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.CaseSpace E.CaseIndentPattern)
                         |> P.bind
-                            (\_ ->
+                            (\c48 ->
+                                let
+                                    _ =
+                                        Debug.log "c48" c48
+                                in
                                 P.withIndent <|
                                     (chompBranch syntaxVersion
                                         |> P.bind
@@ -822,7 +996,14 @@ chompBranch syntaxVersion =
                 Space.checkIndent patternEnd E.CaseIndentArrow
                     |> P.bind (\_ -> P.word2 '-' '>' E.CaseArrow)
                     |> P.bind (\_ -> Space.chompAndCheckIndent E.CaseSpace E.CaseIndentBranch)
-                    |> P.bind (\_ -> P.specialize E.CaseBranch (expression syntaxVersion))
+                    |> P.bind
+                        (\c49 ->
+                            let
+                                _ =
+                                    Debug.log "c49" c49
+                            in
+                            P.specialize E.CaseBranch (expression syntaxVersion)
+                        )
                     |> P.fmap (\( branchExpr, end ) -> ( ( pattern, branchExpr ), end ))
             )
 
@@ -847,7 +1028,11 @@ let_ syntaxVersion start =
         ((P.withBacksetIndent 3 <|
             (Space.chompAndCheckIndent E.LetSpace E.LetIndentDef
                 |> P.bind
-                    (\_ ->
+                    (\c50 ->
+                        let
+                            _ =
+                                Debug.log "c50" c50
+                        in
                         P.withIndent <|
                             (chompLetDef syntaxVersion
                                 |> P.bind (\( def, end ) -> chompLetDefs syntaxVersion [ def ] end)
@@ -860,7 +1045,14 @@ let_ syntaxVersion start =
                     Space.checkIndent defsEnd E.LetIndentIn
                         |> P.bind (\_ -> Keyword.in_ E.LetIn)
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.LetSpace E.LetIndentBody)
-                        |> P.bind (\_ -> P.specialize E.LetBody (expression syntaxVersion))
+                        |> P.bind
+                            (\c51 ->
+                                let
+                                    _ =
+                                        Debug.log "c51" c51
+                                in
+                                P.specialize E.LetBody (expression syntaxVersion)
+                            )
                         |> P.fmap
                             (\( body, end ) ->
                                 ( A.at start end (Src.Let defs body), end )
@@ -903,11 +1095,22 @@ definition syntaxVersion =
                 P.specialize (E.LetDef name) <|
                     (Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
                         |> P.bind
-                            (\_ ->
+                            (\c52 ->
+                                let
+                                    _ =
+                                        Debug.log "c52" c52
+                                in
                                 P.oneOf E.DefEquals
                                     [ P.word1 ':' E.DefEquals
                                         |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentType)
-                                        |> P.bind (\_ -> P.specialize E.DefType Type.expression)
+                                        |> P.bind
+                                            (\c53 ->
+                                                let
+                                                    _ =
+                                                        Debug.log "c53" c53
+                                                in
+                                                P.specialize E.DefType Type.expression
+                                            )
                                         |> P.bind
                                             (\( tipe, _ ) ->
                                                 Space.checkAligned E.DefAlignment
@@ -915,7 +1118,14 @@ definition syntaxVersion =
                                                     |> P.bind
                                                         (\defName ->
                                                             Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
-                                                                |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion start defName (Just tipe) [])
+                                                                |> P.bind
+                                                                    (\c54 ->
+                                                                        let
+                                                                            _ =
+                                                                                Debug.log "c54" c54
+                                                                        in
+                                                                        chompDefArgsAndBody syntaxVersion start defName (Just tipe) []
+                                                                    )
                                                         )
                                             )
                                     , chompDefArgsAndBody syntaxVersion start aname Nothing []
@@ -932,11 +1142,25 @@ chompDefArgsAndBody syntaxVersion start name tipe revArgs =
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
-                        |> P.bind (\_ -> chompDefArgsAndBody syntaxVersion start name tipe (arg :: revArgs))
+                        |> P.bind
+                            (\c55 ->
+                                let
+                                    _ =
+                                        Debug.log "c55" c55
+                                in
+                                chompDefArgsAndBody syntaxVersion start name tipe (arg :: revArgs)
+                            )
                 )
         , P.word1 '=' E.DefEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentBody)
-            |> P.bind (\_ -> P.specialize E.DefBody (expression syntaxVersion))
+            |> P.bind
+                (\c56 ->
+                    let
+                        _ =
+                            Debug.log "c56" c56
+                    in
+                    P.specialize E.DefBody (expression syntaxVersion)
+                )
             |> P.fmap
                 (\( body, end ) ->
                     ( A.at start end (Src.Define name (List.reverse revArgs) body tipe)
@@ -990,9 +1214,23 @@ destructure syntaxVersion =
                         |> P.bind
                             (\pattern ->
                                 Space.chompAndCheckIndent E.DestructSpace E.DestructIndentEquals
-                                    |> P.bind (\_ -> P.word1 '=' E.DestructEquals)
+                                    |> P.bind
+                                        (\c57 ->
+                                            let
+                                                _ =
+                                                    Debug.log "c57" c57
+                                            in
+                                            P.word1 '=' E.DestructEquals
+                                        )
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.DestructSpace E.DestructIndentBody)
-                                    |> P.bind (\_ -> P.specialize E.DestructBody (expression syntaxVersion))
+                                    |> P.bind
+                                        (\c58 ->
+                                            let
+                                                _ =
+                                                    Debug.log "c58" c58
+                                            in
+                                            P.specialize E.DestructBody (expression syntaxVersion)
+                                        )
                                     |> P.fmap
                                         (\( expr, end ) ->
                                             ( A.at start end (Src.Destruct pattern expr)
