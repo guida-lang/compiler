@@ -1,6 +1,6 @@
 module Main exposing (add1)
 
-{-| This a test package for testing the Elm compiler.
+{-| This is a test package for testing the Elm compiler.
 
 
 # Example
