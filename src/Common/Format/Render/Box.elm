@@ -146,13 +146,13 @@ declarationType decl =
             DComment
 
 
-removeDuplicates : List (List ( Comments, Src.Exposed, Comments )) -> List (List ( Comments, Src.Exposed, Comments ))
+removeDuplicates : List (List (C2 Src.Exposed)) -> List (List (C2 Src.Exposed))
 removeDuplicates input =
     let
         step :
-            List ( Comments, Src.Exposed, Comments )
-            -> ( List (List ( Comments, Src.Exposed, Comments )), EverySet String ( Comments, Src.Exposed, Comments ) )
-            -> ( List (List ( Comments, Src.Exposed, Comments )), EverySet String ( Comments, Src.Exposed, Comments ) )
+            List (C2 Src.Exposed)
+            -> ( List (List (C2 Src.Exposed)), EverySet String (C2 Src.Exposed) )
+            -> ( List (List (C2 Src.Exposed)), EverySet String (C2 Src.Exposed) )
         step next ( acc, seen ) =
             case List.foldl stepChildren ( [], seen ) next |> (\( a, b ) -> ( List.reverse a, b )) of
                 ( [], seen_ ) ->
@@ -162,9 +162,9 @@ removeDuplicates input =
                     ( children_ :: acc, seen_ )
 
         stepChildren :
-            ( Comments, Src.Exposed, Comments )
-            -> ( List ( Comments, Src.Exposed, Comments ), EverySet String ( Comments, Src.Exposed, Comments ) )
-            -> ( List ( Comments, Src.Exposed, Comments ), EverySet String ( Comments, Src.Exposed, Comments ) )
+            C2 Src.Exposed
+            -> ( List (C2 Src.Exposed), EverySet String (C2 Src.Exposed) )
+            -> ( List (C2 Src.Exposed), EverySet String (C2 Src.Exposed) )
         stepChildren next ( acc, seen ) =
             if EverySet.member (\( _, v, _ ) -> Debug.todo "v") next seen then
                 ( acc, seen )
@@ -177,10 +177,10 @@ removeDuplicates input =
         |> List.reverse
 
 
-sortVars : Bool -> EverySet String ( Comments, Src.Exposed, Comments ) -> List (List String) -> ( List (List ( Comments, Src.Exposed, Comments )), Comments )
+sortVars : Bool -> EverySet String (C2 Src.Exposed) -> List (List String) -> ( List (List (C2 Src.Exposed)), Comments )
 sortVars forceMultiline fromExposing fromDocs =
     let
-        varOrder : ( Comments, Src.Exposed, Comments ) -> ( Int, String )
+        varOrder : C2 Src.Exposed -> ( Int, String )
         varOrder ( _, exposed, _ ) =
             case exposed of
                 Src.Operator _ name ->
@@ -192,7 +192,7 @@ sortVars forceMultiline fromExposing fromDocs =
                 Src.Lower (A.At _ name) ->
                     ( 3, name )
 
-        listedInDocs : List (List ( Comments, Src.Exposed, Comments ))
+        listedInDocs : List (List (C2 Src.Exposed))
         listedInDocs =
             fromDocs
                 |> List.map (List.filterMap (\v -> Map.get identity v allowedInDocs))
@@ -205,7 +205,7 @@ sortVars forceMultiline fromExposing fromDocs =
                 |> EverySet.toList (\a b -> compare (varName a) (varName b))
                 |> List.sortBy varOrder
 
-        varName : ( Comments, Src.Exposed, Comments ) -> String
+        varName : C2 Src.Exposed -> String
         varName ( _, exposed, _ ) =
             case exposed of
                 Src.Lower (A.At _ name) ->
@@ -217,7 +217,7 @@ sortVars forceMultiline fromExposing fromDocs =
                 Src.Operator _ name ->
                     name
 
-        varSetToMap : EverySet String ( Comments, Src.Exposed, Comments ) -> Dict String String Src.Exposed
+        varSetToMap : EverySet String (C2 Src.Exposed) -> Dict String String Src.Exposed
         varSetToMap set =
             EverySet.toList (\a b -> compare (varName a) (varName b)) set
                 |> List.map (\(( _, exposed, _ ) as var) -> ( varName var, exposed ))
@@ -451,11 +451,7 @@ formatModuleHeader addDefaultHeader modu =
             [ Maybe.toList (Maybe.map formatModuleLine_ maybeHeader)
 
             -- , Maybe.toList docs
-            , if List.isEmpty imports then
-                []
-
-              else
-                [ imports ]
+            , imports
             ]
         )
 
@@ -474,9 +470,7 @@ formatImports modu =
     in
     [ formatComments comments
         |> Maybe.toList
-    , imports
-        |> Map.assocs
-        |> fmap (\( name, C pre method ) -> formatImport ( C pre name, method ))
+    , List.map formatImport imports
     ]
         |> List.filter (not << List.isEmpty)
         |> List.intersperse [ Box.blankLine ]
@@ -938,9 +932,8 @@ formatDocComment importInfo blocks =
 
 formatImport : Src.Import -> Box
 formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
-    -- formatImport ( (C _ rawName) as name, method ) =
     let
-        requestedAs =
+        maybeRequestedAs =
             maybeAlias
                 |> Maybe.andThen
                     (\aliasName ->
@@ -952,38 +945,40 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                     )
 
         asVar =
-            requestedAs
+            maybeRequestedAs
                 |> Maybe.map
-                    (formatImportClause
-                        (Just << Box.line << formatUppercaseIdentifier)
-                        "as"
+                    (\requestedAs ->
+                        formatImportClause
+                            (Just << Box.line << formatUppercaseIdentifier)
+                            "as"
+                            ( [], requestedAs, [] )
                     )
                 |> Maybe.join
 
         exposingVar =
             formatImportClause
-                (formatListing formatDetailedListing)
+                formatExposing
                 "exposing"
-                (AST.Module.exposedVars method)
+                ( [], exposing_, [] )
 
-        formatImportClause : (a -> Maybe Box) -> String -> C2 beforeKeyword afterKeyword a -> Maybe Box
+        formatImportClause : (a -> Maybe Box) -> String -> C2 a -> Maybe Box
         formatImportClause format keyw input =
-            case fmap format input of
-                C ( [], [] ) Nothing ->
+            case c2map format input of
+                ( [], Nothing, [] ) ->
                     Nothing
 
-                C ( preKeyword, postKeyword ) (Just listing_) ->
+                ( preKeyword, Just listing_, postKeyword ) ->
                     case
-                        ( formatPreCommented (C preKeyword (line (keyword keyw)))
-                        , formatPreCommented (C postKeyword listing_)
+                        ( formatPreCommented ( preKeyword, Box.line (Box.keyword keyw) )
+                        , formatPreCommented ( postKeyword, listing_ )
                         )
                     of
-                        ( SingleLine keyword_, SingleLine listing__ ) ->
+                        ( Box.SingleLine keyword_, Box.SingleLine listing__ ) ->
                             Just
-                                (line
-                                    (row
+                                (Box.line
+                                    (Box.row
                                         [ keyword_
-                                        , space
+                                        , Box.space
                                         , listing__
                                         ]
                                     )
@@ -991,9 +986,9 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
 
                         ( keyword_, listing__ ) ->
                             Just
-                                (stack1
+                                (Box.stack1
                                     [ keyword_
-                                    , indent listing__
+                                    , Box.indent listing__
                                     ]
                                 )
 
@@ -1001,12 +996,12 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                     Just (pleaseReport "UNEXPECTED IMPORT" "import clause comments with no clause")
     in
     case
-        ( formatPreCommented (fmap (Box.line << formatQualifiedUppercaseIdentifier) name)
+        ( formatPreCommented (c1map (Box.line << formatQualifiedUppercaseIdentifier) ( [], String.split "." importName ))
         , asVar
         , exposingVar
         )
     of
-        ( Box.SingleLine name_, Just (Box.SingleLine as_), Just (Box.SingleLine exposing_) ) ->
+        ( Box.SingleLine name_, Just (Box.SingleLine as_), Just (Box.SingleLine exposing__) ) ->
             Box.line <|
                 Box.row
                     [ Box.keyword "import"
@@ -1015,7 +1010,7 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                     , Box.space
                     , as_
                     , Box.space
-                    , exposing_
+                    , exposing__
                     ]
 
         ( Box.SingleLine name_, Just (Box.SingleLine as_), Nothing ) ->
@@ -1028,14 +1023,14 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                     , as_
                     ]
 
-        ( Box.SingleLine name_, Nothing, Just (Box.SingleLine exposing_) ) ->
+        ( Box.SingleLine name_, Nothing, Just (Box.SingleLine exposing__) ) ->
             Box.line <|
                 Box.row
                     [ Box.keyword "import"
                     , Box.space
                     , name_
                     , Box.space
-                    , exposing_
+                    , exposing__
                     ]
 
         ( Box.SingleLine name_, Nothing, Nothing ) ->
@@ -1046,7 +1041,7 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                     , name_
                     ]
 
-        ( Box.SingleLine name_, Just (Box.SingleLine as_), Just exposing_ ) ->
+        ( Box.SingleLine name_, Just (Box.SingleLine as_), Just exposing__ ) ->
             Box.stack1
                 [ Box.line <|
                     Box.row
@@ -1056,10 +1051,10 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                         , Box.space
                         , as_
                         ]
-                , Box.indent exposing_
+                , Box.indent exposing__
                 ]
 
-        ( Box.SingleLine name_, Just as_, Just exposing_ ) ->
+        ( Box.SingleLine name_, Just as_, Just exposing__ ) ->
             Box.stack1
                 [ Box.line <|
                     Box.row
@@ -1068,10 +1063,10 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                         , name_
                         ]
                 , Box.indent as_
-                , Box.indent exposing_
+                , Box.indent exposing__
                 ]
 
-        ( Box.SingleLine name_, Nothing, Just exposing_ ) ->
+        ( Box.SingleLine name_, Nothing, Just exposing__ ) ->
             Box.stack1
                 [ Box.line <|
                     Box.row
@@ -1079,22 +1074,22 @@ formatImport (Src.Import (A.At _ importName) maybeAlias exposing_) =
                         , Box.space
                         , name_
                         ]
-                , Box.indent exposing_
+                , Box.indent exposing__
                 ]
 
-        ( name_, Just as_, Just exposing_ ) ->
+        ( name_, Just as_, Just exposing__ ) ->
             Box.stack1
                 [ Box.line <| Box.keyword "import"
                 , Box.indent name_
                 , Box.indent <| Box.indent as_
-                , Box.indent <| Box.indent exposing_
+                , Box.indent <| Box.indent exposing__
                 ]
 
-        ( name_, Nothing, Just exposing_ ) ->
+        ( name_, Nothing, Just exposing__ ) ->
             Box.stack1
                 [ Box.line <| Box.keyword "import"
                 , Box.indent name_
-                , Box.indent <| Box.indent exposing_
+                , Box.indent <| Box.indent exposing__
                 ]
 
         ( name_, Just as_, Nothing ) ->
@@ -1122,32 +1117,58 @@ formatListing listing =
             Just (parens (formatCommented ( [], Box.line (Box.keyword ".."), [] )))
 
 
+formatExposing : Src.Exposing -> Maybe Box
+formatExposing listing =
+    case listing of
+        Src.Open ->
+            -- TODO comments
+            Just (parens (formatCommented ( [], Box.line (Box.keyword ".."), [] )))
 
--- formatDetailedListing : AST.Module.DetailedListing -> List Box
+        Src.Explicit _ ->
+            Nothing
+
+
+type Listing a
+    = ExplicitListing a Bool
+    | OpenListing (C2 ())
+    | ClosedListing
+
+
+type alias DetailedListing =
+    { values : Dict String String (C2 ())
+    , operators : Dict String String (C2 ())
+    , types : Dict String String (C1 (Listing (Dict String String (C2 ()))))
+    }
+
+
+
+-- formatDetailedListing : DetailedListing -> List Box
 -- formatDetailedListing listing =
---     concat
---         [ formatCommentedMap
---             (\name () -> AST.Listing.OpValue name)
+--     List.concat
+--         [ formatCommentedMap (\_ _ -> EQ)
+--             (\name () -> Src.Operator A.zero name)
 --             formatVarValue
---             (AST.Module.operators listing)
---         , formatCommentedMap
---             (\name (C inner listing_) -> AST.Listing.Union (C inner name) listing_)
+--             listing.operators
+--         , formatCommentedMap (\_ _ -> EQ)
+--             (\name _ -> Src.Upper (A.At A.zero name) Src.Private)
 --             formatVarValue
---             (AST.Module.types listing)
---         , formatCommentedMap
---             (\name () -> AST.Listing.Value name)
+--             listing.types
+--         , formatCommentedMap (\_ _ -> EQ)
+--             (\name () -> Src.Lower (A.At A.zero name))
 --             formatVarValue
---             (AST.Module.values listing)
+--             listing.values
 --         ]
--- formatCommentedMap : (k -> v -> a) -> (a -> Box) -> AST.Listing.CommentedMap k v -> List Box
--- formatCommentedMap construct format values =
---     let
---         format_ ( k, C c v ) =
---             formatCommented (C c (format (construct k v)))
---     in
---     values
---         |> Map.assocs
---         |> fmap format_
+
+
+formatCommentedMap : (k -> k -> Order) -> (k -> v -> a) -> (a -> Box) -> Dict comparable k (C2 v) -> List Box
+formatCommentedMap keyComparison construct format values =
+    let
+        format_ ( k, ( beforeComments, v, afterComments ) ) =
+            formatCommented ( beforeComments, format (construct k v), afterComments )
+    in
+    values
+        |> Map.toList keyComparison
+        |> List.map format_
 
 
 formatVarValue : Src.Exposed -> Box
@@ -1189,13 +1210,13 @@ formatTopLevelStructure importInfo topLevelStructure =
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
-formatCommonDeclaration importInfo (A.At _ (Src.Value (A.At _ name) args expr _)) =
+formatCommonDeclaration importInfo (A.At _ (Src.Value (A.At nameRegion name) args expr _)) =
     -- case decl of
     --     Definition name args comments expr ->
     --         formatDefinition importInfo name args comments expr
     --     TypeAnnotation name typ ->
     --         formatTypeAnnotation name typ
-    formatDefinition importInfo name args [] expr
+    formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args [] expr
 
 
 formatDeclaration : ImportInfo -> Decl.Decl -> Box
@@ -1255,12 +1276,6 @@ formatDeclaration importInfo decl =
         --         , formatCommented <| fmap formatNameWithArgs nameWithArgs
         --         ]
         --         (formatPreCommentedStack <| fmap (typeParens NotRequired << formatType) typ)
-        -- PortAnnotation name typeComments typ ->
-        --     ElmStructure.definition ":"
-        --         False
-        --         (Box.line (Box.keyword "port"))
-        --         [ formatCommented (fmap (Box.line << formatLowercaseIdentifier []) name) ]
-        --         (formatCommentedApostrophe typeComments (typeParens NotRequired (formatType typ)))
         -- Fixity assoc precedence name value ->
         --     let
         --         formatAssoc a =
@@ -1342,11 +1357,26 @@ formatDeclaration importInfo decl =
                                     |> Box.indent
                                 ]
 
-        Decl.Alias _ _ ->
-            Debug.todo "formatDeclaration3"
+        Decl.Alias _ (A.At _ (Src.Alias (A.At _ name) args typ)) ->
+            ElmStructure.definition "="
+                True
+                (Box.line (Box.keyword "type"))
+                [ formatPreCommented ( [], Box.line (Box.keyword "alias") )
+                , formatCommented ( [], formatNameWithArgs name (List.map (\(A.At _ arg) -> ( [], arg )) args), [] )
+                ]
+                (formatPreCommentedStack <| c1map (typeParens NotRequired << formatType) ( [], typ ))
 
-        Decl.Port _ _ ->
-            Debug.todo "formatDeclaration4"
+        Decl.Port _ (Src.Port (A.At _ name) typ) ->
+            let
+                typeComments =
+                    -- TODO
+                    []
+            in
+            ElmStructure.definition ":"
+                False
+                (Box.line (Box.keyword "port"))
+                [ formatCommented (c2map (Box.line << formatLowercaseIdentifier []) ( [], name, [] )) ]
+                (formatCommentedApostrophe typeComments (typeParens NotRequired (formatType typ)))
 
 
 formatNameWithArgs : Name -> List (C1 Name) -> Box
@@ -1362,8 +1392,8 @@ formatNameWithArgs name args =
                 )
 
 
-formatDefinition : ImportInfo -> Name -> List Src.Pattern -> Comments -> Src.Expr -> Box
-formatDefinition importInfo name args comments expr =
+formatDefinition : ImportInfo -> Src.Pattern -> List Src.Pattern -> Comments -> Src.Expr -> Box
+formatDefinition importInfo (A.At _ name) args comments expr =
     let
         body =
             Box.stack1
@@ -1375,7 +1405,7 @@ formatDefinition importInfo name args comments expr =
     in
     ElmStructure.definition "="
         True
-        (syntaxParens SpaceSeparated (formatPattern (Src.PVar name)))
+        (syntaxParens SpaceSeparated (formatPattern name))
         (List.map (\(A.At _ y) -> formatCommentedApostrophe [] (syntaxParens SpaceSeparated (formatPattern y))) args)
         body
 
@@ -1532,13 +1562,15 @@ formatRecordPair delim formatValue ( ( pre, k, postK ), ( preV, v, postV ), forc
         )
 
 
+formatPair : String -> Pair Box.Line Box -> Box
+formatPair delim (Pair a b (ForceMultiline forceMultiline)) =
+    ElmStructure.equalsPair delim
+        forceMultiline
+        (formatTailCommented <| c1map Box.line a)
+        (formatPreCommented b)
 
--- formatPair : String -> Pair Line Box -> Box
--- formatPair delim (Pair a b (ForceMultiline forceMultiline)) =
---     ElmStructure.equalsPair delim
---         forceMultiline
---         (formatTailCommented <| fmap line a)
---         (formatPreCommented b)
+
+
 -- negativeCasePatternWorkaround : ASTNS annf (List UppercaseIdentifier) PatternNK -> Box -> Box
 -- negativeCasePatternWorkaround pattern =
 --     case extract <| I.unFix pattern of
@@ -1892,10 +1924,10 @@ formatExpression importInfo (A.At _ aexpr) =
 
         Src.List list ->
             let
-                multiline : Bool
+                multiline : ForceMultiline
                 multiline =
                     -- TODO
-                    False
+                    ForceMultiline False
 
                 trailing : Comments
                 trailing =
@@ -2060,16 +2092,21 @@ formatExpression importInfo (A.At _ aexpr) =
                         --         formatTypeAnnotation name typ
                         --     LetComment comment ->
                         --         formatComment comment
-                        Src.Define (A.At _ name) srcArgs body maybeType ->
+                        Src.Define (A.At nameRegion name) srcArgs body maybeType ->
                             let
                                 comments =
                                     -- TODO
                                     []
                             in
-                            formatDefinition importInfo name srcArgs comments body
+                            formatDefinition importInfo (A.At nameRegion (Src.PVar name)) srcArgs comments body
 
                         Src.Destruct pattern body ->
-                            Debug.todo "formatDefinition_"
+                            let
+                                comments =
+                                    -- TODO
+                                    []
+                            in
+                            formatDefinition importInfo pattern [] comments body
             in
             ( AmbiguousEnd
             , -- TODO: not tested
@@ -2157,32 +2194,32 @@ formatPreCommentedExpression importInfo context ( pre, e ) =
     formatCommentedApostrophe pre_ (syntaxParens context <| formatExpression importInfo e_)
 
 
+formatRecordLike : Maybe (C2 Box) -> List (C2Eol Box) -> Comments -> ForceMultiline -> Box
+formatRecordLike base_ fields trailing multiline =
+    case ( base_, fields ) of
+        ( Just base, pairs_ ) ->
+            ElmStructure.extensionGroup_
+                ((\(ForceMultiline b) -> b) multiline)
+                (formatCommented base)
+                (formatSequence '|'
+                    ','
+                    Nothing
+                    multiline
+                    trailing
+                    pairs_
+                )
 
--- formatRecordLike : Maybe (C2 before after Box) -> Sequence Box -> Comments -> ForceMultiline -> Box
--- formatRecordLike base_ fields trailing multiline =
---     case ( base_, fields ) of
---         ( Just base, pairs_ ) ->
---             ElmStructure.extensionGroup_
---                 ((\(ForceMultiline b) -> b) multiline)
---                 (formatCommented base)
---                 (formatSequence '|'
---                     ','
---                     Nothing
---                     multiline
---                     trailing
---                     pairs_
---                 )
---         ( Nothing, pairs_ ) ->
---             formatSequence '{'
---                 ','
---                 (Just '}')
---                 multiline
---                 trailing
---                 pairs_
+        ( Nothing, pairs_ ) ->
+            formatSequence '{'
+                ','
+                (Just '}')
+                multiline
+                trailing
+                pairs_
 
 
-formatSequence : Char -> Char -> Maybe Char -> Bool -> Comments -> List (C2Eol Box) -> Box
-formatSequence left delim maybeRight multiline trailing list =
+formatSequence : Char -> Char -> Maybe Char -> ForceMultiline -> Comments -> List (C2Eol Box) -> Box
+formatSequence left delim maybeRight (ForceMultiline multiline) trailing list =
     case ( left, maybeRight, list ) of
         ( _, _, first :: rest ) ->
             let
@@ -2316,7 +2353,7 @@ formatComments comments =
             Just (ElmStructure.spaceSepOrStack first rest)
 
 
-formatCommented_ : Bool -> ( Comments, Box, Comments ) -> Box
+formatCommented_ : Bool -> C2 Box -> Box
 formatCommented_ forceMultiline ( pre, inner, post ) =
     ElmStructure.forceableSpaceSepOrStack1 forceMultiline <|
         List.concat
@@ -2326,12 +2363,12 @@ formatCommented_ forceMultiline ( pre, inner, post ) =
             ]
 
 
-formatCommented : ( Comments, Box, Comments ) -> Box
+formatCommented : C2 Box -> Box
 formatCommented =
     formatCommented_ False
 
 
-formatPreCommented : ( Comments, Box ) -> Box
+formatPreCommented : C1 Box -> Box
 formatPreCommented ( pre, inner ) =
     formatCommentedApostrophe pre inner
 
@@ -2364,16 +2401,17 @@ formatEolCommented ( post, inner ) =
             Box.stack1 [ box, formatComment <| Space.LineComment eol ]
 
 
+formatCommentedStack : C2 Box -> Box
+formatCommentedStack ( pre, inner, post ) =
+    Box.stack1 <|
+        List.map formatComment pre
+            ++ inner
+            :: List.map formatComment post
 
--- formatCommentedStack : C2 before after Box -> Box
--- formatCommentedStack (C ( pre, post ) inner) =
---     stack1 <|
---         map formatComment pre
---             ++ [ inner ]
---             ++ map formatComment post
--- formatPreCommentedStack : C1 before Box -> Box
--- formatPreCommentedStack (C pre inner) =
---     formatCommentedStack (C ( pre, [] ) inner)
+
+formatPreCommentedStack : C1 Box -> Box
+formatPreCommentedStack ( pre, inner ) =
+    formatCommentedStack ( pre, inner, [] )
 
 
 formatKeywordCommented : String -> ( List Space.Comment, Box, List Space.Comment ) -> Box
@@ -2639,74 +2677,116 @@ typeParensNeeded outer typeParensInner =
 
 
 formatType : Src.Type -> ( TypeParensInner, Box )
-formatType atype =
-    -- case atype of
-    -- UnitType comments ->
-    --     Tuple.pair NotNeeded <|
-    --         formatUnit '(' ')' comments
-    -- FunctionType first rest (ForceMultiline forceMultiline) ->
-    --     let
-    --         formatRight (C ( preOp, postOp, eol ) term) =
-    --             ElmStructure.forceableSpaceSepOrStack1
-    --                 False
-    --             <|
-    --                 concat
-    --                     [ Maybe.maybeToList <| formatComments preOp
-    --                     , [ ElmStructure.prefixOrIndented
-    --                             (line <| punc "->")
-    --                             (formatC2Eol <|
-    --                                 (fmap <| typeParens ForLambda << formatType)
-    --                                     (C ( postOp, [], eol ) term)
-    --                             )
-    --                       ]
-    --                     ]
-    --     in
-    --     Tuple.pair ForFunctionType <|
-    --         ElmStructure.forceableSpaceSepOrStack
-    --             forceMultiline
-    --             (formatEolCommented (typeParens ForLambda << formatType first))
-    --             (formatRight (toCommentedList rest))
-    -- TypeVariable var ->
-    --     Tuple.pair NotNeeded <|
-    --         line <|
-    --             identifier <|
-    --                 formatVarName var
-    -- TypeConstruction ctor args forceMultiline ->
-    --     let
-    --         join =
-    --             case forceMultiline of
-    --                 ForceMultiline True ->
-    --                     FASplitFirst
-    --                 ForceMultiline False ->
-    --                     FAJoinFirst JoinAll
-    --     in
-    --     Tuple.pair
-    --         (if null args then
-    --             NotNeeded
-    --          else
-    --             ForTypeConstruction
-    --         )
-    --     <|
-    --         ElmStructure.application
-    --             join
-    --             (formatTypeConstructor ctor)
-    --             (fmap (formatPreCommented << fmap (typeParens ForCtor << formatType)) args)
-    -- TypeParens type_ ->
-    --     Tuple.pair NotNeeded <|
-    --         parens <|
-    --             formatCommented <|
-    --                 fmap (typeParens NotRequired << formatType) type_
-    -- TupleType types (ForceMultiline forceMultiline) ->
-    --     Tuple.pair NotNeeded <|
-    --         ElmStructure.group True "(" "," ")" forceMultiline (fmap (formatC2Eol << fmap (typeParens NotRequired << formatType)) types)
-    -- RecordType base fields trailing multiline ->
-    --     Tuple.pair NotNeeded <|
-    --         formatRecordLike
-    --             (fmap (line << formatLowercaseIdentifier []) base)
-    --             (fmap (formatPair ":" << mapPair (formatLowercaseIdentifier []) (typeParens NotRequired << formatType)) fields)
-    --             trailing
-    --             multiline
-    Debug.todo "formatType"
+formatType (A.At _ atype) =
+    case atype of
+        -- FunctionType first rest (ForceMultiline forceMultiline) ->
+        --     let
+        --         formatRight (C ( preOp, postOp, eol ) term) =
+        --             ElmStructure.forceableSpaceSepOrStack1
+        --                 False
+        --             <|
+        --                 concat
+        --                     [ Maybe.maybeToList <| formatComments preOp
+        --                     , [ ElmStructure.prefixOrIndented
+        --                             (line <| punc "->")
+        --                             (formatC2Eol <|
+        --                                 (fmap <| typeParens ForLambda << formatType)
+        --                                     (C ( postOp, [], eol ) term)
+        --                             )
+        --                       ]
+        --                     ]
+        --     in
+        --     Tuple.pair ForFunctionType <|
+        --         ElmStructure.forceableSpaceSepOrStack
+        --             forceMultiline
+        --             (formatEolCommented (typeParens ForLambda << formatType first))
+        --             (formatRight (toCommentedList rest))
+        -- TypeVariable var ->
+        --     Tuple.pair NotNeeded <|
+        --         line <|
+        --             identifier <|
+        --                 formatVarName var
+        -- TypeConstruction ctor args forceMultiline ->
+        --     let
+        --         join =
+        --             case forceMultiline of
+        --                 ForceMultiline True ->
+        --                     FASplitFirst
+        --                 ForceMultiline False ->
+        --                     FAJoinFirst JoinAll
+        --     in
+        --     Tuple.pair
+        --         (if null args then
+        --             NotNeeded
+        --          else
+        --             ForTypeConstruction
+        --         )
+        --     <|
+        --         ElmStructure.application
+        --             join
+        --             (formatTypeConstructor ctor)
+        --             (fmap (formatPreCommented << fmap (typeParens ForCtor << formatType)) args)
+        -- TypeParens type_ ->
+        --     Tuple.pair NotNeeded <|
+        --         parens <|
+        --             formatCommented <|
+        --                 fmap (typeParens NotRequired << formatType) type_
+        Src.TRecord fields ext ->
+            let
+                base =
+                    Maybe.map (\(A.At _ extName) -> ( [], extName, [] )) ext
+
+                fields_ : List (C2Eol (Pair Name Src.Type))
+                fields_ =
+                    List.map
+                        (\( A.At _ name, typ ) ->
+                            ( ( [], [], Nothing )
+                            , Pair ( [], name ) ( [], typ ) (ForceMultiline False)
+                            )
+                        )
+                        fields
+
+                trailing =
+                    -- TODO
+                    []
+
+                multiline =
+                    -- TODO
+                    ForceMultiline False
+            in
+            ( NotNeeded
+            , formatRecordLike
+                (Maybe.map (c2map (Box.line << formatLowercaseIdentifier [])) base)
+                (List.map (c2EolMap (formatPair ":" << mapPair (formatLowercaseIdentifier []) (typeParens NotRequired << formatType))) fields_)
+                trailing
+                multiline
+            )
+
+        Src.TUnit ->
+            let
+                comments =
+                    -- TODO
+                    []
+            in
+            ( NotNeeded
+            , formatUnit '(' ')' comments
+            )
+
+        Src.TTuple a b cs ->
+            let
+                types =
+                    List.map (Tuple.pair ( [], [], Nothing )) (a :: b :: cs)
+
+                forceMultiline =
+                    -- TODO
+                    False
+            in
+            ( NotNeeded
+            , ElmStructure.group True "(" "," ")" forceMultiline (List.map (formatC2Eol << c2EolMap (typeParens NotRequired << formatType)) types)
+            )
+
+        _ ->
+            Debug.todo ("formatType: " ++ Debug.toString atype)
 
 
 formatVar : Ref (List String) -> Box.Line
@@ -2800,6 +2880,10 @@ formatVarName name =
 -- AST
 
 
+type ForceMultiline
+    = ForceMultiline Bool
+
+
 type alias Comments =
     List Space.Comment
 
@@ -2874,3 +2958,22 @@ openCommentedListMap f (OpenCommentedList rest ( preLst, eolLst, lst )) =
     OpenCommentedList
         (List.map (\( ( pre, post, eol ), a ) -> ( ( pre, post, eol ), f a )) rest)
         ( preLst, eolLst, f lst )
+
+
+{-| Represents a delimiter-separated pair.
+
+Comments can appear after the key or before the value.
+
+For example:
+
+key = value
+key : value
+
+-}
+type Pair key value
+    = Pair (C1 key) (C1 value) ForceMultiline
+
+
+mapPair : (a1 -> a2) -> (b1 -> b2) -> Pair a1 b1 -> Pair a2 b2
+mapPair fa fb (Pair k v fm) =
+    Pair (c1map fa k) (c1map fb v) fm
