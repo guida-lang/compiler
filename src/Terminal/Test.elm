@@ -713,7 +713,7 @@ extractExposedPossiblyTests path =
                                     Src.Open ->
                                         []
 
-                                    Src.Explicit exposedList ->
+                                    Src.Explicit (A.At _ exposedList) ->
                                         List.filterMap
                                             (\exposedValue ->
                                                 case exposedValue of

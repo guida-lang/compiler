@@ -1,5 +1,11 @@
 module Compiler.AST.Source exposing
     ( Alias(..)
+    , C0Eol
+    , C1
+    , C1Eol
+    , C2
+    , C2Eol
+    , C3
     , Comment(..)
     , Def(..)
     , Docs(..)
@@ -8,10 +14,15 @@ module Compiler.AST.Source exposing
     , Exposing(..)
     , Expr
     , Expr_(..)
+    , FComment(..)
+    , FComments
+    , ForceMultiline(..)
     , Import(..)
     , Infix(..)
     , Manager(..)
     , Module(..)
+    , OpenCommentedList(..)
+    , Pair(..)
     , Pattern
     , Pattern_(..)
     , Port(..)
@@ -21,10 +32,18 @@ module Compiler.AST.Source exposing
     , Union(..)
     , Value(..)
     , VarType(..)
+    , c0EolMap
+    , c1map
+    , c2EolMap
+    , c2map
     , getImportName
     , getName
+    , mapPair
     , moduleDecoder
     , moduleEncoder
+    , openCommentedListMap
+    , sequenceAC2
+    , toCommentedList
     , typeDecoder
     , typeEncoder
     )
@@ -37,6 +56,127 @@ import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
+
+
+
+-- FORMAT
+
+
+type ForceMultiline
+    = ForceMultiline Bool
+
+
+type FComment
+    = BlockComment (List String)
+    | LineComment String
+    | CommentTrickOpener
+    | CommentTrickCloser
+    | CommentTrickBlock String
+
+
+type alias FComments =
+    List FComment
+
+
+type alias C1 a =
+    ( FComments, a )
+
+
+c1map : (a -> b) -> C1 a -> C1 b
+c1map f ( comments, a ) =
+    ( comments, f a )
+
+
+type alias C2 a =
+    ( FComments, a, FComments )
+
+
+c2map : (a -> b) -> C2 a -> C2 b
+c2map f ( before, a, after ) =
+    ( before, f a, after )
+
+
+sequenceAC2 : List (C2 a) -> C2 (List a)
+sequenceAC2 =
+    List.foldr
+        (\( before, a, after ) ( beforeAcc, acc, afterAcc ) ->
+            ( before ++ beforeAcc, a :: acc, after ++ afterAcc )
+        )
+        ( [], [], [] )
+
+
+type alias C3 a =
+    ( ( FComments, FComments, FComments ), a )
+
+
+type alias C0Eol a =
+    ( Maybe String, a )
+
+
+c0EolMap : (a -> b) -> C0Eol a -> C0Eol b
+c0EolMap f ( eol, a ) =
+    ( eol, f a )
+
+
+type alias C1Eol a =
+    ( FComments, Maybe String, a )
+
+
+type alias C2Eol a =
+    ( ( FComments, FComments, Maybe String ), a )
+
+
+c2EolMap : (a -> b) -> C2Eol a -> C2Eol b
+c2EolMap f ( ( before, after, eol ), a ) =
+    ( ( before, after, eol ), f a )
+
+
+{-| This represents a list of things that have a clear start delimiter but no
+clear end delimiter.
+There must be at least one item.
+Comments can appear before the last item, or around any other item.
+An end-of-line comment can also appear after the last item.
+
+For example:
+= a
+= a, b, c
+
+TODO: this should be replaced with (Sequence a)
+
+-}
+type OpenCommentedList a
+    = OpenCommentedList (List (C2Eol a)) (C1Eol a)
+
+
+openCommentedListMap : (a -> b) -> OpenCommentedList a -> OpenCommentedList b
+openCommentedListMap f (OpenCommentedList rest ( preLst, eolLst, lst )) =
+    OpenCommentedList
+        (List.map (\( ( pre, post, eol ), a ) -> ( ( pre, post, eol ), f a )) rest)
+        ( preLst, eolLst, f lst )
+
+
+toCommentedList : OpenCommentedList Type -> List (C2Eol Type)
+toCommentedList (OpenCommentedList rest ( cLast, eolLast, last )) =
+    rest ++ [ ( ( cLast, [], eolLast ), last ) ]
+
+
+{-| Represents a delimiter-separated pair.
+
+Comments can appear after the key or before the value.
+
+For example:
+
+key = value
+key : value
+
+-}
+type Pair key value
+    = Pair (C1 key) (C1 value) ForceMultiline
+
+
+mapPair : (a1 -> a2) -> (b1 -> b2) -> Pair a1 b1 -> Pair a2 b2
+mapPair fa fb (Pair k v fm) =
+    Pair (c1map fa k) (c1map fb v) fm
 
 
 
@@ -54,7 +194,7 @@ type Expr_
     | Float Float
     | Var VarType Name
     | VarQual VarType Name Name
-    | List (List Expr)
+    | List (A.Located (List Expr))
     | Op Name
     | Negate Expr
     | Binops (List ( Expr, A.Located Name )) Expr
@@ -202,7 +342,7 @@ type Comment
 
 type Exposing
     = Open
-    | Explicit (List Exposed)
+    | Explicit (A.Located (List Exposed))
 
 
 type Exposed
@@ -366,7 +506,7 @@ exposingEncoder exposing_ =
         Explicit exposedList ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , BE.list exposedEncoder exposedList
+                , A.locatedEncoder (BE.list exposedEncoder) exposedList
                 ]
 
 
@@ -380,7 +520,7 @@ exposingDecoder =
                         BD.succeed Open
 
                     1 ->
-                        BD.map Explicit (BD.list exposedDecoder)
+                        BD.map Explicit (A.locatedDecoder (BD.list exposedDecoder))
 
                     _ ->
                         BD.fail
@@ -922,7 +1062,7 @@ expr_Encoder expr_ =
         List list ->
             BE.sequence
                 [ BE.unsignedInt8 6
-                , BE.list exprEncoder list
+                , A.locatedEncoder (BE.list exprEncoder) list
                 ]
 
         Op op ->
@@ -1054,7 +1194,7 @@ expr_Decoder =
                             BD.string
 
                     6 ->
-                        BD.map List (BD.list exprDecoder)
+                        BD.map List (A.locatedDecoder (BD.list exprDecoder))
 
                     7 ->
                         BD.map Op BD.string

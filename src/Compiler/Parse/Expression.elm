@@ -127,7 +127,8 @@ list syntaxVersion start =
                                         |> P.bind (\_ -> P.loop (chompListEnd syntaxVersion start) [ entry ])
                                 )
                         , P.word1 ']' E.ListOpen
-                            |> P.bind (\_ -> P.addEnd start (Src.List []))
+                            |> P.bind (\_ -> P.getPosition)
+                            |> P.bind (\end -> P.addEnd start (Src.List (A.At (A.Region start end) [])))
                         ]
                 )
         )
@@ -152,7 +153,8 @@ chompListEnd syntaxVersion start entries =
                         |> P.fmap (\_ -> P.Loop (entry :: entries))
                 )
         , P.word1 ']' E.ListEnd
-            |> P.bind (\_ -> P.addEnd start (Src.List (List.reverse entries)))
+            |> P.bind (\_ -> P.getPosition)
+            |> P.bind (\end -> P.addEnd start (Src.List (A.At (A.Region start end) (List.reverse entries))))
             |> P.fmap P.Done
         ]
 

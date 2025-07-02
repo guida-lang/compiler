@@ -26,7 +26,7 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type Decl
-    = Value (Maybe Src.Comment) (List Space.Comment) (A.Located Src.Value)
+    = Value (Maybe Src.Comment) Src.FComments (A.Located Src.Value)
     | Union (Maybe Src.Comment) (A.Located Src.Union)
     | Alias (Maybe Src.Comment) (A.Located Src.Alias)
     | Port (Maybe Src.Comment) Src.Port
@@ -53,7 +53,7 @@ declaration syntaxVersion =
 -- DOC COMMENT
 
 
-chompDocComment : P.Parser E.Decl ( List Space.Comment, Maybe Src.Comment )
+chompDocComment : P.Parser E.Decl (Src.C1 (Maybe Src.Comment))
 chompDocComment =
     P.oneOfWithFallback
         [ Space.docComment E.DeclStart E.DeclSpace
@@ -78,7 +78,7 @@ chompDocComment =
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : SyntaxVersion -> Maybe Src.Comment -> List Space.Comment -> A.Position -> Space.Parser E.Decl Decl
+valueDecl : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> Space.Parser E.Decl Decl
 valueDecl syntaxVersion maybeDocs comments start =
     Var.lower E.DeclStart
         |> P.bind
@@ -130,7 +130,7 @@ valueDecl syntaxVersion maybeDocs comments start =
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> List Space.Comment -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
+chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
 chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
     P.oneOf E.DeclDefEquals
         [ P.specialize E.DeclDefArg (Pattern.term syntaxVersion)

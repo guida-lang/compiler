@@ -263,7 +263,7 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
         Src.Open ->
             R.ok (Can.ExportEverything region)
 
-        Src.Explicit exposeds ->
+        Src.Explicit (A.At _ exposeds) ->
             let
                 names : Dict String Name ()
                 names =

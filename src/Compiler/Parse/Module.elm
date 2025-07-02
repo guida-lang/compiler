@@ -74,9 +74,9 @@ isKernel projectType =
 
 
 type alias Module =
-    { initialComments : List Space.Comment
+    { initialComments : Src.FComments
     , header : Maybe Header
-    , imports : List Src.Import
+    , imports : Src.C1 (List Src.Import)
     , infixes : List (A.Located Src.Infix)
     , decls : List Decl.Decl
     }
@@ -86,7 +86,11 @@ chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
 chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
-            (\( initialComments, header ) ->
+            (\( initialComments, header, headerComments ) ->
+                let
+                    _ =
+                        Debug.log "initialComments" initialComments
+                in
                 chompImports
                     (if isCore projectType then
                         []
@@ -110,7 +114,7 @@ chompModule syntaxVersion projectType =
                                                     Module
                                                         initialComments
                                                         header
-                                                        imports
+                                                        ( headerComments, imports )
                                                         infixes
                                                         decls
                                                 )
@@ -128,6 +132,9 @@ checkModule syntaxVersion projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
             categorizeDecls [] [] [] [] module_.decls
+
+        ( _, imports ) =
+            module_.imports
     in
     case module_.header of
         Just ({ effects, docs } as header) ->
@@ -144,7 +151,7 @@ checkModule syntaxVersion projectType module_ =
                         (Just name)
                         exports
                         (toDocs docs module_.decls)
-                        module_.imports
+                        imports
                         values
                         unions
                         aliases
@@ -157,7 +164,7 @@ checkModule syntaxVersion projectType module_ =
                     Nothing
                     (A.At A.one Src.Open)
                     (toDocs (Err A.one) module_.decls)
-                    module_.imports
+                    imports
                     values
                     unions
                     aliases
@@ -284,7 +291,7 @@ addComment maybeComment (A.At _ name) comments =
 -- FRESH LINES
 
 
-freshLine : (Row -> Col -> E.Module) -> P.Parser E.Module (List Space.Comment)
+freshLine : (Row -> Col -> E.Module) -> P.Parser E.Module Src.FComments
 freshLine toFreshLineError =
     Space.chomp E.ModuleSpace
         |> P.bind
@@ -334,11 +341,15 @@ chompInfixes infixes =
 -- MODULE DOC COMMENT
 
 
-chompModuleDocCommentSpace : P.Parser E.Module ( List Space.Comment, Result A.Region Src.Comment )
+chompModuleDocCommentSpace : P.Parser E.Module (Src.C1 (Result A.Region Src.Comment))
 chompModuleDocCommentSpace =
     P.addLocation (freshLine E.FreshLine)
         |> P.bind
             (\(A.At region beforeComments) ->
+                let
+                    _ =
+                        Debug.log "beforeComments" beforeComments
+                in
                 P.oneOfWithFallback
                     [ Space.docComment E.ImportStart E.ModuleSpace
                         |> P.bind
@@ -369,11 +380,10 @@ chompModuleDocCommentSpace =
 
 
 type alias Header =
-    { name : ( List Space.Comment, A.Located Name.Name, List Space.Comment )
+    { name : Src.C2 (A.Located Name.Name)
     , effects : Effects
-    , exports : ( List Space.Comment, A.Located Src.Exposing, List Space.Comment )
+    , exports : Src.C2 (A.Located Src.Exposing)
     , docs : Result A.Region Src.Comment
-    , comments : List Space.Comment
     }
 
 
@@ -383,7 +393,6 @@ defaultHeader =
     , effects = NoEffects A.zero
     , exports = ( [], A.At A.zero Src.Open, [] )
     , docs = Err A.zero
-    , comments = []
     }
 
 
@@ -393,7 +402,7 @@ type Effects
     | Manager A.Region Src.Manager
 
 
-chompHeader : P.Parser E.Module ( List Space.Comment, Maybe Header )
+chompHeader : P.Parser E.Module (Src.C2 (Maybe Header))
 chompHeader =
     freshLine E.FreshLine
         |> P.bind
@@ -427,10 +436,10 @@ chompHeader =
                                                                                 Keyword.exposing_ E.ModuleProblem
                                                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem)
                                                                                     |> P.bind
-                                                                                        (\beforeExportsComments ->
+                                                                                        (\afterExportsComments ->
                                                                                             let
                                                                                                 _ =
-                                                                                                    Debug.log "c61" beforeExportsComments
+                                                                                                    Debug.log "c61" afterExportsComments
                                                                                             in
                                                                                             P.addLocation (P.specialize E.ModuleExposing exposing_)
                                                                                                 |> P.bind
@@ -438,12 +447,14 @@ chompHeader =
                                                                                                         chompModuleDocCommentSpace
                                                                                                             |> P.fmap
                                                                                                                 (\( headerComments, docComment ) ->
-                                                                                                                    Just <|
+                                                                                                                    ( initialComments
+                                                                                                                    , Just <|
                                                                                                                         Header ( beforeNameComments, name, afterNameComments )
                                                                                                                             (NoEffects (A.Region start effectEnd))
-                                                                                                                            ( beforeExportsComments, exports, [] )
+                                                                                                                            ( [], exports, afterExportsComments )
                                                                                                                             docComment
-                                                                                                                            headerComments
+                                                                                                                    , headerComments
+                                                                                                                    )
                                                                                                                 )
                                                                                                     )
                                                                                         )
@@ -496,12 +507,14 @@ chompHeader =
                                                                                                         chompModuleDocCommentSpace
                                                                                                             |> P.fmap
                                                                                                                 (\( headerComments, docComment ) ->
-                                                                                                                    Just <|
+                                                                                                                    ( initialComments
+                                                                                                                    , Just <|
                                                                                                                         Header ( beforeNameComments, name, afterNameComments )
                                                                                                                             (Ports (A.Region start effectEnd))
                                                                                                                             ( beforeExportsComments, exports, [] )
                                                                                                                             docComment
-                                                                                                                            headerComments
+                                                                                                                    , headerComments
+                                                                                                                    )
                                                                                                                 )
                                                                                                     )
                                                                                         )
@@ -574,12 +587,14 @@ chompHeader =
                                                                                                                     chompModuleDocCommentSpace
                                                                                                                         |> P.fmap
                                                                                                                             (\( headerComments, docComment ) ->
-                                                                                                                                Just <|
+                                                                                                                                ( initialComments
+                                                                                                                                , Just <|
                                                                                                                                     Header ( beforeNameComments, name, afterNameComments )
                                                                                                                                         (Manager (A.Region start effectEnd) manager)
                                                                                                                                         ( beforeExportsComments, exports, [] )
                                                                                                                                         docComment
-                                                                                                                                        headerComments
+                                                                                                                                , headerComments
+                                                                                                                                )
                                                                                                                             )
                                                                                                                 )
                                                                                                     )
@@ -590,9 +605,8 @@ chompHeader =
                                         )
                                 ]
                                 -- default header
-                                Nothing
+                                ( initialComments, Nothing, [] )
                         )
-                    |> P.fmap (Tuple.pair initialComments)
             )
 
 
@@ -671,7 +685,7 @@ chompSubscription =
         |> P.bind (\_ -> P.addLocation (Var.upper E.Effect))
 
 
-spaces_em : P.Parser E.Module (List Space.Comment)
+spaces_em : P.Parser E.Module Src.FComments
 spaces_em =
     Space.chompAndCheckIndent E.ModuleSpace E.Effect
         |> P.fmap (Debug.log "c72")
@@ -713,7 +727,7 @@ chompImport =
                             in
                             P.oneOf E.ImportEnd
                                 [ Space.checkFreshLine E.ImportEnd
-                                    |> P.fmap (\_ -> Src.Import name Nothing (Src.Explicit []))
+                                    |> P.fmap (\_ -> Src.Import name Nothing (Src.Explicit (A.At A.zero [])))
                                 , Space.checkIndent end E.ImportEnd
                                     |> P.bind
                                         (\_ ->
@@ -753,7 +767,7 @@ chompAs name =
                                         in
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.Import name (Just alias) (Src.Explicit []))
+                                                |> P.fmap (\_ -> Src.Import name (Just alias) (Src.Explicit (A.At A.zero [])))
                                             , Space.checkIndent end E.ImportEnd
                                                 |> P.bind (\_ -> chompExposing name (Just alias))
                                             ]
@@ -788,44 +802,48 @@ chompExposing name maybeAlias =
 exposing_ : P.Parser E.Exposing Src.Exposing
 exposing_ =
     P.word1 '(' E.ExposingStart
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
+        |> P.bind (\_ -> P.getPosition)
         |> P.bind
-            (\c76 ->
-                let
-                    _ =
-                        Debug.log "c76" c76
-                in
-                P.oneOf E.ExposingValue
-                    [ P.word2 '.' '.' E.ExposingValue
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
-                        |> P.bind
-                            (\c77 ->
-                                let
-                                    _ =
-                                        Debug.log "c77" c77
-                                in
-                                P.word1 ')' E.ExposingEnd
-                            )
-                        |> P.fmap (\_ -> Src.Open)
-                    , chompExposed
-                        |> P.bind
-                            (\exposed ->
-                                Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+            (\start ->
+                Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue
+                    |> P.bind
+                        (\c76 ->
+                            let
+                                _ =
+                                    Debug.log "c76" c76
+                            in
+                            P.oneOf E.ExposingValue
+                                [ P.word2 '.' '.' E.ExposingValue
+                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
                                     |> P.bind
-                                        (\c78 ->
+                                        (\c77 ->
                                             let
                                                 _ =
-                                                    Debug.log "c78" c78
+                                                    Debug.log "c77" c77
                                             in
-                                            P.loop exposingHelp [ exposed ]
+                                            P.word1 ')' E.ExposingEnd
                                         )
-                            )
-                    ]
+                                    |> P.fmap (\_ -> Src.Open)
+                                , chompExposed
+                                    |> P.bind
+                                        (\exposed ->
+                                            Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+                                                |> P.bind
+                                                    (\c78 ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c78" c78
+                                                        in
+                                                        P.loop (exposingHelp start) [ exposed ]
+                                                    )
+                                        )
+                                ]
+                        )
             )
 
 
-exposingHelp : List Src.Exposed -> P.Parser E.Exposing (P.Step (List Src.Exposed) Src.Exposing)
-exposingHelp revExposed =
+exposingHelp : A.Position -> List Src.Exposed -> P.Parser E.Exposing (P.Step (List Src.Exposed) Src.Exposing)
+exposingHelp start revExposed =
     P.oneOf E.ExposingEnd
         [ P.word1 ',' E.ExposingEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
@@ -850,7 +868,8 @@ exposingHelp revExposed =
                             )
                 )
         , P.word1 ')' E.ExposingEnd
-            |> P.fmap (\_ -> P.Done (Src.Explicit (List.reverse revExposed)))
+            |> P.bind (\_ -> P.getPosition)
+            |> P.fmap (\end -> P.Done (Src.Explicit (A.At (A.Region start end) (List.reverse revExposed))))
         ]
 
 

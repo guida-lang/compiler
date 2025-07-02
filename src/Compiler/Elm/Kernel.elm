@@ -400,7 +400,7 @@ toNames exposing_ =
         Src.Open ->
             crash "cannot have `exposing (..)` in kernel code."
 
-        Src.Explicit exposedList ->
+        Src.Explicit (A.At _ exposedList) ->
             List.map toName exposedList
 
 

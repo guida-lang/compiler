@@ -38,19 +38,19 @@ import_ (IO.Canonical _ name) maybeAlias exposing_ =
 
 closed : Src.Exposing
 closed =
-    Src.Explicit []
+    Src.Explicit (A.At A.zero [])
 
 
 typeOpen : Name -> Src.Exposing
 typeOpen name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) (Src.Public A.zero) ]
+    Src.Explicit (A.At A.zero [ Src.Upper (A.At A.zero name) (Src.Public A.zero) ])
 
 
 typeClosed : Name -> Src.Exposing
 typeClosed name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) Src.Private ]
+    Src.Explicit (A.At A.zero [ Src.Upper (A.At A.zero name) Src.Private ])
 
 
 operator : Name -> Src.Exposing
 operator op =
-    Src.Explicit [ Src.Operator A.zero op ]
+    Src.Explicit (A.At A.zero [ Src.Operator A.zero op ])

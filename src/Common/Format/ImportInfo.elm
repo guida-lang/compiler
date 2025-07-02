@@ -23,7 +23,11 @@ type ImportInfo
 
 fromModule : KnownContents -> M.Module -> ImportInfo
 fromModule knownContents modu =
-    fromImports knownContents (importsToDict modu.imports)
+    let
+        ( _, imports ) =
+            modu.imports
+    in
+    fromImports knownContents (importsToDict imports)
 
 
 importsToDict : List Src.Import -> Dict String String Src.Import

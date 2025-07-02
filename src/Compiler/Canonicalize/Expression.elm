@@ -87,7 +87,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                     Src.CapVar ->
                         R.fmap (toVarCtor name) (Env.findCtorQual region env prefix name)
 
-            Src.List exprs ->
+            Src.List (A.At _ exprs) ->
                 R.fmap Can.List (R.traverse (canonicalize syntaxVersion env) exprs)
 
             Src.Op op ->

@@ -1,6 +1,5 @@
 module Compiler.Parse.Space exposing
-    ( Comment(..)
-    , Parser
+    ( Parser
     , checkAligned
     , checkFreshLine
     , checkIndent
@@ -16,18 +15,6 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 
--- COMMENT
-
-
-type Comment
-    = BlockComment (List String)
-    | LineComment String
-    | CommentTrickOpener
-    | CommentTrickCloser
-    | CommentTrickBlock String
-
-
-
 -- SPACE PARSING
 
 
@@ -39,7 +26,7 @@ type alias Parser x a =
 -- CHOMP
 
 
-chomp : (E.Space -> Row -> Col -> x) -> P.Parser x (List Comment)
+chomp : (E.Space -> Row -> Col -> x) -> P.Parser x Src.FComments
 chomp toError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -104,7 +91,7 @@ checkFreshLine toError =
 -- CHOMP AND CHECK
 
 
-chompAndCheckIndent : (E.Space -> Row -> Col -> x) -> (Row -> Col -> x) -> P.Parser x (List Comment)
+chompAndCheckIndent : (E.Space -> Row -> Col -> x) -> (Row -> Col -> x) -> P.Parser x Src.FComments
 chompAndCheckIndent toSpaceError toIndentError =
     P.Parser <|
         \(P.State src pos end indent row col) ->
@@ -153,7 +140,7 @@ type Status
     | EndlessMultiComment
 
 
-eat : EatType -> List Comment -> String -> Int -> Int -> Row -> Col -> ( ( Status, List Comment, Int ), ( Row, Col ) )
+eat : EatType -> Src.FComments -> String -> Int -> Int -> Row -> Col -> ( ( Status, Src.FComments, Int ), ( Row, Col ) )
 eat eatType comments src pos end row col =
     case eatType of
         EatSpaces ->
@@ -205,7 +192,7 @@ eat eatType comments src pos end row col =
                 if word == '\n' then
                     let
                         newComment =
-                            LineComment (String.slice startPos pos src)
+                            Src.LineComment (String.slice startPos pos src)
                     in
                     eat EatSpaces (newComment :: comments) src (pos + 1) end (row + 1) 1
 
@@ -245,7 +232,7 @@ eat eatType comments src pos end row col =
                             MultiGood ->
                                 let
                                     newComment =
-                                        BlockComment (String.lines (String.slice pos2 (newPos - 2) src))
+                                        Src.BlockComment (String.lines (String.slice pos2 (newPos - 2) src))
                                 in
                                 eat EatSpaces (newComment :: comments) src newPos end newRow newCol
 

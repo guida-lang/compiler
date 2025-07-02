@@ -109,7 +109,7 @@ toExposing exposing_ =
         Src.Open ->
             All
 
-        Src.Explicit exposedList ->
+        Src.Explicit (A.At _ exposedList) ->
             Only (List.foldr addType EverySet.empty exposedList)
 
 
