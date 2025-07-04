@@ -229,7 +229,7 @@ categorizeDecls values unions aliases ports decls =
 
         decl :: otherDecls ->
             case decl of
-                Decl.Value _ _ value ->
+                Decl.Value _ value ->
                     categorizeDecls (value :: values) unions aliases ports otherDecls
 
                 Decl.Union _ union ->
@@ -264,13 +264,13 @@ getComments decls comments =
 
         decl :: otherDecls ->
             case decl of
-                Decl.Value c _ (A.At _ (Src.Value n _ _ _)) ->
+                Decl.Value c (A.At _ (Src.Value _ n _ _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
                 Decl.Union c (A.At _ (Src.Union n _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Alias c (A.At _ (Src.Alias n _ _)) ->
+                Decl.Alias c (A.At _ (Src.Alias _ ( _, n, _ ) _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
                 Decl.Port c (Src.Port n _) ->

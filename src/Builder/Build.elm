@@ -470,7 +470,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
 
 
 isMain : A.Located Src.Value -> Bool
-isMain (A.At _ (Src.Value (A.At _ name) _ _ _)) =
+isMain (A.At _ (Src.Value _ (A.At _ name) _ _ _)) =
     name == Name.main_
 
 

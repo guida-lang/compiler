@@ -418,13 +418,13 @@ formatModuleHeader addDefaultHeader modu =
         extractVarName : Decl.Decl -> List Src.Exposed
         extractVarName decl =
             case decl of
-                Decl.Value _ _ (A.At _ (Src.Value name _ _ _)) ->
+                Decl.Value _ (A.At _ (Src.Value _ name _ _ _)) ->
                     [ Src.Lower name ]
 
                 Decl.Union _ (A.At _ (Src.Union name _ _)) ->
                     [ Src.Upper name (Src.Public A.zero) ]
 
-                Decl.Alias _ (A.At _ (Src.Alias name _ _)) ->
+                Decl.Alias _ (A.At _ (Src.Alias _ ( _, name, _ ) _ _)) ->
                     [ Src.Upper name Src.Private ]
 
                 Decl.Port _ (Src.Port name _) ->
@@ -650,13 +650,13 @@ formatModuleBody linesBetween importInfo body =
                 --     BodyNamed (VarRef () name)
                 -- Fixity _ _ _ _ ->
                 --     BodyFixity
-                Decl.Value _ _ (A.At _ (Src.Value (A.At _ name) _ _ _)) ->
+                Decl.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _)) ->
                     BodyNamed (VarRef () name)
 
                 Decl.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
                     BodyNamed (TagRef () name)
 
-                Decl.Alias _ (A.At _ (Src.Alias (A.At _ name) _ _)) ->
+                Decl.Alias _ (A.At _ (Src.Alias _ ( _, A.At _ name, _ ) _ _)) ->
                     BodyNamed (TagRef () name)
 
                 Decl.Port _ (Src.Port (A.At _ name) _) ->
@@ -1231,7 +1231,7 @@ formatTopLevelStructure importInfo topLevelStructure =
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
-formatCommonDeclaration importInfo (A.At _ (Src.Value (A.At nameRegion name) args expr maybeType)) =
+formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) args expr maybeType)) =
     let
         formattedDefinition =
             formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args [] expr
@@ -1323,7 +1323,7 @@ formatDeclaration importInfo decl =
         --         , Box.line (Box.keyword "=")
         --         , formatPreCommented (fmap (Box.line << Box.identifier << formatVarName) value)
         --         ]
-        Decl.Value _ _ value ->
+        Decl.Value _ value ->
             formatCommonDeclaration importInfo value
 
         Decl.Union _ (A.At _ (Src.Union name args tags)) ->
@@ -1385,14 +1385,14 @@ formatDeclaration importInfo decl =
                                     |> Box.indent
                                 ]
 
-        Decl.Alias _ (A.At _ (Src.Alias (A.At _ name) args typ)) ->
+        Decl.Alias _ (A.At _ (Src.Alias preAlias ( preNameComments, A.At _ name, postArgsComments ) args typ)) ->
             ElmStructure.definition "="
                 True
                 (Box.line (Box.keyword "type"))
-                [ formatPreCommented ( [], Box.line (Box.keyword "alias") )
-                , formatCommented ( [], formatNameWithArgs name (List.map (\(A.At _ arg) -> ( [], arg )) args), [] )
+                [ formatPreCommented ( preAlias, Box.line (Box.keyword "alias") )
+                , formatCommented ( preNameComments, formatNameWithArgs name (List.map (Src.c1map A.toValue) args), postArgsComments )
                 ]
-                (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) ( [], typ ))
+                (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) typ)
 
         Decl.Port _ (Src.Port (A.At _ name) typ) ->
             let
@@ -1591,7 +1591,11 @@ formatRecordPair delim formatValue ( ( pre, k, postK ), ( preV, v, postV ), forc
 
 
 formatPair : String -> Src.Pair Box.Line Box -> Box
-formatPair delim (Src.Pair a b (Src.ForceMultiline forceMultiline)) =
+formatPair delim ((Src.Pair a b (Src.ForceMultiline forceMultiline)) as pair) =
+    let
+        _ =
+            Debug.log "pair" pair
+    in
     ElmStructure.equalsPair delim
         forceMultiline
         (formatTailCommented <| Src.c1map Box.line a)
@@ -2223,7 +2227,7 @@ formatPreCommentedExpression importInfo context ( pre, e ) =
 
 formatRecordLike : Maybe (Src.C2 Box) -> List (Src.C2Eol Box) -> Src.FComments -> Src.ForceMultiline -> Box
 formatRecordLike base_ fields trailing multiline =
-    case ( base_, fields ) of
+    case Debug.log "formatRecordLike" ( base_, fields ) of
         ( Just base, pairs_ ) ->
             ElmStructure.extensionGroup_
                 ((\(Src.ForceMultiline b) -> b) multiline)
@@ -2247,27 +2251,30 @@ formatRecordLike base_ fields trailing multiline =
 
 formatSequence : Char -> Char -> Maybe Char -> Src.ForceMultiline -> Src.FComments -> List (Src.C2Eol Box) -> Box
 formatSequence left delim maybeRight (Src.ForceMultiline multiline) trailing list =
-    case ( left, maybeRight, list ) of
-        ( _, _, first :: rest ) ->
+    case ( maybeRight, Debug.log "formatSequence.list" list ) of
+        ( _, first :: rest ) ->
             let
                 formatItem : Char -> Src.C2Eol Box -> Box
                 formatItem delim_ ( ( pre, post, eol ), item ) =
-                    Maybe.unwrap identity (Box.stack_ << Box.stack_ Box.blankLine) (formatComments pre) <|
-                        Box.prefix (Box.row [ Box.punc (String.fromChar delim_), Box.space ]) <|
-                            formatC2Eol <|
-                                ( ( post, [], eol ), item )
+                    Maybe.unwrap identity (Box.stack_ << Box.stack_ Box.blankLine) (Debug.log "formatCommentsResult" (formatComments pre)) <|
+                        Debug.log "HERE!" <|
+                            Box.prefix (Box.row [ Box.punc (String.fromChar delim_), Box.space ]) <|
+                                Debug.log "HERE2!" <|
+                                    formatC2Eol ( ( Debug.log "POST" post, [], eol ), item )
             in
             ElmStructure.forceableSpaceSepOrStack multiline
-                (ElmStructure.forceableRowOrStack multiline
-                    (formatItem left first)
-                    (List.map (formatItem delim) rest)
+                (Debug.log "forceableRowOrStack"
+                    (ElmStructure.forceableRowOrStack multiline
+                        (Debug.log "formatItem" (formatItem left first))
+                        (List.map (formatItem delim) rest)
+                    )
                 )
                 (Maybe.unwrap [] (flip (::) [] << Box.stack_ Box.blankLine) (formatComments trailing) ++ Maybe.toList (Maybe.map (Box.line << Box.punc << String.fromChar) maybeRight))
 
-        ( _, Just right, [] ) ->
+        ( Just right, [] ) ->
             formatUnit left right trailing
 
-        ( _, Nothing, [] ) ->
+        ( Nothing, [] ) ->
             formatUnit left ' ' trailing
 
 
@@ -2372,7 +2379,7 @@ formatUnit left right comments =
 
 formatComments : Src.FComments -> Maybe Box
 formatComments comments =
-    case List.map formatComment comments of
+    case Debug.log "formatComments" (List.map formatComment comments) of
         [] ->
             Nothing
 
@@ -2702,7 +2709,7 @@ formatTypeConstructor name =
 
 
 formatType : Src.Type -> ( TypeParensInner, Box )
-formatType (A.At _ atype) =
+formatType (A.At region atype) =
     case atype of
         Src.TLambda arg result ->
             let
@@ -2802,28 +2809,26 @@ formatType (A.At _ atype) =
                 (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args_)
             )
 
-        Src.TRecord fields ext ->
+        Src.TRecord fields ext trailing ->
             let
+                _ =
+                    Debug.log "TRecord" ( region, fields, ext )
+
                 base =
-                    Maybe.map (\(A.At _ extName) -> ( [], extName, [] )) ext
+                    Maybe.map (Src.c2map A.toValue) ext
 
                 fields_ : List (Src.C2Eol (Src.Pair Name Src.Type))
                 fields_ =
                     List.map
-                        (\( A.At _ name, typ ) ->
-                            ( ( [], [], Nothing )
-                            , Src.Pair ( [], name ) ( [], typ ) (Src.ForceMultiline False)
+                        (\( preFieldComments, ( ( postNameComments, A.At _ name ), ( preTypeComments, typ ) ), postFieldComments ) ->
+                            ( ( preFieldComments, postFieldComments, Nothing )
+                            , Src.Pair ( postNameComments, name ) ( preTypeComments, typ ) (Src.ForceMultiline False)
                             )
                         )
                         fields
 
-                trailing =
-                    -- TODO
-                    []
-
                 multiline =
-                    -- TODO
-                    Src.ForceMultiline False
+                    Src.ForceMultiline (A.isMultiline region)
             in
             ( NotNeeded
             , formatRecordLike

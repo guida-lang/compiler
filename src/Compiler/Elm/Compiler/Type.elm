@@ -153,15 +153,15 @@ fromRawType (A.At _ astType) =
         Src.TTypeQual _ _ name args ->
             Type name (List.map fromRawType args)
 
-        Src.TRecord fields ext ->
+        Src.TRecord fields maybeExt _ ->
             let
-                fromField : ( A.Located a, Src.Type ) -> ( a, Type )
-                fromField ( A.At _ field, tipe ) =
+                fromField : Src.C2 ( Src.C1 (A.Located a), Src.C1 Src.Type ) -> ( a, Type )
+                fromField ( _, ( ( _, A.At _ field ), ( _, tipe ) ), _ ) =
                     ( field, fromRawType tipe )
             in
             Record
                 (List.map fromField fields)
-                (Maybe.map A.toValue ext)
+                (Maybe.map (\( _, A.At _ ext, _ ) -> ext) maybeExt)
 
 
 

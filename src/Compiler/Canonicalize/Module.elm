@@ -172,7 +172,7 @@ type alias NodeTwo =
 
 
 toNodeOne : SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne syntaxVersion env (A.At _ (Src.Value ((A.At _ name) as aname) srcArgs body maybeType)) =
+toNodeOne syntaxVersion env (A.At _ (Src.Value _ ((A.At _ name) as aname) srcArgs body maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
@@ -278,7 +278,7 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
 
 
 valueToName : A.Located Src.Value -> ( Name, () )
-valueToName (A.At _ (Src.Value (A.At _ name) _ _ _)) =
+valueToName (A.At _ (Src.Value _ (A.At _ name) _ _ _)) =
     ( name, () )
 
 

@@ -383,13 +383,13 @@ attemptDeclOrExpr lines =
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
             case decl of
-                PD.Value _ _ (A.At _ (Src.Value (A.At _ name) _ _ _)) ->
+                PD.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _)) ->
                     ifDone lines (Decl name src)
 
                 PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
-                PD.Alias _ (A.At _ (Src.Alias (A.At _ name) _ _)) ->
+                PD.Alias _ (A.At _ (Src.Alias _ ( _, A.At _ name, _ ) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Port _ _ ->

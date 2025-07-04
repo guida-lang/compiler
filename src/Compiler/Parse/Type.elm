@@ -73,23 +73,23 @@ term =
                       P.inContext E.TRecord (P.word1 '{' E.TStart) <|
                         (Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentOpen
                             |> P.bind
-                                (\c95 ->
+                                (\initialComments ->
                                     let
                                         _ =
-                                            Debug.log "c95" c95
+                                            Debug.log "c95" initialComments
                                     in
                                     P.oneOf E.TRecordOpen
                                         [ P.word1 '}' E.TRecordEnd
-                                            |> P.bind (\_ -> P.addEnd start (Src.TRecord [] Nothing))
+                                            |> P.bind (\_ -> P.addEnd start (Src.TRecord [] Nothing initialComments))
                                         , P.addLocation (Var.lower E.TRecordField)
                                             |> P.bind
                                                 (\name ->
                                                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                                                         |> P.bind
-                                                            (\c96 ->
+                                                            (\postNameComments ->
                                                                 let
                                                                     _ =
-                                                                        Debug.log "c96" c96
+                                                                        Debug.log "c96" postNameComments
                                                                 in
                                                                 P.oneOf E.TRecordColon
                                                                     [ P.word1 '|' E.TRecordColon
@@ -97,16 +97,16 @@ term =
                                                                             (\_ ->
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                                                                                     |> P.bind
-                                                                                        (\c97 ->
+                                                                                        (\preFieldComments ->
                                                                                             let
                                                                                                 _ =
-                                                                                                    Debug.log "c97" c97
+                                                                                                    Debug.log "c97" preFieldComments
                                                                                             in
                                                                                             chompField
                                                                                                 |> P.bind
                                                                                                     (\field ->
-                                                                                                        chompRecordEnd [ field ]
-                                                                                                            |> P.bind (\fields -> P.addEnd start (Src.TRecord fields (Just name)))
+                                                                                                        chompRecordEnd [ ( preFieldComments, field, [] ) ]
+                                                                                                            |> P.bind (\fields -> P.addEnd start (Src.TRecord fields (Just ( initialComments, name, postNameComments )) []))
                                                                                                     )
                                                                                         )
                                                                             )
@@ -115,10 +115,10 @@ term =
                                                                             (\_ ->
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                                                                     |> P.bind
-                                                                                        (\c98 ->
+                                                                                        (\preTypeComments ->
                                                                                             let
                                                                                                 _ =
-                                                                                                    Debug.log "c98" c98
+                                                                                                    Debug.log "c98" preTypeComments
                                                                                             in
                                                                                             P.specialize E.TRecordType expression
                                                                                                 |> P.bind
@@ -126,8 +126,8 @@ term =
                                                                                                         Space.checkIndent end E.TRecordIndentEnd
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
-                                                                                                                    chompRecordEnd [ ( name, tipe ) ]
-                                                                                                                        |> P.bind (\fields -> P.addEnd start (Src.TRecord fields Nothing))
+                                                                                                                    chompRecordEnd [ ( [], ( ( postNameComments, name ), ( preTypeComments, tipe ) ), initialComments ) ]
+                                                                                                                        |> P.bind (\fields -> P.addEnd start (Src.TRecord fields Nothing []))
                                                                                                                 )
                                                                                                     )
                                                                                         )
@@ -325,10 +325,10 @@ chompTupleEnd start firstType revTypes =
 
 
 type alias Field =
-    ( A.Located Name, Src.Type )
+    ( Src.C1 (A.Located Name), Src.C1 Src.Type )
 
 
-chompRecordEnd : List Field -> P.Parser E.TRecord (List Field)
+chompRecordEnd : List (Src.C2 Field) -> P.Parser E.TRecord (List (Src.C2 Field))
 chompRecordEnd fields =
     P.oneOf E.TRecordEnd
         [ P.word1 ',' E.TRecordEnd
@@ -336,15 +336,15 @@ chompRecordEnd fields =
                 (\_ ->
                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                         |> P.bind
-                            (\c101 ->
+                            (\preFieldComments ->
                                 let
                                     _ =
-                                        Debug.log "c101" c101
+                                        Debug.log "c101" preFieldComments
                                 in
                                 chompField
                                     |> P.bind
                                         (\field ->
-                                            chompRecordEnd (field :: fields)
+                                            chompRecordEnd (( [], field, preFieldComments ) :: fields)
                                         )
                             )
                 )
@@ -360,26 +360,26 @@ chompField =
             (\name ->
                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                     |> P.bind
-                        (\c102 ->
+                        (\postNameComments ->
                             let
                                 _ =
-                                    Debug.log "c102" c102
+                                    Debug.log "c102" postNameComments
                             in
                             P.word1 ':' E.TRecordColon
                                 |> P.bind
                                     (\_ ->
                                         Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                             |> P.bind
-                                                (\c103 ->
+                                                (\preTypeComments ->
                                                     let
                                                         _ =
-                                                            Debug.log "c103" c103
+                                                            Debug.log "c103" preTypeComments
                                                     in
                                                     P.specialize E.TRecordType expression
                                                         |> P.bind
                                                             (\( tipe, end ) ->
                                                                 Space.checkIndent end E.TRecordIndentEnd
-                                                                    |> P.fmap (\_ -> ( name, tipe ))
+                                                                    |> P.fmap (\_ -> ( ( postNameComments, name ), ( preTypeComments, tipe ) ))
                                                             )
                                                 )
                                     )

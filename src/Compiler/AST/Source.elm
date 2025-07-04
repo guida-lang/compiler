@@ -263,7 +263,7 @@ type Type_
     | TVar Name
     | TType A.Region Name (List Type)
     | TTypeQual A.Region Name Name (List Type)
-    | TRecord (List ( A.Located Name, Type )) (Maybe (A.Located Name))
+    | TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
     | TUnit
     | TTuple Type Type (List Type)
 
@@ -296,7 +296,7 @@ type Import
 
 
 type Value
-    = Value (A.Located Name) (List Pattern) Expr (Maybe Type)
+    = Value FComments (A.Located Name) (List Pattern) Expr (Maybe Type)
 
 
 type Union
@@ -304,7 +304,7 @@ type Union
 
 
 type Alias
-    = Alias (A.Located Name) (List (A.Located Name)) Type
+    = Alias FComments (C2 (A.Located Name)) (List (C1 (A.Located Name))) (C1 Type)
 
 
 type Infix
@@ -360,6 +360,113 @@ type Privacy
 -- ENCODERS and DECODERS
 
 
+forceMultilineEncoder : ForceMultiline -> BE.Encoder
+forceMultilineEncoder (ForceMultiline bool) =
+    BE.bool bool
+
+
+forceMultilineDecoder : BD.Decoder ForceMultiline
+forceMultilineDecoder =
+    BD.map ForceMultiline BD.bool
+
+
+fCommentEncoder : FComment -> BE.Encoder
+fCommentEncoder formatComment =
+    case formatComment of
+        BlockComment c ->
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , BE.list BE.string c
+                ]
+
+        LineComment c ->
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , BE.string c
+                ]
+
+        CommentTrickOpener ->
+            BE.unsignedInt8 2
+
+        CommentTrickCloser ->
+            BE.unsignedInt8 3
+
+        CommentTrickBlock c ->
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , BE.string c
+                ]
+
+
+fCommentDecoder : BD.Decoder FComment
+fCommentDecoder =
+    BD.unsignedInt8
+        |> BD.andThen
+            (\idx ->
+                case idx of
+                    0 ->
+                        BD.map BlockComment (BD.list BD.string)
+
+                    1 ->
+                        BD.map LineComment BD.string
+
+                    2 ->
+                        BD.succeed CommentTrickOpener
+
+                    3 ->
+                        BD.succeed CommentTrickCloser
+
+                    4 ->
+                        BD.map CommentTrickBlock BD.string
+
+                    _ ->
+                        BD.fail
+            )
+
+
+fCommentsEncoder : FComments -> BE.Encoder
+fCommentsEncoder =
+    BE.list fCommentEncoder
+
+
+fCommentsDecoder : BD.Decoder FComments
+fCommentsDecoder =
+    BD.list fCommentDecoder
+
+
+c1Encoder : (a -> BE.Encoder) -> C1 a -> BE.Encoder
+c1Encoder encoder ( comments, a ) =
+    BE.sequence
+        [ fCommentsEncoder comments
+        , encoder a
+        ]
+
+
+c1Decoder : BD.Decoder a -> BD.Decoder (C1 a)
+c1Decoder decoder =
+    BD.map2 Tuple.pair fCommentsDecoder decoder
+
+
+c2Encoder : (a -> BE.Encoder) -> C2 a -> BE.Encoder
+c2Encoder encoder ( preComments, a, postComments ) =
+    BE.sequence
+        [ fCommentsEncoder preComments
+        , encoder a
+        , fCommentsEncoder postComments
+        ]
+
+
+c2Decoder : BD.Decoder a -> BD.Decoder (C2 a)
+c2Decoder decoder =
+    BD.map3
+        (\preComments a postComments ->
+            ( preComments, a, postComments )
+        )
+        fCommentsDecoder
+        decoder
+        fCommentsDecoder
+
+
 typeEncoder : Type -> BE.Encoder
 typeEncoder =
     A.locatedEncoder internalTypeEncoder
@@ -403,11 +510,12 @@ internalTypeEncoder type_ =
                 , BE.list typeEncoder args
                 ]
 
-        TRecord fields ext ->
+        TRecord fields ext trailing ->
             BE.sequence
                 [ BE.unsignedInt8 4
-                , BE.list (BE.jsonPair (A.locatedEncoder BE.string) typeEncoder) fields
-                , BE.maybe (A.locatedEncoder BE.string) ext
+                , BE.list (c2Encoder (BE.jsonPair (c1Encoder (A.locatedEncoder BE.string)) (c1Encoder typeEncoder))) fields
+                , BE.maybe (c2Encoder (A.locatedEncoder BE.string)) ext
+                , fCommentsEncoder trailing
                 ]
 
         TUnit ->
@@ -450,9 +558,10 @@ internalTypeDecoder =
                             (BD.list typeDecoder)
 
                     4 ->
-                        BD.map2 TRecord
-                            (BD.list (BD.jsonPair (A.locatedDecoder BD.string) typeDecoder))
-                            (BD.maybe (A.locatedDecoder BD.string))
+                        BD.map3 TRecord
+                            (BD.list (c2Decoder (BD.jsonPair (c1Decoder (A.locatedDecoder BD.string)) (c1Decoder typeDecoder))))
+                            (BD.maybe (c2Decoder (A.locatedDecoder BD.string)))
+                            fCommentsDecoder
 
                     5 ->
                         BD.succeed TUnit
@@ -584,9 +693,10 @@ importDecoder =
 
 
 valueEncoder : Value -> BE.Encoder
-valueEncoder (Value name srcArgs body maybeType) =
+valueEncoder (Value formatComments name srcArgs body maybeType) =
     BE.sequence
-        [ A.locatedEncoder BE.string name
+        [ fCommentsEncoder formatComments
+        , A.locatedEncoder BE.string name
         , BE.list patternEncoder srcArgs
         , exprEncoder body
         , BE.maybe typeEncoder maybeType
@@ -595,7 +705,8 @@ valueEncoder (Value name srcArgs body maybeType) =
 
 valueDecoder : BD.Decoder Value
 valueDecoder =
-    BD.map4 Value
+    BD.map5 Value
+        fCommentsDecoder
         (A.locatedDecoder BD.string)
         (BD.list patternDecoder)
         exprDecoder
@@ -620,20 +731,22 @@ unionDecoder =
 
 
 aliasEncoder : Alias -> BE.Encoder
-aliasEncoder (Alias name args tipe) =
+aliasEncoder (Alias formatComments name args tipe) =
     BE.sequence
-        [ A.locatedEncoder BE.string name
-        , BE.list (A.locatedEncoder BE.string) args
-        , typeEncoder tipe
+        [ fCommentsEncoder formatComments
+        , c2Encoder (A.locatedEncoder BE.string) name
+        , BE.list (c1Encoder (A.locatedEncoder BE.string)) args
+        , c1Encoder typeEncoder tipe
         ]
 
 
 aliasDecoder : BD.Decoder Alias
 aliasDecoder =
-    BD.map3 Alias
-        (A.locatedDecoder BD.string)
-        (BD.list (A.locatedDecoder BD.string))
-        typeDecoder
+    BD.map4 Alias
+        fCommentsDecoder
+        (c2Decoder (A.locatedDecoder BD.string))
+        (BD.list (c1Decoder (A.locatedDecoder BD.string)))
+        (c1Decoder typeDecoder)
 
 
 infixEncoder : Infix -> BE.Encoder

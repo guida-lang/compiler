@@ -26,7 +26,7 @@ import Compiler.Reporting.Error.Syntax as E
 
 
 type Decl
-    = Value (Maybe Src.Comment) Src.FComments (A.Located Src.Value)
+    = Value (Maybe Src.Comment) (A.Located Src.Value)
     | Union (Maybe Src.Comment) (A.Located Src.Union)
     | Alias (Maybe Src.Comment) (A.Located Src.Alias)
     | Port (Maybe Src.Comment) Src.Port
@@ -161,13 +161,13 @@ chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
                     let
                         value : Src.Value
                         value =
-                            Src.Value name (List.reverse revArgs) body tipe
+                            Src.Value comments name (List.reverse revArgs) body tipe
 
                         avalue : A.Located Src.Value
                         avalue =
                             A.at start end value
                     in
-                    ( Value maybeDocs comments avalue, end )
+                    ( Value maybeDocs avalue, end )
                 )
         ]
 
@@ -211,33 +211,33 @@ typeDecl maybeDocs start =
     P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
             |> P.bind
-                (\c6 ->
+                (\preAlias ->
                     let
                         _ =
-                            Debug.log "c6" c6
+                            Debug.log "c6" preAlias
                     in
                     P.oneOf E.DT_Name
                         [ P.inContext E.DT_Alias (Keyword.alias_ E.DT_Name) <|
                             (Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                                 |> P.bind
-                                    (\c7 ->
+                                    (\preComments ->
                                         let
                                             _ =
-                                                Debug.log "c7" c7
+                                                Debug.log "c7" preComments
                                         in
                                         chompAliasNameToEquals
-                                    )
-                                |> P.bind
-                                    (\( name, args ) ->
-                                        P.specialize E.AliasBody Type.expression
-                                            |> P.fmap
-                                                (\( tipe, end ) ->
-                                                    let
-                                                        alias_ : A.Located Src.Alias
-                                                        alias_ =
-                                                            A.at start end (Src.Alias name args tipe)
-                                                    in
-                                                    ( Alias maybeDocs alias_, end )
+                                            |> P.bind
+                                                (\( ( name, args, postComments ), preTypeComments ) ->
+                                                    P.specialize E.AliasBody Type.expression
+                                                        |> P.fmap
+                                                            (\( tipe, end ) ->
+                                                                let
+                                                                    alias_ : A.Located Src.Alias
+                                                                    alias_ =
+                                                                        A.at start end (Src.Alias preAlias ( preComments, name, postComments ) args ( preTypeComments, tipe ))
+                                                                in
+                                                                ( Alias maybeDocs alias_, end )
+                                                            )
                                                 )
                                     )
                             )
@@ -270,48 +270,48 @@ typeDecl maybeDocs start =
 -- TYPE ALIASES
 
 
-chompAliasNameToEquals : P.Parser E.TypeAlias ( A.Located Name, List (A.Located Name) )
+chompAliasNameToEquals : P.Parser E.TypeAlias ( ( A.Located Name, List (Src.C1 (A.Located Name)), Src.FComments ), Src.FComments )
 chompAliasNameToEquals =
     P.addLocation (Var.upper E.AliasName)
         |> P.bind
             (\name ->
                 Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                     |> P.bind
-                        (\c8 ->
+                        (\comments ->
                             let
                                 _ =
-                                    Debug.log "c8" c8
+                                    Debug.log "c8" comments
                             in
-                            chompAliasNameToEqualsHelp name []
+                            chompAliasNameToEqualsHelp name [] comments
                         )
             )
 
 
-chompAliasNameToEqualsHelp : A.Located Name -> List (A.Located Name) -> P.Parser E.TypeAlias ( A.Located Name, List (A.Located Name) )
-chompAliasNameToEqualsHelp name args =
+chompAliasNameToEqualsHelp : A.Located Name -> List (Src.C1 (A.Located Name)) -> Src.FComments -> P.Parser E.TypeAlias ( ( A.Located Name, List (Src.C1 (A.Located Name)), Src.FComments ), Src.FComments )
+chompAliasNameToEqualsHelp name args comments =
     P.oneOf E.AliasEquals
         [ P.addLocation (Var.lower E.AliasEquals)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                         |> P.bind
-                            (\c9 ->
+                            (\postComments ->
                                 let
                                     _ =
-                                        Debug.log "c9" c9
+                                        Debug.log "c9" postComments
                                 in
-                                chompAliasNameToEqualsHelp name (arg :: args)
+                                chompAliasNameToEqualsHelp name (( comments, arg ) :: args) postComments
                             )
                 )
         , P.word1 '=' E.AliasEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.AliasSpace E.AliasIndentBody)
             |> P.fmap
-                (\c10 ->
+                (\preTypeComments ->
                     let
                         _ =
-                            Debug.log "c10" c10
+                            Debug.log "c10" preTypeComments
                     in
-                    ( name, List.reverse args )
+                    ( ( name, List.reverse args, comments ), preTypeComments )
                 )
         ]
 
