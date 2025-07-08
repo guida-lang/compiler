@@ -178,7 +178,7 @@ srcToDoc context (A.At _ tipe) =
             apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (srcToDoc App) args)
 
         Src.TRecord fields maybeExt trailing ->
-            record (List.map srcFieldToDocs fields) (Maybe.map (\( _, A.At _ ext, _ ) -> D.fromName ext) maybeExt)
+            record (List.map srcFieldToDocs fields) (Maybe.map (\( _, _, A.At _ ext ) -> D.fromName ext) maybeExt)
 
         Src.TUnit ->
             D.fromChars "()"
@@ -188,7 +188,7 @@ srcToDoc context (A.At _ tipe) =
 
 
 srcFieldToDocs : Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type ) -> ( D.Doc, D.Doc )
-srcFieldToDocs ( _, ( ( _, A.At _ fieldName ), ( _, fieldType ) ), _ ) =
+srcFieldToDocs ( _, _, ( ( _, A.At _ fieldName ), ( _, fieldType ) ) ) =
     ( D.fromName fieldName, srcToDoc None fieldType )
 
 

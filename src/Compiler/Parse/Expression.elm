@@ -1114,7 +1114,7 @@ definition syntaxVersion =
                                                 P.specialize E.DefType Type.expression
                                             )
                                         |> P.bind
-                                            (\( tipe, _ ) ->
+                                            (\( ( _, tipe ), _ ) ->
                                                 Space.checkAligned E.DefAlignment
                                                     |> P.bind (\_ -> chompMatchingName name)
                                                     |> P.bind

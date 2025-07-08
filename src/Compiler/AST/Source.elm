@@ -33,9 +33,12 @@ module Compiler.AST.Source exposing
     , Value(..)
     , VarType(..)
     , c0EolMap
+    , c1Decoder
+    , c1Encoder
     , c1map
     , c2EolMap
     , c2map
+    , fCommentsDecoder
     , getImportName
     , getName
     , mapPair
@@ -88,19 +91,19 @@ c1map f ( comments, a ) =
 
 
 type alias C2 a =
-    ( FComments, a, FComments )
+    ( FComments, FComments, a )
 
 
 c2map : (a -> b) -> C2 a -> C2 b
-c2map f ( before, a, after ) =
-    ( before, f a, after )
+c2map f ( before, after, a ) =
+    ( before, after, f a )
 
 
 sequenceAC2 : List (C2 a) -> C2 (List a)
 sequenceAC2 =
     List.foldr
-        (\( before, a, after ) ( beforeAcc, acc, afterAcc ) ->
-            ( before ++ beforeAcc, a :: acc, after ++ afterAcc )
+        (\( before, after, a ) ( beforeAcc, afterAcc, acc ) ->
+            ( before ++ beforeAcc, after ++ afterAcc, a :: acc )
         )
         ( [], [], [] )
 
@@ -448,23 +451,23 @@ c1Decoder decoder =
 
 
 c2Encoder : (a -> BE.Encoder) -> C2 a -> BE.Encoder
-c2Encoder encoder ( preComments, a, postComments ) =
+c2Encoder encoder ( preComments, postComments, a ) =
     BE.sequence
         [ fCommentsEncoder preComments
-        , encoder a
         , fCommentsEncoder postComments
+        , encoder a
         ]
 
 
 c2Decoder : BD.Decoder a -> BD.Decoder (C2 a)
 c2Decoder decoder =
     BD.map3
-        (\preComments a postComments ->
-            ( preComments, a, postComments )
+        (\preComments postComments a ->
+            ( preComments, postComments, a )
         )
         fCommentsDecoder
-        decoder
         fCommentsDecoder
+        decoder
 
 
 typeEncoder : Type -> BE.Encoder

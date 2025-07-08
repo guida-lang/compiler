@@ -106,7 +106,7 @@ valueDecl syntaxVersion maybeDocs comments start =
                                                             P.specialize E.DeclDefType Type.expression
                                                         )
                                                     |> P.bind
-                                                        (\( tipe, _ ) ->
+                                                        (\( ( _, tipe ), _ ) ->
                                                             Space.checkFreshLine E.DeclDefNameRepeat
                                                                 |> P.bind (\_ -> chompMatchingName name)
                                                                 |> P.bind
@@ -230,11 +230,11 @@ typeDecl maybeDocs start =
                                                 (\( ( name, args, postComments ), preTypeComments ) ->
                                                     P.specialize E.AliasBody Type.expression
                                                         |> P.fmap
-                                                            (\( tipe, end ) ->
+                                                            (\( ( _, tipe ), end ) ->
                                                                 let
                                                                     alias_ : A.Located Src.Alias
                                                                     alias_ =
-                                                                        A.at start end (Src.Alias preAlias ( preComments, name, postComments ) args ( preTypeComments, tipe ))
+                                                                        A.at start end (Src.Alias preAlias ( preComments, postComments, name ) args ( preTypeComments, tipe ))
                                                                 in
                                                                 ( Alias maybeDocs alias_, end )
                                                             )
@@ -421,7 +421,7 @@ portDecl maybeDocs =
                                 in
                                 P.specialize E.PortType Type.expression
                                     |> P.fmap
-                                        (\( tipe, end ) ->
+                                        (\( ( _, tipe ), end ) ->
                                             ( Port maybeDocs (Src.Port name tipe)
                                             , end
                                             )

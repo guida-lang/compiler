@@ -86,7 +86,7 @@ chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
 chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
-            (\( initialComments, header, headerComments ) ->
+            (\( initialComments, headerComments, header ) ->
                 let
                     _ =
                         Debug.log "initialComments" initialComments
@@ -139,10 +139,10 @@ checkModule syntaxVersion projectType module_ =
     case module_.header of
         Just ({ effects, docs } as header) ->
             let
-                ( _, name, _ ) =
+                ( _, _, name ) =
                     header.name
 
-                ( _, exports, _ ) =
+                ( _, _, exports ) =
                     header.exports
             in
             checkEffects projectType ports effects
@@ -270,7 +270,7 @@ getComments decls comments =
                 Decl.Union c (A.At _ (Src.Union n _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Alias c (A.At _ (Src.Alias _ ( _, n, _ ) _ _)) ->
+                Decl.Alias c (A.At _ (Src.Alias _ ( _, _, n ) _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
                 Decl.Port c (Src.Port n _) ->
@@ -389,9 +389,9 @@ type alias Header =
 
 defaultHeader : Header
 defaultHeader =
-    { name = ( [], A.At A.zero Name.mainModule, [] )
+    { name = ( [], [], A.At A.zero Name.mainModule )
     , effects = NoEffects A.zero
-    , exports = ( [], A.At A.zero Src.Open, [] )
+    , exports = ( [], [], A.At A.zero Src.Open )
     , docs = Err A.zero
     }
 
@@ -448,12 +448,12 @@ chompHeader =
                                                                                                             |> P.fmap
                                                                                                                 (\( headerComments, docComment ) ->
                                                                                                                     ( initialComments
-                                                                                                                    , Just <|
-                                                                                                                        Header ( beforeNameComments, name, afterNameComments )
-                                                                                                                            (NoEffects (A.Region start effectEnd))
-                                                                                                                            ( [], exports, afterExportsComments )
-                                                                                                                            docComment
                                                                                                                     , headerComments
+                                                                                                                    , Just <|
+                                                                                                                        Header ( beforeNameComments, afterNameComments, name )
+                                                                                                                            (NoEffects (A.Region start effectEnd))
+                                                                                                                            ( [], afterExportsComments, exports )
+                                                                                                                            docComment
                                                                                                                     )
                                                                                                                 )
                                                                                                     )
@@ -508,12 +508,12 @@ chompHeader =
                                                                                                             |> P.fmap
                                                                                                                 (\( headerComments, docComment ) ->
                                                                                                                     ( initialComments
-                                                                                                                    , Just <|
-                                                                                                                        Header ( beforeNameComments, name, afterNameComments )
-                                                                                                                            (Ports (A.Region start effectEnd))
-                                                                                                                            ( beforeExportsComments, exports, [] )
-                                                                                                                            docComment
                                                                                                                     , headerComments
+                                                                                                                    , Just <|
+                                                                                                                        Header ( beforeNameComments, afterNameComments, name )
+                                                                                                                            (Ports (A.Region start effectEnd))
+                                                                                                                            ( beforeExportsComments, [], exports )
+                                                                                                                            docComment
                                                                                                                     )
                                                                                                                 )
                                                                                                     )
@@ -588,12 +588,12 @@ chompHeader =
                                                                                                                         |> P.fmap
                                                                                                                             (\( headerComments, docComment ) ->
                                                                                                                                 ( initialComments
-                                                                                                                                , Just <|
-                                                                                                                                    Header ( beforeNameComments, name, afterNameComments )
-                                                                                                                                        (Manager (A.Region start effectEnd) manager)
-                                                                                                                                        ( beforeExportsComments, exports, [] )
-                                                                                                                                        docComment
                                                                                                                                 , headerComments
+                                                                                                                                , Just <|
+                                                                                                                                    Header ( beforeNameComments, afterNameComments, name )
+                                                                                                                                        (Manager (A.Region start effectEnd) manager)
+                                                                                                                                        ( beforeExportsComments, [], exports )
+                                                                                                                                        docComment
                                                                                                                                 )
                                                                                                                             )
                                                                                                                 )
@@ -605,7 +605,7 @@ chompHeader =
                                         )
                                 ]
                                 -- default header
-                                ( initialComments, Nothing, [] )
+                                ( initialComments, [], Nothing )
                         )
             )
 
