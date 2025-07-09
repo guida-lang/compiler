@@ -4,6 +4,7 @@ module Common.Format.Render.Box exposing (..)
 
 import Basics.Extra as Basics exposing (flip)
 import Common.Format.Box as Box exposing (Box)
+import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
@@ -298,10 +299,10 @@ formatModuleHeader addDefaultHeader modu =
         documentedVarsSet =
             EverySet.fromList identity (List.concat documentedVars)
 
-        extractDocs : Markdown.Block -> List (List String)
+        extractDocs : Block -> List (List String)
         extractDocs block =
             case block of
-                Markdown.ElmDocs vars ->
+                ElmDocs vars ->
                     List.map (List.map (refName << textToRef)) vars
 
                 _ ->
@@ -693,7 +694,7 @@ refMap f ref =
 
 
 type TopLevelStructure a
-    = DocComment Markdown.Blocks
+    = DocComment Blocks
     | BodyComment Src.FComment
     | Entry a
 
@@ -865,7 +866,7 @@ firstOf options value =
                     firstOf rest value
 
 
-formatDocComment : ImportInfo -> Markdown.Blocks -> Box
+formatDocComment : ImportInfo -> Blocks -> Box
 formatDocComment importInfo blocks =
     -- let
     --     parse : String -> Maybe (ElmCodeBlock Identity (List UppercaseIdentifier))

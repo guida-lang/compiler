@@ -1,30 +1,12 @@
 module Common.Format.Cheapskate.Parse exposing (markdown)
 
--- import Cheapskate.ParserCombinators
--- import Cheapskate.Util
--- import Cheapskate.Inlines
--- import Cheapskate.Types
--- import Data.Char hiding (Space)
--- import qualified Data.Set as Set
--- import Prelude hiding (takeWhile)
--- import Data.Maybe (mapMaybe)
--- import Data.Text (Text)
--- import qualified Data.Text as T
--- import Data.Foldable (toList)
--- import Data.Sequence ((|>), viewr, ViewR(..), singleton, Seq)
--- import qualified Data.Sequence as Seq
--- import Control.Monad.RWS
--- import Control.Applicative
--- import qualified Data.Map as M
--- import Data.List (intercalate)
--- | Parses the input as a markdown document.  Note that 'Doc' is an instance
--- of 'ToMarkup', so the document can be converted to 'Html' using 'toHtml'.
--- A simple 'Text' to 'Html' filter would be
---
--- > markdownToHtml :: Text -> Html
--- > markdownToHtml = toHtml . markdown def
+import Common.Format.Cheapskate.Types exposing (..)
+import Set exposing (Set)
+import Utils.Crash exposing (crash)
 
-import Common.Format.Render.Markdown as Markdown
+
+
+-- PARSE
 
 
 markdown : Options -> String -> Doc
@@ -82,10 +64,7 @@ type Elt
 
 
 type Container
-    = Container
-        { containerType : ContainerType
-        , children : List Elt
-        }
+    = Container ContainerType (List Elt)
 
 
 type ContainerType
@@ -94,7 +73,7 @@ type ContainerType
     | ListItem
         { markerColumn : Int
         , padding : Int
-        , listType : Markdown.ListType
+        , listType : ListType
         }
     | FencedCode
         { startColumn : Int
@@ -114,20 +93,20 @@ type ContainerType
 
 nest : Int -> String -> String
 nest num =
-    intercalate "\n" << List.map (String.repeat num ' ' (++)) << String.lines
+    List.intersperse "\n" << List.map (String.repeat num ' ' (++)) << String.lines
 
 
 showElt : Elt -> String
 showElt elt =
     case elt of
         C c ->
-            show c
+            Debug.toString c
 
         L _ (TextLine s) ->
-            show s
+            s
 
         L _ lf ->
-            show lf
+            Debug.toString lf
 
 
 
@@ -197,8 +176,8 @@ type Leaf
     | Rule
 
 
-type ContainerM
-    = RWS () Markdown.ReferenceMap ContainerStack
+type ContainerM a
+    = RWS () ReferenceMap ContainerStack a
 
 
 
@@ -299,10 +278,10 @@ processDocument : ( Container, ReferenceMap ) -> Blocks
 processDocument ( Container ct cs, refmap ) =
     case ct of
         Document ->
-            processElts refmap (toList cs)
+            processElts refmap cs
 
         _ ->
-            error "top level container is not Document"
+            crash "top level container is not Document"
 
 
 
@@ -312,7 +291,7 @@ processDocument ( Container ct cs, refmap ) =
 -- parsing inline contents of texts and resolving referencess.
 
 
-processElts : ReferenceMap -> List Elt -> Markdown.Blocks
+processElts : ReferenceMap -> List Elt -> Blocks
 processElts refmap elts =
     case elts of
         [] ->
@@ -322,118 +301,132 @@ processElts refmap elts =
             case lf of
                 -- Special handling of @docs lines in Elm:
                 TextLine t ->
-                    case T.stripPrefix "@docs" t of
+                    case stripPrefix "@docs" t of
                         Just terms1 ->
                             let
+                                docs : List String
                                 docs =
-                                    terms1 :: map (cleanDoc << extractText) docLines
+                                    terms1 :: List.map (cleanDoc << extractText) docLines
 
                                 ( docLines, rest_ ) =
-                                    span isDocLine rest
+                                    List.partition isDocLine rest
 
-                                isDocLine (L _ (TextLine _)) =
-                                    True
+                                isDocLine : Elt -> Bool
+                                isDocLine elt =
+                                    case elt of
+                                        L _ (TextLine _) ->
+                                            True
 
-                                isDocLine _ =
-                                    False
+                                        _ ->
+                                            False
 
+                                cleanDoc : String -> String
                                 cleanDoc lin =
-                                    case T.stripPrefix "@docs" lin of
+                                    case stripPrefix "@docs" lin of
                                         Nothing ->
                                             lin
 
                                         Just stripped ->
                                             stripped
                             in
-                            singleton (ElmDocs <| filter ((/=) []) <| fmap (filter ((/=) "") << fmap T.strip << T.splitOn ",") docs)
-                                <> processElts refmap rest_
+                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map T.strip << String.split ",") docs)
+                                ++ processElts refmap rest_
 
                         Nothing ->
                             -- Gobble text lines and make them into a Para:
                             let
                                 txt =
-                                    T.stripEnd <|
+                                    String.trimRight <|
                                         joinLines <|
-                                            map T.stripStart <|
+                                            List.map String.trimLeft <|
                                                 t
-                                                    :: map extractText textlines
+                                                    :: List.map extractText textlines
 
                                 ( textlines, rest_ ) =
-                                    span isTextLine rest
+                                    List.partition isTextLine rest
 
+                                isTextLine : Elt -> Bool
                                 isTextLine elt =
                                     case elt of
                                         L _ (TextLine s) ->
-                                            not (T.isPrefixOf "@docs" s)
+                                            not (String.startsWith "@docs" s)
 
                                         _ ->
                                             False
                             in
-                            singleton (Para <| parseInlines refmap txt)
-                                <> processElts refmap rest_
+                            List.singleton (Para <| parseInlines refmap txt)
+                                ++ processElts refmap rest_
 
                 -- Blanks at outer level are ignored:
-                BlankLine {} ->
+                BlankLine _ ->
                     processElts refmap rest
 
                 -- Headers:
                 ATXHeader lvl t ->
-                    singleton (Header lvl <| parseInlines refmap t)
-                        <> processElts refmap rest
+                    List.singleton (Header lvl <| parseInlines refmap t)
+                        ++ processElts refmap rest
 
                 SetextHeader lvl t ->
-                    singleton (Header lvl <| parseInlines refmap t)
-                        <> processElts refmap rest
+                    List.singleton (Header lvl <| parseInlines refmap t)
+                        ++ processElts refmap rest
 
                 -- Horizontal rule:
                 Rule ->
-                    singleton HRule <> processElts refmap rest
+                    List.singleton HRule ++ processElts refmap rest
 
         (C (Container ct cs)) :: rest ->
             let
-                isBlankLine (L _ BlankLine {}) =
-                    True
+                isBlankLine : Elt -> Bool
+                isBlankLine x =
+                    case x of
+                        L _ (BlankLine _) ->
+                            True
 
-                isBlankLine _ =
-                    False
+                        _ ->
+                            False
 
-                tightListItem [] =
-                    True
-
+                tightListItem : List Elt -> Bool
                 tightListItem xs =
-                    not <| any isBlankLine xs
+                    case xs of
+                        [] ->
+                            True
+
+                        _ ->
+                            not <| List.any isBlankLine xs
             in
             case ct of
                 Document ->
-                    error "Document container found inside Document"
+                    crash "Document container found inside Document"
 
                 BlockQuote ->
-                    singleton (Blockquote <| processElts refmap (toList cs))
-                        <> processElts refmap rest
+                    List.singleton (Blockquote <| processElts refmap (toList cs))
+                        ++ processElts refmap rest
 
                 -- List item?  Gobble up following list items of the same type
                 -- (skipping blank lines), determine whether the list is tight or
                 -- loose, and generate a List.
                 ListItem { listType } ->
                     let
+                        xs : List Elt
                         xs =
                             takeListItems rest
 
+                        rest_ : List Elt
                         rest_ =
-                            drop (length xs) rest
+                            List.drop (List.length xs) rest
 
                         -- take list items as long as list type matches and we
                         -- don't hit two blank lines:
                         takeListItems ys =
                             case ys of
-                                (C ((Container ListItem { listType } _) as c)) :: zs ->
+                                (C ((Container (ListItem { listType }) _) as c)) :: zs ->
                                     if listTypesMatch listType listType_ then
                                         C c :: takeListItems zs
 
                                     else
                                         []
 
-                                ((L _ (BlankLine _)) as lf) :: ((C (Container ListItem { listType } _)) as c) :: zs ->
+                                ((L _ (BlankLine _)) as lf) :: ((C (Container (ListItem { listType }) _)) as c) :: zs ->
                                     if listTypesMatch listType listType_ then
                                         lf :: c :: takeListItems zs
 
@@ -526,16 +519,16 @@ processElts refmap elts =
                 RawHtmlBlock ->
                     let
                         txt =
-                            joinLines (map extractText (toList cs))
+                            joinLines (List.map extractText cs)
                     in
-                    singleton (HtmlBlock txt) <> processElts refmap rest
+                    List.singleton (HtmlBlock txt) ++ processElts refmap rest
 
                 -- References have already been taken into account in the reference map,
                 -- so we just skip.
-                Reference {} ->
+                Reference ->
                     let
                         refs cs_ =
-                            fmap (extractRef << extractText) (toList cs_)
+                            List.map (extractRef << extractText) cs_
 
                         extractRef t =
                             case parse pReference (T.strip t) of
@@ -570,15 +563,20 @@ extractText elt =
 -- Step 1
 
 
-processLines : Text -> ( Container, ReferenceMap )
+processLines : String -> ( Container, ReferenceMap )
 processLines t =
     let
         ( doc, refmap ) =
             evalRWS (mapM_ processLine lns >> closeStack) () startState
 
-        -- lns        = zip [1..] (map tabFilter $ T.lines t)
+        lns : List ( Int, String )
+        lns =
+            List.indexedMap Tuple.pair
+                (List.map tabFilter (String.lines t))
+
+        startState : ContainerStack
         startState =
-            ContainerStack (Container Document mempty) []
+            ContainerStack (Container Document []) []
     in
     ( doc, refmap )
 
@@ -589,7 +587,7 @@ processLines t =
 -- adding a new leaf, or closing or opening containers.
 
 
-processLine : ( LineNumber, Text ) -> ContainerM ()
+processLine : ( LineNumber, String ) -> ContainerM ()
 processLine ( lineNumber, txt ) =
     --   do
     --     ContainerStack top@(Container ct cs) rest <- get
@@ -661,18 +659,18 @@ processLine ( lineNumber, txt ) =
 -- we have a lazy text line.)
 
 
-tryOpenContainers : List Container -> Text -> ( Text, Int )
+tryOpenContainers : List Container -> String -> ( String, Int )
 tryOpenContainers cs t =
     --   let scanners [] = Tuple.pair <$> takeText <*> pure 0
     --         scanners (p::ps) = (p *> scanners ps)
     --                       <|> (Tuple.pair <$> takeText <*> pure (length (p::ps)))
     --   in
-    case parse (scanners <| map containerContinue cs) t of
-        Right ( t_, n ) ->
+    case parse (scanners <| List.map containerContinue cs) t of
+        Ok ( t_, n ) ->
             ( t_, n )
 
-        Left e ->
-            error <|
+        Err e ->
+            crash <|
                 "error parsing scanners: "
                     ++ show e
 
@@ -682,7 +680,7 @@ tryOpenContainers cs t =
 -- container types, and the leaf to add inside the new containers.
 
 
-tryNewContainers : Bool -> Int -> Text -> ( List ContainerType, Leaf )
+tryNewContainers : Bool -> Int -> String -> ( List ContainerType, Leaf )
 tryNewContainers lastLineIsText offset t =
     --   let
     --     newContainers = do
@@ -696,11 +694,11 @@ tryNewContainers lastLineIsText offset t =
     --                             textLineOrBlank
     --   in
     case parse newContainers t of
-        Right ( cs, t_ ) ->
+        Ok ( cs, t_ ) ->
             ( cs, t_ )
 
-        Left err ->
-            error (show err)
+        Err err ->
+            crash (show err)
 
 
 textLineOrBlank : Parser Leaf
@@ -848,7 +846,7 @@ parseHtmlBlockStart =
 -- List of block level tags for HTML 5.
 
 
-blockHtmlTags : Set.Set Text
+blockHtmlTags : Set String
 blockHtmlTags =
     Set.fromList
         [ "article"
@@ -936,7 +934,7 @@ parseListMarker =
 -- Parse a bullet and return list type.
 
 
-parseBullet : Parser Markdown.ListType
+parseBullet : Parser ListType
 parseBullet =
     -- do
     --   c <- satisfy (\c -> c == '+' || c == '*' || c == '-')
@@ -951,7 +949,7 @@ parseBullet =
 -- Parse a list number marker and return list type.
 
 
-parseListNumber : Parser Markdown.ListType
+parseListNumber : Parser ListType
 parseListNumber =
     -- do
     --     num
@@ -965,3 +963,206 @@ parseListNumber =
     --         return
     --     $ Numbered wrap num
     Debug.todo "parseListNumber"
+
+
+
+-- Utility functions.
+
+
+{-| Like T.unlines but does not add a final newline.
+Concatenates lines with newlines between.
+-}
+joinLines : List String -> String
+joinLines =
+    List.intersperse "\n"
+
+
+{-| Convert tabs to spaces using a 4-space tab stop.
+-}
+tabFilter : String -> String
+tabFilter =
+    let
+        pad value =
+            case value of
+                [] ->
+                    []
+
+                [ t ] ->
+                    [ t ]
+
+                t :: ts ->
+                    let
+                        tl =
+                            String.length t
+
+                        n =
+                            tl + 4 - modBy 4 tl
+                    in
+                    String.padRight n ' ' t :: pad ts
+    in
+    String.concat << pad << String.split "\t"
+
+
+{-| These are the whitespace characters that are significant in
+parsing markdown. We can treat \\160 (nonbreaking space) etc.
+as regular characters. This function should be considerably
+faster than the unicode-aware isSpace from Data.Char.
+-}
+isWhitespace : Char -> Bool
+isWhitespace c =
+    case c of
+        ' ' ->
+            True
+
+        '\t' ->
+            True
+
+        '\n' ->
+            True
+
+        '\u{000D}' ->
+            True
+
+        _ ->
+            False
+
+
+{-| The original Markdown only allowed certain symbols
+to be backslash-escaped. It was hard to remember
+which ones could be, so we now allow any ascii punctuation mark or
+symbol to be escaped, whether or not it has a use in Markdown.
+-}
+isEscapable : Char -> Bool
+isEscapable c =
+    isAscii c && (isSymbol c || isPunctuation c)
+
+
+{-| Link references are case sensitive and ignore line breaks
+and repeated spaces.
+-}
+normalizeReference : String -> String
+normalizeReference =
+    T.toCaseFold << T.concat << T.split isWhitespace
+
+
+{-| Scanners are implemented here as attoparsec parsers,
+which consume input and capture nothing. They could easily
+be implemented as regexes in other languages, or hand-coded.
+With the exception of scanSpnl, they are all intended to
+operate on a single line of input (so endOfInput = endOfLine).
+-}
+type Scanner
+    = Parser ()
+
+
+{-| Scan four spaces.
+-}
+scanIndentSpace : Scanner
+scanIndentSpace =
+    -- () <| count 4 (skip ((==) ' '))
+    Debug.todo "scanIndentSpace"
+
+
+scanSpacesToColumn : Int -> Scanner
+scanSpacesToColumn col =
+    -- do
+    --   currentCol <- column <$> getPosition
+    --   case col - currentCol of
+    --        n | n >= 1 -> () <$ (count n (skip (==' ')))
+    --          | otherwise -> return ()
+    Debug.todo "scanSpacesToColumn"
+
+
+{-| Scan 0-3 spaces.
+-}
+scanNonindentSpace : Scanner
+scanNonindentSpace =
+    -- () <$ upToCountChars 3 (==' ')
+    Debug.todo "scanNonindentSpace"
+
+
+{-| Scan a specified character.
+-}
+scanChar : Char -> Scanner
+scanChar c =
+    -- skip (== c) >> return ()
+    Debug.todo "scanChar"
+
+
+{-| Scan a blankline.
+-}
+scanBlankline : Scanner
+scanBlankline =
+    -- scanSpaces *> endOfInput
+    Debug.todo "scanBlankline"
+
+
+{-| Scan 0 or more spaces
+-}
+scanSpaces : Scanner
+scanSpaces =
+    -- skipWhile ((==) ' ')
+    Debug.todo "scanSpaces"
+
+
+{-| Scan 0 or more spaces, and optionally a newline
+and more spaces.
+-}
+scanSpnl : Scanner
+scanSpnl =
+    -- scanSpaces *> option () (char '\n' *> scanSpaces)
+    Debug.todo "scanSpnl"
+
+
+{-| Not followed by: Succeed without consuming input if the specified
+scanner would not succeed.
+-}
+nfb : Parser a -> Scanner
+nfb =
+    notFollowedBy
+
+
+{-| Succeed if not followed by a character. Consumes no input.
+-}
+nfbChar : Char -> Scanner
+nfbChar c =
+    nfb (skip ((==) c))
+
+
+upToCountChars : Int -> (Char -> Bool) -> Parser String
+upToCountChars cnt f =
+    scan 0
+        (\n c ->
+            if n < cnt && f c then
+                Just (n + 1)
+
+            else
+                Nothing
+        )
+
+
+{-| Selects the first 128 characters of the Unicode character set,
+corresponding to the ASCII character set.
+-}
+isAscii : Char -> Bool
+isAscii c =
+    c < '\u{0080}'
+
+
+isSymbol : Char -> Bool
+isSymbol c =
+    Debug.todo "isSymbol"
+
+
+isPunctuation : Char -> Bool
+isPunctuation c =
+    Debug.todo "isPunctuation"
+
+
+stripPrefix : String -> String -> Maybe String
+stripPrefix p t =
+    if String.startsWith p t then
+        Just (String.dropLeft (String.length p) t)
+
+    else
+        Nothing
