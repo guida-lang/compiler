@@ -148,10 +148,10 @@ fromRawType (A.At _ astType) =
                 (List.map fromRawType cs)
 
         Src.TType _ name args ->
-            Type name (List.map fromRawType args)
+            Type name (List.map fromRawType (List.map Tuple.second args))
 
         Src.TTypeQual _ _ name args ->
-            Type name (List.map fromRawType args)
+            Type name (List.map fromRawType (List.map Tuple.second args))
 
         Src.TRecord fields maybeExt _ ->
             let

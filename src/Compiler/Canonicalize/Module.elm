@@ -172,7 +172,7 @@ type alias NodeTwo =
 
 
 toNodeOne : SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne syntaxVersion env (A.At _ (Src.Value _ ((A.At _ name) as aname) srcArgs body maybeType)) =
+toNodeOne syntaxVersion env (A.At _ (Src.Value _ ((A.At _ name) as aname) srcArgs ( _, body ) maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)

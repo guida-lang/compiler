@@ -215,10 +215,10 @@ getEdges (A.At _ tipe) edges =
             edges
 
         Src.TType _ name args ->
-            List.foldl getEdges (name :: edges) args
+            List.foldl getEdges (name :: edges) (List.map Tuple.second args)
 
         Src.TTypeQual _ _ _ args ->
-            List.foldl getEdges edges args
+            List.foldl getEdges edges (List.map Tuple.second args)
 
         Src.TRecord fields _ _ ->
             List.foldl (\( _, _, ( _, ( _, t ) ) ) es -> getEdges t es) edges fields
@@ -305,10 +305,10 @@ addFreeVars (A.At region tipe) freeVars =
             Dict.insert identity name region freeVars
 
         Src.TType _ _ args ->
-            List.foldl addFreeVars freeVars args
+            List.foldl addFreeVars freeVars (List.map Tuple.second args)
 
         Src.TTypeQual _ _ _ args ->
-            List.foldl addFreeVars freeVars args
+            List.foldl addFreeVars freeVars (List.map Tuple.second args)
 
         Src.TRecord fields maybeExt _ ->
             let

@@ -105,7 +105,7 @@ term =
                                                                                             chompField
                                                                                                 |> P.bind
                                                                                                     (\( postFieldComments, field ) ->
-                                                                                                        chompRecordEnd postFieldComments [ ( preFieldComments, [], field ) ]
+                                                                                                        chompRecordEnd postFieldComments [ ( [], preFieldComments, field ) ]
                                                                                                             |> P.bind (\( trailingComments, fields ) -> P.addEnd start (Src.TRecord fields (Just ( initialComments, postNameComments, name )) trailingComments))
                                                                                                     )
                                                                                         )
@@ -251,7 +251,7 @@ app start =
             )
 
 
-chompArgs : Src.FComments -> List Src.Type -> A.Position -> Space.Parser E.Type (Src.C1 (List Src.Type))
+chompArgs : Src.FComments -> List (Src.C1 Src.Type) -> A.Position -> Space.Parser E.Type (Src.C1 (List (Src.C1 Src.Type)))
 chompArgs preComments args end =
     P.oneOfWithFallback
         [ Space.checkIndent end E.TIndentStart
@@ -265,12 +265,12 @@ chompArgs preComments args end =
                                         (\newEnd ->
                                             Space.chomp E.TSpace
                                                 |> P.bind
-                                                    (\c124 ->
+                                                    (\comments ->
                                                         let
                                                             _ =
-                                                                Debug.log "c124" c124
+                                                                Debug.log "c124" comments
                                                         in
-                                                        chompArgs [] (arg :: args) newEnd
+                                                        chompArgs comments (( preComments, arg ) :: args) newEnd
                                                     )
                                         )
                             )
@@ -409,7 +409,7 @@ variant =
                             P.specialize E.CT_VariantArg (chompArgs [] [] nameEnd)
                                 |> P.fmap
                                     (\( ( _, args ), end ) ->
-                                        ( ( name, args ), end )
+                                        ( ( name, List.map Tuple.second args ), end )
                                     )
                         )
             )

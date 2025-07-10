@@ -48,11 +48,11 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
 
         Src.TType region name args ->
             Env.findType region env name
-                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name (List.map Tuple.second args))
 
         Src.TTypeQual region home name args ->
             Env.findTypeQual region env home name
-                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name (List.map Tuple.second args))
 
         Src.TLambda a b ->
             R.fmap Can.TLambda (canonicalize syntaxVersion env a)

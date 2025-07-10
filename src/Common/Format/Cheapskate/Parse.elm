@@ -1,6 +1,8 @@
 module Common.Format.Cheapskate.Parse exposing (markdown)
 
 import Common.Format.Cheapskate.Types exposing (..)
+import Common.Format.RWS as RWS exposing (RWS)
+import List.Extra as List
 import Set exposing (Set)
 import Utils.Crash exposing (crash)
 
@@ -15,49 +17,45 @@ markdown opts =
 
 
 
--- General parsing strategy:
---
--- Step 1:  processLines
---
--- We process the input line by line.  Each line modifies the
--- container stack, by adding a leaf to the current open container,
--- sometimes after closing old containers and/or opening new ones.
---
--- To open a container is to add it to the top of the container stack,
--- so that new content will be added under this container.
--- To close a container is to remove it from the container stack and
--- make it a child of the container above it on the container stack.
---
--- When all the input has been processed, we close all open containers
--- except the root (Document) container.  At this point we should also
--- have a ReferenceMap containing any defined link references.
---
--- Step 2:  processDocument
---
--- We then convert this container structure into an AST.  This principally
--- involves (a) gathering consecutive ListItem containers into lists, (b)
--- gathering TextLine nodes that don't belong to verbatim containers into
--- paragraphs, and (c) parsing the inline contents of non-verbatim TextLines.
---------
--- Container stack definitions:
+{- General parsing strategy:
+
+   Step 1: processLines
+
+   We process the input line by line. Each line modifies the
+   container stack, by adding a leaf to the current open container,
+   sometimes after closing old containers and/or opening new ones.
+
+   To open a container is to add it to the top of the container stack,
+   so that new content will be added under this container.
+   To close a container is to remove it from the container stack and
+   make it a child of the container above it on the container stack.
+
+   When all the input has been processed, we close all open containers
+   except the root (Document) container. At this point we should also
+   have a ReferenceMap containing any defined link references.
+
+   Step 2: processDocument
+
+   We then convert this container structure into an AST. This principally
+   involves (a) gathering consecutive ListItem containers into lists, (b)
+   gathering TextLine nodes that don't belong to verbatim containers into
+   paragraphs, and (c) parsing the inline contents of non-verbatim TextLines.
+
+-}
 
 
+{-| Container stack definitions:
+-}
 type ContainerStack
-    = ContainerStack Container {- top -} (List Container)
-
-
-
-{- rest -}
+    = ContainerStack {- top -} Container {- rest -} (List Container)
 
 
 type LineNumber
     = Int
 
 
-
--- Generic type for a container or a leaf.
-
-
+{-| Generic type for a container or a leaf.
+-}
 type Elt
     = C Container
     | L LineNumber Leaf
@@ -85,15 +83,11 @@ type ContainerType
     | Reference
 
 
-
--- instance Show Container where
---   show c = show (containerType c) ++ "\n" ++
---     nest 2 (intercalate "\n" (map showElt $ toList $ children c))
-
-
 nest : Int -> String -> String
 nest num =
-    List.intersperse "\n" << List.map (String.repeat num ' ' (++)) << String.lines
+    List.intersperse "\n"
+        << List.map (String.repeat num ' ' (++))
+        << String.lines
 
 
 showElt : Elt -> String
@@ -109,11 +103,9 @@ showElt elt =
             Debug.toString lf
 
 
-
--- Scanners that must be satisfied if the current open container
--- is to be continued on a new line (ignoring lazy continuations).
-
-
+{-| Scanners that must be satisfied if the current open container
+is to be continued on a new line (ignoring lazy continuations).
+-}
 containerContinue : Container -> Scanner
 containerContinue c =
     -- case containerType c of
@@ -271,9 +263,10 @@ addContainer ct =
 
 
 -- Step 2
--- Convert Document container and reference map into an AST.
 
 
+{-| Convert Document container and reference map into an AST.
+-}
 processDocument : ( Container, ReferenceMap ) -> Blocks
 processDocument ( Container ct cs, refmap ) =
     case ct of
@@ -284,13 +277,11 @@ processDocument ( Container ct cs, refmap ) =
             crash "top level container is not Document"
 
 
-
--- Turn the result of `processLines` into a proper AST.
--- This requires grouping text lines into paragraphs
--- and list items into lists, handling blank lines,
--- parsing inline contents of texts and resolving referencess.
-
-
+{-| Turn the result of `processLines` into a proper AST.
+This requires grouping text lines into paragraphs
+and list items into lists, handling blank lines,
+parsing inline contents of texts and resolving referencess.
+-}
 processElts : ReferenceMap -> List Elt -> Blocks
 processElts refmap elts =
     case elts of
@@ -436,21 +427,29 @@ processElts refmap elts =
                                 _ ->
                                     []
 
-                        listTypesMatch (Bullet c1) (Bullet c2) =
-                            c1 == c2
+                        listTypesMatch listType listType_ =
+                            case ( listType, listType_ ) of
+                                ( Bullet c1, Bullet c2 ) ->
+                                    c1 == c2
 
-                        listTypesMatch (Numbered w1 _) (Numbered w2 _) =
-                            w1 == w2
+                                ( Numbered w1 _, Numbered w2 _ ) ->
+                                    w1 == w2
 
-                        listTypesMatch _ _ =
-                            False
+                                _ ->
+                                    False
 
-                        -- items = mapMaybe getItem (Container ct cs :: [c | C c <- xs])
-                        getItem (Container ListItem {} cs_) =
-                            Just <| toList cs_
+                        items : List Elt
+                        items =
+                            List.filterMap getItem (Container ct cs :: List.map (\C c -> c) xs)
 
-                        getItem _ =
-                            Nothing
+                        getItem : Container -> Maybe Elt
+                        getItem container =
+                            case container of
+                                Container ListItem cs_ ->
+                                    Just cs_
+
+                                _ ->
+                                    Nothing
 
                         items_ =
                             map (processElts refmap) items
@@ -460,16 +459,16 @@ processElts refmap elts =
                     in
                     singleton (List isTight listType items_) <> processElts refmap rest_
 
-                FencedCode _ _ info_ ->
+                FencedCode { info } ->
                     let
                         txt =
-                            joinLines <| map extractText <| toList cs
+                            joinLines <| List.map extractText cs
 
                         attr =
-                            CodeAttr x (T.strip y)
+                            CodeAttr x (String.trim y)
 
                         ( x, y ) =
-                            T.break ((==) ' ') info_
+                            T.break ((==) ' ') info
                     in
                     singleton (CodeBlock attr txt)
                         <> processElts refmap rest
@@ -479,42 +478,46 @@ processElts refmap elts =
                         txt =
                             joinLines <|
                                 stripTrailingEmpties <|
-                                    concatMap extractCode cbs
+                                    List.concatMap extractCode cbs
 
                         stripTrailingEmpties =
-                            reverse
-                                << dropWhile (T.all ((==) ' '))
-                                << reverse
+                            List.reverse
+                                << List.dropWhile (T.all ((==) ' '))
+                                << List.reverse
 
                         -- explanation for next line:  when we parsed
                         -- the blank line, we dropped 0-3 spaces.
                         -- but for this, code block context, we want
                         -- to have dropped 4 spaces. we simply drop
                         -- one more:
-                        extractCode (L _ (BlankLine t)) =
-                            [ T.drop 1 t ]
+                        extractCode elt =
+                            case elt of
+                                L _ (BlankLine t) ->
+                                    [ T.drop 1 t ]
 
-                        extractCode (C (Container IndentedCode cs_)) =
-                            map extractText <| toList cs_
+                                C (Container IndentedCode cs_) ->
+                                    map extractText cs_
 
-                        extractCode _ =
-                            []
+                                _ ->
+                                    []
 
                         ( cbs, rest_ ) =
                             span isIndentedCodeOrBlank
                                 (C (Container ct cs) :: rest)
 
-                        isIndentedCodeOrBlank (L _ BlankLine {}) =
-                            True
+                        isIndentedCodeOrBlank elt =
+                            case elt of
+                                L _ BlankLine ->
+                                    True
 
-                        isIndentedCodeOrBlank (C (Container IndentedCode _)) =
-                            True
+                                C (Container IndentedCode _) ->
+                                    True
 
-                        isIndentedCodeOrBlank _ =
-                            False
+                                _ ->
+                                    False
                     in
-                    singleton (CodeBlock (CodeAttr "" "") txt)
-                        <> processElts refmap rest_
+                    List.singleton (CodeBlock (CodeAttr "" "") txt)
+                        ++ processElts refmap rest_
 
                 RawHtmlBlock ->
                     let
@@ -531,20 +534,22 @@ processElts refmap elts =
                             List.map (extractRef << extractText) cs_
 
                         extractRef t =
-                            case parse pReference (T.strip t) of
-                                Right ( lab, lnk, tit ) ->
+                            case parse pReference (String.trim t) of
+                                Ok ( lab, lnk, tit ) ->
                                     ( lab, lnk, tit )
 
-                                Left _ ->
+                                Err _ ->
                                     ( "??", "??", "??" )
 
                         processElts_ : List (List ( Text, Text, Text )) -> List Elt -> Blocks
-                        processElts_ acc ((C (Container Reference cs)) :: rest_) =
-                            processElts_ (refs cs :: acc) rest_
-
                         processElts_ acc pass =
-                            (singleton <| ReferencesBlock <| concat <| reverse acc)
-                                <> processElts refmap pass
+                            case pass of
+                                (C (Container Reference cs)) :: rest_ ->
+                                    processElts_ (refs cs :: acc) rest_
+
+                                _ ->
+                                    (List.singleton <| ReferencesBlock <| List.concat <| List.reverse acc)
+                                        ++ processElts refmap pass
                     in
                     processElts_ [] (C (Container ct cs) :: rest)
 
@@ -567,9 +572,9 @@ processLines : String -> ( Container, ReferenceMap )
 processLines t =
     let
         ( doc, refmap ) =
-            evalRWS (mapM_ processLine lns >> closeStack) () startState
+            RWS.evalRWS (RWS.mapM_ processLine lns >> closeStack) () startState
 
-        lns : List ( Int, String )
+        lns : List ( LineNumber, String )
         lns =
             List.indexedMap Tuple.pair
                 (List.map tabFilter (String.lines t))

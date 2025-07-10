@@ -149,25 +149,25 @@ chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
         , P.word1 '=' E.DeclDefEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentBody)
             |> P.bind
-                (\c5 ->
+                (\preBodyComments ->
                     let
                         _ =
-                            Debug.log "c5" c5
+                            Debug.log "c5" preBodyComments
                     in
                     P.specialize E.DeclDefBody (Expr.expression syntaxVersion)
-                )
-            |> P.fmap
-                (\( body, end ) ->
-                    let
-                        value : Src.Value
-                        value =
-                            Src.Value comments name (List.reverse revArgs) body tipe
+                        |> P.fmap
+                            (\( body, end ) ->
+                                let
+                                    value : Src.Value
+                                    value =
+                                        Src.Value comments name (List.reverse revArgs) ( preBodyComments, body ) tipe
 
-                        avalue : A.Located Src.Value
-                        avalue =
-                            A.at start end value
-                    in
-                    ( Value maybeDocs avalue, end )
+                                    avalue : A.Located Src.Value
+                                    avalue =
+                                        A.at start end value
+                                in
+                                ( Value maybeDocs avalue, end )
+                            )
                 )
         ]
 

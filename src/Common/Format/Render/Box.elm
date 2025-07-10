@@ -8,14 +8,13 @@ import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
-import Common.Format.Render.Markdown as Markdown
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
-import Data.Set as EverySet exposing (EverySet)
+import Data.Set as Set exposing (EverySet)
 import Hex
 import Language.GLSL.Syntax exposing (Statement(..))
 import Maybe.Extra as Maybe
@@ -1233,10 +1232,10 @@ formatTopLevelStructure importInfo topLevelStructure =
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
-formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) args expr maybeType)) =
+formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) args ( comments, expr ) maybeType)) =
     let
         formattedDefinition =
-            formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args [] expr
+            formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args comments expr
     in
     case maybeType of
         Just typ ->
@@ -2233,7 +2232,7 @@ formatRecordLike base_ fields trailing multiline =
         ( Just base, pairs_ ) ->
             ElmStructure.extensionGroup_
                 ((\(Src.ForceMultiline b) -> b) multiline)
-                (formatCommented base)
+                (formatCommented (Debug.log "base" base))
                 (formatSequence '|'
                     ','
                     Nothing
@@ -2563,8 +2562,15 @@ type StringStyle
 
 charIsPrint : Char -> Bool
 charIsPrint c =
-    -- TODO
-    False
+    case c of
+        '\u{2028}' ->
+            False
+
+        '\u{2029}' ->
+            False
+
+        _ ->
+            True
 
 
 charIsSpace : Char -> Bool
@@ -2583,6 +2589,7 @@ charIsSpace c =
 formatString : StringStyle -> String -> Box
 formatString style s =
     let
+        stringBox : String -> (String -> String) -> Box
         stringBox quotes escaper =
             Box.line <|
                 Box.row
@@ -2591,6 +2598,7 @@ formatString style s =
                     , Box.punc quotes
                     ]
 
+        fix : Char -> String
         fix c =
             if (style == SString TripleQuotedString) && c == '\n' then
                 String.fromChar c
@@ -2610,7 +2618,7 @@ formatString style s =
             else if (style == SChar) && c == '\'' then
                 "\\'"
 
-            else if not <| charIsPrint c then
+            else if not (charIsPrint c) then
                 hex c
 
             else if c == ' ' then
@@ -2623,8 +2631,7 @@ formatString style s =
                 String.fromChar c
 
         hex char =
-            -- "\\u{" ++ (printf "%04X" <| Char.toCode char) ++ "}"
-            Debug.todo "hex char"
+            "\\u{" ++ String.padLeft 4 '0' (Hex.toString (Char.toCode char)) ++ "}"
 
         escapeMultiQuote =
             let
@@ -2766,12 +2773,8 @@ formatType (A.At region atype) =
 
                         Src.ForceMultiline False ->
                             ElmStructure.FAJoinFirst ElmStructure.JoinAll
-
-                args_ : List (Src.C1 Src.Type)
-                args_ =
-                    List.map (Tuple.pair []) args
             in
-            ( if List.isEmpty args_ then
+            ( if List.isEmpty args then
                 NotNeeded
 
               else
@@ -2779,7 +2782,7 @@ formatType (A.At region atype) =
             , ElmStructure.application
                 join
                 (formatTypeConstructor ctor)
-                (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args_)
+                (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args)
             )
 
         Src.TTypeQual _ home name args ->
@@ -2795,12 +2798,8 @@ formatType (A.At region atype) =
 
                         Src.ForceMultiline False ->
                             ElmStructure.FAJoinFirst ElmStructure.JoinAll
-
-                args_ : List (Src.C1 Src.Type)
-                args_ =
-                    List.map (Tuple.pair []) args
             in
-            ( if List.isEmpty args_ then
+            ( if List.isEmpty args then
                 NotNeeded
 
               else
@@ -2808,7 +2807,7 @@ formatType (A.At region atype) =
             , ElmStructure.application
                 join
                 (formatTypeConstructor (home ++ "." ++ name))
-                (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args_)
+                (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args)
             )
 
         Src.TRecord fields ext trailing ->

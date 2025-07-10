@@ -264,8 +264,8 @@ type alias Type =
 type Type_
     = TLambda Type Type
     | TVar Name
-    | TType A.Region Name (List Type)
-    | TTypeQual A.Region Name Name (List Type)
+    | TType A.Region Name (List (C1 Type))
+    | TTypeQual A.Region Name Name (List (C1 Type))
     | TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
     | TUnit
     | TTuple Type Type (List Type)
@@ -299,7 +299,7 @@ type Import
 
 
 type Value
-    = Value FComments (A.Located Name) (List Pattern) Expr (Maybe Type)
+    = Value FComments (A.Located Name) (List Pattern) (C1 Expr) (Maybe Type)
 
 
 type Union
@@ -501,7 +501,7 @@ internalTypeEncoder type_ =
                 [ BE.unsignedInt8 2
                 , A.regionEncoder region
                 , BE.string name
-                , BE.list typeEncoder args
+                , BE.list (c1Encoder typeEncoder) args
                 ]
 
         TTypeQual region home name args ->
@@ -510,7 +510,7 @@ internalTypeEncoder type_ =
                 , A.regionEncoder region
                 , BE.string home
                 , BE.string name
-                , BE.list typeEncoder args
+                , BE.list (c1Encoder typeEncoder) args
                 ]
 
         TRecord fields ext trailing ->
@@ -551,14 +551,14 @@ internalTypeDecoder =
                         BD.map3 TType
                             A.regionDecoder
                             BD.string
-                            (BD.list typeDecoder)
+                            (BD.list (c1Decoder typeDecoder))
 
                     3 ->
                         BD.map4 TTypeQual
                             A.regionDecoder
                             BD.string
                             BD.string
-                            (BD.list typeDecoder)
+                            (BD.list (c1Decoder typeDecoder))
 
                     4 ->
                         BD.map3 TRecord
@@ -701,7 +701,7 @@ valueEncoder (Value formatComments name srcArgs body maybeType) =
         [ fCommentsEncoder formatComments
         , A.locatedEncoder BE.string name
         , BE.list patternEncoder srcArgs
-        , exprEncoder body
+        , c1Encoder exprEncoder body
         , BE.maybe typeEncoder maybeType
         ]
 
@@ -712,7 +712,7 @@ valueDecoder =
         fCommentsDecoder
         (A.locatedDecoder BD.string)
         (BD.list patternDecoder)
-        exprDecoder
+        (c1Decoder exprDecoder)
         (BD.maybe typeDecoder)
 
 
