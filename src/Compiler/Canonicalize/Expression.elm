@@ -59,16 +59,16 @@ canonicalize : SyntaxVersion -> Env.Env -> Src.Expr -> EResult FreeLocals (List 
 canonicalize syntaxVersion env (A.At region expression) =
     R.fmap (A.At region) <|
         case expression of
-            Src.Str string ->
+            Src.Str string _ ->
                 R.ok (Can.Str string)
 
             Src.Chr char ->
                 R.ok (Can.Chr char)
 
-            Src.Int int ->
+            Src.Int int _ ->
                 R.ok (Can.Int int)
 
-            Src.Float float ->
+            Src.Float float _ ->
                 R.ok (Can.Float float)
 
             Src.Var varType name ->
@@ -87,8 +87,8 @@ canonicalize syntaxVersion env (A.At region expression) =
                     Src.CapVar ->
                         R.fmap (toVarCtor name) (Env.findCtorQual region env prefix name)
 
-            Src.List (A.At _ exprs) ->
-                R.fmap Can.List (R.traverse (canonicalize syntaxVersion env) exprs)
+            Src.List exprs _ ->
+                R.fmap Can.List (R.traverse (canonicalize syntaxVersion env) (List.map Tuple.second exprs))
 
             Src.Op op ->
                 Env.findBinop region env op
@@ -103,10 +103,10 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Binops ops final ->
                 R.fmap A.toValue (canonicalizeBinops syntaxVersion region env ops final)
 
-            Src.Lambda srcArgs body ->
+            Src.Lambda ( _, srcArgs ) ( _, body ) ->
                 delayedUsage <|
                     (Pattern.verify Error.DPLambdaArgs
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
+                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, bindings ) ->
                                 Env.addLocals bindings env
@@ -380,10 +380,10 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PChr _ ->
             bindings
 
-        Src.PStr _ ->
+        Src.PStr _ _ ->
             bindings
 
-        Src.PInt _ ->
+        Src.PInt _ _ ->
             bindings
 
 
@@ -554,10 +554,10 @@ getPatternNames names (A.At region pattern) =
         Src.PChr _ ->
             names
 
-        Src.PStr _ ->
+        Src.PStr _ _ ->
             names
 
-        Src.PInt _ ->
+        Src.PInt _ _ ->
             names
 
 

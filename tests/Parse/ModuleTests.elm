@@ -47,7 +47,8 @@ main =
                                         (S.Value []
                                             (A.at (A.Position 6 1) (A.Position 6 5) "main")
                                             []
-                                            (A.at (A.Position 7 3)
+                                            ( []
+                                            , A.at (A.Position 7 3)
                                                 (A.Position 7 16)
                                                 (S.Call (A.at (A.Position 7 3) (A.Position 7 7) (S.Var S.LowVar "text"))
                                                     [ A.at (A.Position 7 8) (A.Position 7 16) (S.Str "Hello!")

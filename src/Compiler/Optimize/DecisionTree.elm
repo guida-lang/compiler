@@ -228,7 +228,7 @@ flatten (( path, A.At region pattern ) as pathPattern) otherPathPatterns =
         Can.PChr _ ->
             pathPattern :: otherPathPatterns
 
-        Can.PStr _ ->
+        Can.PStr _ _ ->
             pathPattern :: otherPathPatterns
 
         Can.PInt _ ->
@@ -362,7 +362,7 @@ testAtPath selectedPath (Branch _ pathPatterns) =
                     Can.PInt int ->
                         Just (IsInt int)
 
-                    Can.PStr str ->
+                    Can.PStr str _ ->
                         Just (IsStr str)
 
                     Can.PChr chr ->
@@ -464,7 +464,7 @@ toRelevantBranch test path ((Branch goal pathPatterns) as branch) =
                         _ ->
                             Nothing
 
-                Can.PStr str ->
+                Can.PStr str _ ->
                     case test of
                         IsStr testStr ->
                             if str == testStr then
@@ -596,7 +596,7 @@ needsTests (A.At _ pattern) =
         Can.PChr _ ->
             True
 
-        Can.PStr _ ->
+        Can.PStr _ _ ->
             True
 
         Can.PInt _ ->

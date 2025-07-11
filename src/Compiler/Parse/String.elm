@@ -103,7 +103,7 @@ chompChar src pos end row col numChars mostRecent =
 -- STRINGS
 
 
-string : (Row -> Col -> x) -> (E.String_ -> Row -> Col -> x) -> Parser x String
+string : (Row -> Col -> x) -> (E.String_ -> Row -> Col -> x) -> Parser x ( String, Bool )
 string toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
@@ -133,18 +133,18 @@ string toExpectation toError =
                             multiString src pos3 end row col3 pos3 row col []
 
                         else
-                            SROk pos2 row (col + 2) ""
+                            SROk pos2 row (col + 2) "" False
 
                     else
                         singleString src pos1 end row (col + 1) pos1 []
                 of
-                    SROk newPos newRow newCol utf8 ->
+                    SROk newPos newRow newCol utf8 multiline ->
                         let
                             newState : P.State
                             newState =
                                 P.State src newPos end indent newRow newCol
                         in
-                        P.Cok utf8 newState
+                        P.Cok ( utf8, multiline ) newState
 
                     SRErr r c x ->
                         P.Cerr r c (toError x)
@@ -160,7 +160,7 @@ isDoubleQuote src pos end =
 
 
 type StringResult
-    = SROk Int Row Col String
+    = SROk Int Row Col String Bool
     | SRErr Row Col E.String_
 
 
@@ -201,8 +201,11 @@ singleString src pos end row col initialPos revChunks =
                 P.unsafeIndex src pos
         in
         if word == '"' then
-            SROk (pos + 1) row (col + 1) <|
-                finalize src initialPos pos revChunks
+            SROk (pos + 1)
+                row
+                (col + 1)
+                (finalize src initialPos pos revChunks)
+                False
 
         else if word == '\n' then
             SRErr row col E.StringEndless_Single
@@ -261,8 +264,11 @@ multiString src pos end row col initialPos sr sc revChunks =
                 P.unsafeIndex src pos
         in
         if word == '"' && isDoubleQuote src (pos + 1) end && isDoubleQuote src (pos + 2) end then
-            SROk (pos + 3) row (col + 3) <|
-                finalize src initialPos pos revChunks
+            SROk (pos + 3)
+                row
+                (col + 3)
+                (finalize src initialPos pos revChunks)
+                True
 
         else if word == '\'' then
             let

@@ -169,7 +169,7 @@ add (A.At region pattern) expectation state =
             in
             IO.pure (State headers vars (intCon :: revCons))
 
-        Can.PStr _ ->
+        Can.PStr _ _ ->
             let
                 (State headers vars revCons) =
                     state

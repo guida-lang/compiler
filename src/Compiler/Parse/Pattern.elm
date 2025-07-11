@@ -68,10 +68,10 @@ termHelp syntaxVersion start =
                         |> P.bind
                             (\end ->
                                 case number of
-                                    Number.Int int ->
-                                        P.pure (A.at start end (Src.PInt int))
+                                    Number.Int int src ->
+                                        P.pure (A.at start end (Src.PInt int src))
 
-                                    Number.Float float ->
+                                    Number.Float float _ ->
                                         P.Parser <|
                                             \(P.State _ _ _ _ row col) ->
                                                 let
@@ -84,7 +84,7 @@ termHelp syntaxVersion start =
                             )
                 )
         , String.string E.PStart E.PString
-            |> P.bind (\str -> P.addEnd start (Src.PStr str))
+            |> P.bind (\( str, multiline ) -> P.addEnd start (Src.PStr str multiline))
         , String.character E.PStart E.PChar
             |> P.bind (\chr -> P.addEnd start (Src.PChr chr))
         ]

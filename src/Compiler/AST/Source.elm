@@ -33,10 +33,16 @@ module Compiler.AST.Source exposing
     , Value(..)
     , VarType(..)
     , c0EolMap
+    , c0EolValue
     , c1Decoder
     , c1Encoder
+    , c1Value
     , c1map
+    , c2EolDecoder
+    , c2EolEncoder
     , c2EolMap
+    , c2EolValue
+    , c2Value
     , c2map
     , fCommentsDecoder
     , getImportName
@@ -90,6 +96,11 @@ c1map f ( comments, a ) =
     ( comments, f a )
 
 
+c1Value : C1 a -> a
+c1Value ( _, a ) =
+    a
+
+
 type alias C2 a =
     ( FComments, FComments, a )
 
@@ -97,6 +108,11 @@ type alias C2 a =
 c2map : (a -> b) -> C2 a -> C2 b
 c2map f ( before, after, a ) =
     ( before, after, f a )
+
+
+c2Value : C2 a -> a
+c2Value ( _, _, a ) =
+    a
 
 
 sequenceAC2 : List (C2 a) -> C2 (List a)
@@ -121,6 +137,11 @@ c0EolMap f ( eol, a ) =
     ( eol, f a )
 
 
+c0EolValue : C0Eol a -> a
+c0EolValue ( eol, a ) =
+    a
+
+
 type alias C1Eol a =
     ( FComments, Maybe String, a )
 
@@ -132,6 +153,11 @@ type alias C2Eol a =
 c2EolMap : (a -> b) -> C2Eol a -> C2Eol b
 c2EolMap f ( ( before, after, eol ), a ) =
     ( ( before, after, eol ), f a )
+
+
+c2EolValue : C2Eol a -> a
+c2EolValue ( ( before, after, eol ), a ) =
+    a
 
 
 {-| This represents a list of things that have a clear start delimiter but no
@@ -192,16 +218,16 @@ type alias Expr =
 
 type Expr_
     = Chr String
-    | Str String
-    | Int Int
-    | Float Float
+    | Str String Bool
+    | Int Int String
+    | Float Float String
     | Var VarType Name
     | VarQual VarType Name Name
-    | List (A.Located (List Expr))
+    | List (List (C2Eol Expr)) FComments
     | Op Name
     | Negate Expr
     | Binops (List ( Expr, A.Located Name )) Expr
-    | Lambda (List Pattern) Expr
+    | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
     | Call Expr (List Expr)
     | If (List ( Expr, Expr )) Expr
     | Let (List (A.Located Def)) Expr
@@ -249,8 +275,8 @@ type Pattern_
     | PList (List Pattern)
     | PCons Pattern Pattern
     | PChr String
-    | PStr String
-    | PInt Int
+    | PStr String Bool
+    | PInt Int String
 
 
 
@@ -467,6 +493,28 @@ c2Decoder decoder =
         )
         fCommentsDecoder
         fCommentsDecoder
+        decoder
+
+
+c2EolEncoder : (a -> BE.Encoder) -> C2Eol a -> BE.Encoder
+c2EolEncoder encoder ( ( preComments, postComments, eol ), a ) =
+    BE.sequence
+        [ fCommentsEncoder preComments
+        , fCommentsEncoder postComments
+        , BE.maybe BE.string eol
+        , encoder a
+        ]
+
+
+c2EolDecoder : BD.Decoder a -> BD.Decoder (C2Eol a)
+c2EolDecoder decoder =
+    BD.map4
+        (\preComments postComments eol a ->
+            ( ( preComments, postComments, eol ), a )
+        )
+        fCommentsDecoder
+        fCommentsDecoder
+        (BD.maybe BD.string)
         decoder
 
 
@@ -1046,16 +1094,18 @@ pattern_Encoder pattern_ =
                 , BE.string chr
                 ]
 
-        PStr str ->
+        PStr str multiline ->
             BE.sequence
                 [ BE.unsignedInt8 11
                 , BE.string str
+                , BE.bool multiline
                 ]
 
-        PInt int ->
+        PInt int src ->
             BE.sequence
                 [ BE.unsignedInt8 12
                 , BE.int int
+                , BE.string src
                 ]
 
 
@@ -1113,10 +1163,14 @@ pattern_Decoder =
                         BD.map PChr BD.string
 
                     11 ->
-                        BD.map PStr BD.string
+                        BD.map2 PStr
+                            BD.string
+                            BD.bool
 
                     12 ->
-                        BD.map PInt BD.int
+                        BD.map2 PInt
+                            BD.int
+                            BD.string
 
                     _ ->
                         BD.fail
@@ -1142,22 +1196,25 @@ expr_Encoder expr_ =
                 , BE.string char
                 ]
 
-        Str string ->
+        Str string multiline ->
             BE.sequence
                 [ BE.unsignedInt8 1
                 , BE.string string
+                , BE.bool multiline
                 ]
 
-        Int int ->
+        Int int src ->
             BE.sequence
                 [ BE.unsignedInt8 2
                 , BE.int int
+                , BE.string src
                 ]
 
-        Float float ->
+        Float float src ->
             BE.sequence
                 [ BE.unsignedInt8 3
                 , BE.float float
+                , BE.string src
                 ]
 
         Var varType name ->
@@ -1175,10 +1232,11 @@ expr_Encoder expr_ =
                 , BE.string name
                 ]
 
-        List list ->
+        List list trailing ->
             BE.sequence
                 [ BE.unsignedInt8 6
-                , A.locatedEncoder (BE.list exprEncoder) list
+                , BE.list (c2EolEncoder exprEncoder) list
+                , fCommentsEncoder trailing
                 ]
 
         Op op ->
@@ -1203,8 +1261,8 @@ expr_Encoder expr_ =
         Lambda srcArgs body ->
             BE.sequence
                 [ BE.unsignedInt8 10
-                , BE.list patternEncoder srcArgs
-                , exprEncoder body
+                , c1Encoder (BE.list (c1Encoder patternEncoder)) srcArgs
+                , c1Encoder exprEncoder body
                 ]
 
         Call func args ->
@@ -1290,13 +1348,19 @@ expr_Decoder =
                         BD.map Chr BD.string
 
                     1 ->
-                        BD.map Str BD.string
+                        BD.map2 Str
+                            BD.string
+                            BD.bool
 
                     2 ->
-                        BD.map Int BD.int
+                        BD.map2 Int
+                            BD.int
+                            BD.string
 
                     3 ->
-                        BD.map Float BD.float
+                        BD.map2 Float
+                            BD.float
+                            BD.string
 
                     4 ->
                         BD.map2 Var
@@ -1310,7 +1374,9 @@ expr_Decoder =
                             BD.string
 
                     6 ->
-                        BD.map List (A.locatedDecoder (BD.list exprDecoder))
+                        BD.map2 List
+                            (BD.list (c2EolDecoder exprDecoder))
+                            fCommentsDecoder
 
                     7 ->
                         BD.map Op BD.string
@@ -1325,8 +1391,8 @@ expr_Decoder =
 
                     10 ->
                         BD.map2 Lambda
-                            (BD.list patternDecoder)
-                            exprDecoder
+                            (c1Decoder (BD.list (c1Decoder patternDecoder)))
+                            (c1Decoder exprDecoder)
 
                     11 ->
                         BD.map2 Call

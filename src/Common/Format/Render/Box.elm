@@ -14,7 +14,7 @@ import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
-import Data.Set as Set exposing (EverySet)
+import Data.Set as EverySet exposing (EverySet)
 import Hex
 import Language.GLSL.Syntax exposing (Statement(..))
 import Maybe.Extra as Maybe
@@ -1251,79 +1251,6 @@ formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) a
 formatDeclaration : ImportInfo -> Decl.Decl -> Box
 formatDeclaration importInfo decl =
     case decl of
-        -- CommonDeclaration def ->
-        --     formatCommonDeclaration importInfo def
-        -- Datatype nameWithArgs tags ->
-        --     let
-        --         ctor (NameWithArgs tag args_) =
-        --             case allSingles <| map (formatPreCommented .fmap (typeParens ForCtor << formatType)) args_ of
-        --                 Ok args__ ->
-        --                     Box.line <| Box.row <| List.intersperse space <| formatUppercaseIdentifier tag :: args__
-        --                 Err [] ->
-        --                     Box.line <| formatUppercaseIdentifier tag
-        --                 Err args__ ->
-        --                     Box.stack1
-        --                         [ Box.line <| formatUppercaseIdentifier tag
-        --                         , Box.stack1 args__
-        --                             |> indent
-        --                         ]
-        --     in
-        --     case
-        --         formatOpenCommentedList <| fmap ctor tags
-        --     of
-        --         [] ->
-        --             error "List can't be empty"
-        --         first :: rest ->
-        --             case formatCommented <| fmap formatNameWithArgs nameWithArgs of
-        --                 SingleLine nameWithArgs_ ->
-        --                     Box.stack1
-        --                         [ Box.line <|
-        --                             Box.row
-        --                                 [ Box.keyword "type"
-        --                                 , space
-        --                                 , nameWithArgs_
-        --                                 ]
-        --                         , first
-        --                             |> prefix (Box.row [ punc "=", space ])
-        --                             |> andThen (map (prefix (Box.row [ punc "|", space ])) rest)
-        --                             |> indent
-        --                         ]
-        --                 nameWithArgs_ ->
-        --                     Box.stack1
-        --                         [ Box.line <| Box.keyword "type"
-        --                         , Box.indent nameWithArgs_
-        --                         , first
-        --                             |> Box.prefix (Box.row [ Box.punc "=", Box.space ])
-        --                             |> andThen (map (prefix (Box.row [ Box.punc "|", Box.space ])) rest)
-        --                             |> Box.indent
-        --                         ]
-        -- TypeAlias preAlias nameWithArgs typ ->
-        --     ElmStructure.definition "="
-        --         True
-        --         (Box.line (Box.keyword "type"))
-        --         [ formatPreCommented (C preAlias (Box.line (Box.keyword "alias")))
-        --         , formatCommented <| fmap formatNameWithArgs nameWithArgs
-        --         ]
-        --         (formatPreCommentedStack <| fmap (typeParens NotRequired << formatType) typ)
-        -- Fixity assoc precedence name value ->
-        --     let
-        --         formatAssoc a =
-        --             case a of
-        --                 L ->
-        --                     Box.keyword "left "
-        --                 R ->
-        --                     Box.keyword "right"
-        --                 N ->
-        --                     Box.keyword "non  "
-        --     in
-        --     ElmStructure.spaceSepOrIndented
-        --         (Box.line (Box.keyword "infix"))
-        --         [ formatPreCommented (fmap (Box.line << formatAssoc) assoc)
-        --         , formatPreCommented (fmap (Box.line << Box.literal << show) precedence)
-        --         , formatCommented (fmap (Box.line << formatSymbolIdentifierInParens) name)
-        --         , Box.line (Box.keyword "=")
-        --         , formatPreCommented (fmap (Box.line << Box.identifier << formatVarName) value)
-        --         ]
         Decl.Value _ value ->
             formatCommonDeclaration importInfo value
 
@@ -1451,95 +1378,6 @@ formatTypeAnnotation name typ =
 formatPattern : Src.Pattern_ -> ( SyntaxContext, Box )
 formatPattern apattern =
     case apattern of
-        --     Anything ->
-        --         Tuple.pair SyntaxSeparated (line (keyword "_"))
-        --     UnitPattern comments ->
-        --         Tuple.pair SyntaxSeparated (formatUnit '(' ')' comments)
-        --     LiteralPattern lit ->
-        --         Tuple.pair SyntaxSeparated (formatLiteral lit)
-        --     VarPattern var ->
-        --         Tuple.pair SyntaxSeparated (line (formatLowercaseIdentifier [] var))
-        --     OpPattern (SymbolIdentifier name) ->
-        --         Tuple.pair SyntaxSeparated (line (identifier ("(" ++ name ++ ")")))
-        --     ConsPattern first rest ->
-        --         let
-        --             formatRight (C ( preOp, postOp, eol ) term) =
-        --                 ( False
-        --                 , preOp
-        --                 , line (punc "::")
-        --                 , formatC2Eol
-        --                     ((fmap <| syntaxParens SpaceSeparated << formatPattern )
-        --                         (C ( postOp, [], eol ) term)
-        --                     )
-        --                 )
-        --         in
-        --         Tuple.pair SpaceSeparated
-        --             (formatBinary False
-        --                 (formatEolCommented <| fmap (syntaxParens SpaceSeparated << formatPattern ) first)
-        --                 (formatRight (toCommentedList rest))
-        --             )
-        --     DataPattern ( ns, tag ) [] ->
-        --         let
-        --             ctor =
-        --                 ns ++ [ tag ]
-        --         in
-        --         line (formatQualifiedUppercaseIdentifier ctor)
-        --             |> Tuple.pair SyntaxSeparated
-        --     DataPattern ( ns, tag ) patterns ->
-        --         let
-        --             ctor =
-        --                 ns ++ [ tag ]
-        --         in
-        --         Tuple.pair SpaceSeparated
-        --             (ElmStructure.application
-        --                 (FAJoinFirst JoinAll)
-        --                 (line (formatQualifiedUppercaseIdentifier  ctor))
-        --                 (fmap (formatPreCommented << fmap (syntaxParens SpaceSeparated << formatPattern )) patterns)
-        --             )
-        --     PatternParens pattern ->
-        --         formatCommented (fmap (syntaxParens SyntaxSeparated << formatPattern ) pattern)
-        --             |> parens
-        --             |> Tuple.pair SyntaxSeparated
-        --     TuplePattern patterns ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             ElmStructure.group True "(" "," ")" False <|
-        --                 fmap (formatCommented << fmap (syntaxParens SyntaxSeparated << formatPattern )) patterns
-        --     EmptyListPattern comments ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatUnit '[' ']' comments
-        --     ListPattern patterns ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             ElmStructure.group True "[" "," "]" False <|
-        --                 fmap (formatCommented << fmap (syntaxParens SyntaxSeparated << formatPattern )) patterns
-        --     EmptyRecordPattern comments ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatUnit '{' '}' comments
-        --     RecordPattern fields ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             ElmStructure.group True "{" "," "}" False <|
-        --                 map (formatCommented << fmap (line << formatLowercaseIdentifier  [])) fields
-        --     Alias pattern name ->
-        --         Tuple.pair SpaceSeparated <|
-        --             case
-        --                 ( formatTailCommented <| fmap (syntaxParens SpaceSeparated << formatPattern ) pattern
-        --                 , formatPreCommented <| fmap (line << formatLowercaseIdentifier  []) name
-        --                 )
-        --             of
-        --                 ( SingleLine pattern_, SingleLine name_ ) ->
-        --                     line <|
-        --                         row
-        --                             [ pattern_
-        --                             , space
-        --                             , keyword "as"
-        --                             , space
-        --                             , name_
-        --                             ]
-        --                 ( pattern_, name_ ) ->
-        --                     stack1
-        --                         [ pattern_
-        --                         , line <| keyword "as"
-        --                         , indent name_
-        --                         ]
         Src.PAnything name ->
             ( SyntaxSeparated, Box.line (Box.identifier ("_" ++ name)) )
 
@@ -1571,13 +1409,18 @@ formatPattern apattern =
             Debug.todo "formatPattern.PCons"
 
         Src.PChr chr ->
-            Debug.todo "formatPattern.PChr"
+            ( SyntaxSeparated, formatString SChar chr )
 
-        Src.PStr str ->
-            Debug.todo "formatPattern.PStr"
+        Src.PStr str False ->
+            ( SyntaxSeparated, formatString (SString SingleQuotedString) str )
 
-        Src.PInt int ->
-            Debug.todo "formatPattern.PInt"
+        Src.PStr str True ->
+            ( SyntaxSeparated, formatString (SString TripleQuotedString) str )
+
+        Src.PInt _ src ->
+            ( SyntaxSeparated
+            , formatLiteral (IntNum src)
+            )
 
 
 formatRecordPair : String -> (v -> Box) -> ( Src.C2 String, Src.C2 v, Bool ) -> Box
@@ -1667,281 +1510,22 @@ needsParensInContext inner outer =
 
 
 formatExpression : ImportInfo -> Src.Expr -> ( SyntaxContext, Box )
-formatExpression importInfo (A.At _ aexpr) =
+formatExpression importInfo (A.At region aexpr) =
     case aexpr of
-        --     Literal lit ->
-        --         Tuple.pair SyntaxSeparated <| formatLiteral lit
-        --     VarExpr v ->
-        --         Tuple.pair SyntaxSeparated <| line <| formatVar v
-        --     Range left right multiline ->
-        --         formatRange_0_18 importInfo left right
-        --     ExplicitList exprs trailing multiline ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatSequence '['
-        --                 ','
-        --                 (Just ']')
-        --                 multiline
-        --                 trailing
-        --                 (syntaxParens SyntaxSeparated << formatExpression importInfo exprs)
-        --     Binops left ops multiline ->
-        --         Tuple.pair InfixSeparated <|
-        --             formatBinops importInfo left ops multiline
-        --     Lambda patterns bodyComments expr multiline ->
-        --         Tuple.pair AmbiguousEnd <|
-        --             case
-        --                 ( multiline
-        --                 , allSingles <| fmap (formatPreCommented << fmap (syntaxParens SpaceSeparated << formatPattern)) patterns
-        --                 , bodyComments == []
-        --                 , syntaxParens SyntaxSeparated <| formatExpression importInfo expr
-        --                 )
-        --             of
-        --                 ( False, Right patterns_, True, SingleLine expr_ ) ->
-        --                     line <|
-        --                         row
-        --                             [ punc "\\"
-        --                             , row <| List.intersperse space patterns_
-        --                             , space
-        --                             , punc "->"
-        --                             , space
-        --                             , expr_
-        --                             ]
-        --                 ( _, Right patterns_, _, expr_ ) ->
-        --                     stack1
-        --                         [ line <|
-        --                             row
-        --                                 [ punc "\\"
-        --                                 , row (List.intersperse space patterns_)
-        --                                 , space
-        --                                 , punc "->"
-        --                                 ]
-        --                         , indent <|
-        --                             stack1 <|
-        --                                 fmap formatComment bodyComments
-        --                                     ++ [ expr_ ]
-        --                         ]
-        --                 ( _, Left [], _, _ ) ->
-        --                     pleaseReport "UNEXPECTED LAMBDA" "no patterns"
-        --                 ( _, Left patterns_, _, expr_ ) ->
-        --                     stack1
-        --                         [ prefix (punc "\\") <| stack1 patterns_
-        --                         , line <| punc "->"
-        --                         , indent <|
-        --                             stack1 <|
-        --                                 fmap formatComment bodyComments
-        --                                     ++ [ expr_ ]
-        --                         ]
-        --     Unary Negative e ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             prefix (punc "-") <|
-        --                 syntaxParens SpaceSeparated <|
-        --                     formatExpression importInfo e
-        --     If if_ elseifs (C elsComments els) ->
-        --         let
-        --             opening key cond =
-        --                 case ( key, cond ) of
-        --                     ( SingleLine key_, SingleLine cond_ ) ->
-        --                         line <|
-        --                             row
-        --                                 [ key_
-        --                                 , space
-        --                                 , cond_
-        --                                 , space
-        --                                 , keyword "then"
-        --                                 ]
-        --                     _ ->
-        --                         stack1
-        --                             [ key
-        --                             , cond |> indent
-        --                             , line <| keyword "then"
-        --                             ]
-        --             formatIf (IfClause cond body) =
-        --                 stack1
-        --                     [ opening (line <| keyword "if") <| formatCommentedExpression importInfo cond
-        --                     , indent <| formatCommented_ True <| fmap (syntaxParens SyntaxSeparated << formatExpression importInfo) body
-        --                     ]
-        --             formatElseIf (C ifComments (IfClause cond body)) =
-        --                 let
-        --                     key =
-        --                         case formatPreCommented (C ifComments <| line <| keyword "if") of
-        --                             SingleLine key_ ->
-        --                                 line <| row [ keyword "else", space, key_ ]
-        --                             key_ ->
-        --                                 stack1
-        --                                     [ line <| keyword "else"
-        --                                     , key_
-        --                                     ]
-        --                 in
-        --                 stack1
-        --                     [ blankLine
-        --                     , opening key <| formatCommentedExpression importInfo cond
-        --                     , indent <| formatCommented_ True <| fmap (syntaxParens SyntaxSeparated << formatExpression importInfo) body
-        --                     ]
-        --         in
-        --         Tuple.pair AmbiguousEnd <|
-        --             formatIf if_
-        --                 |> andThen (fmap formatElseIf elseifs)
-        --                 |> andThen
-        --                     [ blankLine
-        --                     , line <| keyword "else"
-        --                     , indent <| formatCommented_ True <| fmap (syntaxParens SyntaxSeparated << formatExpression importInfo) (C ( elsComments, [] ) els)
-        --                     ]
-        --     Let defs bodyComments expr ->
-        --         let
-        --             spacer : AST typeRef ctorRef varRef (I.Fix Identity (AST typeRef ctorRef varRef)) LetDeclarationNK -> AST typeRef ctorRef varRef getType LetDeclarationNK -> List Box
-        --             spacer first _ =
-        --                 case first of
-        --                     LetCommonDeclaration (I.Fix (Identity (Definition _ _ _ _))) ->
-        --                         [ blankLine ]
-        --                     _ ->
-        --                         []
-        --             formatDefinition_ def =
-        --                 case def of
-        --                     LetCommonDeclaration (I.Fix (Identity (Definition name args comments expr_))) ->
-        --                         formatDefinition importInfo name args comments expr_
-        --                     LetCommonDeclaration (I.Fix (Identity (TypeAnnotation name typ))) ->
-        --                         formatTypeAnnotation name typ
-        --                     LetComment comment ->
-        --                         formatComment comment
-        --         in
-        --         Tuple.pair AmbiguousEnd <|
-        --             -- TODO: not tested
-        --             line (keyword "let")
-        --                 |> andThen
-        --                     (defs
-        --                         |> fmap (extract << I.unFix)
-        --                         |> intersperseMap spacer formatDefinition_
-        --                         |> map indent
-        --                     )
-        --                 |> andThen
-        --                     [ line <| keyword "in"
-        --                     , stack1 <|
-        --                         fmap formatComment bodyComments
-        --                             ++ [ syntaxParens SyntaxSeparated <| formatExpression importInfo expr ]
-        --                     ]
-        --     Case ( subject, multiline ) clauses ->
-        --         let
-        --             opening =
-        --                 case
-        --                     ( multiline
-        --                     , formatCommentedExpression importInfo subject
-        --                     )
-        --                 of
-        --                     ( False, SingleLine subject_ ) ->
-        --                         line <|
-        --                             row
-        --                                 [ keyword "case"
-        --                                 , space
-        --                                 , subject_
-        --                                 , space
-        --                                 , keyword "of"
-        --                                 ]
-        --                     ( _, subject_ ) ->
-        --                         stack1
-        --                             [ line <| keyword "case"
-        --                             , indent subject_
-        --                             , line <| keyword "of"
-        --                             ]
-        --             clause (CaseBranch prePat postPat preExpr pat expr) =
-        --                 case
-        --                     ( postPat
-        --                     , formatPattern pat
-        --                         |> syntaxParens SyntaxSeparated
-        --                         |> negativeCasePatternWorkaround pat
-        --                     , formatCommentedStack (fmap (syntaxParens SyntaxSeparated << formatPattern) (C ( prePat, postPat ) pat))
-        --                         |> negativeCasePatternWorkaround pat
-        --                     , formatPreCommentedStack <| fmap (syntaxParens SyntaxSeparated << formatExpression importInfo) (C preExpr expr)
-        --                     )
-        --                 of
-        --                     ( _, _, SingleLine pat_, body_ ) ->
-        --                         stack1
-        --                             [ line (row [ pat_, space, keyword "->" ])
-        --                             , indent body_
-        --                             ]
-        --                     ( [], SingleLine pat_, _, body_ ) ->
-        --                         stack1
-        --                             (fmap formatComment prePat
-        --                                 ++ [ line (row [ pat_, space, keyword "->" ])
-        --                                    , indent body_
-        --                                    ]
-        --                             )
-        --                     ( _, _, pat_, body_ ) ->
-        --                         stack1
-        --                             [ pat_
-        --                             , line (keyword "->")
-        --                             , indent body_
-        --                             ]
-        --         in
-        --         Tuple.pair AmbiguousEnd <|
-        --             -- TODO: not tested
-        --             opening
-        --                 |> andThen
-        --                     (clauses
-        --                         |> fmap (clause << extract << I.unFix)
-        --                         |> List.intersperse blankLine
-        --                         |> map indent
-        --                     )
-        --     Tuple exprs multiline ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             ElmStructure.group True "(" "," ")" multiline <|
-        --                 map (formatCommentedExpression importInfo) exprs
-        --     TupleFunction n ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             line <|
-        --                 keyword <|
-        --                     "("
-        --                         ++ List.replicate (n - 1) ','
-        --                         ++ ")"
-        --     Access expr field ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatExpression importInfo expr
-        --                 |> syntaxParens SpaceSeparated
-        --                 -- TODO: does this need a different context than SpaceSeparated?
-        --                 |> addSuffix (row <| [ punc ".", formatLowercaseIdentifier [] field ])
-        --     AccessFunction (LowercaseIdentifier field) ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             line <|
-        --                 identifier <|
-        --                     "."
-        --                         ++ formatVarName_ field
-        --     Record base fields trailing multiline ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatRecordLike
-        --                 (fmap (line << formatLowercaseIdentifier []) base)
-        --                 (fmap (formatPair "=" << mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo)) fields)
-        --                 trailing
-        --                 multiline
-        --     Parens expr ->
-        --         case expr of
-        --             C ( [], [] ) expr_ ->
-        --                 formatExpression importInfo expr_
-        --             _ ->
-        --                 Tuple.pair SyntaxSeparated <|
-        --                     formatCommentedExpression importInfo expr
-        --                         |> parens
-        --     Unit comments ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             formatUnit '(' ')' comments
-        --     GLShader src ->
-        --         Tuple.pair SyntaxSeparated <|
-        --             line <|
-        --                 row
-        --                     [ punc "[glsl|"
-        --                     , literal src
-        --                     , punc "|]"
-        --                     ]
         Src.Chr char ->
-            ( SyntaxSeparated, formatLiteral (Chr char) )
+            ( SyntaxSeparated, formatString SChar char )
 
-        Src.Str string ->
-            -- TODO SingleQuotedString
-            ( SyntaxSeparated, formatLiteral (Str string SingleQuotedString) )
+        Src.Str string False ->
+            ( SyntaxSeparated, formatString (SString SingleQuotedString) string )
 
-        Src.Int int ->
-            -- TODO HexadecimalInt
-            ( SyntaxSeparated, formatLiteral (IntNum int DecimalInt) )
+        Src.Str string True ->
+            ( SyntaxSeparated, formatString (SString TripleQuotedString) string )
 
-        Src.Float float ->
-            Debug.todo "formatExpression.Float"
+        Src.Int _ src ->
+            ( SyntaxSeparated, formatLiteral (IntNum src) )
+
+        Src.Float _ src ->
+            ( SyntaxSeparated, formatLiteral (FloatNum src) )
 
         Src.Var Src.LowVar name ->
             ( SyntaxSeparated, Box.line (formatVar (VarRef [] name)) )
@@ -1955,18 +1539,11 @@ formatExpression importInfo (A.At _ aexpr) =
         Src.VarQual Src.CapVar prefix name ->
             ( SyntaxSeparated, Box.line (formatVar (TagRef (String.split "." prefix) name)) )
 
-        Src.List (A.At region list) ->
+        Src.List list trailing ->
             let
                 multiline : Src.ForceMultiline
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
-
-                trailing : Src.FComments
-                trailing =
-                    []
-
-                exprs =
-                    List.map (\expr -> ( ( [], [], Nothing ), expr )) list
             in
             ( SyntaxSeparated
             , formatSequence '['
@@ -1974,17 +1551,21 @@ formatExpression importInfo (A.At _ aexpr) =
                 (Just ']')
                 multiline
                 trailing
-                (List.map (Src.c2EolMap (syntaxParens SyntaxSeparated << formatExpression importInfo)) exprs)
+                (List.map (Src.c2EolMap (syntaxParens SyntaxSeparated << formatExpression importInfo)) list)
             )
 
         Src.Op op ->
-            Debug.todo "formatExpression.Op"
+            ( SyntaxSeparated
+            , Box.line (formatSymbolIdentifierInParens op)
+            )
 
         Src.Negate expr ->
-            Debug.todo "formatExpression.Negate"
+            ( SyntaxSeparated
+              -- TODO: This might need something stronger than SpaceSeparated?
+            , Box.prefix (Box.punc "-") (syntaxParens SpaceSeparated (formatExpression importInfo expr))
+            )
 
         Src.Binops ops final ->
-            -- Binops left ops multiline ->
             let
                 ( left, clauses ) =
                     List.foldr
@@ -1995,34 +1576,25 @@ formatExpression importInfo (A.At _ aexpr) =
                         ops
 
                 multiline =
-                    -- TODO
-                    False
+                    A.isMultiline region
             in
             ( InfixSeparated
             , formatBinops importInfo left clauses multiline
             )
 
-        Src.Lambda srcArgs expr ->
-            -- Lambda patterns bodyComments expr multiline ->
+        Src.Lambda ( trailingComments, srcArgs ) ( bodyComments, expr ) ->
+            -- TODO trailingComments (should go before `->`)
             let
-                patterns =
-                    List.map (\srcArg -> ( [], srcArg )) srcArgs
-
-                bodyComments =
-                    -- TODO
-                    []
-
                 multiline =
-                    -- TODO
-                    False
+                    A.isMultiline region
             in
             ( AmbiguousEnd
             , case
                 ( ( multiline
-                  , Box.allSingles <| List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) patterns
+                  , Box.allSingles (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) srcArgs)
                   )
                 , ( bodyComments == []
-                  , syntaxParens SyntaxSeparated <| formatExpression importInfo expr
+                  , syntaxParens SyntaxSeparated (formatExpression importInfo expr)
                   )
                 )
               of
@@ -2501,11 +2073,6 @@ formatComment comment =
             Box.mustBreak <| Box.row [ Box.punc "{--", Box.literal c, Box.punc "-}" ]
 
 
-type IntRepresentation
-    = DecimalInt
-    | HexadecimalInt
-
-
 type FloatRepresentation
     = DecimalFloat
     | ExponentFloat
@@ -2517,36 +2084,19 @@ type StringRepresentation
 
 
 type LiteralValue
-    = IntNum Int IntRepresentation
-    | FloatNum Float FloatRepresentation
-    | Chr String
-    | Str String StringRepresentation
+    = IntNum String
+    | FloatNum String
     | Boolean Bool
 
 
 formatLiteral : LiteralValue -> Box
 formatLiteral lit =
     case lit of
-        IntNum i DecimalInt ->
-            Box.line <| Box.literal <| String.fromInt i
+        IntNum i ->
+            Box.line (Box.literal i)
 
-        IntNum i HexadecimalInt ->
-            Box.line <|
-                Box.literal <|
-                    Hex.toString i
-
-        FloatNum f DecimalFloat ->
-            Box.line <| Box.literal <| String.fromFloat f
-
-        FloatNum f ExponentFloat ->
-            -- Box.line <| Box.literal <| printf "%e" f
-            Debug.todo "FloatNum f ExponentFloat"
-
-        Chr c ->
-            formatString SChar c
-
-        Str s multi ->
-            formatString (SString multi) s
+        FloatNum f ->
+            Box.line (Box.literal f)
 
         Boolean True ->
             Box.line <| Box.literal "True"

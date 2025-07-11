@@ -107,10 +107,10 @@ canonicalize syntaxVersion env (A.At region pattern) =
             Src.PChr chr ->
                 R.ok (Can.PChr chr)
 
-            Src.PStr str ->
-                R.ok (Can.PStr str)
+            Src.PStr str multiline ->
+                R.ok (Can.PStr str multiline)
 
-            Src.PInt int ->
+            Src.PInt int _ ->
                 R.ok (Can.PInt int)
 
 

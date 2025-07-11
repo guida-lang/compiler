@@ -54,6 +54,20 @@ const examples = [
         { title: "list", filename: "ListDeclarations", module: { ...defaultModule, declarations: ["fn = [1,2,3]"] } },
         { title: "multi-line list", filename: "MultiLineListDeclarations", module: { ...defaultModule, declarations: ["fn = [\n 1,\n 2,3]"] } },
         { title: "argument w/ parentheses", filename: "ArgumentWithParenthesesDeclarations", module: { ...defaultModule, declarations: ["fn input = String.toInt (String.trim input)"] } },
+        {
+            title: "literals", filename: "LiteralDeclarations", module: {
+                ...defaultModule, declarations: [
+                    "decimalInt = 123",
+                    "hexadecimalInt = 0xff",
+                    "decimalFloat = 3.14",
+                    "exponentFloat = 6.022e23",
+                    "smallExponentFloat = 1e3",
+                    "char = 'a'",
+                    "singleQuotedString = \"hello world!\"",
+                    "tripleQuotedString = \"\"\"multiline\n strings\"\"\"",
+                ]
+            }
+        },
     ]],
     // UNION DECLARATIONS
     ["Union", [

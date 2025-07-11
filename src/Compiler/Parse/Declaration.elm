@@ -156,7 +156,7 @@ chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
                     in
                     P.specialize E.DeclDefBody (Expr.expression syntaxVersion)
                         |> P.fmap
-                            (\( body, end ) ->
+                            (\( ( _, body ), end ) ->
                                 let
                                     value : Src.Value
                                     value =

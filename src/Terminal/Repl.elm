@@ -404,7 +404,7 @@ attemptDeclOrExpr lines =
 
             else
                 let
-                    exprParser : P.Parser ( Row, Col ) ( Src.Expr, A.Position )
+                    exprParser : P.Parser ( Row, Col ) ( Src.C1 Src.Expr, A.Position )
                     exprParser =
                         P.specialize (toExprPosition src) (PE.expression SV.Guida)
                 in
