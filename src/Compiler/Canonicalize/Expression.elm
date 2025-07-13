@@ -132,8 +132,8 @@ canonicalize syntaxVersion env (A.At region expression) =
                     )
                     |> R.apply (canonicalize syntaxVersion env (Src.c1Value finally))
 
-            Src.Let defs expr ->
-                R.fmap A.toValue (canonicalizeLet syntaxVersion region env defs expr)
+            Src.Let defs _ expr ->
+                R.fmap A.toValue (canonicalizeLet syntaxVersion region env (List.map Src.c2Value defs) expr)
 
             Src.Case expr branches ->
                 R.fmap Can.Case (canonicalize syntaxVersion env expr)

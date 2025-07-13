@@ -1728,33 +1728,27 @@ formatExpression importInfo (A.At region aexpr) =
                     ]
             )
 
-        Src.Let defs expr ->
-            --     Let defs bodyComments expr ->
+        Src.Let defs bodyComments expr ->
             let
-                bodyComments : Src.FComments
-                bodyComments =
-                    -- TODO
-                    []
+                letDeclarations : Src.C2 (A.Located Src.Def) -> List LetDeclaration
+                letDeclarations ( preDefComments, postDefComments, def ) =
+                    List.map LetComment preDefComments
+                        ++ LetCommonDeclaration def
+                        :: List.map LetComment postDefComments
 
-                spacer : A.Located Src.Def -> A.Located Src.Def -> List Box
+                spacer : LetDeclaration -> LetDeclaration -> List Box
                 spacer first _ =
-                    -- case first of
-                    --     LetCommonDeclaration (I.Fix (Identity (Definition _ _ _ _))) ->
-                    --         [ blankLine ]
-                    --     _ ->
-                    --         []
-                    Debug.todo "spacer"
+                    case first of
+                        LetCommonDeclaration _ ->
+                            [ Box.blankLine ]
 
-                formatDefinition_ : A.Located Src.Def -> Box
-                formatDefinition_ (A.At _ def) =
+                        _ ->
+                            []
+
+                formatDefinition_ : LetDeclaration -> Box
+                formatDefinition_ def =
                     case def of
-                        --     LetCommonDeclaration (I.Fix (Identity (Definition name args comments expr_))) ->
-                        --         formatDefinition importInfo name args comments expr_
-                        --     LetCommonDeclaration (I.Fix (Identity (TypeAnnotation name typ))) ->
-                        --         formatTypeAnnotation name typ
-                        --     LetComment comment ->
-                        --         formatComment comment
-                        Src.Define (A.At nameRegion name) srcArgs body maybeType ->
+                        LetCommonDeclaration (A.At _ (Src.Define (A.At nameRegion name) srcArgs body maybeType)) ->
                             let
                                 comments =
                                     -- TODO
@@ -1762,19 +1756,23 @@ formatExpression importInfo (A.At region aexpr) =
                             in
                             formatDefinition importInfo (A.At nameRegion (Src.PVar name)) srcArgs comments body
 
-                        Src.Destruct pattern body ->
+                        LetCommonDeclaration (A.At _ (Src.Destruct pattern body)) ->
                             let
                                 comments =
                                     -- TODO
                                     []
                             in
                             formatDefinition importInfo pattern [] comments body
+
+                        LetComment comment ->
+                            formatComment comment
             in
             ( AmbiguousEnd
             , -- TODO: not tested
               Box.line (Box.keyword "let")
                 |> Box.andThen
                     (defs
+                        |> List.concatMap letDeclarations
                         |> intersperseMap spacer formatDefinition_
                         |> List.map Box.indent
                     )
@@ -1821,6 +1819,11 @@ formatExpression importInfo (A.At region aexpr) =
 
         Src.Shader src tipe ->
             Debug.todo "formatExpression.Shader"
+
+
+type LetDeclaration
+    = LetCommonDeclaration (A.Located Src.Def)
+    | LetComment Src.FComment
 
 
 formatCommentedExpression : ImportInfo -> Src.C2 Src.Expr -> Box

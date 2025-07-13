@@ -583,7 +583,6 @@ expression syntaxVersion =
             (\start ->
                 P.oneOf E.Start
                     [ let_ syntaxVersion start
-                        |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                     , if_ syntaxVersion start
                     , case_ syntaxVersion start
                         |> P.fmap (Tuple.mapFirst (Tuple.pair []))
@@ -750,13 +749,13 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                           P.oneOf err
                                             [ let_ syntaxVersion newStart
                                             , case_ syntaxVersion newStart
+                                                |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                                             , if_ syntaxVersion newStart
-                                                -- TODO
-                                                |> P.fmap (Tuple.mapFirst Tuple.second)
                                             , function syntaxVersion newStart
+                                                |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                                             ]
                                             |> P.fmap
-                                                (\( newLast, newEnd ) ->
+                                                (\( ( _, newLast ), newEnd ) ->
                                                     let
                                                         newOps : List ( Src.Expr, A.Located Name.Name )
                                                         newOps =
@@ -1033,20 +1032,20 @@ chompCaseEnd syntaxVersion branches end =
 -- LET EXPRESSION
 
 
-let_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+let_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr (Src.C1 Src.Expr)
 let_ syntaxVersion start =
     P.inContext E.Let (Keyword.let_ E.Start) <|
         ((P.withBacksetIndent 3 <|
             (Space.chompAndCheckIndent E.LetSpace E.LetIndentDef
                 |> P.bind
-                    (\c50 ->
+                    (\preDefComments ->
                         let
                             _ =
-                                Debug.log "c50" c50
+                                Debug.log "c50" preDefComments
                         in
                         P.withIndent <|
                             (chompLetDef syntaxVersion
-                                |> P.bind (\( def, end ) -> chompLetDefs syntaxVersion [ def ] end)
+                                |> P.bind (\( ( postDefComments, def ), end ) -> chompLetDefs syntaxVersion [ ( preDefComments, postDefComments, def ) ] end)
                             )
                     )
             )
@@ -1057,27 +1056,27 @@ let_ syntaxVersion start =
                         |> P.bind (\_ -> Keyword.in_ E.LetIn)
                         |> P.bind (\_ -> Space.chompAndCheckIndent E.LetSpace E.LetIndentBody)
                         |> P.bind
-                            (\c51 ->
+                            (\bodyComments ->
                                 let
                                     _ =
-                                        Debug.log "c51" c51
+                                        Debug.log "c51" bodyComments
                                 in
                                 P.specialize E.LetBody (expression syntaxVersion)
-                            )
-                        |> P.fmap
-                            (\( ( _, body ), end ) ->
-                                ( A.at start end (Src.Let defs body), end )
+                                    |> P.fmap
+                                        (\( ( trailingComments, body ), end ) ->
+                                            ( ( trailingComments, A.at start end (Src.Let defs bodyComments body) ), end )
+                                        )
                             )
                 )
         )
 
 
-chompLetDefs : SyntaxVersion -> List (A.Located Src.Def) -> A.Position -> Space.Parser E.Let (List (A.Located Src.Def))
+chompLetDefs : SyntaxVersion -> List (Src.C2 (A.Located Src.Def)) -> A.Position -> Space.Parser E.Let (List (Src.C2 (A.Located Src.Def)))
 chompLetDefs syntaxVersion revDefs end =
     P.oneOfWithFallback
         [ Space.checkAligned E.LetDefAlignment
             |> P.bind (\_ -> chompLetDef syntaxVersion)
-            |> P.bind (\( def, newEnd ) -> chompLetDefs syntaxVersion (def :: revDefs) newEnd)
+            |> P.bind (\( ( postDefComments, def ), newEnd ) -> chompLetDefs syntaxVersion (( [], postDefComments, def ) :: revDefs) newEnd)
         ]
         ( List.reverse revDefs, end )
 
@@ -1086,7 +1085,7 @@ chompLetDefs syntaxVersion revDefs end =
 -- LET DEFINITIONS
 
 
-chompLetDef : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+chompLetDef : SyntaxVersion -> Space.Parser E.Let (Src.C1 (A.Located Src.Def))
 chompLetDef syntaxVersion =
     P.oneOf E.LetDefName
         [ definition syntaxVersion
@@ -1098,7 +1097,7 @@ chompLetDef syntaxVersion =
 -- DEFINITION
 
 
-definition : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+definition : SyntaxVersion -> Space.Parser E.Let (Src.C1 (A.Located Src.Def))
 definition syntaxVersion =
     P.addLocation (Var.lower E.LetDefName)
         |> P.bind
@@ -1146,7 +1145,7 @@ definition syntaxVersion =
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.Def (A.Located Src.Def)
+chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.Def (Src.C1 (A.Located Src.Def))
 chompDefArgsAndBody syntaxVersion start name tipe revArgs =
     P.oneOf E.DefEquals
         [ P.specialize E.DefArg (Pattern.term syntaxVersion)
@@ -1173,8 +1172,8 @@ chompDefArgsAndBody syntaxVersion start name tipe revArgs =
                     P.specialize E.DefBody (expression syntaxVersion)
                 )
             |> P.fmap
-                (\( ( _, body ), end ) ->
-                    ( A.at start end (Src.Define name (List.reverse revArgs) body tipe)
+                (\( ( comments, body ), end ) ->
+                    ( ( comments, A.at start end (Src.Define name (List.reverse revArgs) body tipe) )
                     , end
                     )
                 )
@@ -1215,7 +1214,7 @@ chompMatchingName expectedName =
 -- DESTRUCTURE
 
 
-destructure : SyntaxVersion -> Space.Parser E.Let (A.Located Src.Def)
+destructure : SyntaxVersion -> Space.Parser E.Let (Src.C1 (A.Located Src.Def))
 destructure syntaxVersion =
     P.specialize E.LetDestruct <|
         (P.getPosition
@@ -1243,8 +1242,8 @@ destructure syntaxVersion =
                                             P.specialize E.DestructBody (expression syntaxVersion)
                                         )
                                     |> P.fmap
-                                        (\( ( _, expr ), end ) ->
-                                            ( A.at start end (Src.Destruct pattern expr)
+                                        (\( ( comments, expr ), end ) ->
+                                            ( ( comments, A.at start end (Src.Destruct pattern expr) )
                                             , end
                                             )
                                         )

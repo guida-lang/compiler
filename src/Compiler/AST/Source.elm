@@ -230,7 +230,7 @@ type Expr_
     | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
     | Call Expr (List (C1 Expr))
     | If (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
-    | Let (List (A.Located Def)) Expr
+    | Let (List (C2 (A.Located Def))) FComments Expr
     | Case Expr (List ( Pattern, Expr ))
     | Accessor Name
     | Access Expr (A.Located Name)
@@ -1279,10 +1279,11 @@ expr_Encoder expr_ =
                 , c1Encoder exprEncoder finally
                 ]
 
-        Let defs expr ->
+        Let defs comments expr ->
             BE.sequence
                 [ BE.unsignedInt8 13
-                , BE.list (A.locatedEncoder defEncoder) defs
+                , BE.list (c2Encoder (A.locatedEncoder defEncoder)) defs
+                , fCommentsEncoder comments
                 , exprEncoder expr
                 ]
 
@@ -1405,8 +1406,9 @@ expr_Decoder =
                             (c1Decoder exprDecoder)
 
                     13 ->
-                        BD.map2 Let
-                            (BD.list (A.locatedDecoder defDecoder))
+                        BD.map3 Let
+                            (BD.list (c2Decoder (A.locatedDecoder defDecoder)))
+                            fCommentsDecoder
                             exprDecoder
 
                     14 ->
