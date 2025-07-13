@@ -1639,36 +1639,94 @@ formatExpression importInfo (A.At region aexpr) =
             )
 
         Src.Call func [] ->
-            -- App left [] _ ->
-            let
-                left =
-                    func
-            in
-            formatExpression importInfo left
+            formatExpression importInfo func
 
-        Src.Call func args_ ->
-            -- TODO: This might need something stronger than SpaceSeparated?
-            -- App left args multiline ->
+        Src.Call func ((( _, A.At (A.Region _ (A.Position firstArgEndRow _)) _ ) :: _) as args) ->
             let
-                left =
-                    func
-
-                args =
-                    List.map (\arg -> ( [], arg )) args_
+                (A.Region (A.Position aexprStartRow _) _) =
+                    region
 
                 multiline =
-                    -- TODO
-                    ElmStructure.FASplitFirst
+                    if firstArgEndRow > aexprStartRow then
+                        ElmStructure.FASplitFirst
+
+                    else
+                        ElmStructure.FAJoinFirst
+                            (if A.isMultiline region then
+                                ElmStructure.SplitAll
+
+                             else
+                                ElmStructure.JoinAll
+                            )
             in
             ( SpaceSeparated
             , ElmStructure.application
                 multiline
-                (syntaxParens InfixSeparated <| formatExpression importInfo left)
+                (syntaxParens InfixSeparated <| formatExpression importInfo func)
                 (List.map (formatPreCommentedExpression importInfo SpaceSeparated) args)
             )
 
-        Src.If branches finally ->
-            Debug.todo "formatExpression.If"
+        Src.If [] _ ->
+            Debug.todo "needs review, this should not happen"
+
+        Src.If (( _, if_ ) :: elseifs) ( elsComments, els ) ->
+            let
+                opening : Box -> Box -> Box
+                opening key cond =
+                    case ( key, cond ) of
+                        ( Box.SingleLine key_, Box.SingleLine cond_ ) ->
+                            Box.line <|
+                                Box.row
+                                    [ key_
+                                    , Box.space
+                                    , cond_
+                                    , Box.space
+                                    , Box.keyword "then"
+                                    ]
+
+                        _ ->
+                            Box.stack1
+                                [ key
+                                , Box.indent cond
+                                , Box.line (Box.keyword "then")
+                                ]
+
+                formatIf : ( Src.C2 Src.Expr, Src.C2 Src.Expr ) -> Box
+                formatIf ( cond, body ) =
+                    Box.stack1
+                        [ opening (Box.line (Box.keyword "if")) (formatCommentedExpression importInfo cond)
+                        , Box.indent <| formatCommented_ True <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) body
+                        ]
+
+                formatElseIf : Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ) -> Box
+                formatElseIf ( ifComments, ( cond, body ) ) =
+                    let
+                        key =
+                            case formatPreCommented ( ifComments, Box.line (Box.keyword "if") ) of
+                                Box.SingleLine key_ ->
+                                    Box.line <| Box.row [ Box.keyword "else", Box.space, key_ ]
+
+                                key_ ->
+                                    Box.stack1
+                                        [ Box.line (Box.keyword "else")
+                                        , key_
+                                        ]
+                    in
+                    Box.stack1
+                        [ Box.blankLine
+                        , opening key <| formatCommentedExpression importInfo cond
+                        , Box.indent <| formatCommented_ True <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) body
+                        ]
+            in
+            ( AmbiguousEnd
+            , formatIf if_
+                |> Box.andThen (List.map formatElseIf elseifs)
+                |> Box.andThen
+                    [ Box.blankLine
+                    , Box.line (Box.keyword "else")
+                    , Box.indent <| formatCommented_ True <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) ( elsComments, [], els )
+                    ]
+            )
 
         Src.Let defs expr ->
             --     Let defs bodyComments expr ->
@@ -1744,13 +1802,8 @@ formatExpression importInfo (A.At region aexpr) =
             Debug.todo "formatExpression.Record"
 
         Src.Unit ->
-            let
-                -- TODO
-                comments =
-                    []
-            in
             ( SyntaxSeparated
-            , formatUnit '(' ')' comments
+            , formatUnit '(' ')' []
             )
 
         Src.Tuple a b cs ->

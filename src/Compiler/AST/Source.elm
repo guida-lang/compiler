@@ -228,8 +228,8 @@ type Expr_
     | Negate Expr
     | Binops (List ( Expr, A.Located Name )) Expr
     | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
-    | Call Expr (List Expr)
-    | If (List ( Expr, Expr )) Expr
+    | Call Expr (List (C1 Expr))
+    | If (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
     | Let (List (A.Located Def)) Expr
     | Case Expr (List ( Pattern, Expr ))
     | Accessor Name
@@ -1269,14 +1269,14 @@ expr_Encoder expr_ =
             BE.sequence
                 [ BE.unsignedInt8 11
                 , exprEncoder func
-                , BE.list exprEncoder args
+                , BE.list (c1Encoder exprEncoder) args
                 ]
 
         If branches finally ->
             BE.sequence
                 [ BE.unsignedInt8 12
-                , BE.list (BE.jsonPair exprEncoder exprEncoder) branches
-                , exprEncoder finally
+                , BE.list (c1Encoder (BE.jsonPair (c2Encoder exprEncoder) (c2Encoder exprEncoder))) branches
+                , c1Encoder exprEncoder finally
                 ]
 
         Let defs expr ->
@@ -1397,12 +1397,12 @@ expr_Decoder =
                     11 ->
                         BD.map2 Call
                             exprDecoder
-                            (BD.list exprDecoder)
+                            (BD.list (c1Decoder exprDecoder))
 
                     12 ->
                         BD.map2 If
-                            (BD.list (BD.jsonPair exprDecoder exprDecoder))
-                            exprDecoder
+                            (BD.list (c1Decoder (BD.jsonPair (c2Decoder exprDecoder) (c2Decoder exprDecoder))))
+                            (c1Decoder exprDecoder)
 
                     13 ->
                         BD.map2 Let

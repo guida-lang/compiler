@@ -585,7 +585,6 @@ expression syntaxVersion =
                     [ let_ syntaxVersion start
                         |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                     , if_ syntaxVersion start
-                        |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                     , case_ syntaxVersion start
                         |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                     , function syntaxVersion start
@@ -624,7 +623,7 @@ type State
     = State
         { ops : List ( Src.Expr, A.Located Name.Name )
         , expr : Src.Expr
-        , args : List Src.Expr
+        , args : List (Src.C1 Src.Expr)
         , end : A.Position
         }
 
@@ -652,7 +651,7 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                                 (State
                                                     { ops = ops
                                                     , expr = expr
-                                                    , args = arg :: args
+                                                    , args = ( [], arg ) :: args
                                                     , end = newEnd
                                                     }
                                                 )
@@ -686,14 +685,14 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                                         (\newEnd ->
                                                             Space.chomp E.Space
                                                                 |> P.bind
-                                                                    (\c113 ->
+                                                                    (\postNegatedExprComments ->
                                                                         let
                                                                             _ =
-                                                                                Debug.log "c113" c113
+                                                                                Debug.log "c113" postNegatedExprComments
 
-                                                                            arg : A.Located Src.Expr_
+                                                                            arg : Src.C1 (A.Located Src.Expr_)
                                                                             arg =
-                                                                                A.at opStart newEnd (Src.Negate negatedExpr)
+                                                                                ( postNegatedExprComments, A.at opStart newEnd (Src.Negate negatedExpr) )
                                                                         in
                                                                         chompExprEnd syntaxVersion
                                                                             start
@@ -752,6 +751,8 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                             [ let_ syntaxVersion newStart
                                             , case_ syntaxVersion newStart
                                             , if_ syntaxVersion newStart
+                                                -- TODO
+                                                |> P.fmap (Tuple.mapFirst Tuple.second)
                                             , function syntaxVersion newStart
                                             ]
                                             |> P.fmap
@@ -801,13 +802,13 @@ possiblyNegativeTerm syntaxVersion start =
         ]
 
 
-toCall : Src.Expr -> List Src.Expr -> Src.Expr
+toCall : Src.Expr -> List (Src.C1 Src.Expr) -> Src.Expr
 toCall func revArgs =
     case revArgs of
         [] ->
             func
 
-        lastArg :: _ ->
+        ( _, lastArg ) :: _ ->
             A.merge func lastArg (Src.Call func (List.reverse revArgs))
 
 
@@ -815,65 +816,65 @@ toCall func revArgs =
 -- IF EXPRESSION
 
 
-if_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+if_ : SyntaxVersion -> A.Position -> Space.Parser E.Expr (Src.C1 Src.Expr)
 if_ syntaxVersion start =
     P.inContext E.If (Keyword.if_ E.Start) <|
-        chompIfEnd syntaxVersion start []
+        chompIfEnd syntaxVersion start [] []
 
 
-chompIfEnd : SyntaxVersion -> A.Position -> List ( Src.Expr, Src.Expr ) -> Space.Parser E.If Src.Expr
-chompIfEnd syntaxVersion start branches =
+chompIfEnd : SyntaxVersion -> A.Position -> Src.FComments -> List (Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr )) -> Space.Parser E.If (Src.C1 Src.Expr)
+chompIfEnd syntaxVersion start comments branches =
     Space.chompAndCheckIndent E.IfSpace E.IfIndentCondition
         |> P.bind
-            (\c40 ->
+            (\preConditionComments ->
                 let
                     _ =
-                        Debug.log "c40" c40
+                        Debug.log "c40" preConditionComments
                 in
                 P.specialize E.IfCondition (expression syntaxVersion)
-            )
-        |> P.bind
-            (\( ( _, condition ), condEnd ) ->
-                Space.checkIndent condEnd E.IfIndentThen
-                    |> P.bind (\_ -> Keyword.then_ E.IfThen)
-                    |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentThenBranch)
                     |> P.bind
-                        (\c41 ->
-                            let
-                                _ =
-                                    Debug.log "c41" c41
-                            in
-                            P.specialize E.IfThenBranch (expression syntaxVersion)
-                        )
-                    |> P.bind
-                        (\( ( _, thenBranch ), thenEnd ) ->
-                            Space.checkIndent thenEnd E.IfIndentElse
-                                |> P.bind (\_ -> Keyword.else_ E.IfElse)
-                                |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentElseBranch)
+                        (\( ( postConditionComments, condition ), condEnd ) ->
+                            Space.checkIndent condEnd E.IfIndentThen
+                                |> P.bind (\_ -> Keyword.then_ E.IfThen)
+                                |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentThenBranch)
                                 |> P.bind
-                                    (\c42 ->
+                                    (\preThenBranchComments ->
                                         let
                                             _ =
-                                                Debug.log "c42" c42
-
-                                            newBranches : List ( Src.Expr, Src.Expr )
-                                            newBranches =
-                                                ( condition, thenBranch ) :: branches
+                                                Debug.log "c41" preThenBranchComments
                                         in
-                                        P.oneOf E.IfElseBranchStart
-                                            [ Keyword.if_ E.IfElseBranchStart
-                                                |> P.bind (\_ -> chompIfEnd syntaxVersion start newBranches)
-                                            , P.specialize E.IfElseBranch (expression syntaxVersion)
-                                                |> P.fmap
-                                                    (\( ( _, elseBranch ), elseEnd ) ->
-                                                        let
-                                                            ifExpr : Src.Expr_
-                                                            ifExpr =
-                                                                Src.If (List.reverse newBranches) elseBranch
-                                                        in
-                                                        ( A.at start elseEnd ifExpr, elseEnd )
-                                                    )
-                                            ]
+                                        P.specialize E.IfThenBranch (expression syntaxVersion)
+                                            |> P.bind
+                                                (\( ( postThenBranchComments, thenBranch ), thenEnd ) ->
+                                                    Space.checkIndent thenEnd E.IfIndentElse
+                                                        |> P.bind (\_ -> Keyword.else_ E.IfElse)
+                                                        |> P.bind (\_ -> Space.chompAndCheckIndent E.IfSpace E.IfIndentElseBranch)
+                                                        |> P.bind
+                                                            (\trailingComments ->
+                                                                let
+                                                                    _ =
+                                                                        Debug.log "c42" trailingComments
+
+                                                                    newBranches : List (Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ))
+                                                                    newBranches =
+                                                                        ( comments, ( ( preConditionComments, postConditionComments, condition ), ( preThenBranchComments, postThenBranchComments, thenBranch ) ) ) :: branches
+                                                                in
+                                                                P.oneOf E.IfElseBranchStart
+                                                                    [ Keyword.if_ E.IfElseBranchStart
+                                                                        |> P.bind (\_ -> chompIfEnd syntaxVersion start trailingComments newBranches)
+                                                                    , P.specialize E.IfElseBranch (expression syntaxVersion)
+                                                                        |> P.fmap
+                                                                            (\( ( postElseBranch, elseBranch ), elseEnd ) ->
+                                                                                let
+                                                                                    ifExpr : Src.Expr_
+                                                                                    ifExpr =
+                                                                                        Src.If (List.reverse newBranches) ( trailingComments, elseBranch )
+                                                                                in
+                                                                                ( ( Debug.log "postElseBranch" postElseBranch, A.at start elseEnd ifExpr ), elseEnd )
+                                                                            )
+                                                                    ]
+                                                            )
+                                                )
                                     )
                         )
             )
