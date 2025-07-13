@@ -165,10 +165,10 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Unit ->
                 R.ok Can.Unit
 
-            Src.Tuple a b cs ->
+            Src.Tuple ( _, _, a ) ( _, _, b ) cs ->
                 R.fmap Can.Tuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
-                    |> R.apply (canonicalizeTupleExtras syntaxVersion region env cs)
+                    |> R.apply (canonicalizeTupleExtras syntaxVersion region env (List.map Src.c2Value cs))
 
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)

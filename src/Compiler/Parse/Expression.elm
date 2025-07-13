@@ -169,10 +169,10 @@ tuple syntaxVersion ((A.Position row col) as start) =
                 (\before ->
                     Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExpr1
                         |> P.bind
-                            (\c25 ->
+                            (\preEntryComments ->
                                 let
                                     _ =
-                                        Debug.log "c25" c25
+                                        Debug.log "c25" preEntryComments
                                 in
                                 P.getPosition
                                     |> P.bind
@@ -180,9 +180,9 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                             if before /= after then
                                                 P.specialize E.TupleExpr (expression syntaxVersion)
                                                     |> P.bind
-                                                        (\( ( _, entry ), end ) ->
+                                                        (\( ( postEntryComments, entry ), end ) ->
                                                             Space.checkIndent end E.TupleIndentEnd
-                                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
+                                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
                                                         )
 
                                             else
@@ -227,9 +227,9 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                                                     )
                                                                             )
                                                                             |> P.bind
-                                                                                (\( ( _, entry ), end ) ->
+                                                                                (\( ( postEntryComments, entry ), end ) ->
                                                                                     Space.checkIndent end E.TupleIndentEnd
-                                                                                        |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
+                                                                                        |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
                                                                                 )
                                                                         ]
 
@@ -241,9 +241,9 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                         |> P.bind (\_ -> P.addEnd start Src.Unit)
                                                     , P.specialize E.TupleExpr (expression syntaxVersion)
                                                         |> P.bind
-                                                            (\( ( _, entry ), end ) ->
+                                                            (\( ( postEntryComments, entry ), end ) ->
                                                                 Space.checkIndent end E.TupleIndentEnd
-                                                                    |> P.bind (\_ -> chompTupleEnd syntaxVersion start entry [])
+                                                                    |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
                                                             )
                                                     ]
                                         )
@@ -252,24 +252,24 @@ tuple syntaxVersion ((A.Position row col) as start) =
         )
 
 
-chompTupleEnd : SyntaxVersion -> A.Position -> Src.Expr -> List Src.Expr -> P.Parser E.Tuple Src.Expr
-chompTupleEnd syntaxVersion start firstExpr revExprs =
+chompTupleEnd : SyntaxVersion -> A.Position -> Src.C2 Src.Expr -> List (Src.C2 Src.Expr) -> P.Parser E.Tuple Src.Expr
+chompTupleEnd syntaxVersion start (( _, _, innerFirstExpr ) as firstExpr) revExprs =
     P.oneOf E.TupleEnd
         [ P.word1 ',' E.TupleEnd
             |> P.bind
                 (\_ ->
                     Space.chompAndCheckIndent E.TupleSpace E.TupleIndentExprN
                         |> P.bind
-                            (\c26 ->
+                            (\preEntryComments ->
                                 let
                                     _ =
-                                        Debug.log "c26" c26
+                                        Debug.log "c26" preEntryComments
                                 in
                                 P.specialize E.TupleExpr (expression syntaxVersion)
                                     |> P.bind
-                                        (\( ( _, entry ), end ) ->
+                                        (\( ( postEntryComments, entry ), end ) ->
                                             Space.checkIndent end E.TupleIndentEnd
-                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start firstExpr (entry :: revExprs))
+                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start firstExpr (( preEntryComments, postEntryComments, entry ) :: revExprs))
                                         )
                             )
                 )
@@ -278,7 +278,7 @@ chompTupleEnd syntaxVersion start firstExpr revExprs =
                 (\_ ->
                     case List.reverse revExprs of
                         [] ->
-                            P.pure firstExpr
+                            P.pure innerFirstExpr
 
                         secondExpr :: otherExprs ->
                             P.addEnd start (Src.Tuple firstExpr secondExpr otherExprs)

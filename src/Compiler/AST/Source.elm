@@ -237,7 +237,7 @@ type Expr_
     | Update Expr (List ( A.Located Name, Expr ))
     | Record (List ( A.Located Name, Expr ))
     | Unit
-    | Tuple Expr Expr (List Expr)
+    | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
     | Shader Shader.Source Shader.Types
 
 
@@ -1326,9 +1326,9 @@ expr_Encoder expr_ =
         Tuple a b cs ->
             BE.sequence
                 [ BE.unsignedInt8 20
-                , exprEncoder a
-                , exprEncoder b
-                , BE.list exprEncoder cs
+                , c2Encoder exprEncoder a
+                , c2Encoder exprEncoder b
+                , BE.list (c2Encoder exprEncoder) cs
                 ]
 
         Shader src tipe ->
@@ -1438,9 +1438,9 @@ expr_Decoder =
 
                     20 ->
                         BD.map3 Tuple
-                            exprDecoder
-                            exprDecoder
-                            (BD.list exprDecoder)
+                            (c2Decoder exprDecoder)
+                            (c2Decoder exprDecoder)
+                            (BD.list (c2Decoder exprDecoder))
 
                     21 ->
                         BD.map2 Shader

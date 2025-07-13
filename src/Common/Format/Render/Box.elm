@@ -1807,11 +1807,10 @@ formatExpression importInfo (A.At region aexpr) =
         Src.Tuple a b cs ->
             let
                 multiline =
-                    -- TODO
-                    False
+                    A.isMultiline region
 
                 exprs =
-                    ( [], [], a ) :: ( [], [], b ) :: List.map (\c -> ( [], [], c )) cs
+                    a :: b :: cs
             in
             Tuple.pair SyntaxSeparated <|
                 ElmStructure.group True "(" "," ")" multiline <|
