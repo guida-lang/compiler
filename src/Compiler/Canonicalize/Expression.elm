@@ -136,8 +136,8 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap A.toValue (canonicalizeLet syntaxVersion region env (List.map Src.c2Value defs) expr)
 
             Src.Case expr branches ->
-                R.fmap Can.Case (canonicalize syntaxVersion env expr)
-                    |> R.apply (R.traverse (canonicalizeCaseBranch syntaxVersion env) branches)
+                R.fmap Can.Case (canonicalize syntaxVersion env (Src.c2Value expr))
+                    |> R.apply (R.traverse (canonicalizeCaseBranch syntaxVersion env) (List.map (Tuple.mapBoth Src.c2Value Src.c1Value) branches))
 
             Src.Accessor field ->
                 R.pure (Can.Accessor field)
@@ -146,7 +146,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Access (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
-            Src.Update name fields ->
+            Src.Update ( _, _, name ) fields ->
                 let
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =

@@ -231,10 +231,10 @@ type Expr_
     | Call Expr (List (C1 Expr))
     | If (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
     | Let (List (C2 (A.Located Def))) FComments Expr
-    | Case Expr (List ( Pattern, Expr ))
+    | Case (C2 Expr) (List ( C2 Pattern, C1 Expr ))
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Expr (List ( A.Located Name, Expr ))
+    | Update (C2 Expr) (List ( A.Located Name, Expr ))
     | Record (List ( A.Located Name, Expr ))
     | Unit
     | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
@@ -1290,8 +1290,8 @@ expr_Encoder expr_ =
         Case expr branches ->
             BE.sequence
                 [ BE.unsignedInt8 14
-                , exprEncoder expr
-                , BE.list (BE.jsonPair patternEncoder exprEncoder) branches
+                , c2Encoder exprEncoder expr
+                , BE.list (BE.jsonPair (c2Encoder patternEncoder) (c1Encoder exprEncoder)) branches
                 ]
 
         Accessor field ->
@@ -1310,7 +1310,7 @@ expr_Encoder expr_ =
         Update name fields ->
             BE.sequence
                 [ BE.unsignedInt8 17
-                , exprEncoder name
+                , c2Encoder exprEncoder name
                 , BE.list (BE.jsonPair (A.locatedEncoder BE.string) exprEncoder) fields
                 ]
 
@@ -1413,8 +1413,8 @@ expr_Decoder =
 
                     14 ->
                         BD.map2 Case
-                            exprDecoder
-                            (BD.list (BD.jsonPair patternDecoder exprDecoder))
+                            (c2Decoder exprDecoder)
+                            (BD.list (BD.jsonPair (c2Decoder patternDecoder) (c1Decoder exprDecoder)))
 
                     15 ->
                         BD.map Accessor BD.string
@@ -1426,7 +1426,7 @@ expr_Decoder =
 
                     17 ->
                         BD.map2 Update
-                            exprDecoder
+                            (c2Decoder exprDecoder)
                             (BD.list (BD.jsonPair (A.locatedDecoder BD.string) exprDecoder))
 
                     18 ->

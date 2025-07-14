@@ -9,6 +9,7 @@ import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
 import Compiler.AST.Source as Src
+import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
@@ -1446,22 +1447,18 @@ formatPair delim ((Src.Pair a b (Src.ForceMultiline forceMultiline)) as pair) =
         (formatPreCommented b)
 
 
+negativeCasePatternWorkaround : Src.Pattern_ -> Box -> Box
+negativeCasePatternWorkaround pattern =
+    case pattern of
+        Src.PInt i _ ->
+            if i < 0 then
+                parens
 
--- negativeCasePatternWorkaround : ASTNS annf (List UppercaseIdentifier) PatternNK -> Box -> Box
--- negativeCasePatternWorkaround pattern =
---     case extract <| I.unFix pattern of
---         LiteralPattern (IntNum i _) ->
---             if i < 0 then
---                 parens
---             else
---                 id
---         LiteralPattern (FloatNum f _) ->
---             if f < 0 then
---                 parens
---             else
---                 id
---         _ ->
---             id
+            else
+                identity
+
+        _ ->
+            identity
 
 
 type SyntaxContext
@@ -1511,7 +1508,7 @@ needsParensInContext inner outer =
 
 formatExpression : ImportInfo -> Src.Expr -> ( SyntaxContext, Box )
 formatExpression importInfo (A.At region aexpr) =
-    case aexpr of
+    case Debug.log "aexpr" aexpr of
         Src.Chr char ->
             ( SyntaxSeparated, formatString SChar char )
 
@@ -1575,6 +1572,7 @@ formatExpression importInfo (A.At region aexpr) =
                         ( final, [] )
                         ops
 
+                multiline : Bool
                 multiline =
                     A.isMultiline region
             in
@@ -1585,6 +1583,7 @@ formatExpression importInfo (A.At region aexpr) =
         Src.Lambda ( trailingComments, srcArgs ) ( bodyComments, expr ) ->
             -- TODO trailingComments (should go before `->`)
             let
+                multiline : Bool
                 multiline =
                     A.isMultiline region
             in
@@ -1667,6 +1666,7 @@ formatExpression importInfo (A.At region aexpr) =
             )
 
         Src.If [] _ ->
+            -- TODO
             Debug.todo "needs review, this should not happen"
 
         Src.If (( _, if_ ) :: elseifs) ( elsComments, els ) ->
@@ -1784,20 +1784,128 @@ formatExpression importInfo (A.At region aexpr) =
                     ]
             )
 
-        Src.Case expr branches ->
-            Debug.todo "formatExpression.Case"
+        Src.Case (( _, _, A.At subjectRegion _ ) as subject) clauses ->
+            let
+                opening =
+                    case
+                        ( A.isMultiline subjectRegion
+                        , formatCommentedExpression importInfo subject
+                        )
+                    of
+                        ( False, Box.SingleLine subject_ ) ->
+                            Box.line <|
+                                Box.row
+                                    [ Box.keyword "case"
+                                    , Box.space
+                                    , subject_
+                                    , Box.space
+                                    , Box.keyword "of"
+                                    ]
+
+                        ( _, subject_ ) ->
+                            Box.stack1
+                                [ Box.line <| Box.keyword "case"
+                                , Box.indent subject_
+                                , Box.line <| Box.keyword "of"
+                                ]
+
+                clause : ( Src.C2 Src.Pattern, Src.C1 Src.Expr ) -> Box
+                clause ( ( prePat, postPat, A.At _ pat ), ( preExpr, expr ) ) =
+                    case
+                        ( ( postPat
+                          , formatPattern pat
+                                |> syntaxParens SyntaxSeparated
+                                |> negativeCasePatternWorkaround pat
+                          )
+                        , ( formatCommentedStack (Src.c2map (syntaxParens SyntaxSeparated << formatPattern) ( prePat, postPat, pat ))
+                                |> negativeCasePatternWorkaround pat
+                          , formatPreCommentedStack <| Src.c1map (syntaxParens SyntaxSeparated << formatExpression importInfo) ( preExpr, expr )
+                          )
+                        )
+                    of
+                        ( ( _, _ ), ( Box.SingleLine pat_, body_ ) ) ->
+                            Box.stack1
+                                [ Box.line (Box.row [ pat_, Box.space, Box.keyword "->" ])
+                                , Box.indent body_
+                                ]
+
+                        ( ( [], Box.SingleLine pat_ ), ( _, body_ ) ) ->
+                            Box.stack1
+                                (List.map formatComment prePat
+                                    ++ [ Box.line (Box.row [ pat_, Box.space, Box.keyword "->" ])
+                                       , Box.indent body_
+                                       ]
+                                )
+
+                        ( ( _, _ ), ( pat_, body_ ) ) ->
+                            Box.stack1
+                                [ pat_
+                                , Box.line (Box.keyword "->")
+                                , Box.indent body_
+                                ]
+            in
+            ( AmbiguousEnd
+            , -- TODO: not tested
+              opening
+                |> Box.andThen
+                    (clauses
+                        |> List.map clause
+                        |> List.intersperse Box.blankLine
+                        |> List.map Box.indent
+                    )
+            )
 
         Src.Accessor field ->
-            Debug.todo "formatExpression.Accessor"
+            ( SyntaxSeparated
+            , Box.line (Box.identifier ("." ++ formatVarName field))
+            )
 
-        Src.Access record field ->
-            Debug.todo "formatExpression.Access"
+        Src.Access record (A.At _ field) ->
+            ( SyntaxSeparated
+            , formatExpression importInfo record
+                |> syntaxParens SpaceSeparated
+                -- TODO: does this need a different context than SpaceSeparated?
+                |> Box.addSuffix (Box.row [ Box.punc ".", formatLowercaseIdentifier [] field ])
+            )
 
         Src.Update name fields ->
-            Debug.todo "formatExpression.Update"
+            let
+                trailing =
+                    -- TODO
+                    []
+
+                multiline =
+                    Src.ForceMultiline (A.isMultiline region)
+
+                fields_ =
+                    List.map (\( A.At _ name_, expr ) -> Src.Pair ( [], name_ ) ( [], expr ) multiline) fields
+            in
+            ( SyntaxSeparated
+            , formatRecordLike
+                (Just (Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) name))
+                (List.map (Tuple.pair ( [], [], Nothing ) << formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo)) fields_)
+                trailing
+                multiline
+            )
 
         Src.Record fields ->
-            Debug.todo "formatExpression.Record"
+            let
+                trailing =
+                    -- TODO
+                    []
+
+                multiline =
+                    Src.ForceMultiline (A.isMultiline region)
+
+                fields_ =
+                    List.map (\( A.At _ name_, expr ) -> Src.Pair ( [], name_ ) ( [], expr ) multiline) fields
+            in
+            ( SyntaxSeparated
+            , formatRecordLike Nothing
+                (List.map (Tuple.pair ( [], [], Nothing ) << formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo)) fields_)
+                trailing
+                multiline
+            )
 
         Src.Unit ->
             ( SyntaxSeparated
@@ -1816,8 +1924,16 @@ formatExpression importInfo (A.At region aexpr) =
                 ElmStructure.group True "(" "," ")" multiline <|
                     List.map (formatCommentedExpression importInfo) exprs
 
-        Src.Shader src tipe ->
-            Debug.todo "formatExpression.Shader"
+        Src.Shader (Shader.Source src) _ ->
+            -- TODO/FIXME
+            ( SyntaxSeparated
+            , Box.line <|
+                Box.row
+                    [ Box.punc "[glsl|"
+                    , Box.literal src
+                    , Box.punc "|]"
+                    ]
+            )
 
 
 type LetDeclaration
@@ -1826,7 +1942,7 @@ type LetDeclaration
 
 
 formatCommentedExpression : ImportInfo -> Src.C2 Src.Expr -> Box
-formatCommentedExpression importInfo ( pre, e, post ) =
+formatCommentedExpression importInfo ( pre, post, e ) =
     let
         commented_ =
             -- TODO
@@ -1834,7 +1950,7 @@ formatCommentedExpression importInfo ( pre, e, post ) =
             --     Src.Parens (C ( pre__, post__ ) e__) ->
             --         ( pre ++ pre__, e__, post__ ++ post )
             --     _ ->
-            ( pre, e, post )
+            ( pre, post, e )
     in
     formatCommented <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) commented_
 

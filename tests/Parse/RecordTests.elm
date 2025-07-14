@@ -24,9 +24,9 @@ suite =
                         |> Expect.equal
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 14) <|
-                                    Src.Update (A.at (A.Position 1 3) (A.Position 1 4) (Src.Var Src.LowVar "a"))
+                                    Src.Update ( [], [], A.at (A.Position 1 3) (A.Position 1 4) (Src.Var Src.LowVar "a") )
                                         [ ( A.at (A.Position 1 7) (A.Position 1 8) "x"
-                                          , A.at (A.Position 1 11) (A.Position 1 12) (Src.Int 2)
+                                          , A.at (A.Position 1 11) (A.Position 1 12) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
@@ -59,9 +59,9 @@ suite =
                         |> Expect.equal
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 14) <|
-                                    Src.Update (A.at (A.Position 1 3) (A.Position 1 4) (Src.Var Src.LowVar "a"))
+                                    Src.Update ( [], [], A.at (A.Position 1 3) (A.Position 1 4) (Src.Var Src.LowVar "a") )
                                         [ ( A.at (A.Position 1 7) (A.Position 1 8) "x"
-                                          , A.at (A.Position 1 11) (A.Position 1 12) (Src.Int 2)
+                                          , A.at (A.Position 1 11) (A.Position 1 12) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
@@ -72,9 +72,9 @@ suite =
                         |> Expect.equal
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 16) <|
-                                    Src.Update (A.at (A.Position 1 3) (A.Position 1 6) (Src.VarQual Src.LowVar "A" "b"))
+                                    Src.Update ( [], [], A.at (A.Position 1 3) (A.Position 1 6) (Src.VarQual Src.LowVar "A" "b") )
                                         [ ( A.at (A.Position 1 9) (A.Position 1 10) "x"
-                                          , A.at (A.Position 1 13) (A.Position 1 14) (Src.Int 2)
+                                          , A.at (A.Position 1 13) (A.Position 1 14) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
@@ -85,9 +85,9 @@ suite =
                         |> Expect.equal
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 18) <|
-                                    Src.Update (A.at (A.Position 1 3) (A.Position 1 8) (Src.VarQual Src.LowVar "A.B" "c"))
+                                    Src.Update ( [], [], A.at (A.Position 1 3) (A.Position 1 8) (Src.VarQual Src.LowVar "A.B" "c") )
                                         [ ( A.at (A.Position 1 11) (A.Position 1 12) "x"
-                                          , A.at (A.Position 1 15) (A.Position 1 16) (Src.Int 2)
+                                          , A.at (A.Position 1 15) (A.Position 1 16) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
@@ -99,12 +99,14 @@ suite =
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 16) <|
                                     Src.Update
-                                        (A.at (A.Position 1 3) (A.Position 1 6) <|
+                                        ( []
+                                        , []
+                                        , A.at (A.Position 1 3) (A.Position 1 6) <|
                                             Src.Access (A.at (A.Position 1 3) (A.Position 1 4) (Src.Var Src.LowVar "a"))
                                                 (A.at (A.Position 1 5) (A.Position 1 6) "b")
                                         )
                                         [ ( A.at (A.Position 1 9) (A.Position 1 10) "x"
-                                          , A.at (A.Position 1 13) (A.Position 1 14) (Src.Int 2)
+                                          , A.at (A.Position 1 13) (A.Position 1 14) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
@@ -116,14 +118,16 @@ suite =
                             (Ok
                                 (A.at (A.Position 1 1) (A.Position 1 20) <|
                                     Src.Update
-                                        (A.at (A.Position 1 3)
+                                        ( []
+                                        , []
+                                        , A.at (A.Position 1 3)
                                             (A.Position 1 10)
                                             (Src.Access (A.at (A.Position 1 3) (A.Position 1 8) (Src.VarQual Src.LowVar "A.B" "c"))
                                                 (A.at (A.Position 1 9) (A.Position 1 10) "d")
                                             )
                                         )
                                         [ ( A.at (A.Position 1 13) (A.Position 1 14) "x"
-                                          , A.at (A.Position 1 17) (A.Position 1 18) (Src.Int 2)
+                                          , A.at (A.Position 1 17) (A.Position 1 18) (Src.Int 2 "2")
                                           )
                                         ]
                                 )
