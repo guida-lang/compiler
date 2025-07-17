@@ -32,6 +32,8 @@ module Compiler.AST.Source exposing
     , Union(..)
     , Value(..)
     , VarType(..)
+    , c0EolDecoder
+    , c0EolEncoder
     , c0EolMap
     , c0EolValue
     , c1Decoder
@@ -266,14 +268,14 @@ type alias Pattern =
 type Pattern_
     = PAnything Name
     | PVar Name
-    | PRecord (List (A.Located Name))
-    | PAlias Pattern (A.Located Name)
-    | PUnit
-    | PTuple Pattern Pattern (List Pattern)
-    | PCtor A.Region Name (List Pattern)
-    | PCtorQual A.Region Name Name (List Pattern)
-    | PList (List Pattern)
-    | PCons Pattern Pattern
+    | PRecord (C1 (List (C2 (A.Located Name))))
+    | PAlias (C1 Pattern) (C1 (A.Located Name))
+    | PUnit FComments
+    | PTuple (C2 Pattern) (C2 Pattern) (List (C2 Pattern))
+    | PCtor A.Region Name (List (C1 Pattern))
+    | PCtorQual A.Region Name Name (List (C1 Pattern))
+    | PList (C1 (List (C2 Pattern)))
+    | PCons (C0Eol Pattern) (C2Eol Pattern)
     | PChr String
     | PStr String Bool
     | PInt Int String
@@ -337,7 +339,7 @@ type Alias
 
 
 type Infix
-    = Infix Name Binop.Associativity Binop.Precedence Name
+    = Infix (C2 Name) (C1 Binop.Associativity) (C1 Binop.Precedence) (C1 Name)
 
 
 type Port
@@ -461,6 +463,21 @@ fCommentsEncoder =
 fCommentsDecoder : BD.Decoder FComments
 fCommentsDecoder =
     BD.list fCommentDecoder
+
+
+c0EolEncoder : (a -> BE.Encoder) -> C0Eol a -> BE.Encoder
+c0EolEncoder encoder ( eol, a ) =
+    BE.sequence
+        [ BE.maybe BE.string eol
+        , encoder a
+        ]
+
+
+c0EolDecoder : BD.Decoder a -> BD.Decoder (C0Eol a)
+c0EolDecoder decoder =
+    BD.map2 Tuple.pair
+        (BD.maybe BD.string)
+        decoder
 
 
 c1Encoder : (a -> BE.Encoder) -> C1 a -> BE.Encoder
@@ -803,20 +820,20 @@ aliasDecoder =
 infixEncoder : Infix -> BE.Encoder
 infixEncoder (Infix op associativity precedence name) =
     BE.sequence
-        [ BE.string op
-        , Binop.associativityEncoder associativity
-        , Binop.precedenceEncoder precedence
-        , BE.string name
+        [ c2Encoder BE.string op
+        , c1Encoder Binop.associativityEncoder associativity
+        , c1Encoder Binop.precedenceEncoder precedence
+        , c1Encoder BE.string name
         ]
 
 
 infixDecoder : BD.Decoder Infix
 infixDecoder =
     BD.map4 Infix
-        BD.string
-        Binop.associativityDecoder
-        Binop.precedenceDecoder
-        BD.string
+        (c2Decoder BD.string)
+        (c1Decoder Binop.associativityDecoder)
+        (c1Decoder Binop.precedenceDecoder)
+        (c1Decoder BD.string)
 
 
 effectsEncoder : Effects -> BE.Encoder
@@ -1037,25 +1054,28 @@ pattern_Encoder pattern_ =
         PRecord fields ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , BE.list (A.locatedEncoder BE.string) fields
+                , c1Encoder (BE.list (c2Encoder (A.locatedEncoder BE.string))) fields
                 ]
 
         PAlias aliasPattern name ->
             BE.sequence
                 [ BE.unsignedInt8 3
-                , patternEncoder aliasPattern
-                , A.locatedEncoder BE.string name
+                , c1Encoder patternEncoder aliasPattern
+                , c1Encoder (A.locatedEncoder BE.string) name
                 ]
 
-        PUnit ->
-            BE.unsignedInt8 4
+        PUnit comments ->
+            BE.sequence
+                [ BE.unsignedInt8 4
+                , fCommentsEncoder comments
+                ]
 
         PTuple a b cs ->
             BE.sequence
                 [ BE.unsignedInt8 5
-                , patternEncoder a
-                , patternEncoder b
-                , BE.list patternEncoder cs
+                , c2Encoder patternEncoder a
+                , c2Encoder patternEncoder b
+                , BE.list (c2Encoder patternEncoder) cs
                 ]
 
         PCtor nameRegion name patterns ->
@@ -1063,7 +1083,7 @@ pattern_Encoder pattern_ =
                 [ BE.unsignedInt8 6
                 , A.regionEncoder nameRegion
                 , BE.string name
-                , BE.list patternEncoder patterns
+                , BE.list (c1Encoder patternEncoder) patterns
                 ]
 
         PCtorQual nameRegion home name patterns ->
@@ -1072,20 +1092,20 @@ pattern_Encoder pattern_ =
                 , A.regionEncoder nameRegion
                 , BE.string home
                 , BE.string name
-                , BE.list patternEncoder patterns
+                , BE.list (c1Encoder patternEncoder) patterns
                 ]
 
         PList patterns ->
             BE.sequence
                 [ BE.unsignedInt8 8
-                , BE.list patternEncoder patterns
+                , c1Encoder (BE.list (c2Encoder patternEncoder)) patterns
                 ]
 
         PCons hd tl ->
             BE.sequence
                 [ BE.unsignedInt8 9
-                , patternEncoder hd
-                , patternEncoder tl
+                , c0EolEncoder patternEncoder hd
+                , c2EolEncoder patternEncoder tl
                 ]
 
         PChr chr ->
@@ -1122,42 +1142,42 @@ pattern_Decoder =
                         BD.map PVar BD.string
 
                     2 ->
-                        BD.map PRecord (BD.list (A.locatedDecoder BD.string))
+                        BD.map PRecord (c1Decoder (BD.list (c2Decoder (A.locatedDecoder BD.string))))
 
                     3 ->
                         BD.map2 PAlias
-                            patternDecoder
-                            (A.locatedDecoder BD.string)
+                            (c1Decoder patternDecoder)
+                            (c1Decoder (A.locatedDecoder BD.string))
 
                     4 ->
-                        BD.succeed PUnit
+                        BD.map PUnit fCommentsDecoder
 
                     5 ->
                         BD.map3 PTuple
-                            patternDecoder
-                            patternDecoder
-                            (BD.list patternDecoder)
+                            (c2Decoder patternDecoder)
+                            (c2Decoder patternDecoder)
+                            (BD.list (c2Decoder patternDecoder))
 
                     6 ->
                         BD.map3 PCtor
                             A.regionDecoder
                             BD.string
-                            (BD.list patternDecoder)
+                            (BD.list (c1Decoder patternDecoder))
 
                     7 ->
                         BD.map4 PCtorQual
                             A.regionDecoder
                             BD.string
                             BD.string
-                            (BD.list patternDecoder)
+                            (BD.list (c1Decoder patternDecoder))
 
                     8 ->
-                        BD.map PList (BD.list patternDecoder)
+                        BD.map PList (c1Decoder (BD.list (c2Decoder patternDecoder)))
 
                     9 ->
                         BD.map2 PCons
-                            patternDecoder
-                            patternDecoder
+                            (c0EolDecoder patternDecoder)
+                            (c2EolDecoder patternDecoder)
 
                     10 ->
                         BD.map PChr BD.string

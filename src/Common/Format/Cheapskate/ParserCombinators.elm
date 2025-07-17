@@ -1,89 +1,204 @@
 module Common.Format.Cheapskate.ParserCombinators exposing (..)
 
+import Set exposing (Set)
 
-type Position = Position  Int Int
+
+type Position
+    = Position Int Int
+
 
 showPosition : Position -> String
-showPosition  (Position ln cn) = "line " ++ String.fromInt ln ++ " column " ++ String.fromInt cn
+showPosition (Position ln cn) =
+    "line " ++ String.fromInt ln ++ " column " ++ String.fromInt cn
+
+
+comparePositions : Position -> Position -> Basics.Order
+comparePositions (Position ln1 cn1) (Position ln2 cn2) =
+    if ln1 > ln2 then
+        GT
+
+    else if ln1 == ln2 then
+        compare cn1 cn2
+
+    else
+        LT
+
+
 
 -- the String indicates what the parser was expecting
-type ParseError = ParseError Position String
 
-type ParserState = ParserState { subject  : Text
-                               , position : Position
-                               , lastChar : Maybe Char
-                               }
 
-advance : ParserState -> Text -> ParserState
-advance = 
-    
-    -- let
-    --     go :: ParserState -> Char -> ParserState
-    --     go st c = st{ subject = T.drop 1 (subject st)
-    --                     , position = case c of
-    --                                     '\n' -> Position { line =
-    --                                                 line (position st) + 1
-    --                                                 , column = 1 }
-    --                                     _    -> Position { line =
-    --                                                 line (position st)
-    --                                                 , column =
-    --                                                 column (position st) + 1
-    --                                                 }
-    --                     , lastChar = Just c }
-    -- in
-    -- T.foldl' go
-    Debug.todo "advance"
+type ParseError
+    = ParseError Position String
 
-type Parser a = Parser (ParserState -> Result ParseError (ParserState, a))
+
+type ParserState
+    = ParserState
+        { subject : String
+        , position : Position
+        , lastChar : Maybe Char
+        }
+
+
+advance : ParserState -> String -> ParserState
+advance parserState str =
+    let
+        go : Char -> ParserState -> ParserState
+        go c (ParserState st) =
+            let
+                (Position line column) =
+                    st.position
+            in
+            ParserState
+                { subject = String.dropLeft 1 st.subject
+                , position =
+                    case c of
+                        '\n' ->
+                            Position (line + 1) 1
+
+                        _ ->
+                            Position line (column + 1)
+                , lastChar = Just c
+                }
+    in
+    List.foldl go parserState (String.toList str)
+
+
+type Parser a
+    = Parser (ParserState -> Result ParseError ( ParserState, a ))
+
+
 
 -- instance Functor Parser where
---   fmap f (Parser g) = Parser $ \st ->
---     case g st of
---          Right (st', x) -> Right (st', f x)
---          Left e         -> Left e
+
+
+fmap : (a -> b) -> Parser a -> Parser b
+fmap f (Parser g) =
+    Parser
+        (\st ->
+            case g st of
+                Ok ( st_, x ) ->
+                    Ok ( st_, f x )
+
+                Err e ->
+                    Err e
+        )
+
+
 
 -- instance Applicative Parser where
---   pure x = Parser $ \st -> Right (st, x)
---   (Parser f) <*> (Parser g) = Parser $ \st ->
---     case f st of
---          Left e         -> Left e
---          Right (st', h) -> case g st' of
---                                 Right (st'', x) -> Right (st'', h x)
---                                 Left e          -> Left e
+
+
+pure : a -> Parser a
+pure x =
+    Parser (\st -> Ok ( st, x ))
+
+
+apply : Parser a -> Parser (a -> b) -> Parser b
+apply (Parser g) (Parser f) =
+    Parser
+        (\st ->
+            case f st of
+                Err e ->
+                    Err e
+
+                Ok ( st_, h ) ->
+                    case g st_ of
+                        Ok ( st__, x ) ->
+                            Ok ( st__, h x )
+
+                        Err e ->
+                            Err e
+        )
+
+
 
 -- instance Alternative Parser where
---   empty = Parser $ \st -> Left $ ParseError (position st) "(empty)"
---   (Parser f) <|> (Parser g) = Parser $ \st ->
---     case f st of
---          Right res                 -> Right res
---          Left (ParseError pos msg) ->
---            case g st of
---              Right res                   -> Right res
---              Left (ParseError pos' msg') -> Left $
---                case () of
---                   -- return error for farthest match
---                   _ | pos' > pos  -> ParseError pos' msg'
---                     | pos' < pos  -> ParseError pos msg
---                     | otherwise {- pos' == pos -}
---                                   -> ParseError pos (msg ++ " or " ++ msg')
+
+
+empty : Parser a
+empty =
+    Parser (\(ParserState st) -> Err (ParseError st.position "(empty)"))
+
+
+oneOf : Parser a -> Parser a -> Parser a
+oneOf (Parser f) (Parser g) =
+    Parser
+        (\st ->
+            case f st of
+                Ok res ->
+                    Ok res
+
+                Err (ParseError pos msg) ->
+                    case g st of
+                        Ok res ->
+                            Ok res
+
+                        Err (ParseError pos_ msg_) ->
+                            Err
+                                -- return error for farthest match
+                                (case comparePositions pos pos_ of
+                                    LT ->
+                                        ParseError pos_ msg_
+
+                                    GT ->
+                                        ParseError pos msg
+
+                                    EQ ->
+                                        ParseError pos (msg ++ " or " ++ msg_)
+                                )
+        )
+
+
 
 -- instance Monad Parser where
---   return x = Parser $ \st -> Right (st, x)
---   p >>= g = Parser $ \st ->
---     case evalParser p st of
---          Left e        -> Left e
---          Right (st',x) -> evalParser (g x) st'
+
+
+return : a -> Parser a
+return x =
+    Parser (\st -> Ok ( st, x ))
+
+
+bind : (a -> Parser b) -> Parser a -> Parser b
+bind g (Parser p) =
+    Parser
+        (\st ->
+            case p st of
+                Err e ->
+                    Err e
+
+                Ok ( st_, x ) ->
+                    let
+                        (Parser evalParser) =
+                            g x
+                    in
+                    evalParser st_
+        )
+
+
 
 -- instance MonadFail Parser where
---   fail e = Parser $ \st -> Left $ ParseError (position st) e
+
+
+fail : String -> Parser a
+fail e =
+    Parser (\(ParserState st) -> Err (ParseError st.position e))
+
+
 
 -- instance MonadPlus Parser where
---   mzero = Parser $ \st -> Left $ ParseError (position st) "(mzero)"
+
+
+mzero : Parser a
+mzero =
+    Parser (\(ParserState st) -> Err (ParseError st.position "(mzero)"))
+
+
+
 --   mplus p1 p2 = Parser $ \st ->
 --     case evalParser p1 st of
 --          Right res  -> Right res
 --          Left _     -> evalParser p2 st
-
 -- (<?>) :: Parser a -> String -> Parser a
 -- p <?> msg = Parser $ \st ->
 --   let startpos = position st in
@@ -93,196 +208,402 @@ type Parser a = Parser (ParserState -> Result ParseError (ParserState, a))
 --        Right r                 -> Right r
 -- infixl 5 <?>
 
-parse : Parser a -> Text -> Result ParseError a
-parse p t =
-  fmap Tuple.second ( evalParser p (ParserState { subject  = t
-                                     , position = Position 1 1
-                                     , lastChar = Nothing }))
 
-failure : ParserState -> String -> Result ParseError (ParserState, a)
-failure st msg = Err (ParseError (position st) msg)
+parse : Parser a -> String -> Result ParseError a
+parse (Parser evalParser) t =
+    Result.map Tuple.second
+        (evalParser
+            (ParserState
+                { subject = t
+                , position = Position 1 1
+                , lastChar = Nothing
+                }
+            )
+        )
 
-success : ParserState -> a -> Result ParseError (ParserState, a)
-success st x = Ok (st, x)
+
+failure : ParserState -> String -> Result ParseError ( ParserState, a )
+failure (ParserState st) msg =
+    Err (ParseError st.position msg)
+
+
+success : ParserState -> a -> Result ParseError ( ParserState, a )
+success st x =
+    Ok ( st, x )
+
 
 satisfy : (Char -> Bool) -> Parser Char
 satisfy f =
-  let
-    g st =
-        case T.uncons (subject st) of
-                    Just (c, _)  ->
-                        if f c then
-                         success (advance st (T.singleton c)) c
-                        else failure st "character meeting condition"
-                    _ -> failure st "character meeting condition"
-  in
-  Parser g
+    let
+        g (ParserState st) =
+            case String.uncons st.subject of
+                Just ( c, _ ) ->
+                    if f c then
+                        success (advance (ParserState st) (String.fromChar c)) c
+
+                    else
+                        failure (ParserState st) "character meeting condition"
+
+                _ ->
+                    failure (ParserState st) "character meeting condition"
+    in
+    Parser g
+
 
 peekChar : Parser (Maybe Char)
-peekChar = Parser (\st ->
-             case T.uncons (subject st) of
-                  Just (c, _) -> success st (Just c)
-                  Nothing     -> success st Nothing)
+peekChar =
+    Parser
+        (\(ParserState st) ->
+            case String.uncons st.subject of
+                Just ( c, _ ) ->
+                    success (ParserState st) (Just c)
+
+                Nothing ->
+                    success (ParserState st) Nothing
+        )
+
 
 peekLastChar : Parser (Maybe Char)
-peekLastChar = Parser (\st -> success st (lastChar st))
+peekLastChar =
+    Parser (\(ParserState st) -> success (ParserState st) st.lastChar)
+
 
 notAfter : (Char -> Bool) -> Parser ()
-notAfter f = 
-    -- do
-    --   mbc <- peekLastChar
-    --   case mbc of
-    --        Nothing -> return ()
-    --        Just c  -> if f c then mzero else return ()
-    Debug.todo "notAfter"
+notAfter f =
+    peekLastChar
+        |> bind
+            (\mbc ->
+                case mbc of
+                    Nothing ->
+                        return ()
+
+                    Just c ->
+                        if f c then
+                            mzero
+
+                        else
+                            return ()
+            )
+
+
 
 -- low-grade version of attoparsec's:
-charClass : String -> Set.Set Char
-charClass = 
-    -- Set.fromList . go
-    -- where go (a:'-':b:xs) = [a..b] ++ go xs
-    --       go (x:xs) = x : go xs
-    --       go _ = ""
-    Debug.todo "charClass"
+
+
+charClass : String -> Set Char
+charClass =
+    let
+        go : List Char -> List Char
+        go str =
+            case str of
+                a :: '-' :: b :: xs ->
+                    List.map Char.fromCode (List.range (Char.toCode a) (Char.toCode b)) ++ go xs
+
+                x :: xs ->
+                    x :: go xs
+
+                _ ->
+                    []
+    in
+    Set.fromList << go << String.toList
+
 
 inClass : String -> Char -> Bool
-inClass s c = 
-  let
-        s_ = charClass s
-  in
-    Set.member c  s_
+inClass s c =
+    let
+        s_ =
+            charClass s
+    in
+    Set.member c s_
+
 
 notInClass : String -> Char -> Bool
-notInClass s = not << inClass s
+notInClass s =
+    not << inClass s
+
 
 endOfInput : Parser ()
-endOfInput = Parser (\st ->
-  if T.null (subject st)
-     then success st ()
-     else failure st "end of input")
+endOfInput =
+    Parser
+        (\(ParserState st) ->
+            if String.isEmpty st.subject then
+                success (ParserState st) ()
+
+            else
+                failure (ParserState st) "end of input"
+        )
+
 
 char : Char -> Parser Char
-char c = satisfy ((==) c)
+char c =
+    satisfy ((==) c)
+
 
 anyChar : Parser Char
-anyChar = satisfy (\_ -> True)
+anyChar =
+    satisfy (\_ -> True)
+
 
 getPosition : Parser Position
-getPosition = Parser (\st -> success st (position st))
+getPosition =
+    Parser (\(ParserState st) -> success (ParserState st) st.position)
+
+
 
 -- note: this does not actually change the position in the subject;
 -- it only changes what column counts as column N.  It is intended
 -- to be used in cases where we're parsing a partial line but need to
 -- have accurate column information.
+
+
 setPosition : Position -> Parser ()
-setPosition pos = Parser (\st -> success st{ position = pos } ())
+setPosition pos =
+    Parser (\(ParserState st) -> success (ParserState { st | position = pos }) ())
 
-takeWhile : (Char -> Bool) -> Parser Text
-takeWhile f = Parser (\st ->
-  let t = T.takeWhile f (subject st) in
-  success (advance st t) t)
 
-takeTill : (Char -> Bool) -> Parser Text
-takeTill f = takeWhile (not << f)
-
-takeWhile1 : (Char -> Bool) -> Parser Text
-takeWhile1 f = Parser (\st ->
-    let
-        t = T.takeWhile f (subject st)
-    in
-    if String.isEmpty t then
-  
-        failure st "characters satisfying condition"
-    else
-        success (advance st t) t)
-
-takeText : Parser Text
-takeText = Parser (\st ->
-  let t = subject st in
-  success (advance st t) t)
-
-skip : (Char -> Bool) -> Parser ()
-skip f = 
-    Parser 
-        (\st ->
-            case T.uncons (subject st) of
-                Just (c, _) ->
-                            if f c then
-                                success (advance st (T.singleton c)) ()
-                            else
-                                failure st "character satisfying condition"
-                _   -> failure st "character satisfying condition"
+takeWhile : (Char -> Bool) -> Parser String
+takeWhile f =
+    Parser
+        (\(ParserState st) ->
+            let
+                t =
+                    stringTakeWhile f st.subject
+            in
+            success (advance (ParserState st) t) t
         )
 
+
+takeTill : (Char -> Bool) -> Parser String
+takeTill f =
+    takeWhile (not << f)
+
+
+takeWhile1 : (Char -> Bool) -> Parser String
+takeWhile1 f =
+    Parser
+        (\(ParserState st) ->
+            let
+                t =
+                    stringTakeWhile f st.subject
+            in
+            if String.isEmpty t then
+                failure (ParserState st) "characters satisfying condition"
+
+            else
+                success (advance (ParserState st) t) t
+        )
+
+
+takeText : Parser String
+takeText =
+    Parser
+        (\(ParserState st) ->
+            let
+                t =
+                    st.subject
+            in
+            success (advance (ParserState st) t) t
+        )
+
+
+skip : (Char -> Bool) -> Parser ()
+skip f =
+    Parser
+        (\(ParserState st) ->
+            case String.uncons st.subject of
+                Just ( c, _ ) ->
+                    if f c then
+                        success (advance (ParserState st) (String.fromChar c)) ()
+
+                    else
+                        failure (ParserState st) "character satisfying condition"
+
+                _ ->
+                    failure (ParserState st) "character satisfying condition"
+        )
+
+
 skipWhile : (Char -> Bool) -> Parser ()
-skipWhile f = Parser (\st ->
-  let t_ = T.takeWhile f (subject st) in
-  success (advance st t_) ())
+skipWhile f =
+    Parser
+        (\(ParserState st) ->
+            let
+                t_ =
+                    stringTakeWhile f st.subject
+            in
+            success (advance (ParserState st) t_) ()
+        )
 
-string : Text -> Parser Text
-string s = Parser (\st ->
-    if T.isPrefixOf  (subject st) then
-        success (advance st s) s
-    else
-        failure st "string"
-    )
 
-scan : s -> (s -> Char -> Maybe s) -> Parser Text
+string : String -> Parser String
+string s =
+    Parser
+        (\(ParserState st) ->
+            if String.startsWith st.subject s then
+                success (advance (ParserState st) s) s
+
+            else
+                failure (ParserState st) "string"
+        )
+
+
+scan : s -> (s -> Char -> Maybe s) -> Parser String
 scan s0 f =
-  let
-        go s cs st =
-         case T.uncons (subject st) of
-               Nothing        -> finish st cs
-               Just (c, _)    -> case f s c of
-                                  Just s_ -> go s_ (c :: cs)
-                                              (advance st (T.singleton c))
-                                  Nothing -> finish st cs
+    let
+        go : s -> String -> ParserState -> Result ParseError ( ParserState, String )
+        go s cs (ParserState st) =
+            case String.uncons st.subject of
+                Nothing ->
+                    finish (ParserState st) cs
+
+                Just ( c, _ ) ->
+                    case f s c of
+                        Just s_ ->
+                            go s_
+                                (String.cons c cs)
+                                (advance (ParserState st) (String.fromChar c))
+
+                        Nothing ->
+                            finish (ParserState st) cs
+
         finish st cs =
-            success st (T.pack (reverse cs))
-  in
-  Parser (go s0 [])
+            success st (String.reverse cs)
+    in
+    Parser (go s0 "")
+
 
 lookAhead : Parser a -> Parser a
-lookAhead p = Parser (\st ->
-  case evalParser p st of
-       Ok (_,x) -> success st x
-       Err _      -> failure st "lookAhead")
+lookAhead (Parser p) =
+    Parser
+        (\st ->
+            case p st of
+                Ok ( _, x ) ->
+                    success st x
+
+                Err _ ->
+                    failure st "lookAhead"
+        )
+
 
 notFollowedBy : Parser a -> Parser ()
-notFollowedBy p = Parser (\st ->
-  case evalParser p st of
-       Ok (_,_) -> failure st "notFollowedBy"
-       Err _      -> success st ())
+notFollowedBy (Parser p) =
+    Parser
+        (\st ->
+            case p st of
+                Ok ( _, _ ) ->
+                    failure st "notFollowedBy"
+
+                Err _ ->
+                    success st ()
+        )
+
+
 
 -- combinators (definitions borrowed from attoparsec)
 
-option : a -> List a -> List a
-option x p = 
-    -- p <|> pure x
-    Debug.todo "option"
 
-many1 : f a -> f (List a)
+option : a -> Parser a -> Parser a
+option x p =
+    oneOf p (pure x)
+
+
+many1 : Parser a -> Parser (List a)
 many1 p =
-    -- liftA2 (::) p (many p)
-    Debug.todo "many1"
+    liftA2 (::) p (many p)
 
-manyTill : f a -> f b -> f (List a)
-manyTill p end = 
---   let go = (end *> pure []) <|> liftA2 (::) p go
---   in
-  go
 
-skipMany : f a -> f ()
-skipMany p = 
---   let go = (p *> go) <|> pure ()
---   in
-    go
+manyTill : Parser a -> Parser b -> Parser (List a)
+manyTill (Parser p) (Parser end) =
+    let
+        accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
+        accumulate acc state =
+            case end state of
+                Ok ( st_, _ ) ->
+                    Ok ( st_, List.reverse acc )
 
-skipMany1 : f a -> f ()
-skipMany1 p = 
-    -- p *> skipMany p
-    Debug.todo "skipMany1"
+                Err ms ->
+                    case p state of
+                        Ok ( st_, res ) ->
+                            accumulate (res :: acc) st_
 
-count : Int -> m a -> m [a]
+                        Err _ ->
+                            Err ms
+    in
+    Parser (accumulate [])
+
+
+skipMany : Parser a -> Parser ()
+skipMany p =
+    many (skipP p) |> fmap (\_ -> ())
+
+
+skipP : Parser a -> Parser ()
+skipP p =
+    p |> fmap (\_ -> ())
+
+
+skipMany1 : Parser a -> Parser ()
+skipMany1 p =
+    p |> bind (\_ -> skipMany p)
+
+
+count : Int -> Parser a -> Parser (List a)
 count n p =
-    sequence (replicate n p)
+    sequence (List.repeat n p)
+
+
+
+-- ...
+
+
+lazy : (() -> Parser a) -> Parser a
+lazy f =
+    bind f (pure ())
+
+
+many : Parser a -> Parser (List a)
+many (Parser p) =
+    let
+        accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
+        accumulate acc state =
+            case p state of
+                Ok ( st_, res ) ->
+                    accumulate (res :: acc) st_
+
+                Err _ ->
+                    Ok ( state, List.reverse acc )
+    in
+    Parser (accumulate [])
+
+
+liftA2 : (a -> b -> c) -> Parser a -> Parser b -> Parser c
+liftA2 f pa pb =
+    pa
+        |> fmap f
+        |> bind (\fApplied -> fmap fApplied pb)
+
+
+sequence : List (Parser a) -> Parser (List a)
+sequence parsers =
+    case parsers of
+        [] ->
+            pure []
+
+        p :: ps ->
+            liftA2 (::) p (sequence ps)
+
+
+stringTakeWhile : (Char -> Bool) -> String -> String
+stringTakeWhile f str =
+    String.toList str
+        |> List.foldr
+            (\c ( found, acc ) ->
+                if found || f c then
+                    ( True, acc )
+
+                else
+                    ( False, String.cons c acc )
+            )
+            ( False, "" )
+        |> Tuple.second
+        |> String.reverse

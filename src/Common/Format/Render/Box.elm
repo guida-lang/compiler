@@ -1,18 +1,19 @@
 module Common.Format.Render.Box exposing (..)
 
--- import Common.Format.Cheapskate.Parse as Parse
-
 import Basics.Extra as Basics exposing (flip)
 import Common.Format.Box as Box exposing (Box)
+import Common.Format.Cheapskate.Parse as Parse
 import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
 import Compiler.AST.Source as Src
+import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
+import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -440,18 +441,29 @@ formatModuleHeader addDefaultHeader modu =
             in
             formatModuleLine sortedExports header.effects header.name preExposing postExposing
 
-        -- docs =
-        --     modu.header
-        --         |> Maybe.andThen (.docs >> Result.toMaybe)
-        --         |> Maybe.map (Parse.markdown () >> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu))
+        docs =
+            modu.header
+                |> Maybe.andThen (.docs >> Result.toMaybe)
+                |> Maybe.map (\(Src.Comment (P.Snippet { fptr, offset, length })) -> String.slice offset (offset + length) fptr)
+                |> Maybe.map
+                    (Parse.markdown
+                        (Options
+                            { sanitize = True
+                            , allowRawHtml = True
+                            , preserveHardBreaks = True
+                            , debug = False
+                            }
+                        )
+                        >> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) blocks)
+                    )
+
         imports =
             formatImports modu
     in
     List.intersperse Box.blankLine
         (List.concat
             [ Maybe.toList (Maybe.map formatModuleLine_ maybeHeader)
-
-            -- , Maybe.toList docs
+            , Maybe.toList docs
             , imports
             ]
         )
@@ -612,9 +624,9 @@ formatModule addDefaultHeader spacing modu =
                     spacing
 
         decls =
-            modu.decls
-                -- TODO review
-                |> List.map Entry
+            -- TODO review
+            List.map (Entry << InfixDeclaration) (List.reverse modu.infixes)
+                ++ List.map (Entry << CommonDeclaration) modu.decls
     in
     Box.stack1
         (List.concat
@@ -626,10 +638,15 @@ formatModule addDefaultHeader spacing modu =
         )
 
 
-formatModuleBody : Int -> ImportInfo -> List (TopLevelStructure Decl.Decl) -> Maybe Box
+type Declaration
+    = CommonDeclaration Decl.Decl
+    | InfixDeclaration (A.Located Src.Infix)
+
+
+formatModuleBody : Int -> ImportInfo -> List (TopLevelStructure Declaration) -> Maybe Box
 formatModuleBody linesBetween importInfo body =
     let
-        entryType : Decl.Decl -> BodyEntryType
+        entryType : Declaration -> BodyEntryType
         entryType adecl =
             case adecl of
                 -- CommonDeclaration def ->
@@ -652,17 +669,20 @@ formatModuleBody linesBetween importInfo body =
                 --     BodyNamed (VarRef () name)
                 -- Fixity _ _ _ _ ->
                 --     BodyFixity
-                Decl.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _)) ->
+                CommonDeclaration (Decl.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _))) ->
                     BodyNamed (VarRef () name)
 
-                Decl.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
+                CommonDeclaration (Decl.Union _ (A.At _ (Src.Union (A.At _ name) _ _))) ->
                     BodyNamed (TagRef () name)
 
-                Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ _)) ->
+                CommonDeclaration (Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ _))) ->
                     BodyNamed (TagRef () name)
 
-                Decl.Port _ (Src.Port (A.At _ name) _) ->
+                CommonDeclaration (Decl.Port _ (Src.Port (A.At _ name) _)) ->
                     BodyNamed (VarRef () name)
+
+                InfixDeclaration (A.At _ (Src.Infix _ _ _ _)) ->
+                    BodyFixity
     in
     formatTopLevelBody linesBetween importInfo <|
         List.map (topLevelStructureMap (\b -> ( entryType b, formatDeclaration importInfo b ))) body
@@ -1249,13 +1269,13 @@ formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) a
             formattedDefinition
 
 
-formatDeclaration : ImportInfo -> Decl.Decl -> Box
+formatDeclaration : ImportInfo -> Declaration -> Box
 formatDeclaration importInfo decl =
     case decl of
-        Decl.Value _ value ->
+        CommonDeclaration (Decl.Value _ value) ->
             formatCommonDeclaration importInfo value
 
-        Decl.Union _ (A.At _ (Src.Union name args tags)) ->
+        CommonDeclaration (Decl.Union _ (A.At _ (Src.Union name args tags))) ->
             let
                 tags_ : Src.OpenCommentedList ( A.Located Name, List Src.Type )
                 tags_ =
@@ -1314,7 +1334,7 @@ formatDeclaration importInfo decl =
                                     |> Box.indent
                                 ]
 
-        Decl.Alias _ (A.At _ (Src.Alias preAlias ( preNameComments, postArgsComments, A.At _ name ) args typ)) ->
+        CommonDeclaration (Decl.Alias _ (A.At _ (Src.Alias preAlias ( preNameComments, postArgsComments, A.At _ name ) args typ))) ->
             ElmStructure.definition "="
                 True
                 (Box.line (Box.keyword "type"))
@@ -1323,7 +1343,7 @@ formatDeclaration importInfo decl =
                 ]
                 (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) typ)
 
-        Decl.Port _ (Src.Port (A.At _ name) typ) ->
+        CommonDeclaration (Decl.Port _ (Src.Port (A.At _ name) typ)) ->
             let
                 typeComments =
                     -- TODO
@@ -1334,6 +1354,28 @@ formatDeclaration importInfo decl =
                 (Box.line (Box.keyword "port"))
                 [ formatCommented (Src.c2map (Box.line << formatLowercaseIdentifier []) ( [], [], name )) ]
                 (formatCommentedApostrophe typeComments (typeParens NotRequired (formatType typ)))
+
+        InfixDeclaration (A.At _ (Src.Infix op associativity precedence name)) ->
+            let
+                formatAssoc a =
+                    case a of
+                        Binop.Left ->
+                            Box.keyword "left "
+
+                        Binop.Right ->
+                            Box.keyword "right"
+
+                        Binop.Non ->
+                            Box.keyword "non  "
+            in
+            ElmStructure.spaceSepOrIndented
+                (Box.line (Box.keyword "infix"))
+                [ formatPreCommented (Src.c1map (Box.line << formatAssoc) associativity)
+                , formatPreCommented (Src.c1map (Box.line << Box.literal << String.fromInt) precedence)
+                , formatCommented (Src.c2map (Box.line << formatSymbolIdentifierInParens) op)
+                , Box.line (Box.keyword "=")
+                , formatPreCommented (Src.c1map (Box.line << Box.identifier << formatVarName) name)
+                ]
 
 
 formatNameWithArgs : Name -> List (Src.C1 Name) -> Box
@@ -1385,29 +1427,126 @@ formatPattern apattern =
         Src.PVar name ->
             ( SyntaxSeparated, Box.line (formatLowercaseIdentifier [] name) )
 
-        Src.PRecord fields ->
-            Debug.todo "formatPattern.PRecord"
+        Src.PRecord ( comments, [] ) ->
+            ( SyntaxSeparated
+            , formatUnit '{' '}' comments
+            )
+
+        Src.PRecord ( _, fields ) ->
+            ( SyntaxSeparated
+            , ElmStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) fields)
+            )
 
         Src.PAlias aliasPattern name ->
-            Debug.todo "formatPattern.PAlias"
+            ( SpaceSeparated
+            , case
+                ( formatTailCommented (Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue) aliasPattern)
+                , formatPreCommented (Src.c1map (Box.line << formatLowercaseIdentifier [] << A.toValue) name)
+                )
+              of
+                ( Box.SingleLine pattern_, Box.SingleLine name_ ) ->
+                    Box.line
+                        (Box.row
+                            [ pattern_
+                            , Box.space
+                            , Box.keyword "as"
+                            , Box.space
+                            , name_
+                            ]
+                        )
 
-        Src.PUnit ->
-            Debug.todo "formatPattern.PUnit"
+                ( pattern_, name_ ) ->
+                    Box.stack1
+                        [ pattern_
+                        , Box.line (Box.keyword "as")
+                        , Box.indent name_
+                        ]
+            )
+
+        Src.PUnit comments ->
+            ( SyntaxSeparated, formatUnit '(' ')' comments )
 
         Src.PTuple a b cs ->
-            Debug.todo "formatPattern.PTuple"
+            let
+                patterns : List (Src.C2 Src.Pattern)
+                patterns =
+                    a :: b :: cs
+            in
+            ( SyntaxSeparated
+            , ElmStructure.group True "(" "," ")" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
+            )
 
-        Src.PCtor nameRegion name patterns ->
-            Debug.todo "formatPattern.PCtor"
+        Src.PCtor _ name [] ->
+            let
+                ctor =
+                    [ name ]
+            in
+            ( SyntaxSeparated
+            , Box.line (formatQualifiedUppercaseIdentifier ctor)
+            )
 
-        Src.PCtorQual nameRegion home name patterns ->
-            Debug.todo "formatPattern.PCtorQual"
+        Src.PCtor _ name patterns ->
+            let
+                ctor =
+                    [ name ]
+            in
+            ( SpaceSeparated
+            , ElmStructure.application
+                (ElmStructure.FAJoinFirst ElmStructure.JoinAll)
+                (Box.line (formatQualifiedUppercaseIdentifier ctor))
+                (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) patterns)
+            )
 
-        Src.PList patterns ->
-            Debug.todo "formatPattern.PList"
+        Src.PCtorQual _ home name [] ->
+            let
+                ctor =
+                    String.split "." home ++ [ name ]
+            in
+            ( SyntaxSeparated
+            , Box.line (formatQualifiedUppercaseIdentifier ctor)
+            )
+
+        Src.PCtorQual _ home name patterns ->
+            let
+                ctor =
+                    String.split "." home ++ [ name ]
+            in
+            ( SpaceSeparated
+            , ElmStructure.application
+                (ElmStructure.FAJoinFirst ElmStructure.JoinAll)
+                (Box.line (formatQualifiedUppercaseIdentifier ctor))
+                (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) patterns)
+            )
+
+        Src.PList ( comments, [] ) ->
+            ( SyntaxSeparated
+            , formatUnit '[' ']' comments
+            )
+
+        Src.PList ( _, patterns ) ->
+            ( SyntaxSeparated
+            , ElmStructure.group True "[" "," "]" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
+            )
 
         Src.PCons hd tl ->
-            Debug.todo "formatPattern.PCons"
+            let
+                formatRight : Src.C2Eol Src.Pattern -> ( ( Bool, Src.FComments, Box ), Box )
+                formatRight ( ( preOp, postOp, eol ), term ) =
+                    ( ( False
+                      , preOp
+                      , Box.line (Box.punc "::")
+                      )
+                    , formatC2Eol
+                        (Src.c2EolMap (syntaxParens SpaceSeparated << formatPattern << A.toValue)
+                            ( ( postOp, [], eol ), term )
+                        )
+                    )
+            in
+            ( SpaceSeparated
+            , formatBinary False
+                (formatEolCommented (Src.c0EolMap (syntaxParens SpaceSeparated << formatPattern << A.toValue) hd))
+                [ formatRight tl ]
+            )
 
         Src.PChr chr ->
             ( SyntaxSeparated, formatString SChar chr )
@@ -1508,7 +1647,7 @@ needsParensInContext inner outer =
 
 formatExpression : ImportInfo -> Src.Expr -> ( SyntaxContext, Box )
 formatExpression importInfo (A.At region aexpr) =
-    case Debug.log "aexpr" aexpr of
+    case aexpr of
         Src.Chr char ->
             ( SyntaxSeparated, formatString SChar char )
 
@@ -2207,7 +2346,7 @@ formatOpenCommentedList (Src.OpenCommentedList rest ( preLst, eol, lst )) =
 
 formatComment : Src.FComment -> Box
 formatComment comment =
-    case comment of
+    case Debug.log "formatComment" comment of
         Src.BlockComment c ->
             case c of
                 [] ->
@@ -2218,7 +2357,7 @@ formatComment comment =
                         Box.row
                             [ Box.punc "{-"
                             , Box.space
-                            , Box.literal l
+                            , Box.literal (String.trim l)
                             , Box.space
                             , Box.punc "-}"
                             ]
@@ -2264,7 +2403,15 @@ formatLiteral : LiteralValue -> Box
 formatLiteral lit =
     case lit of
         IntNum i ->
-            Box.line (Box.literal i)
+            let
+                number =
+                    if String.startsWith "0x" i then
+                        "0x" ++ String.toUpper (String.dropLeft 2 i)
+
+                    else
+                        i
+            in
+            Box.line (Box.literal number)
 
         FloatNum f ->
             Box.line (Box.literal f)
@@ -2315,7 +2462,7 @@ formatString style s =
             Box.line <|
                 Box.row
                     [ Box.punc quotes
-                    , Box.literal <| escaper <| String.concat <| List.map fix <| String.toList s
+                    , Box.literal <| escaper <| String.concat <| List.map fix <| String.toList <| String.replace "\\n" "\n" s
                     , Box.punc quotes
                     ]
 

@@ -454,76 +454,58 @@ infix_ =
                 Keyword.infix_ err
                     |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
                     |> P.bind
-                        (\c18 ->
-                            let
-                                _ =
-                                    Debug.log "c18" c18
-                            in
+                        (\preBinopComments ->
                             P.oneOf err
                                 [ Keyword.left_ err |> P.fmap (\_ -> Binop.Left)
                                 , Keyword.right_ err |> P.fmap (\_ -> Binop.Right)
                                 , Keyword.non_ err |> P.fmap (\_ -> Binop.Non)
                                 ]
+                                |> P.fmap (Tuple.pair preBinopComments)
                         )
                     |> P.bind
                         (\associativity ->
                             Space.chompAndCheckIndent err_ err
                                 |> P.bind
-                                    (\c19 ->
-                                        let
-                                            _ =
-                                                Debug.log "c19" c19
-                                        in
+                                    (\prePrecedenceComments ->
                                         Number.precedence err
+                                            |> P.fmap (Tuple.pair prePrecedenceComments)
                                     )
                                 |> P.bind
                                     (\precedence ->
                                         Space.chompAndCheckIndent err_ err
                                             |> P.bind
-                                                (\c20 ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "c20" c20
-                                                    in
+                                                (\preOpComments ->
                                                     P.word1 '(' err
-                                                )
-                                            |> P.bind (\_ -> Symbol.operator err err_)
-                                            |> P.bind
-                                                (\op ->
-                                                    P.word1 ')' err
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
+                                                        |> P.bind (\_ -> Symbol.operator err err_)
                                                         |> P.bind
-                                                            (\c21 ->
-                                                                let
-                                                                    _ =
-                                                                        Debug.log "c21" c21
-                                                                in
-                                                                P.word1 '=' err
-                                                            )
-                                                        |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
-                                                        |> P.bind
-                                                            (\c22 ->
-                                                                let
-                                                                    _ =
-                                                                        Debug.log "c22" c22
-                                                                in
-                                                                Var.lower err
-                                                            )
-                                                        |> P.bind
-                                                            (\name ->
-                                                                P.getPosition
+                                                            (\op ->
+                                                                P.word1 ')' err
+                                                                    |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
                                                                     |> P.bind
-                                                                        (\end ->
-                                                                            Space.chomp err_
+                                                                        (\postOpComments ->
+                                                                            P.word1 '=' err
+                                                                                |> P.bind (\_ -> Space.chompAndCheckIndent err_ err)
                                                                                 |> P.bind
-                                                                                    (\c109 ->
-                                                                                        let
-                                                                                            _ =
-                                                                                                Debug.log "c109" c109
-                                                                                        in
-                                                                                        Space.checkFreshLine err
+                                                                                    (\preNameComments ->
+                                                                                        Var.lower err
+                                                                                            |> P.bind
+                                                                                                (\name ->
+                                                                                                    P.getPosition
+                                                                                                        |> P.bind
+                                                                                                            (\end ->
+                                                                                                                Space.chomp err_
+                                                                                                                    |> P.bind
+                                                                                                                        (\c109 ->
+                                                                                                                            let
+                                                                                                                                _ =
+                                                                                                                                    Debug.log "c109" c109
+                                                                                                                            in
+                                                                                                                            Space.checkFreshLine err
+                                                                                                                        )
+                                                                                                                    |> P.fmap (\_ -> A.at start end (Src.Infix ( preOpComments, postOpComments, op ) associativity precedence ( preNameComments, name )))
+                                                                                                            )
+                                                                                                )
                                                                                     )
-                                                                                |> P.fmap (\_ -> A.at start end (Src.Infix op associativity precedence name))
                                                                         )
                                                             )
                                                 )

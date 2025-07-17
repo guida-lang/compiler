@@ -74,33 +74,37 @@ canonicalize syntaxVersion env (A.At region pattern) =
             Src.PVar name ->
                 logVar name region (Can.PVar name)
 
-            Src.PRecord fields ->
+            Src.PRecord ( _, c2Fields ) ->
+                let
+                    fields =
+                        List.map Src.c2Value c2Fields
+                in
                 logFields fields (Can.PRecord (List.map A.toValue fields))
 
-            Src.PUnit ->
+            Src.PUnit _ ->
                 R.ok Can.PUnit
 
-            Src.PTuple a b cs ->
+            Src.PTuple ( _, _, a ) ( _, _, b ) cs ->
                 R.fmap Can.PTuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
-                    |> R.apply (canonicalizeTuple syntaxVersion region env cs)
+                    |> R.apply (canonicalizeTuple syntaxVersion region env (List.map Src.c2Value cs))
 
             Src.PCtor nameRegion name patterns ->
                 Env.findCtor nameRegion env name
-                    |> R.bind (canonicalizeCtor syntaxVersion env region name patterns)
+                    |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
 
             Src.PCtorQual nameRegion home name patterns ->
                 Env.findCtorQual nameRegion env home name
-                    |> R.bind (canonicalizeCtor syntaxVersion env region name patterns)
+                    |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
 
-            Src.PList patterns ->
-                R.fmap Can.PList (canonicalizeList syntaxVersion env patterns)
+            Src.PList ( _, patterns ) ->
+                R.fmap Can.PList (canonicalizeList syntaxVersion env (List.map Src.c2Value patterns))
 
-            Src.PCons first rest ->
+            Src.PCons ( _, first ) ( _, rest ) ->
                 R.fmap Can.PCons (canonicalize syntaxVersion env first)
                     |> R.apply (canonicalize syntaxVersion env rest)
 
-            Src.PAlias ptrn (A.At reg name) ->
+            Src.PAlias ( _, ptrn ) ( _, A.At reg name ) ->
                 canonicalize syntaxVersion env ptrn
                     |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
 

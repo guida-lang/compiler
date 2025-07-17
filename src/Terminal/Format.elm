@@ -180,7 +180,14 @@ format : ( FilePath, String ) -> Result InfoMessage String
 format ( inputFile, inputText ) =
     -- FIXME fix hardcoded syntaxVersion and projectType
     Common.Format.format SV.Elm (M.Package Pkg.core) inputText
-        |> Result.mapError (\_ -> ParseError inputFile [])
+        |> Result.mapError
+            (\err ->
+                let
+                    _ =
+                        Debug.log "err" err
+                in
+                ParseError inputFile []
+            )
 
 
 doIt : Bool -> WhatToDo -> IO Bool

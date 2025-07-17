@@ -350,33 +350,33 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PVar name ->
             Dups.insert name region region bindings
 
-        Src.PRecord fields ->
+        Src.PRecord ( _, fields ) ->
             let
-                addField : A.Located Name -> Dups.Tracker A.Region -> Dups.Tracker A.Region
-                addField (A.At fieldRegion name) dict =
+                addField : Src.C2 (A.Located Name) -> Dups.Tracker A.Region -> Dups.Tracker A.Region
+                addField ( _, _, A.At fieldRegion name ) dict =
                     Dups.insert name fieldRegion fieldRegion dict
             in
             List.foldl addField bindings fields
 
-        Src.PUnit ->
+        Src.PUnit _ ->
             bindings
 
         Src.PTuple a b cs ->
-            List.foldl (flip addBindingsHelp) bindings (a :: b :: cs)
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c2Value (a :: b :: cs))
 
         Src.PCtor _ _ patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c1Value patterns)
 
         Src.PCtorQual _ _ _ patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c1Value patterns)
 
-        Src.PList patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+        Src.PList ( _, patterns ) ->
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c2Value patterns)
 
-        Src.PCons hd tl ->
+        Src.PCons ( _, hd ) ( _, tl ) ->
             addBindingsHelp (addBindingsHelp bindings hd) tl
 
-        Src.PAlias aliasPattern (A.At nameRegion name) ->
+        Src.PAlias ( _, aliasPattern ) ( _, A.At nameRegion name ) ->
             Dups.insert name nameRegion nameRegion <|
                 addBindingsHelp bindings aliasPattern
 
@@ -530,28 +530,28 @@ getPatternNames names (A.At region pattern) =
         Src.PVar name ->
             A.At region name :: names
 
-        Src.PRecord fields ->
-            fields ++ names
+        Src.PRecord ( _, fields ) ->
+            List.map Src.c2Value fields ++ names
 
-        Src.PAlias ptrn name ->
+        Src.PAlias ( _, ptrn ) ( _, name ) ->
             getPatternNames (name :: names) ptrn
 
-        Src.PUnit ->
+        Src.PUnit _ ->
             names
 
-        Src.PTuple a b cs ->
-            List.foldl (flip getPatternNames) (getPatternNames (getPatternNames names a) b) cs
+        Src.PTuple ( _, _, a ) ( _, _, b ) cs ->
+            List.foldl (flip getPatternNames) (getPatternNames (getPatternNames names a) b) (List.map Src.c2Value cs)
 
         Src.PCtor _ _ args ->
-            List.foldl (flip getPatternNames) names args
+            List.foldl (flip getPatternNames) names (List.map Src.c1Value args)
 
         Src.PCtorQual _ _ _ args ->
-            List.foldl (flip getPatternNames) names args
+            List.foldl (flip getPatternNames) names (List.map Src.c1Value args)
 
-        Src.PList patterns ->
-            List.foldl (flip getPatternNames) names patterns
+        Src.PList ( _, patterns ) ->
+            List.foldl (flip getPatternNames) names (List.map Src.c2Value patterns)
 
-        Src.PCons hd tl ->
+        Src.PCons ( _, hd ) ( _, tl ) ->
             getPatternNames (getPatternNames names hd) tl
 
         Src.PChr _ ->

@@ -1,7 +1,11 @@
 module Common.Format.Cheapskate.Parse exposing (markdown)
 
+import Common.Format.Cheapskate.Inlines exposing (..)
+import Common.Format.Cheapskate.ParserCombinators exposing (..)
 import Common.Format.Cheapskate.Types exposing (..)
+import Common.Format.Cheapskate.Util exposing (..)
 import Common.Format.RWS as RWS exposing (RWS)
+import Dict exposing (Dict)
 import List.Extra as List
 import Set exposing (Set)
 import Utils.Crash exposing (crash)
@@ -50,8 +54,8 @@ type ContainerStack
     = ContainerStack {- top -} Container {- rest -} (List Container)
 
 
-type LineNumber
-    = Int
+type alias LineNumber =
+    Int
 
 
 {-| Generic type for a container or a leaf.
@@ -85,8 +89,8 @@ type ContainerType
 
 nest : Int -> String -> String
 nest num =
-    List.intersperse "\n"
-        << List.map (String.repeat num ' ' (++))
+    String.join "\n"
+        << List.map ((++) (String.repeat num " "))
         << String.lines
 
 
@@ -107,24 +111,33 @@ showElt elt =
 is to be continued on a new line (ignoring lazy continuations).
 -}
 containerContinue : Container -> Scanner
-containerContinue c =
-    -- case containerType c of
-    --      BlockQuote     -> scanNonindentSpace *> scanBlockquoteStart
-    --      IndentedCode   -> scanIndentSpace
-    --      FencedCode {startColumn } ->
-    --                        scanSpacesToColumn startColumn
-    --      RawHtmlBlock   -> nfb scanBlankline
-    --      (ListItem{}) as li  -> scanBlankline
-    --                        <|>
-    --                        (do scanSpacesToColumn
-    --                               (markerColumn li + 1)
-    --                            _ <- upToCountChars (padding li - 1)
-    --                               (==' ')
-    --                            return ())
-    --      Reference{}    -> nfb scanBlankline >>
-    --                        nfb (scanNonindentSpace *> scanReference)
-    --      _              -> return ()
-    Debug.todo "containerContinue"
+containerContinue (Container containerType _) =
+    case containerType of
+        BlockQuote ->
+            scanNonindentSpace |> bind (\_ -> scanBlockquoteStart)
+
+        IndentedCode ->
+            scanIndentSpace
+
+        FencedCode { startColumn } ->
+            scanSpacesToColumn startColumn
+
+        RawHtmlBlock ->
+            nfb scanBlankline
+
+        ListItem { markerColumn, padding } ->
+            oneOf scanBlankline
+                (scanSpacesToColumn (markerColumn + 1)
+                    |> bind (\_ -> upToCountChars (padding - 1) ((==) ' '))
+                    |> bind (\_ -> return ())
+                )
+
+        Reference ->
+            nfb scanBlankline
+                |> bind (\_ -> nfb (scanNonindentSpace |> bind (\_ -> scanReference)))
+
+        _ ->
+            return ()
 
 
 
@@ -133,11 +146,12 @@ containerContinue c =
 
 containerStart : Bool -> Parser ContainerType
 containerStart _ =
-    --     scanNonindentSpace *>
-    --    (  (BlockQuote <$ scanBlockquoteStart)
-    --   <|> parseListMarker
-    --    )
-    Debug.todo "containerStart"
+    scanNonindentSpace
+        |> bind
+            (\_ ->
+                oneOf (fmap (\_ -> BlockQuote) scanBlockquoteStart)
+                    parseListMarker
+            )
 
 
 
@@ -168,8 +182,8 @@ type Leaf
     | Rule
 
 
-type ContainerM a
-    = RWS () ReferenceMap ContainerStack a
+type alias ContainerM a =
+    RWS () ReferenceMap ContainerStack a
 
 
 
@@ -178,12 +192,15 @@ type ContainerM a
 
 closeStack : ContainerM Container
 closeStack =
-    -- do
-    --     ContainerStack top rest  <- get
-    --     if null rest
-    --         then return top
-    --         else closeContainer >> closeStack
-    Debug.todo "closeStack"
+    RWS.get
+        |> RWS.bind
+            (\(ContainerStack top rest) ->
+                if List.isEmpty rest then
+                    RWS.return top
+
+                else
+                    closeContainer |> RWS.bind (\_ -> closeStack)
+            )
 
 
 
@@ -195,40 +212,60 @@ closeStack =
 
 closeContainer : ContainerM ()
 closeContainer =
-    -- do
-    --     ContainerStack top rest <- get
-    --     case top of
-    --         (Container Reference{} cs__) ->
-    --             case parse pReference
-    --                 (T.strip $ joinLines $ map extractText $ toList cs__) of
-    --                 Right (lab, lnk, tit) -> do
-    --                     tell (M.singleton (normalizeReference lab) (lnk, tit))
-    --                     case rest of
-    --                         (Container ct_ cs_ : rs) ->
-    --                         put $ ContainerStack (Container ct_ (cs_ |> C top)) rs
-    --                         [] -> return ()
-    --                 Left _ -> -- pass over in silence if ref doesn't parse?
-    --                             case rest of
-    --                                 (c:cs) -> put $ ContainerStack c cs
-    --                                 []     -> return ()
-    --         (Container (ListItem{} as li) cs__) ->
-    --             case rest of
-    --                 -- move final BlankLine outside of list item
-    --                 (Container ct_ cs_ : rs) ->
-    --                         case viewr cs__ of
-    --                                 (zs :> b@(L _ BlankLine{})) ->
-    --                                 put $ ContainerStack
-    --                                     (if Seq.null zs
-    --                                         then Container ct_ (cs_ |> C (Container li zs))
-    --                                         else Container ct_ (cs_ |>
-    --                                                 C (Container li zs) |> b)) rs
-    --                                 _ -> put $ ContainerStack (Container ct_ (cs_ |> C top)) rs
-    --                 [] -> return ()
-    --         _ -> case rest of
-    --                 (Container ct_ cs_ :: rs) ->
-    --                     put $ ContainerStack (Container ct_ (cs_ |> C top)) rs
-    --                 [] -> return ()
-    Debug.todo "closeContainer"
+    RWS.get
+        |> RWS.bind
+            (\(ContainerStack top rest) ->
+                -- case top of
+                --     Container Reference cs__ ->
+                --         case parse pReference (String.trim <| joinLines <| List.map extractText cs__) of
+                --             Ok ( lab, lnk, tit ) ->
+                --                 RWS.tell (Dict.singleton (normalizeReference lab) ( lnk, tit ))
+                --                     |> (\_ ->
+                --                             case rest of
+                --                                 (Container ct_ cs_) :: rs ->
+                --                                     RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
+                --                                 [] ->
+                --                                     RWS.return ()
+                --                        )
+                --             Err _ ->
+                --                 -- pass over in silence if ref doesn't parse?
+                --                 case rest of
+                --                     c :: cs ->
+                --                         RWS.put (ContainerStack c cs)
+                --                     [] ->
+                --                         RWS.return ()
+                --     Container ((ListItem _) as li) cs__ ->
+                --         case rest of
+                --             -- move final BlankLine outside of list item
+                --             (Container ct_ cs_) :: rs ->
+                --                 -- case viewr cs__ of
+                --                 --     ((L _ (BlankLine _)) :: zs) as b ->
+                --                 --         RWS.put
+                --                 --             (ContainerStack
+                --                 --                 (if List.isEmpty zs then
+                --                 --                     Container ct_ (cs_ |> C (Container li zs))
+                --                 --                  else
+                --                 --                     Container ct_
+                --                 --                         (cs_
+                --                 --                             |> C (Container li zs)
+                --                 --                             |> b
+                --                 --                         )
+                --                 --                 )
+                --                 --                 rs
+                --                 --             )
+                --                 --     _ ->
+                --                 --         RWS.put (ContainerStack (Container ct_ (cs_ |> C top)) rs)
+                --                 Debug.todo "closeContainer"
+                --             [] ->
+                --                 RWS.return ()
+                --     _ ->
+                --         case rest of
+                --             (Container ct_ cs_) :: rs ->
+                --                 RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
+                --             [] ->
+                --                 RWS.return ()
+                Debug.todo "closeContainer"
+            )
 
 
 
@@ -256,8 +293,10 @@ addLeaf lineNum lf =
 
 addContainer : ContainerType -> ContainerM ()
 addContainer ct =
-    -- modify $ \(ContainerStack top rest) ->
-    --     ContainerStack (Container ct mempty) (top:rest)
+    -- modify
+    --     (\(ContainerStack top rest) ->
+    --         ContainerStack (Container ct []) (top :: rest)
+    --     )
     Debug.todo "addContainer"
 
 
@@ -320,7 +359,7 @@ processElts refmap elts =
                                         Just stripped ->
                                             stripped
                             in
-                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map T.strip << String.split ",") docs)
+                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
                                 ++ processElts refmap rest_
 
                         Nothing ->
@@ -390,7 +429,7 @@ processElts refmap elts =
                     crash "Document container found inside Document"
 
                 BlockQuote ->
-                    List.singleton (Blockquote <| processElts refmap (toList cs))
+                    List.singleton (Blockquote <| processElts refmap cs)
                         ++ processElts refmap rest
 
                 -- List item?  Gobble up following list items of the same type
@@ -410,15 +449,15 @@ processElts refmap elts =
                         -- don't hit two blank lines:
                         takeListItems ys =
                             case ys of
-                                (C ((Container (ListItem { listType }) _) as c)) :: zs ->
-                                    if listTypesMatch listType listType_ then
+                                (C ((Container (ListItem li_) _) as c)) :: zs ->
+                                    if listTypesMatch li_.listType listType then
                                         C c :: takeListItems zs
 
                                     else
                                         []
 
-                                ((L _ (BlankLine _)) as lf) :: ((C (Container (ListItem { listType }) _)) as c) :: zs ->
-                                    if listTypesMatch listType listType_ then
+                                ((L _ (BlankLine _)) as lf) :: ((C (Container (ListItem li_) _)) as c) :: zs ->
+                                    if listTypesMatch li_.listType listType then
                                         lf :: c :: takeListItems zs
 
                                     else
@@ -427,8 +466,8 @@ processElts refmap elts =
                                 _ ->
                                     []
 
-                        listTypesMatch listType listType_ =
-                            case ( listType, listType_ ) of
+                        listTypesMatch listType_ listType__ =
+                            case ( listType_, listType__ ) of
                                 ( Bullet c1, Bullet c2 ) ->
                                     c1 == c2
 
@@ -438,26 +477,38 @@ processElts refmap elts =
                                 _ ->
                                     False
 
-                        items : List Elt
+                        items : List (List Elt)
                         items =
-                            List.filterMap getItem (Container ct cs :: List.map (\C c -> c) xs)
+                            List.filterMap getItem
+                                (Container ct cs
+                                    :: List.filterMap
+                                        (\x ->
+                                            case x of
+                                                C c ->
+                                                    Just c
 
-                        getItem : Container -> Maybe Elt
+                                                _ ->
+                                                    Nothing
+                                        )
+                                        xs
+                                )
+
+                        getItem : Container -> Maybe (List Elt)
                         getItem container =
                             case container of
-                                Container ListItem cs_ ->
+                                Container (ListItem _) cs_ ->
                                     Just cs_
 
                                 _ ->
                                     Nothing
 
                         items_ =
-                            map (processElts refmap) items
+                            List.map (processElts refmap) items
 
                         isTight =
-                            tightListItem xs && all tightListItem items
+                            tightListItem xs && List.all tightListItem items
                     in
-                    singleton (List isTight listType items_) <> processElts refmap rest_
+                    List.singleton (List isTight listType items_) ++ processElts refmap rest_
 
                 FencedCode { info } ->
                     let
@@ -465,13 +516,13 @@ processElts refmap elts =
                             joinLines <| List.map extractText cs
 
                         attr =
-                            CodeAttr x (String.trim y)
+                            CodeAttr { codeLang = x, codeInfo = String.trim y }
 
                         ( x, y ) =
-                            T.break ((==) ' ') info
+                            stringBreak ((==) ' ') info
                     in
-                    singleton (CodeBlock attr txt)
-                        <> processElts refmap rest
+                    List.singleton (CodeBlock attr txt)
+                        ++ processElts refmap rest
 
                 IndentedCode ->
                     let
@@ -482,7 +533,7 @@ processElts refmap elts =
 
                         stripTrailingEmpties =
                             List.reverse
-                                << List.dropWhile (T.all ((==) ' '))
+                                << List.dropWhile (String.all ((==) ' '))
                                 << List.reverse
 
                         -- explanation for next line:  when we parsed
@@ -493,21 +544,21 @@ processElts refmap elts =
                         extractCode elt =
                             case elt of
                                 L _ (BlankLine t) ->
-                                    [ T.drop 1 t ]
+                                    [ String.dropLeft 1 t ]
 
                                 C (Container IndentedCode cs_) ->
-                                    map extractText cs_
+                                    List.map extractText cs_
 
                                 _ ->
                                     []
 
                         ( cbs, rest_ ) =
-                            span isIndentedCodeOrBlank
+                            List.break isIndentedCodeOrBlank
                                 (C (Container ct cs) :: rest)
 
                         isIndentedCodeOrBlank elt =
                             case elt of
-                                L _ BlankLine ->
+                                L _ (BlankLine _) ->
                                     True
 
                                 C (Container IndentedCode _) ->
@@ -516,7 +567,7 @@ processElts refmap elts =
                                 _ ->
                                     False
                     in
-                    List.singleton (CodeBlock (CodeAttr "" "") txt)
+                    List.singleton (CodeBlock (CodeAttr { codeLang = "", codeInfo = "" }) txt)
                         ++ processElts refmap rest_
 
                 RawHtmlBlock ->
@@ -541,11 +592,11 @@ processElts refmap elts =
                                 Err _ ->
                                     ( "??", "??", "??" )
 
-                        processElts_ : List (List ( Text, Text, Text )) -> List Elt -> Blocks
+                        processElts_ : List (List ( String, String, String )) -> List Elt -> Blocks
                         processElts_ acc pass =
                             case pass of
-                                (C (Container Reference cs)) :: rest_ ->
-                                    processElts_ (refs cs :: acc) rest_
+                                (C (Container Reference cs_)) :: rest_ ->
+                                    processElts_ (refs cs_ :: acc) rest_
 
                                 _ ->
                                     (List.singleton <| ReferencesBlock <| List.concat <| List.reverse acc)
@@ -572,12 +623,11 @@ processLines : String -> ( Container, ReferenceMap )
 processLines t =
     let
         ( doc, refmap ) =
-            RWS.evalRWS (RWS.mapM_ processLine lns >> closeStack) () startState
+            RWS.evalRWS (RWS.mapM_ processLine lns |> RWS.bind (\_ -> closeStack)) () startState
 
         lns : List ( LineNumber, String )
         lns =
-            List.indexedMap Tuple.pair
-                (List.map tabFilter (String.lines t))
+            List.indexedMap Tuple.pair (List.map tabFilter (String.lines t))
 
         startState : ContainerStack
         startState =
@@ -594,66 +644,84 @@ processLines t =
 
 processLine : ( LineNumber, String ) -> ContainerM ()
 processLine ( lineNumber, txt ) =
-    --   do
-    --     ContainerStack top@(Container ct cs) rest <- get
-    --     -- Apply the line-start scanners appropriate for each nested container.
-    --     -- Return the remainder of the string, and the number of unmatched
-    --     -- containers.
-    --     let (t', numUnmatched) = tryOpenContainers (reverse $ top:rest) txt
+    -- -- Apply the line-start scanners appropriate for each nested container.
+    -- -- Return the remainder of the string, and the number of unmatched
+    -- -- containers.
+    -- let
+    --     ( t_, numUnmatched ) =
+    --         tryOpenContainers (List.reverse (top :: rest)) txt
     --     -- Some new containers can be started only after a blank.
-    --     let lastLineIsText = numUnmatched == 0 &&
-    --                         case viewr cs of
-    --                                 (_ :> L _ (TextLine _)) -> True
-    --                                 _                       -> False
-    --     -- Process the rest of the line in a way that makes sense given
-    --     -- the container type at the top of the stack (ct):
-    --     case ct of
-    --         -- If it's a verbatim line container, add the line.
-    --         RawHtmlBlock{} | numUnmatched == 0 -> addLeaf lineNumber (TextLine t')
-    --         IndentedCode   | numUnmatched == 0 -> addLeaf lineNumber (TextLine t')
-    --         FencedCode{ fence = fence' } ->
+    --     lastLineIsText : Bool
+    --     lastLineIsText =
+    --         numUnmatched == 0
+    --     -- &&
+    --     --                     (case viewr cs of
+    --     --                             (_ :> L _ (TextLine _)) -> True
+    --     --                             _                       -> False)
+    --     addNew ( ns, lf ) =
+    --         -- do
+    --         -- mapM_ addContainer ns
+    --         -- case (reverse ns, lf) of
+    --         --     -- don't add extra blank at beginning of fenced code block
+    --         --     (FencedCode{}:_,  BlankLine{}) -> return ()
+    --         --     _ -> addLeaf lineNumber lf
+    --         Debug.todo "addNew"
+    -- in
+    -- -- Process the rest of the line in a way that makes sense given
+    -- -- the container type at the top of the stack (ct):
+    -- case ct of
+    --     -- If it's a verbatim line container, add the line.
+    --     RawHtmlBlock ->
+    --         if numUnmatched == 0 then
+    --             addLeaf lineNumber (TextLine t_)
+    --         else
+    --             ()
+    --     IndentedCode ->
+    --         if numUnmatched == 0 then
+    --             addLeaf lineNumber (TextLine t_)
+    --         else
+    --             ()
+    --     FencedCode { fence } ->
     --         -- here we don't check numUnmatched because we allow laziness
-    --         if fence' `T.isPrefixOf` t'
+    --         if
+    --             String.startsWith fence t_
     --             -- closing code fence
-    --             then closeContainer
-    --             else addLeaf lineNumber (TextLine t')
-    --         Reference ->
-    --         case tryNewContainers lastLineIsText (T.length txt - T.length t') t' of
-    --             (ns, lf) -> do
+    --         then
     --             closeContainer
-    --             addNew (ns, lf)
-    --         -- otherwise, parse the remainder to see if we have new container starts:
-    --         _ -> case tryNewContainers lastLineIsText (T.length txt - T.length t') t' of
-    --         -- lazy continuation: text line, last line was text, no new containers,
-    --         -- some unmatched containers:
-    --         ([], TextLine t)
-    --             | numUnmatched > 0
-    --             , case viewr cs of
-    --                     (_ :> L _ (TextLine _)) -> True
-    --                     _                       -> False
-    --             , ct /= IndentedCode -> addLeaf lineNumber (TextLine t)
-    --         -- if it's a setext header line and the top container has a textline
-    --         -- as last child, add a setext header:
-    --         ([], SetextHeader lev _) | numUnmatched == 0 ->
-    --             case viewr cs of
-    --                 (cs' :> L _ (TextLine t)) -> -- replace last text line with setext header
-    --                 put $ ContainerStack (Container ct
-    --                             (cs' |> L lineNumber (SetextHeader lev t))) rest
-    --                 -- Note: the following case should not occur, since
-    --                 -- we don't add a SetextHeader leaf unless lastLineIsText.
-    --                 _ -> error "setext header line without preceding text line"
-    --         -- otherwise, close all the unmatched containers, add the new
-    --         -- containers, and finally add the new leaf:
-    --         (ns, lf) -> do -- close unmatched containers, add new ones
-    --             _ <- replicateM numUnmatched closeContainer
-    --             addNew (ns, lf)
-    --     where
-    --         addNew (ns, lf) = do
-    --         mapM_ addContainer ns
-    --         case (reverse ns, lf) of
-    --             -- don't add extra blank at beginning of fenced code block
-    --             (FencedCode{}:_,  BlankLine{}) -> return ()
-    --             _ -> addLeaf lineNumber lf
+    --         else
+    --             addLeaf lineNumber (TextLine t_)
+    --     Reference ->
+    --         case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
+    --             ( ns, lf ) ->
+    --                 closeContainer
+    --                     >> addNew ( ns, lf )
+    --     -- otherwise, parse the remainder to see if we have new container starts:
+    --     _ ->
+    --         case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
+    --             -- -- lazy continuation: text line, last line was text, no new containers,
+    --             -- -- some unmatched containers:
+    --             -- ([], TextLine t)
+    --             --     | numUnmatched > 0
+    --             --     , case viewr cs of
+    --             --             (_ :> L _ (TextLine _)) -> True
+    --             --             _                       -> False
+    --             --     , ct /= IndentedCode -> addLeaf lineNumber (TextLine t)
+    --             -- -- if it's a setext header line and the top container has a textline
+    --             -- -- as last child, add a setext header:
+    --             -- ([], SetextHeader lev _) | numUnmatched == 0 ->
+    --             --     case viewr cs of
+    --             --         (cs' :> L _ (TextLine t)) -> -- replace last text line with setext header
+    --             --         put $ ContainerStack (Container ct
+    --             --                     (cs' |> L lineNumber (SetextHeader lev t))) rest
+    --             --         -- Note: the following case should not occur, since
+    --             --         -- we don't add a SetextHeader leaf unless lastLineIsText.
+    --             --         _ -> error "setext header line without preceding text line"
+    --             -- -- otherwise, close all the unmatched containers, add the new
+    --             -- -- containers, and finally add the new leaf:
+    --             ( ns, lf ) ->
+    --                 -- close unmatched containers, add new ones
+    --                 replicateM numUnmatched closeContainer
+    --                     >> addNew ( ns, lf )
     Debug.todo "processLine"
 
 
@@ -666,10 +734,18 @@ processLine ( lineNumber, txt ) =
 
 tryOpenContainers : List Container -> String -> ( String, Int )
 tryOpenContainers cs t =
-    --   let scanners [] = Tuple.pair <$> takeText <*> pure 0
-    --         scanners (p::ps) = (p *> scanners ps)
-    --                       <|> (Tuple.pair <$> takeText <*> pure (length (p::ps)))
-    --   in
+    let
+        scanners : List (Parser a) -> Parser ( String, Int )
+        scanners ss =
+            case ss of
+                [] ->
+                    pure Tuple.pair
+                        |> apply takeText
+                        |> apply (pure 0)
+
+                p :: ps ->
+                    oneOf (p |> bind (\_ -> scanners ps)) (fmap Tuple.pair takeText |> apply (pure (List.length (p :: ps))))
+    in
     case parse (scanners <| List.map containerContinue cs) t of
         Ok ( t_, n ) ->
             ( t_, n )
@@ -677,7 +753,7 @@ tryOpenContainers cs t =
         Err e ->
             crash <|
                 "error parsing scanners: "
-                    ++ show e
+                    ++ Debug.toString e
 
 
 
@@ -687,23 +763,25 @@ tryOpenContainers cs t =
 
 tryNewContainers : Bool -> Int -> String -> ( List ContainerType, Leaf )
 tryNewContainers lastLineIsText offset t =
-    --   let
-    --     newContainers = do
-    --           getPosition >>= \pos -> setPosition pos{ column = offset + 1 }
-    --           regContainers <- many (containerStart lastLineIsText)
-    --           verbatimContainers <- option []
-    --                             $ count 1 (verbatimContainerStart lastLineIsText)
-    --           if null verbatimContainers
-    --              then (,) <$> pure regContainers <*> leaf lastLineIsText
-    --              else (,) <$> pure (regContainers ++ verbatimContainers) <*>
-    --                             textLineOrBlank
-    --   in
+    let
+        newContainers =
+            -- do
+            --   getPosition >>= \pos -> setPosition pos{ column = offset + 1 }
+            --   regContainers <- many (containerStart lastLineIsText)
+            --   verbatimContainers <- option []
+            --                     $ count 1 (verbatimContainerStart lastLineIsText)
+            --   if null verbatimContainers
+            --      then (,) <$> pure regContainers <*> leaf lastLineIsText
+            --      else (,) <$> pure (regContainers ++ verbatimContainers) <*>
+            --                     textLineOrBlank
+            Debug.todo "newContainers"
+    in
     case parse newContainers t of
         Ok ( cs, t_ ) ->
             ( cs, t_ )
 
         Err err ->
-            crash (show err)
+            crash (Debug.toString err)
 
 
 textLineOrBlank : Parser Leaf
@@ -971,197 +1049,7 @@ parseListNumber =
 
 
 
--- Utility functions.
-
-
-{-| Like T.unlines but does not add a final newline.
-Concatenates lines with newlines between.
--}
-joinLines : List String -> String
-joinLines =
-    List.intersperse "\n"
-
-
-{-| Convert tabs to spaces using a 4-space tab stop.
--}
-tabFilter : String -> String
-tabFilter =
-    let
-        pad value =
-            case value of
-                [] ->
-                    []
-
-                [ t ] ->
-                    [ t ]
-
-                t :: ts ->
-                    let
-                        tl =
-                            String.length t
-
-                        n =
-                            tl + 4 - modBy 4 tl
-                    in
-                    String.padRight n ' ' t :: pad ts
-    in
-    String.concat << pad << String.split "\t"
-
-
-{-| These are the whitespace characters that are significant in
-parsing markdown. We can treat \\160 (nonbreaking space) etc.
-as regular characters. This function should be considerably
-faster than the unicode-aware isSpace from Data.Char.
--}
-isWhitespace : Char -> Bool
-isWhitespace c =
-    case c of
-        ' ' ->
-            True
-
-        '\t' ->
-            True
-
-        '\n' ->
-            True
-
-        '\u{000D}' ->
-            True
-
-        _ ->
-            False
-
-
-{-| The original Markdown only allowed certain symbols
-to be backslash-escaped. It was hard to remember
-which ones could be, so we now allow any ascii punctuation mark or
-symbol to be escaped, whether or not it has a use in Markdown.
--}
-isEscapable : Char -> Bool
-isEscapable c =
-    isAscii c && (isSymbol c || isPunctuation c)
-
-
-{-| Link references are case sensitive and ignore line breaks
-and repeated spaces.
--}
-normalizeReference : String -> String
-normalizeReference =
-    T.toCaseFold << T.concat << T.split isWhitespace
-
-
-{-| Scanners are implemented here as attoparsec parsers,
-which consume input and capture nothing. They could easily
-be implemented as regexes in other languages, or hand-coded.
-With the exception of scanSpnl, they are all intended to
-operate on a single line of input (so endOfInput = endOfLine).
--}
-type Scanner
-    = Parser ()
-
-
-{-| Scan four spaces.
--}
-scanIndentSpace : Scanner
-scanIndentSpace =
-    -- () <| count 4 (skip ((==) ' '))
-    Debug.todo "scanIndentSpace"
-
-
-scanSpacesToColumn : Int -> Scanner
-scanSpacesToColumn col =
-    -- do
-    --   currentCol <- column <$> getPosition
-    --   case col - currentCol of
-    --        n | n >= 1 -> () <$ (count n (skip (==' ')))
-    --          | otherwise -> return ()
-    Debug.todo "scanSpacesToColumn"
-
-
-{-| Scan 0-3 spaces.
--}
-scanNonindentSpace : Scanner
-scanNonindentSpace =
-    -- () <$ upToCountChars 3 (==' ')
-    Debug.todo "scanNonindentSpace"
-
-
-{-| Scan a specified character.
--}
-scanChar : Char -> Scanner
-scanChar c =
-    -- skip (== c) >> return ()
-    Debug.todo "scanChar"
-
-
-{-| Scan a blankline.
--}
-scanBlankline : Scanner
-scanBlankline =
-    -- scanSpaces *> endOfInput
-    Debug.todo "scanBlankline"
-
-
-{-| Scan 0 or more spaces
--}
-scanSpaces : Scanner
-scanSpaces =
-    -- skipWhile ((==) ' ')
-    Debug.todo "scanSpaces"
-
-
-{-| Scan 0 or more spaces, and optionally a newline
-and more spaces.
--}
-scanSpnl : Scanner
-scanSpnl =
-    -- scanSpaces *> option () (char '\n' *> scanSpaces)
-    Debug.todo "scanSpnl"
-
-
-{-| Not followed by: Succeed without consuming input if the specified
-scanner would not succeed.
--}
-nfb : Parser a -> Scanner
-nfb =
-    notFollowedBy
-
-
-{-| Succeed if not followed by a character. Consumes no input.
--}
-nfbChar : Char -> Scanner
-nfbChar c =
-    nfb (skip ((==) c))
-
-
-upToCountChars : Int -> (Char -> Bool) -> Parser String
-upToCountChars cnt f =
-    scan 0
-        (\n c ->
-            if n < cnt && f c then
-                Just (n + 1)
-
-            else
-                Nothing
-        )
-
-
-{-| Selects the first 128 characters of the Unicode character set,
-corresponding to the ASCII character set.
--}
-isAscii : Char -> Bool
-isAscii c =
-    c < '\u{0080}'
-
-
-isSymbol : Char -> Bool
-isSymbol c =
-    Debug.todo "isSymbol"
-
-
-isPunctuation : Char -> Bool
-isPunctuation c =
-    Debug.todo "isPunctuation"
+-- ...
 
 
 stripPrefix : String -> String -> Maybe String
@@ -1171,3 +1059,8 @@ stripPrefix p t =
 
     else
         Nothing
+
+
+stringBreak : (Char -> Bool) -> String -> ( String, String )
+stringBreak p t =
+    Debug.todo "stringBreak"

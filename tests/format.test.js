@@ -36,7 +36,18 @@ const examples = [
     ]],
     // INFIXES
     ["Infixes", [
-        { title: "basic", filename: "BasicInfixes", module: { ...defaultModule, infixes: ["infix right 0 (<|) = apL"] } },
+        {
+            title: "basic", filename: "BasicInfixes", module: {
+                ...defaultModule, infixes: [
+                    "infix right 0 (<|) = apL",
+                    "infix left  0 (|>) = apR",
+                    "infix right 2 (||) = or",
+                    "infix non   4 (<)  = lt",
+                    "infix non   4 (>)  = gt",
+                    "infix non   4 (<=) = le"
+                ]
+            }
+        },
     ]],
     // VALUE DECLARATIONS
     ["Declarations", [
@@ -90,6 +101,7 @@ const examples = [
         { title: "multi-line header", filename: "MultiLineHeaderComments", module: { ...defaultModule, header: ["module {- C1 -} Main {- C2 -} exposing {- C3 -} ({- C4 -}..{- C5 -})"] } },
         { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
+        { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } }
     ]],
 ]
 
