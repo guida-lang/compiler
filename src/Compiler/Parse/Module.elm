@@ -111,6 +111,10 @@ chompModule syntaxVersion projectType =
                                         P.specialize E.Declarations (chompDecls syntaxVersion)
                                             |> P.fmap
                                                 (\decls ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "HERE" ()
+                                                    in
                                                     Module
                                                         initialComments
                                                         header

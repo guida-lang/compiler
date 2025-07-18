@@ -43,9 +43,15 @@ type ParserState
 advance : ParserState -> String -> ParserState
 advance parserState str =
     let
+        _ =
+            Debug.log "advance" ( parserState, str )
+
         go : Char -> ParserState -> ParserState
         go c (ParserState st) =
             let
+                _ =
+                    Debug.log "advance.go" ( c, st )
+
                 (Position line column) =
                     st.position
             in
@@ -112,6 +118,15 @@ apply (Parser g) (Parser f) =
         )
 
 
+unless : Bool -> Parser () -> Parser ()
+unless p s =
+    if p then
+        pure ()
+
+    else
+        s
+
+
 
 -- instance Alternative Parser where
 
@@ -121,16 +136,29 @@ empty =
     Parser (\(ParserState st) -> Err (ParseError st.position "(empty)"))
 
 
+guard : Bool -> Parser ()
+guard bool =
+    if bool then
+        pure ()
+
+    else
+        empty
+
+
 oneOf : Parser a -> Parser a -> Parser a
 oneOf (Parser f) (Parser g) =
     Parser
         (\st ->
-            case f st of
+            let
+                _ =
+                    Debug.log "oneOf" ()
+            in
+            case Debug.log "oneOf1" (f st) of
                 Ok res ->
                     Ok res
 
                 Err (ParseError pos msg) ->
-                    case g st of
+                    case Debug.log "oneOf2" (g st) of
                         Ok res ->
                             Ok res
 
@@ -229,12 +257,19 @@ failure (ParserState st) msg =
 
 success : ParserState -> a -> Result ParseError ( ParserState, a )
 success st x =
+    let
+        _ =
+            Debug.log "success" ( st, x )
+    in
     Ok ( st, x )
 
 
 satisfy : (Char -> Bool) -> Parser Char
 satisfy f =
     let
+        _ =
+            Debug.log "satisfy"
+
         g (ParserState st) =
             case String.uncons st.subject of
                 Just ( c, _ ) ->
@@ -383,6 +418,9 @@ takeWhile1 f =
     Parser
         (\(ParserState st) ->
             let
+                _ =
+                    Debug.log "takeWhile1" st
+
                 t =
                     stringTakeWhile f st.subject
             in
@@ -566,7 +604,11 @@ many (Parser p) =
     let
         accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
         accumulate acc state =
-            case p state of
+            let
+                _ =
+                    Debug.log "accumulate" ( acc, state )
+            in
+            case Debug.log "case result" (p state) of
                 Ok ( st_, res ) ->
                     accumulate (res :: acc) st_
 
@@ -596,14 +638,15 @@ sequence parsers =
 stringTakeWhile : (Char -> Bool) -> String -> String
 stringTakeWhile f str =
     String.toList str
-        |> List.foldr
+        |> List.foldl
             (\c ( found, acc ) ->
-                if found || f c then
-                    ( True, acc )
+                if Debug.log "found" found && Debug.log "f" (f c) then
+                    ( True, String.cons c acc )
 
                 else
-                    ( False, String.cons c acc )
+                    ( False, acc )
             )
-            ( False, "" )
+            ( True, "" )
+        |> Debug.log "stringTakeWhile"
         |> Tuple.second
         |> String.reverse

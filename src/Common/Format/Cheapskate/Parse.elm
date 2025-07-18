@@ -5,7 +5,7 @@ import Common.Format.Cheapskate.ParserCombinators exposing (..)
 import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.Cheapskate.Util exposing (..)
 import Common.Format.RWS as RWS exposing (RWS)
-import Dict exposing (Dict)
+import Data.Map as Dict exposing (Dict)
 import List.Extra as List
 import Set exposing (Set)
 import Utils.Crash exposing (crash)
@@ -149,6 +149,10 @@ containerStart _ =
     scanNonindentSpace
         |> bind
             (\_ ->
+                let
+                    _ =
+                        Debug.log "containerStart" ()
+                in
                 oneOf (fmap (\_ -> BlockQuote) scanBlockquoteStart)
                     parseListMarker
             )
@@ -161,13 +165,24 @@ containerStart _ =
 
 verbatimContainerStart : Bool -> Parser ContainerType
 verbatimContainerStart lastLineIsText =
-    --     scanNonindentSpace *>
-    --    (  parseCodeFence
-    --   <|> (guard (not lastLineIsText) *> (IndentedCode <$ char ' ' <* nfb scanBlankline))
-    --   <|> (guard (not lastLineIsText) *> (RawHtmlBlock <$ parseHtmlBlockStart))
-    --   <|> (guard (not lastLineIsText) *> (Reference <$ scanReference))
-    --    )
-    Debug.todo "verbatimContainerStart"
+    scanNonindentSpace
+        |> bind
+            (\_ ->
+                oneOf parseCodeFence
+                    (oneOf
+                        (guard (not lastLineIsText)
+                            |> bind
+                                (\_ ->
+                                    nfb scanBlankline
+                                        |> bind (\_ -> char ' ')
+                                        |> fmap (\_ -> IndentedCode)
+                                )
+                        )
+                        (oneOf (guard (not lastLineIsText) |> bind (\_ -> fmap (\_ -> RawHtmlBlock) parseHtmlBlockStart))
+                            (guard (not lastLineIsText) |> bind (\_ -> fmap (\_ -> Reference) scanReference))
+                        )
+                    )
+            )
 
 
 
@@ -183,7 +198,7 @@ type Leaf
 
 
 type alias ContainerM a =
-    RWS () ReferenceMap ContainerStack a
+    RWS () ContainerStack a
 
 
 
@@ -274,17 +289,27 @@ closeContainer =
 
 addLeaf : LineNumber -> Leaf -> ContainerM ()
 addLeaf lineNum lf =
-    -- do
-    -- ContainerStack top rest <- get
-    -- case (top, lf) of
-    --         (Container (ListItem{} as ct) cs, BlankLine{}) ->
-    --         case viewr cs of
-    --             (_ :> L _ BlankLine{}) -> -- two blanks break out of list item:
-    --                 closeContainer >> addLeaf lineNum lf
-    --             _ -> put $ ContainerStack (Container ct (cs |> L lineNum lf)) rest
-    --         (Container ct cs, _) ->
-    --                 put $ ContainerStack (Container ct (cs |> L lineNum lf)) rest
-    Debug.todo "addLeaf"
+    RWS.get
+        |> RWS.bind
+            (\(ContainerStack top rest) ->
+                let
+                    _ =
+                        Debug.log "addLeaf" ( ContainerStack top rest, lineNum, lf )
+                in
+                case ( top, lf ) of
+                    ( Container ((ListItem _) as ct) cs, BlankLine _ ) ->
+                        case List.reverse cs of
+                            (L _ (BlankLine _)) :: _ ->
+                                -- two blanks break out of list item:
+                                closeContainer
+                                    |> RWS.bind (\_ -> addLeaf lineNum lf)
+
+                            _ ->
+                                RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
+
+                    ( Container ct cs, _ ) ->
+                        RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
+            )
 
 
 
@@ -308,7 +333,7 @@ addContainer ct =
 -}
 processDocument : ( Container, ReferenceMap ) -> Blocks
 processDocument ( Container ct cs, refmap ) =
-    case ct of
+    case Debug.log "processDocument" ct of
         Document ->
             processElts refmap cs
 
@@ -323,12 +348,12 @@ parsing inline contents of texts and resolving referencess.
 -}
 processElts : ReferenceMap -> List Elt -> Blocks
 processElts refmap elts =
-    case elts of
+    case Debug.log "processElts" elts of
         [] ->
             []
 
         (L _ lf) :: rest ->
-            case lf of
+            case Debug.log "lf" lf of
                 -- Special handling of @docs lines in Elm:
                 TextLine t ->
                     case stripPrefix "@docs" t of
@@ -365,6 +390,9 @@ processElts refmap elts =
                         Nothing ->
                             -- Gobble text lines and make them into a Para:
                             let
+                                _ =
+                                    Debug.log "Gobble" ()
+
                                 txt =
                                     String.trimRight <|
                                         joinLines <|
@@ -385,7 +413,7 @@ processElts refmap elts =
                                             False
                             in
                             List.singleton (Para <| parseInlines refmap txt)
-                                ++ processElts refmap rest_
+                                ++ processElts refmap (Debug.log "rest_" rest_)
 
                 -- Blanks at outer level are ignored:
                 BlankLine _ ->
@@ -624,6 +652,7 @@ processLines t =
     let
         ( doc, refmap ) =
             RWS.evalRWS (RWS.mapM_ processLine lns |> RWS.bind (\_ -> closeStack)) () startState
+                |> Debug.log "doc, refmap"
 
         lns : List ( LineNumber, String )
         lns =
@@ -644,85 +673,146 @@ processLines t =
 
 processLine : ( LineNumber, String ) -> ContainerM ()
 processLine ( lineNumber, txt ) =
-    -- -- Apply the line-start scanners appropriate for each nested container.
-    -- -- Return the remainder of the string, and the number of unmatched
-    -- -- containers.
-    -- let
-    --     ( t_, numUnmatched ) =
-    --         tryOpenContainers (List.reverse (top :: rest)) txt
-    --     -- Some new containers can be started only after a blank.
-    --     lastLineIsText : Bool
-    --     lastLineIsText =
-    --         numUnmatched == 0
-    --     -- &&
-    --     --                     (case viewr cs of
-    --     --                             (_ :> L _ (TextLine _)) -> True
-    --     --                             _                       -> False)
-    --     addNew ( ns, lf ) =
-    --         -- do
-    --         -- mapM_ addContainer ns
-    --         -- case (reverse ns, lf) of
-    --         --     -- don't add extra blank at beginning of fenced code block
-    --         --     (FencedCode{}:_,  BlankLine{}) -> return ()
-    --         --     _ -> addLeaf lineNumber lf
-    --         Debug.todo "addNew"
-    -- in
-    -- -- Process the rest of the line in a way that makes sense given
-    -- -- the container type at the top of the stack (ct):
-    -- case ct of
-    --     -- If it's a verbatim line container, add the line.
-    --     RawHtmlBlock ->
-    --         if numUnmatched == 0 then
-    --             addLeaf lineNumber (TextLine t_)
-    --         else
-    --             ()
-    --     IndentedCode ->
-    --         if numUnmatched == 0 then
-    --             addLeaf lineNumber (TextLine t_)
-    --         else
-    --             ()
-    --     FencedCode { fence } ->
-    --         -- here we don't check numUnmatched because we allow laziness
-    --         if
-    --             String.startsWith fence t_
-    --             -- closing code fence
-    --         then
-    --             closeContainer
-    --         else
-    --             addLeaf lineNumber (TextLine t_)
-    --     Reference ->
-    --         case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
-    --             ( ns, lf ) ->
-    --                 closeContainer
-    --                     >> addNew ( ns, lf )
-    --     -- otherwise, parse the remainder to see if we have new container starts:
-    --     _ ->
-    --         case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
-    --             -- -- lazy continuation: text line, last line was text, no new containers,
-    --             -- -- some unmatched containers:
-    --             -- ([], TextLine t)
-    --             --     | numUnmatched > 0
-    --             --     , case viewr cs of
-    --             --             (_ :> L _ (TextLine _)) -> True
-    --             --             _                       -> False
-    --             --     , ct /= IndentedCode -> addLeaf lineNumber (TextLine t)
-    --             -- -- if it's a setext header line and the top container has a textline
-    --             -- -- as last child, add a setext header:
-    --             -- ([], SetextHeader lev _) | numUnmatched == 0 ->
-    --             --     case viewr cs of
-    --             --         (cs' :> L _ (TextLine t)) -> -- replace last text line with setext header
-    --             --         put $ ContainerStack (Container ct
-    --             --                     (cs' |> L lineNumber (SetextHeader lev t))) rest
-    --             --         -- Note: the following case should not occur, since
-    --             --         -- we don't add a SetextHeader leaf unless lastLineIsText.
-    --             --         _ -> error "setext header line without preceding text line"
-    --             -- -- otherwise, close all the unmatched containers, add the new
-    --             -- -- containers, and finally add the new leaf:
-    --             ( ns, lf ) ->
-    --                 -- close unmatched containers, add new ones
-    --                 replicateM numUnmatched closeContainer
-    --                     >> addNew ( ns, lf )
-    Debug.todo "processLine"
+    let
+        _ =
+            Debug.log "processLine" ( lineNumber, txt )
+    in
+    RWS.get
+        |> RWS.bind
+            (\(ContainerStack ((Container ct cs) as top) rest) ->
+                -- Apply the line-start scanners appropriate for each nested container.
+                -- Return the remainder of the string, and the number of unmatched
+                -- containers.
+                let
+                    _ =
+                        Debug.log "ContainerStack" (ContainerStack top rest)
+
+                    ( t_, numUnmatched ) =
+                        tryOpenContainers (List.reverse (top :: rest)) txt
+
+                    -- Some new containers can be started only after a blank.
+                    lastLineIsText : Bool
+                    lastLineIsText =
+                        numUnmatched
+                            == 0
+                            && (case List.reverse cs of
+                                    (L _ (TextLine _)) :: _ ->
+                                        True
+
+                                    _ ->
+                                        False
+                               )
+
+                    addNew ( ns, lf ) =
+                        RWS.mapM_ addContainer ns
+                            |> RWS.bind
+                                (\_ ->
+                                    case Debug.log "addNew1" ( List.reverse ns, lf ) of
+                                        -- don't add extra blank at beginning of fenced code block
+                                        ( (FencedCode _) :: _, BlankLine _ ) ->
+                                            RWS.return ()
+
+                                        _ ->
+                                            addLeaf lineNumber lf
+                                )
+                in
+                -- Process the rest of the line in a way that makes sense given
+                -- the container type at the top of the stack (ct):
+                case Debug.log "ct" ct of
+                    -- If it's a verbatim line container, add the line.
+                    RawHtmlBlock ->
+                        if numUnmatched == 0 then
+                            addLeaf lineNumber (TextLine t_)
+
+                        else
+                            Debug.todo "RawHtmlBlock"
+
+                    IndentedCode ->
+                        if numUnmatched == 0 then
+                            addLeaf lineNumber (TextLine t_)
+
+                        else
+                            Debug.todo "IndentedCode"
+
+                    FencedCode { fence } ->
+                        -- here we don't check numUnmatched because we allow laziness
+                        if
+                            String.startsWith fence t_
+                            -- closing code fence
+                        then
+                            closeContainer
+
+                        else
+                            addLeaf lineNumber (TextLine t_)
+
+                    Reference ->
+                        case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
+                            ( ns, lf ) ->
+                                closeContainer
+                                    |> RWS.bind (\_ -> addNew ( ns, lf ))
+
+                    -- otherwise, parse the remainder to see if we have new container starts:
+                    _ ->
+                        case Debug.log "tryNewContainers2" (tryNewContainers lastLineIsText (String.length txt - String.length t_) t_) of
+                            -- lazy continuation: text line, last line was text, no new containers,
+                            -- some unmatched containers:
+                            ( [] as ns, (TextLine t) as lf ) ->
+                                if
+                                    numUnmatched
+                                        > 0
+                                        && (case List.reverse cs of
+                                                (L _ (TextLine _)) :: _ ->
+                                                    True
+
+                                                _ ->
+                                                    False
+                                           )
+                                        && ct
+                                        /= IndentedCode
+                                then
+                                    addLeaf lineNumber (TextLine t)
+
+                                else
+                                    -- close unmatched containers, add new ones
+                                    RWS.replicateM numUnmatched closeContainer
+                                        |> RWS.bind (\_ -> addNew ( ns, lf ))
+
+                            -- if it's a setext header line and the top container has a textline
+                            -- as last child, add a setext header:
+                            ( [] as ns, (SetextHeader lev _) as lf ) ->
+                                if numUnmatched == 0 then
+                                    case List.reverse cs of
+                                        (L _ (TextLine t)) :: cs_ ->
+                                            -- replace last text line with setext header
+                                            RWS.put
+                                                (ContainerStack
+                                                    (Container ct
+                                                        (List.reverse (L lineNumber (SetextHeader lev t) :: cs_))
+                                                    )
+                                                    rest
+                                                )
+
+                                        -- Note: the following case should not occur, since
+                                        -- we don't add a SetextHeader leaf unless lastLineIsText.
+                                        _ ->
+                                            RWS.error "setext header line without preceding text line"
+
+                                else
+                                    -- close unmatched containers, add new ones
+                                    RWS.replicateM numUnmatched closeContainer
+                                        |> RWS.bind (\_ -> addNew ( ns, lf ))
+
+                            -- otherwise, close all the unmatched containers, add the new
+                            -- containers, and finally add the new leaf:
+                            ( ns, lf ) ->
+                                let
+                                    _ =
+                                        Debug.log "HEREERERERERERERERERER!!!" ( numUnmatched, ns, lf )
+                                in
+                                -- close unmatched containers, add new ones
+                                RWS.replicateM numUnmatched closeContainer
+                                    |> RWS.bind (\_ -> addNew ( ns, lf ))
+            )
 
 
 
@@ -764,19 +854,41 @@ tryOpenContainers cs t =
 tryNewContainers : Bool -> Int -> String -> ( List ContainerType, Leaf )
 tryNewContainers lastLineIsText offset t =
     let
+        _ =
+            Debug.log "tryNewContainers" ( lastLineIsText, offset, t )
+
         newContainers =
-            -- do
-            --   getPosition >>= \pos -> setPosition pos{ column = offset + 1 }
-            --   regContainers <- many (containerStart lastLineIsText)
-            --   verbatimContainers <- option []
-            --                     $ count 1 (verbatimContainerStart lastLineIsText)
-            --   if null verbatimContainers
-            --      then (,) <$> pure regContainers <*> leaf lastLineIsText
-            --      else (,) <$> pure (regContainers ++ verbatimContainers) <*>
-            --                     textLineOrBlank
-            Debug.todo "newContainers"
+            getPosition
+                |> bind
+                    (\(Position ln _) ->
+                        let
+                            _ =
+                                Debug.log "Position ln" ln
+                        in
+                        setPosition (Position ln (offset + 1))
+                            |> bind
+                                (\_ ->
+                                    many (containerStart lastLineIsText)
+                                        |> bind
+                                            (\regContainers ->
+                                                let
+                                                    _ =
+                                                        Debug.log "regContainers" regContainers
+                                                in
+                                                option [] (count 1 (verbatimContainerStart lastLineIsText))
+                                                    |> bind
+                                                        (\verbatimContainers ->
+                                                            if List.isEmpty verbatimContainers then
+                                                                fmap (Tuple.pair regContainers) (leaf lastLineIsText)
+
+                                                            else
+                                                                fmap (Tuple.pair (regContainers ++ verbatimContainers)) textLineOrBlank
+                                                        )
+                                            )
+                                )
+                    )
     in
-    case parse newContainers t of
+    case Debug.log "tryNewContainers1" (parse newContainers t) of
         Ok ( cs, t_ ) ->
             ( cs, t_ )
 
@@ -786,12 +898,15 @@ tryNewContainers lastLineIsText offset t =
 
 textLineOrBlank : Parser Leaf
 textLineOrBlank =
-    --   let
-    --     consolidate ts | T.all isWhitespace ts = BlankLine ts
-    --                        | otherwise        = TextLine  ts
-    --   in
-    -- consolidate <$> takeText
-    Debug.todo "textLineOrBlank"
+    let
+        consolidate ts =
+            if String.all isWhitespace ts then
+                BlankLine ts
+
+            else
+                TextLine ts
+    in
+    fmap consolidate takeText
 
 
 
@@ -800,19 +915,40 @@ textLineOrBlank =
 
 leaf : Bool -> Parser Leaf
 leaf lastLineIsText =
-    --     scanNonindentSpace *> (
-    --      (ATXHeader <$> parseAtxHeaderStart <*>
-    --          (T.strip . removeATXSuffix <$> takeText))
-    --    <|> (guard lastLineIsText *> (SetextHeader <$> parseSetextHeaderLine <*> pure mempty))
-    --    <|> (Rule <$ scanHRuleLine)
-    --    <|> textLineOrBlank
-    --   )
-    --   where removeATXSuffix t = case T.dropWhileEnd (`elem` (" #" :: String)) t of
-    --                                  t' | T.null t' -> t'
-    --                                       -- an escaped \#
-    --                                     | T.last t' == '\\' -> t' <> "#"
-    --                                     | otherwise -> t'
-    Debug.todo "leaf"
+    scanNonindentSpace
+        |> bind
+            (\_ ->
+                let
+                    removeATXSuffix t =
+                        case String.uncons (String.reverse (stringDropWhileEnd (\c -> String.contains (String.fromChar c) " #") t)) of
+                            Nothing ->
+                                ""
+
+                            Just ( '\\', t_ ) ->
+                                String.reverse t_ ++ "\\#"
+
+                            Just ( c, t_ ) ->
+                                String.reverse (String.cons c t_)
+                in
+                oneOf
+                    (pure ATXHeader
+                        |> apply parseAtxHeaderStart
+                        |> apply (fmap (String.trim << removeATXSuffix) takeText)
+                    )
+                    (oneOf
+                        (guard lastLineIsText
+                            |> bind
+                                (\_ ->
+                                    pure SetextHeader
+                                        |> apply parseSetextHeaderLine
+                                        |> apply (pure "")
+                                )
+                        )
+                        (oneOf (fmap (\_ -> Rule) scanHRuleLine)
+                            textLineOrBlank
+                        )
+                    )
+            )
 
 
 
@@ -821,8 +957,7 @@ leaf lastLineIsText =
 
 scanReference : Scanner
 scanReference =
-    -- () <$ lookAhead (pLinkLabel >> scanChar ':')
-    Debug.todo "scanReference"
+    fmap (\_ -> ()) (lookAhead (pLinkLabel |> bind (\_ -> scanChar ':')))
 
 
 
@@ -832,8 +967,15 @@ scanReference =
 
 scanBlockquoteStart : Scanner
 scanBlockquoteStart =
-    -- scanChar '>' >> option () (scanChar ' ')
-    Debug.todo "scanBlockquoteStart"
+    scanChar '>'
+        |> bind
+            (\_ ->
+                let
+                    _ =
+                        Debug.log "scanBlockquoteStart" ()
+                in
+                option () (scanChar ' ')
+            )
 
 
 
@@ -849,24 +991,33 @@ scanBlockquoteStart =
 
 parseAtxHeaderStart : Parser Int
 parseAtxHeaderStart =
-    --   do
-    --   _ <- char '#'
-    --   hashes <- upToCountChars 5 (== '#')
-    --   -- hashes must be followed by space unless empty header:
-    --   notFollowedBy (skip (/= ' '))
-    --   return $ T.length hashes + 1
-    Debug.todo "parseAtxHeaderStart"
+    char '#'
+        |> bind (\_ -> upToCountChars 5 ((==) '#'))
+        |> bind
+            (\hashes ->
+                -- hashes must be followed by space unless empty header:
+                notFollowedBy (skip ((/=) ' '))
+                    |> fmap (\_ -> String.length hashes + 1)
+            )
 
 
 parseSetextHeaderLine : Parser Int
 parseSetextHeaderLine =
-    -- do
-    --     d <- satisfy (\c -> c == '-' || c == '=')
-    --     let lev = if d == '=' then 1 else 2
-    --     skipWhile (== d)
-    --     scanBlankline
-    --     return lev
-    Debug.todo "parseSetextHeaderLine"
+    satisfy (\c -> c == '-' || c == '=')
+        |> bind
+            (\d ->
+                let
+                    lev =
+                        if d == '=' then
+                            1
+
+                        else
+                            2
+                in
+                skipWhile ((==) d)
+                    |> bind (\_ -> scanBlankline)
+                    |> fmap (\_ -> lev)
+            )
 
 
 
@@ -877,12 +1028,14 @@ parseSetextHeaderLine =
 
 scanHRuleLine : Scanner
 scanHRuleLine =
-    -- do
-    --     c <- satisfy (\c -> c == '*' || c == '_' || c == '-')
-    --     _ <- count 2 $ scanSpaces >> skip (== c)
-    --     skipWhile (\x -> x == ' ' || x == c)
-    --     endOfInput
-    Debug.todo "scanHRuleLine"
+    satisfy (\c -> c == '*' || c == '_' || c == '-')
+        |> bind
+            (\c ->
+                count 2 scanSpaces
+                    |> bind (\_ -> skip ((==) c))
+                    |> bind (\_ -> skipWhile (\x -> x == ' ' || x == c))
+                    |> bind (\_ -> endOfInput)
+            )
 
 
 
@@ -892,17 +1045,29 @@ scanHRuleLine =
 
 parseCodeFence : Parser ContainerType
 parseCodeFence =
-    -- do
-    --     col <- column <$> getPosition
-    --     cs <- takeWhile1 (=='`') <|> takeWhile1 (=='~')
-    --     guard $ T.length cs >= 3
-    --     scanSpaces
-    --     rawattr <- takeWhile (\c -> c /= '`' && c /= '~')
-    --     endOfInput
-    --     return $ FencedCode { startColumn = col
-    --                         , fence = cs
-    --                         , info = rawattr }
-    Debug.todo "parseCodeFence"
+    getPosition
+        |> bind
+            (\(Position _ col) ->
+                oneOf (takeWhile1 ((==) '`')) (takeWhile1 ((==) '~'))
+                    |> bind
+                        (\cs ->
+                            guard (String.length cs >= 3)
+                                |> bind (\_ -> scanSpaces)
+                                |> bind (\_ -> takeWhile (\c -> c /= '`' && c /= '~'))
+                                |> bind
+                                    (\rawattr ->
+                                        endOfInput
+                                            |> fmap
+                                                (\_ ->
+                                                    FencedCode
+                                                        { startColumn = col
+                                                        , fence = cs
+                                                        , info = rawattr
+                                                        }
+                                                )
+                                    )
+                        )
+            )
 
 
 
@@ -912,17 +1077,31 @@ parseCodeFence =
 
 parseHtmlBlockStart : Parser ()
 parseHtmlBlockStart =
-    -- () <$ lookAhead
-    --     ((do t <- pHtmlTag
-    --         guard $ f $ fst t
-    --         return $ snd t)
-    --     <|> string "<!--"
-    --     <|> string "-->"
-    --     )
-    -- where f (Opening name) = name `Set.member` blockHtmlTags
-    --     f (SelfClosing name) = name `Set.member` blockHtmlTags
-    --     f (Closing name) = name `Set.member` blockHtmlTags
-    Debug.todo "parseHtmlBlockStart"
+    let
+        f htmlTagType =
+            case htmlTagType of
+                Opening name ->
+                    Set.member name blockHtmlTags
+
+                SelfClosing name ->
+                    Set.member name blockHtmlTags
+
+                Closing name ->
+                    Set.member name blockHtmlTags
+    in
+    -- () <$
+    lookAhead
+        (oneOf
+            (pHtmlTag
+                |> bind
+                    (\t ->
+                        guard (f (Tuple.first t))
+                            |> fmap (\_ -> Tuple.second t)
+                    )
+            )
+            (oneOf (string "<!--") (string "-->"))
+        )
+        |> fmap (\_ -> ())
 
 
 
@@ -989,43 +1168,87 @@ blockHtmlTags =
 
 parseListMarker : Parser ContainerType
 parseListMarker =
-    -- do
-    --   col <- column <$> getPosition
-    --   ty <- parseBullet <|> parseListNumber
-    --   -- padding is 1 if list marker followed by a blank line
-    --   -- or indented code.  otherwise it's the length of the
-    --   -- whitespace between the list marker and the following text:
-    --   padding_ <- (1 <$ scanBlankline)
-    --           <|> (1 <$ (skip ((==) ' ') *> lookAhead (count 4 (char ' '))))
-    --           <|> (T.length <$> takeWhile ((==) ' '))
-    --   -- text can't immediately follow the list marker:
-    --   guard $ padding_ > 0
-    --   return $ ListItem { listType = ty
-    --                     , markerColumn = col
-    --                     , padding = padding_ + listMarkerWidth ty
-    --                     }
-    Debug.todo "parseListMarker"
+    getPosition
+        |> bind
+            (\(Position _ col) ->
+                let
+                    _ =
+                        Debug.log "parseListMarker" col
+                in
+                oneOf parseBullet parseListNumber
+                    |> bind
+                        (\ty ->
+                            let
+                                _ =
+                                    Debug.log "ty" ty
+                            in
+                            -- padding is 1 if list marker followed by a blank line
+                            -- or indented code.  otherwise it's the length of the
+                            -- whitespace between the list marker and the following text:
+                            oneOf (fmap (\_ -> 1) scanBlankline)
+                                (oneOf (fmap (\_ -> 1) (skip ((==) ' ') |> bind (\_ -> lookAhead (count 4 (char ' ')))))
+                                    (fmap String.length (takeWhile ((==) ' ')))
+                                )
+                                |> bind
+                                    (\padding_ ->
+                                        -- text can't immediately follow the list marker:
+                                        guard (padding_ > 0)
+                                            |> bind
+                                                (\() ->
+                                                    return
+                                                        (ListItem
+                                                            { listType = ty
+                                                            , markerColumn = col
+                                                            , padding = padding_ + listMarkerWidth ty
+                                                            }
+                                                        )
+                                                )
+                                    )
+                        )
+            )
+
+
+listMarkerWidth : ListType -> Int
+listMarkerWidth listType =
+    case listType of
+        Bullet _ ->
+            1
+
+        Numbered _ n ->
+            if n < 10 then
+                2
+
+            else if n < 100 then
+                3
+
+            else if n < 1000 then
+                4
+
+            else
+                5
 
 
 
--- listMarkerWidth : ListType -> Int
--- listMarkerWidth (Bullet _) = 1
--- listMarkerWidth (Numbered _ n) | n < 10    = 2
---                                | n < 100   = 3
---                                | n < 1000  = 4
---                                | otherwise = 5
 -- Parse a bullet and return list type.
 
 
 parseBullet : Parser ListType
 parseBullet =
-    -- do
-    --   c <- satisfy (\c -> c == '+' || c == '*' || c == '-')
-    --   unless (c == '+')
-    --     $ nfb $ (count 2 $ scanSpaces >> skip (== c)) >>
-    --           skipWhile (\x -> x == ' ' || x == c) >> endOfInput -- hrule
-    --   return $ Bullet c
-    Debug.todo "parseBullet"
+    satisfy (\c -> c == '+' || c == '*' || c == '-')
+        |> bind
+            (\c ->
+                let
+                    _ =
+                        Debug.log "parseBullet" ()
+                in
+                unless (c == '+') (nfb (count 2 scanSpaces |> bind (\_ -> skip ((==) c))))
+                    |> bind
+                        (\_ ->
+                            -- hrule
+                            skipWhile (\x -> x == ' ' || x == c) |> bind (\_ -> endOfInput)
+                        )
+                    |> bind (\_ -> return (Bullet c))
+            )
 
 
 
@@ -1034,18 +1257,21 @@ parseBullet =
 
 parseListNumber : Parser ListType
 parseListNumber =
-    -- do
-    --     num
-    --     <- (read . T.unpack)
-    --     <$> takeWhile1 isDigit
-    --             wrap
-    --     <- PeriodFollowing
-    --     <$ skip ((==) '.')
-    --     <|> ParenFollowing
-    --     <$ skip ((==) ')')
-    --         return
-    --     $ Numbered wrap num
-    Debug.todo "parseListNumber"
+    takeWhile1 Char.isDigit
+        |> bind
+            (\numStr ->
+                let
+                    _ =
+                        Debug.log "numStr" numStr
+                in
+                case String.toInt numStr of
+                    Just num ->
+                        oneOf (fmap (\_ -> PeriodFollowing) (skip ((==) '.'))) (fmap (\_ -> ParenFollowing) (skip ((==) ')')))
+                            |> bind (\wrap -> return (Numbered wrap num))
+
+                    Nothing ->
+                        crash "Exception: Prelude.read: no parse"
+            )
 
 
 
@@ -1064,3 +1290,24 @@ stripPrefix p t =
 stringBreak : (Char -> Bool) -> String -> ( String, String )
 stringBreak p t =
     Debug.todo "stringBreak"
+
+
+stringDropWhileEnd : (Char -> Bool) -> String -> String
+stringDropWhileEnd f =
+    String.reverse
+        >> stringDropWhile f
+        >> String.reverse
+
+
+stringDropWhile : (Char -> Bool) -> String -> String
+stringDropWhile f str =
+    case String.uncons str of
+        Just ( first, rest ) ->
+            if f first then
+                stringDropWhile f rest
+
+            else
+                str
+
+        Nothing ->
+            ""

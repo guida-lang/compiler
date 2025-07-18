@@ -9,6 +9,7 @@ import Common.Format.Cheapskate.ParserCombinators exposing (..)
 import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.Cheapskate.Util exposing (..)
 import Set exposing (Set)
+import Utils.Crash exposing (crash)
 
 
 
@@ -27,45 +28,99 @@ import Set exposing (Set)
 
 pHtmlTag : Parser ( HtmlTagType, String )
 pHtmlTag =
-    -- char '<'
-    -- |> bind (\_ ->
-    --     -- do not end the tag with a > character in a quoted attribute.
-    --     oneOf (char '/' >> return True)  (return False)
-    --     |> bind (\closing ->
-    --       takeWhile1 (\c -> isAsciiAlphaNum c || c == '?' || c == '!')
-    --       |> bind (\tagname ->
-    --     let
-    --       tagname_ = String.toLower tagname
-    --       attr =
-    --         takeWhile isSpace
-    --         |> bind (\ss ->
-    --           satisfy isLetter
-    --             |> bind (\x ->
-    --               takeWhile (\c -> isAsciiAlphaNum c || c == ':')
-    --                   |> bind (\xs ->
-    --                     skip ((==) '=')
-    --                     |> bind (\_ -> pQuoted '"' <|> pQuoted '\'' <|> takeWhile1 isAlphaNum <|> return "")
-    --                     |> bind (\v ->
-    --                         return ( ss ++ T.singleton x ++ xs ++ "=" ++ v)
-    --                    )
-    --                   )
-    --             )
-    --         )
-    --     in
-    --     attrs <- String.concat <$> many attr
-    --     final <- takeWhile (\c -> isSpace c || c == '/')
-    --     _ <- char '>'
-    --     let tagtype = if closing
-    --                     then Closing tagname_
-    --                     else case T.stripSuffix "/" final of
-    --                           Just _  -> SelfClosing tagname_
-    --                           Nothing -> Opening tagname_
-    --     return (tagtype,
-    --             T.pack ('<' :: ['/' | closing]) <> tagname <> attrs <> final <> ">")
-    --     )
-    --   )
-    -- )
-    Debug.todo "pHtmlTag"
+    char '<'
+        |> bind
+            (\_ ->
+                -- do not end the tag with a > character in a quoted attribute.
+                oneOf (char '/' |> fmap (\_ -> True)) (return False)
+                    |> bind
+                        (\closing ->
+                            takeWhile1 (\c -> isAsciiAlphaNum c || c == '?' || c == '!')
+                                |> bind
+                                    (\tagname ->
+                                        let
+                                            tagname_ =
+                                                String.toLower tagname
+
+                                            attr =
+                                                takeWhile isSpace
+                                                    |> bind
+                                                        (\ss ->
+                                                            satisfy Char.isAlpha
+                                                                |> bind
+                                                                    (\x ->
+                                                                        takeWhile (\c -> isAsciiAlphaNum c || c == ':')
+                                                                            |> bind
+                                                                                (\xs ->
+                                                                                    skip ((==) '=')
+                                                                                        |> bind (\_ -> oneOf (pQuoted '"') (oneOf (pQuoted '\'') (oneOf (takeWhile1 Char.isAlphaNum) (return ""))))
+                                                                                        |> fmap
+                                                                                            (\v ->
+                                                                                                ss ++ String.fromChar x ++ xs ++ "=" ++ v
+                                                                                            )
+                                                                                )
+                                                                    )
+                                                        )
+                                        in
+                                        many attr
+                                            |> fmap String.concat
+                                            |> bind
+                                                (\attrs ->
+                                                    takeWhile (\c -> isSpace c || c == '/')
+                                                        |> bind
+                                                            (\final ->
+                                                                char '>'
+                                                                    |> bind
+                                                                        (\_ ->
+                                                                            let
+                                                                                tagtype =
+                                                                                    if closing then
+                                                                                        Closing tagname_
+
+                                                                                    else
+                                                                                        case stringStripSuffix "/" final of
+                                                                                            Just _ ->
+                                                                                                SelfClosing tagname_
+
+                                                                                            Nothing ->
+                                                                                                Opening tagname_
+                                                                            in
+                                                                            return
+                                                                                ( tagtype
+                                                                                , String.fromList
+                                                                                    ('<'
+                                                                                        :: (if closing then
+                                                                                                [ '/' ]
+
+                                                                                            else
+                                                                                                []
+                                                                                           )
+                                                                                    )
+                                                                                    ++ tagname
+                                                                                    ++ attrs
+                                                                                    ++ final
+                                                                                    ++ ">"
+                                                                                )
+                                                                        )
+                                                            )
+                                                )
+                                    )
+                        )
+            )
+
+
+isSpace : Char -> Bool
+isSpace c =
+    c == '\t' || c == '\n' || c == '\u{000D}'
+
+
+stringStripSuffix : String -> String -> Maybe String
+stringStripSuffix p t =
+    if String.endsWith p t then
+        Just (String.dropRight (String.length p) t)
+
+    else
+        Nothing
 
 
 
@@ -74,12 +129,13 @@ pHtmlTag =
 
 pQuoted : Char -> Parser String
 pQuoted c =
-    -- do
-    --   skip (== c)
-    --   contents <- takeTill (== c)
-    --   skip (== c)
-    --   return (T.singleton c <> contents <> T.singleton c)
-    Debug.todo "pQuoted"
+    skip ((==) c)
+        |> bind (\_ -> takeTill ((==) c))
+        |> bind
+            (\contents ->
+                skip ((==) c)
+                    |> fmap (\_ -> String.fromChar c ++ contents ++ String.fromChar c)
+            )
 
 
 
@@ -89,22 +145,20 @@ pQuoted c =
 
 pHtmlComment : Parser String
 pHtmlComment =
-    -- do
-    --   _ <- string "<!--"
-    --   rest <- manyTill anyChar (string "-->")
-    --   return $ "<!--" <> T.pack rest <> "-->"
-    Debug.todo "pHtmlComment"
+    string "<!--"
+        |> bind (\_ -> manyTill anyChar (string "-->"))
+        |> fmap (\rest -> "<!--" ++ String.fromList rest ++ "-->")
 
 
+{-| A link label [like this]. Note the precedence: code backticks have
+precedence over label bracket markers, which have precedence over
+\*, \_, and other inline formatting markers.
+So, 2 below contains a link while 1 does not:
 
--- A link label [like this].  Note the precedence:  code backticks have
--- precedence over label bracket markers, which have precedence over
--- *, _, and other inline formatting markers.
--- So, 2 below contains a link while 1 does not:
--- 1. [a link `with a ](/url)` character
--- 2. [a link *with emphasized ](/url) text*
+1.  [a link `with a ](/url)` character
+2.  [a link \*with emphasized ](/url) text\*
 
-
+-}
 pLinkLabel : Parser String
 pLinkLabel =
     let
@@ -280,26 +334,40 @@ pSatisfy p =
 
 parseInlines : ReferenceMap -> String -> Inlines
 parseInlines refmap t =
-    -- case parse (msum <$> many (pInline refmap) <* endOfInput) t of
-    --      Left e   -> error ("parseInlines: " ++ show e) -- should not happen
-    --      Right r  -> r
-    Debug.todo "parseInlines"
+    let
+        _ =
+            Debug.log "parseInlines" t
+    in
+    case Debug.log "parseInlines1" (parse (fmap List.concat (bind (\_ -> many (pInline refmap)) endOfInput)) t) of
+        Err e ->
+            -- should not happen
+            crash ("parseInlines: " ++ Debug.toString e)
+
+        Ok r ->
+            r
 
 
 pInline : ReferenceMap -> Parser Inlines
 pInline refmap =
-    --      pAsciiStr
-    --  <|> pSpace
-    --  <|> pEnclosure '*' refmap  -- strong/emph
-    --  <|> (notAfter isAlphaNum *> pEnclosure '_' refmap)
-    --  <|> pCode
-    --  <|> pLink refmap
-    --  <|> pImage refmap
-    --  <|> pRawHtml
-    --  <|> pAutolink
-    --  <|> pEntity
-    --  <|> pSym
-    Debug.todo "pInline"
+    oneOf pAsciiStr
+        (oneOf pSpace
+            -- strong/emph
+            (oneOf (pEnclosure '*' refmap)
+                (oneOf (notAfter Char.isAlphaNum |> bind (\_ -> pEnclosure '_' refmap))
+                    (oneOf pCode
+                        (oneOf (pLink refmap)
+                            (oneOf (pImage refmap)
+                                (oneOf pRawHtml
+                                    (oneOf pAutolink
+                                        (oneOf pEntity pSym)
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
 
 
 
@@ -311,36 +379,52 @@ pInline refmap =
 
 pSpace : Parser Inlines
 pSpace =
-    -- do
-    --   ss <- takeWhile1 isWhitespace
-    --   return $ singleton
-    --          $ if T.any (=='\n') ss
-    --               then if "  " `T.isPrefixOf` ss
-    --                    then LineBreak
-    --                    else SoftBreak
-    --               else Space
-    Debug.todo "pSpace"
+    takeWhile1 isWhitespace
+        |> bind
+            (\ss ->
+                return
+                    (List.singleton
+                        (if String.any ((==) '\n') ss then
+                            if String.startsWith "  " ss then
+                                LineBreak
+
+                            else
+                                SoftBreak
+
+                         else
+                            Space
+                        )
+                    )
+            )
 
 
 isAsciiAlphaNum : Char -> Bool
 isAsciiAlphaNum c =
-    -- (c >= 'a' && c <= 'z') ||
-    -- (c >= 'A' && c <= 'Z') ||
-    -- (c >= '0' && c <= '9')
-    Debug.todo "isAsciiAlphaNum"
+    (c >= 'a' && c <= 'z')
+        || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9')
 
 
 pAsciiStr : Parser Inlines
 pAsciiStr =
-    -- do
-    --   t <- takeWhile1 isAsciiAlphaNum
-    --   mbc <- peekChar
-    --   case mbc of
-    --        Just ':' -> if t `Set.member` schemeSet
-    --                       then pUri t
-    --                       else return $ singleton $ Str t
-    --        _        -> return $ singleton $ Str t
-    Debug.todo "pAsciiStr"
+    takeWhile1 isAsciiAlphaNum
+        |> bind
+            (\t ->
+                peekChar
+                    |> bind
+                        (\mbc ->
+                            case mbc of
+                                Just ':' ->
+                                    if Set.member t schemeSet then
+                                        pUri t
+
+                                    else
+                                        return (List.singleton (Str t))
+
+                                _ ->
+                                    return (List.singleton (Str t))
+                        )
+            )
 
 
 
@@ -350,15 +434,22 @@ pAsciiStr =
 
 pSym : Parser Inlines
 pSym =
-    -- do
-    --   c <- anyChar
-    --   let ch = singleton . Str . T.singleton
-    --   if c == '\\'
-    --      then ch <$> satisfy isEscapable
-    --           <|> singleton LineBreak <$ satisfy (=='\n')
-    --           <|> return (ch '\\')
-    --      else return (ch c)
-    Debug.todo "pSym"
+    anyChar
+        |> bind
+            (\c ->
+                let
+                    ch =
+                        List.singleton << Str << String.fromChar
+                in
+                if c == '\\' then
+                    oneOf (fmap ch (satisfy isEscapable))
+                        (oneOf (fmap (\_ -> List.singleton LineBreak) (satisfy ((==) '\n')))
+                            (return (ch '\\'))
+                        )
+
+                else
+                    return (ch c)
+            )
 
 
 
@@ -778,12 +869,13 @@ linkToImage ils =
 
 pEntity : Parser Inlines
 pEntity =
-    -- do
-    --   _ <- char '&'
-    --   res <- pCharEntity <|> pDecEntity <|> pHexEntity
-    --   _ <- char ';'
-    --   return $ singleton $ Entity $ "&" <> res <> ";"
-    Debug.todo "pEntity"
+    char '&'
+        |> bind (\_ -> oneOf pCharEntity (oneOf pDecEntity pHexEntity))
+        |> bind
+            (\res ->
+                char ';'
+                    |> bind (\_ -> return (List.singleton (Entity ("&" ++ res ++ ";"))))
+            )
 
 
 pCharEntity : Parser String
@@ -793,21 +885,23 @@ pCharEntity =
 
 pDecEntity : Parser String
 pDecEntity =
-    -- do
-    --   _ <- char '#'
-    --   res <- takeWhile1 isDigit
-    --   return $ "#" <> res
-    Debug.todo "pDecEntity"
+    char '#'
+        |> bind (\_ -> takeWhile1 Char.isDigit)
+        |> bind (\res -> return ("#" ++ res))
 
 
 pHexEntity : Parser String
 pHexEntity =
-    -- do
-    --   _ <- char '#'
-    --   x <- char 'X' <|> char 'x'
-    --   res <- takeWhile1 isHexDigit
-    --   return $ "#" <> T.singleton x <> res
-    Debug.todo "pHexEntity"
+    char '#'
+        |> bind (\_ -> oneOf (char 'X') (char 'x'))
+        |> bind
+            (\x ->
+                takeWhile1 Char.isHexDigit
+                    |> bind
+                        (\res ->
+                            return ("#" ++ String.fromChar x ++ res)
+                        )
+            )
 
 
 
@@ -816,8 +910,7 @@ pHexEntity =
 
 pRawHtml : Parser Inlines
 pRawHtml =
-    -- singleton << RawHtml <$> (snd <$> pHtmlTag <|> pHtmlComment)
-    Debug.todo "pRawHtml"
+    fmap (List.singleton << RawHtml) (oneOf (fmap Tuple.second pHtmlTag) pHtmlComment)
 
 
 
@@ -827,16 +920,31 @@ pRawHtml =
 
 pAutolink : Parser Inlines
 pAutolink =
-    -- do
-    --   skip (=='<')
-    --   s <- takeWhile1 (\c -> c /= ':' && c /= '@')
-    --   rest <- takeWhile1 (\c -> c /='>' && c /= ' ')
-    --   skip (=='>')
-    --   case True of
-    --        _ | "@" `T.isPrefixOf` rest -> return $ emailLink (s <> rest)
-    --          | s `Set.member` schemeSet -> return $ autoLink (s <> rest)
-    --          | otherwise   -> fail "Unknown contents of <>"
-    Debug.todo "pAutolink"
+    skip ((==) '<')
+        |> bind (\_ -> takeWhile1 (\c -> c /= ':' && c /= '@'))
+        |> bind
+            (\s ->
+                takeWhile1 (\c -> c /= '>' && c /= ' ')
+                    |> bind
+                        (\rest ->
+                            skip ((==) '>')
+                                |> bind
+                                    (\_ ->
+                                        if String.startsWith "@" rest then
+                                            return (emailLink (s ++ rest))
+
+                                        else if Set.member s schemeSet then
+                                            return (autoLink (s ++ rest))
+
+                                        else
+                                            fail "Unknown contents of <>"
+                                    )
+                        )
+            )
+
+
+
+--
 
 
 autoLink : String -> Inlines

@@ -268,6 +268,9 @@ sortVars forceMultiline fromExposing fromDocs =
 formatModuleHeader : Bool -> M.Module -> List Box
 formatModuleHeader addDefaultHeader modu =
     let
+        _ =
+            Debug.log "HERE3" ()
+
         maybeHeader : Maybe M.Header
         maybeHeader =
             if addDefaultHeader then
@@ -476,6 +479,7 @@ formatImports modu =
             modu.imports
     in
     [ formatComments comments
+        |> Debug.log "formatComments123!!!"
         |> Maybe.toList
     , List.map formatImport imports
     ]
@@ -493,6 +497,9 @@ formatModuleLine :
     -> Box
 formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.At _ name ) preExposing postExposing =
     let
+        _ =
+            Debug.log "HERE4" ()
+
         tag =
             case srcTag of
                 M.NoEffects _ ->
@@ -526,7 +533,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
                 [ oneGroup ] ->
                     oneGroup
                         |> List.map (formatCommented << Src.c2map formatVarValue)
-                        |> ElmStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" False
+                        |> ElmStructure.group_ False "(" "," (Maybe.toList (Debug.log "formatComments1" (formatComments extraComments))) ")" False
 
                 _ ->
                     varsToExpose
@@ -602,6 +609,9 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
 formatModule : Bool -> Int -> M.Module -> Box
 formatModule addDefaultHeader spacing modu =
     let
+        _ =
+            Debug.log "HERE2" ()
+
         initialComments_ =
             case modu.initialComments of
                 [] ->
@@ -632,8 +642,9 @@ formatModule addDefaultHeader spacing modu =
         (List.concat
             [ initialComments_
             , formatModuleHeader addDefaultHeader modu
-            , List.repeat spaceBeforeBody Box.blankLine
-            , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) decls)
+
+            -- , List.repeat spaceBeforeBody Box.blankLine
+            -- , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) decls)
             ]
         )
 

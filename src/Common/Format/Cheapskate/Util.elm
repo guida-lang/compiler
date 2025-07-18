@@ -115,8 +115,7 @@ type alias Scanner =
 -}
 scanIndentSpace : Scanner
 scanIndentSpace =
-    -- () <| count 4 (skip ((==) ' '))
-    Debug.todo "scanIndentSpace"
+    fmap (\_ -> ()) (count 4 (skip ((==) ' ')))
 
 
 scanSpacesToColumn : Int -> Scanner
@@ -133,16 +132,14 @@ scanSpacesToColumn col =
 -}
 scanNonindentSpace : Scanner
 scanNonindentSpace =
-    -- () <$ upToCountChars 3 (==' ')
-    Debug.todo "scanNonindentSpace"
+    fmap (\_ -> ()) (upToCountChars 3 ((==) ' '))
 
 
 {-| Scan a specified character.
 -}
 scanChar : Char -> Scanner
 scanChar c =
-    -- skip (== c) >> return ()
-    Debug.todo "scanChar"
+    skip ((==) c) |> bind (\_ -> return ())
 
 
 {-| Scan a blankline.
