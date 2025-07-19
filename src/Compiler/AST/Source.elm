@@ -318,12 +318,12 @@ getName (Module _ maybeName _ _ _ _ _ _ _ _) =
 
 
 getImportName : Import -> Name
-getImportName (Import (A.At _ name) _ _) =
+getImportName (Import ( _, A.At _ name ) _ _) =
     name
 
 
 type Import
-    = Import (A.Located Name) (Maybe Name.Name) Exposing
+    = Import (C1 (A.Located Name)) (Maybe (C2 Name.Name)) (C2 Exposing)
 
 
 type Value
@@ -746,18 +746,18 @@ docsDecoder =
 importEncoder : Import -> BE.Encoder
 importEncoder (Import importName maybeAlias exposing_) =
     BE.sequence
-        [ A.locatedEncoder BE.string importName
-        , BE.maybe BE.string maybeAlias
-        , exposingEncoder exposing_
+        [ c1Encoder (A.locatedEncoder BE.string) importName
+        , BE.maybe (c2Encoder BE.string) maybeAlias
+        , c2Encoder exposingEncoder exposing_
         ]
 
 
 importDecoder : BD.Decoder Import
 importDecoder =
     BD.map3 Import
-        (A.locatedDecoder BD.string)
-        (BD.maybe BD.string)
-        exposingDecoder
+        (c1Decoder (A.locatedDecoder BD.string))
+        (BD.maybe (c2Decoder BD.string))
+        (c2Decoder exposingDecoder)
 
 
 valueEncoder : Value -> BE.Encoder

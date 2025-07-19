@@ -29,7 +29,7 @@ defaults =
 
 import_ : IO.Canonical -> Maybe Name -> Src.Exposing -> Src.Import
 import_ (IO.Canonical _ name) maybeAlias exposing_ =
-    Src.Import (A.At A.zero name) maybeAlias exposing_
+    Src.Import ( [], A.At A.zero name ) (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposing_ )
 
 
 

@@ -493,7 +493,9 @@ formatImports modu =
     in
     [ formatComments comments
         |> Maybe.toList
-    , List.map formatImport imports
+    , imports
+        |> List.sortBy (\(Src.Import ( _, A.At _ importName ) _ _) -> importName)
+        |> List.map formatImport
     ]
         |> List.filter (not << List.isEmpty)
         |> List.intersperse [ Box.blankLine ]
@@ -996,12 +998,12 @@ lines str =
 
 
 formatImport : Src.Import -> Box
-formatImport ((Src.Import (A.At _ importName) maybeAlias exposing_) as import__) =
+formatImport ((Src.Import ( _, A.At _ importName ) maybeAlias exposing_) as import__) =
     let
         maybeRequestedAs =
             maybeAlias
                 |> Maybe.andThen
-                    (\aliasName ->
+                    (\( _, _, aliasName ) ->
                         if aliasName == importName then
                             Nothing
 
@@ -1024,7 +1026,7 @@ formatImport ((Src.Import (A.At _ importName) maybeAlias exposing_) as import__)
             formatImportClause
                 (formatExposing formatDetailedListing)
                 "exposing"
-                ( [], [], exposing_ )
+                exposing_
 
         formatImportClause : (a -> Maybe Box) -> String -> Src.C2 a -> Maybe Box
         formatImportClause format keyw input =

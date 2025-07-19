@@ -97,9 +97,9 @@ fromModule ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) =
 
 
 toPair : Src.Import -> ( Name, Import )
-toPair (Src.Import (A.At _ name) alias_ exposing_) =
+toPair (Src.Import ( _, A.At _ name ) alias_ ( _, _, exposing_ )) =
     ( name
-    , Import alias_ (toExposing exposing_)
+    , Import (Maybe.map Src.c2Value alias_) (toExposing exposing_)
     )
 
 

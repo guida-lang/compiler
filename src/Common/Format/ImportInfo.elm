@@ -32,7 +32,7 @@ fromModule knownContents modu =
 
 importsToDict : List Src.Import -> Dict String String Src.Import
 importsToDict =
-    List.map (\((Src.Import (A.At _ name) _ _) as import_) -> ( name, import_ ))
+    List.map (\((Src.Import ( _, A.At _ name ) _ _) as import_) -> ( name, import_ ))
         >> Dict.fromList identity
 
 
@@ -98,7 +98,7 @@ fromImports knownContents rawImports =
                         |> Maybe.withDefault []
 
         getExposed : String -> Src.Import -> Dict String String String
-        getExposed moduleName (Src.Import _ _ exposing_) =
+        getExposed moduleName (Src.Import _ _ ( _, _, exposing_ )) =
             Dict.fromList identity <|
                 List.map (flip Tuple.pair moduleName) <|
                     case exposing_ of
@@ -132,7 +132,7 @@ fromImports knownContents rawImports =
             let
                 getAlias : Src.Import -> Maybe String
                 getAlias (Src.Import _ maybeAlias _) =
-                    maybeAlias
+                    Maybe.map Src.c2Value maybeAlias
 
                 liftMaybe : ( a, Maybe b ) -> Maybe ( a, b )
                 liftMaybe value =
@@ -172,7 +172,7 @@ fromImports knownContents rawImports =
             Dict.empty
 
         exposesAll : Src.Import -> Bool
-        exposesAll (Src.Import _ _ exposing_) =
+        exposesAll (Src.Import _ _ ( _, _, exposing_ )) =
             case exposing_ of
                 Src.Open ->
                     True

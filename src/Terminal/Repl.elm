@@ -344,7 +344,7 @@ attemptImport lines =
             P.specialize (\_ _ _ -> ()) PM.chompImport
     in
     case P.fromByteString parser (\_ _ -> ()) src of
-        Ok (Src.Import (A.At _ name) _ _) ->
+        Ok (Src.Import ( _, A.At _ name ) _ _) ->
             Done (Import name src)
 
         Err () ->

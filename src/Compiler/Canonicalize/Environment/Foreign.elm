@@ -85,7 +85,7 @@ toSafeImports (IO.Canonical package _) imports =
 
 
 isNormal : Src.Import -> Bool
-isNormal (Src.Import (A.At _ name) maybeAlias _) =
+isNormal (Src.Import ( _, A.At _ name ) maybeAlias _) =
     if Name.isKernel name then
         case maybeAlias of
             Nothing ->
@@ -103,14 +103,14 @@ isNormal (Src.Import (A.At _ name) maybeAlias _) =
 
 
 addImport : Dict String ModuleName.Raw I.Interface -> State -> Src.Import -> FResult i w State
-addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
+addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, _, exposing_ )) =
     let
         (I.Interface pkg defs unions aliases binops) =
             Utils.find identity name ifaces
 
         prefix : Name
         prefix =
-            Maybe.withDefault name maybeAlias
+            Maybe.withDefault name (Maybe.map Src.c2Value maybeAlias)
 
         home : IO.Canonical
         home =

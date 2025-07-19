@@ -701,34 +701,34 @@ chompImport =
     Keyword.import_ E.ImportStart
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
         |> P.bind
-            (\c73 ->
+            (\preNameComments ->
                 let
                     _ =
-                        Debug.log "c73" c73
+                        Debug.log "c73" preNameComments
                 in
                 P.addLocation (Var.moduleName E.ImportName)
-            )
-        |> P.bind
-            (\((A.At (A.Region _ end) _) as name) ->
-                Space.chomp E.ModuleSpace
                     |> P.bind
-                        (\c117 ->
-                            let
-                                _ =
-                                    Debug.log "c117" c117
-                            in
-                            P.oneOf E.ImportEnd
-                                [ Space.checkFreshLine E.ImportEnd
-                                    |> P.fmap (\_ -> Src.Import name Nothing (Src.Explicit (A.At A.zero [])))
-                                , Space.checkIndent end E.ImportEnd
-                                    |> P.bind
-                                        (\_ ->
-                                            P.oneOf E.ImportAs
-                                                [ chompAs name
-                                                , chompExposing name Nothing
-                                                ]
-                                        )
-                                ]
+                        (\((A.At (A.Region _ end) _) as name) ->
+                            Space.chomp E.ModuleSpace
+                                |> P.bind
+                                    (\trailingComments ->
+                                        let
+                                            _ =
+                                                Debug.log "c117" trailingComments
+                                        in
+                                        P.oneOf E.ImportEnd
+                                            [ Space.checkFreshLine E.ImportEnd
+                                                |> P.fmap (\_ -> Src.Import ( preNameComments, name ) Nothing ( trailingComments, [], Src.Explicit (A.At A.zero []) ))
+                                            , Space.checkIndent end E.ImportEnd
+                                                |> P.bind
+                                                    (\_ ->
+                                                        P.oneOf E.ImportAs
+                                                            [ chompAs name
+                                                            , chompExposing name Nothing
+                                                            ]
+                                                    )
+                                            ]
+                                    )
                         )
             )
 
@@ -746,7 +746,7 @@ chompAs name =
                 Var.upper E.ImportAlias
             )
         |> P.bind
-            (\alias ->
+            (\alias_ ->
                 P.getPosition
                     |> P.bind
                         (\end ->
@@ -759,9 +759,9 @@ chompAs name =
                                         in
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.Import name (Just alias) (Src.Explicit (A.At A.zero [])))
+                                                |> P.fmap (\_ -> Src.Import ( [], name ) (Just ( [], [], alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ))
                                             , Space.checkIndent end E.ImportEnd
-                                                |> P.bind (\_ -> chompExposing name (Just alias))
+                                                |> P.bind (\_ -> chompExposing name (Just alias_))
                                             ]
                                     )
                         )
@@ -783,7 +783,7 @@ chompExposing name maybeAlias =
         |> P.bind
             (\exposed ->
                 freshLine E.ImportEnd
-                    |> P.fmap (\_ -> Src.Import name maybeAlias exposed)
+                    |> P.fmap (\_ -> Src.Import ( [], name ) (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposed ))
             )
 
 

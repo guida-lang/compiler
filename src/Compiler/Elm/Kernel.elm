@@ -345,7 +345,7 @@ toVarTable pkg foreigns imports =
 
 
 addImport : Pkg.Name -> Foreigns -> Src.Import -> VarTable -> VarTable
-addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vtable =
+addImport pkg foreigns (Src.Import ( _, A.At _ importName ) maybeAlias ( _, _, exposing_ )) vtable =
     if Name.isKernel importName then
         case maybeAlias of
             Just _ ->
@@ -371,7 +371,7 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
 
             prefix : Name
             prefix =
-                toPrefix importName maybeAlias
+                toPrefix importName (Maybe.map Src.c2Value maybeAlias)
 
             add : Name -> Dict String Name Chunk -> Dict String Name Chunk
             add name table =
