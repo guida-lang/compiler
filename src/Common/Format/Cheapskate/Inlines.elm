@@ -147,7 +147,7 @@ pHtmlComment : Parser String
 pHtmlComment =
     string "<!--"
         |> bind (\_ -> manyTill anyChar (string "-->"))
-        |> fmap (\rest -> "<!--" ++ String.fromList rest ++ "-->")
+        |> bind (\rest -> return ("<!--" ++ String.fromList rest ++ "-->"))
 
 
 {-| A link label [like this]. Note the precedence: code backticks have
@@ -336,15 +336,15 @@ parseInlines : ReferenceMap -> String -> Inlines
 parseInlines refmap t =
     let
         _ =
-            Debug.log "parseInlines" t
+            Debug.log "parseInlines" ( refmap, t )
     in
-    case Debug.log "parseInlines1" (parse (fmap List.concat (bind (\_ -> many (pInline refmap)) endOfInput)) t) of
+    case parse (fmap List.concat (leftSequence (many (pInline refmap)) endOfInput)) t of
         Err e ->
             -- should not happen
             crash ("parseInlines: " ++ Debug.toString e)
 
         Ok r ->
-            r
+            Debug.log "parseInlines r" r
 
 
 pInline : ReferenceMap -> Parser Inlines
@@ -692,15 +692,25 @@ type OpenParens
 
 pEnclosure : Char -> ReferenceMap -> Parser Inlines
 pEnclosure c refmap =
-    -- do
-    --   cs <- takeWhile1 (== c)
-    --   (Str cs <|) <$> pSpace
-    --    <|> case T.length cs of
-    --             3  -> pThree c refmap
-    --             2  -> pTwo c refmap mempty
-    --             1  -> pOne c refmap mempty
-    --             _  -> return (singleton $ Str cs)
-    Debug.todo "pEnclosure"
+    takeWhile1 ((==) c)
+        |> bind
+            (\cs ->
+                oneOf
+                    (pSpace |> fmap ((::) (Str cs)))
+                    (case String.length cs of
+                        3 ->
+                            pThree c refmap
+
+                        2 ->
+                            pTwo c refmap []
+
+                        1 ->
+                            pOne c refmap []
+
+                        _ ->
+                            return (List.singleton (Str cs))
+                    )
+            )
 
 
 
@@ -802,13 +812,17 @@ pCode_ =
 
 pLink : ReferenceMap -> Parser Inlines
 pLink refmap =
-    -- do
-    --   lab <- pLinkLabel
-    --   let lab' = parseInlines refmap lab
-    --   pInlineLink lab' <|> pReferenceLink refmap lab lab'
-    --     -- fallback without backtracking if it's not a link:
-    --     <|> return (singleton (Str "[") <> lab' <> singleton (Str "]"))
-    Debug.todo "pLink"
+    pLinkLabel
+        |> bind
+            (\lab ->
+                let
+                    lab_ =
+                        parseInlines refmap lab
+                in
+                oneOf (oneOf (pInlineLink lab_) (pReferenceLink refmap lab lab_))
+                    -- fallback without backtracking if it's not a link:
+                    (return (Str "[" :: lab_ ++ [ Str "]" ]))
+            )
 
 
 
@@ -845,19 +859,21 @@ pReferenceLink _ rawlab lab =
 
 pImage : ReferenceMap -> Parser Inlines
 pImage refmap =
-    -- do
-    --   _ <- char '!'
-    --   (linkToImage <$> pLink refmap) <|> return (singleton (Str "!"))
-    Debug.todo "pImage"
+    char '!'
+        |> bind
+            (\_ ->
+                oneOf (fmap linkToImage (pLink refmap)) (return [ Str "!" ])
+            )
 
 
 linkToImage : Inlines -> Inlines
 linkToImage ils =
-    -- case viewl ils of
-    --       (Link lab (Url url) tit :< x)
-    --         | Seq.null x -> singleton (Image lab url tit)
-    --       _ -> singleton (Str "!") <> ils
-    Debug.todo "linkToImage"
+    case ils of
+        (Link lab (Url url) tit) :: [] ->
+            [ Image lab url tit ]
+
+        _ ->
+            Str "!" :: ils
 
 
 

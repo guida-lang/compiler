@@ -7,6 +7,7 @@ import Common.Format.Cheapskate.Types exposing (..)
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
+import Common.Format.Render.Markdown as Markdown
 import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
@@ -447,17 +448,19 @@ formatModuleHeader addDefaultHeader modu =
         docs =
             modu.header
                 |> Maybe.andThen (.docs >> Result.toMaybe)
-                |> Maybe.map (\(Src.Comment (P.Snippet { fptr, offset, length })) -> String.slice offset (offset + length) fptr)
                 |> Maybe.map
-                    (Parse.markdown
-                        (Options
-                            { sanitize = True
-                            , allowRawHtml = True
-                            , preserveHardBreaks = True
-                            , debug = False
-                            }
-                        )
-                        >> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) blocks)
+                    (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                        String.slice offset (offset + length) fptr
+                            |> String.trim
+                            |> Parse.markdown
+                                (Options
+                                    { sanitize = True
+                                    , allowRawHtml = True
+                                    , preserveHardBreaks = True
+                                    , debug = False
+                                    }
+                                )
+                            |> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) (Debug.log "blocks" blocks))
                     )
 
         imports =
@@ -863,8 +866,8 @@ intersperseMap spacer fn list =
 
 
 type ElmCodeBlock
-    = DeclarationsCode (List (TopLevelStructure Decl.Decl))
-    | ExpressionsCode (List (TopLevelStructure (Src.C0Eol Decl.Decl)))
+    = DeclarationsCode (List (TopLevelStructure Declaration))
+    | ExpressionsCode (List (TopLevelStructure (Src.C0Eol Src.Expr)))
     | ModuleCode M.Module
 
 
@@ -899,50 +902,53 @@ firstOf options value =
 
 formatDocComment : ImportInfo -> Blocks -> Box
 formatDocComment importInfo blocks =
-    -- let
-    --     parse : String -> Maybe (ElmCodeBlock Identity (List UppercaseIdentifier))
-    --     parse source =
-    --         source
-    --             |> firstOf
-    --                 [ Maybe.map DeclarationsCode << Result.toMaybe << Parse.parseDeclarations
-    --                 , Maybe.map ExpressionsCode << Result.toMaybe << Parse.parseExpressions
-    --                 , Maybe.map ModuleCode << Result.toMaybe << Parse.parseModule
-    --                 ]
-    --     format : ElmCodeBlock annf (List UppercaseIdentifier) -> String
-    --     format result =
-    --         case result of
-    --             ModuleCode modu ->
-    --                 formatModule False 1 modu
-    --                     |> (Text.unpack << Box.render)
-    --             DeclarationsCode declarations ->
-    --                 formatModuleBody 1 importInfo declarations
-    --                     |> fmap (Text.unpack << Box.render)
-    --                     |> fromMaybe ""
-    --             ExpressionsCode expressions ->
-    --                 expressions
-    --                     |> fmap (fmap (fmap (I.convert (Identity << extract))))
-    --                     |> fmap (fmap (formatEolCommented << fmap (syntaxParens SyntaxSeparated << formatExpression importInfo)))
-    --                     |> fmap (fmap (Tuple.pair BodyUnnamed))
-    --                     |> formatTopLevelBody 1 importInfo
-    --                     |> fmap (Text.unpack << Box.render)
-    --                     |> fromMaybe ""
-    --     content : String
-    --     content =
-    --         ElmFormat.Render.Markdown.formatMarkdown (fmap format << parse) (fmap cleanBlock blocks)
-    --     cleanBlock : Markdown.Block -> Markdown.Block
-    --     cleanBlock block =
-    --         case block of
-    --             Markdown.ElmDocs docs ->
-    --                 Markdown.ElmDocs
-    --                     ((fmap << fmap)
-    --                         (Text.replace (Text.pack "(..)") (Text.pack ""))
-    --                         docs
-    --                     )
-    --             _ ->
-    --                 block
-    -- in
-    -- formatDocCommentString content
-    Debug.todo "formatDocComment"
+    let
+        parse : String -> Maybe ElmCodeBlock
+        parse source =
+            -- source
+            --     |> Debug.log "formatDocComment.source"
+            --     |> firstOf
+            --         [ Maybe.map DeclarationsCode << Result.toMaybe << Parse.parseDeclarations
+            --         , Maybe.map ExpressionsCode << Result.toMaybe << Parse.parseExpressions
+            --         , Maybe.map ModuleCode << Result.toMaybe << Parse.parseModule
+            --         ]
+            -- TODO!!!!
+            Nothing
+
+        format : ElmCodeBlock -> String
+        format result =
+            case result of
+                ModuleCode modu ->
+                    formatModule False 1 modu
+                        |> Box.render
+
+                DeclarationsCode declarations ->
+                    formatModuleBody 1 importInfo declarations
+                        |> Maybe.map Box.render
+                        |> Maybe.withDefault ""
+
+                ExpressionsCode expressions ->
+                    expressions
+                        |> List.map (topLevelStructureMap (formatEolCommented << Src.c0EolMap (syntaxParens SyntaxSeparated << formatExpression importInfo)))
+                        |> List.map (topLevelStructureMap (Tuple.pair BodyUnnamed))
+                        |> formatTopLevelBody 1 importInfo
+                        |> Maybe.map Box.render
+                        |> Maybe.withDefault ""
+
+        content : String
+        content =
+            Markdown.formatMarkdown (Maybe.map format << parse) (List.map cleanBlock blocks)
+
+        cleanBlock : Block -> Block
+        cleanBlock block =
+            case block of
+                ElmDocs docs ->
+                    ElmDocs ((List.map << List.map) (String.replace "(..)" "") docs)
+
+                _ ->
+                    block
+    in
+    formatDocCommentString content
 
 
 formatDocCommentString : String -> Box

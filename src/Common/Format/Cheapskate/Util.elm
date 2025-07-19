@@ -55,7 +55,7 @@ tabFilter =
                     in
                     String.padRight n ' ' t :: pad ts
     in
-    String.concat << pad << String.split "\t"
+    Debug.log "tabFilter2" << String.concat << pad << Debug.log "tabFilter1" << String.split "\t"
 
 
 {-| These are the whitespace characters that are significant in

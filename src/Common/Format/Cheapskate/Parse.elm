@@ -17,7 +17,7 @@ import Utils.Crash exposing (crash)
 
 markdown : Options -> String -> Doc
 markdown opts =
-    Doc opts << processDocument << processLines
+    Doc opts << Debug.log "processedDocument" << processDocument << Debug.log "processedLines" << processLines << Debug.log "parse!!!"
 
 
 
@@ -294,7 +294,7 @@ addLeaf lineNum lf =
             (\(ContainerStack top rest) ->
                 let
                     _ =
-                        Debug.log "addLeaf" ( ContainerStack top rest, lineNum, lf )
+                        Debug.log "addLeaf!!!!" ( ContainerStack top rest, lineNum, lf )
                 in
                 case ( top, lf ) of
                     ( Container ((ListItem _) as ct) cs, BlankLine _ ) ->
@@ -305,10 +305,10 @@ addLeaf lineNum lf =
                                     |> RWS.bind (\_ -> addLeaf lineNum lf)
 
                             _ ->
-                                RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
+                                RWS.put (ContainerStack (Container ct (Debug.log "addLeaf1" (L lineNum lf :: cs))) rest)
 
                     ( Container ct cs, _ ) ->
-                        RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
+                        RWS.put (ContainerStack (Container ct (Debug.log "addLeaf2" (L lineNum lf :: cs))) rest)
             )
 
 
@@ -412,7 +412,7 @@ processElts refmap elts =
                                         _ ->
                                             False
                             in
-                            List.singleton (Para <| parseInlines refmap txt)
+                            List.singleton (Para (parseInlines refmap txt))
                                 ++ processElts refmap (Debug.log "rest_" rest_)
 
                 -- Blanks at outer level are ignored:
@@ -656,7 +656,7 @@ processLines t =
 
         lns : List ( LineNumber, String )
         lns =
-            List.indexedMap Tuple.pair (List.map tabFilter (String.lines t))
+            List.indexedMap (\i ln -> ( i + 1, ln )) (List.map tabFilter (Debug.log "processLines" (List.filter (not << String.isEmpty) (String.lines t))))
 
         startState : ContainerStack
         startState =
@@ -787,7 +787,7 @@ processLine ( lineNumber, txt ) =
                                             RWS.put
                                                 (ContainerStack
                                                     (Container ct
-                                                        (List.reverse (L lineNumber (SetextHeader lev t) :: cs_))
+                                                        (List.reverse (Debug.log "SetextHeader" (L lineNumber (SetextHeader lev t) :: cs_)))
                                                     )
                                                     rest
                                                 )

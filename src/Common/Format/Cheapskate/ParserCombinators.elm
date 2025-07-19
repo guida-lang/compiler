@@ -127,6 +127,13 @@ unless p s =
         s
 
 
+{-| (<\*)
+-}
+leftSequence : Parser a -> Parser b -> Parser a
+leftSequence p1 p2 =
+    p1 |> bind (\res -> p2 |> fmap (\_ -> res))
+
+
 
 -- instance Alternative Parser where
 
@@ -477,7 +484,7 @@ string : String -> Parser String
 string s =
     Parser
         (\(ParserState st) ->
-            if String.startsWith st.subject s then
+            if String.startsWith s st.subject then
                 success (advance (ParserState st) s) s
 
             else
@@ -551,23 +558,26 @@ many1 p =
 
 
 manyTill : Parser a -> Parser b -> Parser (List a)
-manyTill (Parser p) (Parser end) =
+manyTill p end =
+    -- let
+    --     accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
+    --     accumulate acc state =
+    --         case end state of
+    --             Ok ( st_, _ ) ->
+    --                 Ok ( st_, List.reverse acc )
+    --             Err ms ->
+    --                 case p state of
+    --                     Ok ( st_, res ) ->
+    --                         accumulate (res :: acc) st_
+    --                     Err _ ->
+    --                         Err ms
+    -- in
+    -- Parser (accumulate [])
     let
-        accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
-        accumulate acc state =
-            case end state of
-                Ok ( st_, _ ) ->
-                    Ok ( st_, List.reverse acc )
-
-                Err ms ->
-                    case p state of
-                        Ok ( st_, res ) ->
-                            accumulate (res :: acc) st_
-
-                        Err _ ->
-                            Err ms
+        go () =
+            oneOf (end |> bind (\_ -> pure [])) (liftA2 (::) p (lazy go))
     in
-    Parser (accumulate [])
+    go ()
 
 
 skipMany : Parser a -> Parser ()
