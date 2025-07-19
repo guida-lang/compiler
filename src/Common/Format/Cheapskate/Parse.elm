@@ -17,7 +17,7 @@ import Utils.Crash exposing (crash)
 
 markdown : Options -> String -> Doc
 markdown opts =
-    Doc opts << Debug.log "processedDocument" << processDocument << Debug.log "processedLines" << processLines << Debug.log "parse!!!"
+    Doc opts << processDocument << processLines
 
 
 
@@ -149,10 +149,6 @@ containerStart _ =
     scanNonindentSpace
         |> bind
             (\_ ->
-                let
-                    _ =
-                        Debug.log "containerStart" ()
-                in
                 oneOf (fmap (\_ -> BlockQuote) scanBlockquoteStart)
                     parseListMarker
             )
@@ -292,10 +288,6 @@ addLeaf lineNum lf =
     RWS.get
         |> RWS.bind
             (\(ContainerStack top rest) ->
-                let
-                    _ =
-                        Debug.log "addLeaf!!!!" ( ContainerStack top rest, lineNum, lf )
-                in
                 case ( top, lf ) of
                     ( Container ((ListItem _) as ct) cs, BlankLine _ ) ->
                         case List.reverse cs of
@@ -305,10 +297,10 @@ addLeaf lineNum lf =
                                     |> RWS.bind (\_ -> addLeaf lineNum lf)
 
                             _ ->
-                                RWS.put (ContainerStack (Container ct (Debug.log "addLeaf1" (L lineNum lf :: cs))) rest)
+                                RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
 
                     ( Container ct cs, _ ) ->
-                        RWS.put (ContainerStack (Container ct (Debug.log "addLeaf2" (L lineNum lf :: cs))) rest)
+                        RWS.put (ContainerStack (Container ct (L lineNum lf :: cs)) rest)
             )
 
 
@@ -333,7 +325,7 @@ addContainer ct =
 -}
 processDocument : ( Container, ReferenceMap ) -> Blocks
 processDocument ( Container ct cs, refmap ) =
-    case Debug.log "processDocument" ct of
+    case ct of
         Document ->
             processElts refmap cs
 
@@ -348,23 +340,23 @@ parsing inline contents of texts and resolving referencess.
 -}
 processElts : ReferenceMap -> List Elt -> Blocks
 processElts refmap elts =
-    case Debug.log "processElts" elts of
+    case elts of
         [] ->
             []
 
         (L _ lf) :: rest ->
-            case Debug.log "lf" lf of
+            case lf of
                 -- Special handling of @docs lines in Elm:
                 TextLine t ->
-                    case stripPrefix "@docs" (Debug.log "@docs.t" t) of
+                    case stripPrefix "@docs" t of
                         Just terms1 ->
                             let
                                 docs : List String
                                 docs =
-                                    Debug.log "docs" (Debug.log "terms1" terms1 :: List.map (cleanDoc << extractText) docLines)
+                                    terms1 :: List.map (cleanDoc << extractText) docLines
 
                                 ( docLines, rest_ ) =
-                                    List.partition isDocLine rest
+                                    List.span isDocLine rest
 
                                 isDocLine : Elt -> Bool
                                 isDocLine elt =
@@ -384,26 +376,20 @@ processElts refmap elts =
                                         Just stripped ->
                                             stripped
                             in
-                            Debug.log "processElts!1!"
-                                (List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
-                                    ++ processElts refmap rest_
-                                )
+                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
+                                ++ processElts refmap rest_
 
                         Nothing ->
                             -- Gobble text lines and make them into a Para:
                             let
-                                _ =
-                                    Debug.log "Gobble" ()
-
                                 txt =
                                     String.trimRight <|
                                         joinLines <|
-                                            List.map String.trimLeft <|
-                                                t
-                                                    :: List.map extractText textlines
+                                            List.map String.trimLeft
+                                                (t :: List.map extractText textlines)
 
                                 ( textlines, rest_ ) =
-                                    List.partition isTextLine rest
+                                    List.span isTextLine rest
 
                                 isTextLine : Elt -> Bool
                                 isTextLine elt =
@@ -415,7 +401,7 @@ processElts refmap elts =
                                             False
                             in
                             List.singleton (Para (parseInlines refmap txt))
-                                ++ processElts refmap (Debug.log "rest_" rest_)
+                                ++ processElts refmap rest_
 
                 -- Blanks at outer level are ignored:
                 BlankLine _ ->
@@ -583,7 +569,7 @@ processElts refmap elts =
                                     []
 
                         ( cbs, rest_ ) =
-                            List.break isIndentedCodeOrBlank
+                            List.span isIndentedCodeOrBlank
                                 (C (Container ct cs) :: rest)
 
                         isIndentedCodeOrBlank elt =
@@ -654,11 +640,10 @@ processLines t =
     let
         ( doc, refmap ) =
             RWS.evalRWS (RWS.mapM_ processLine lns |> RWS.bind (\_ -> closeStack)) () startState
-                |> Debug.log "doc, refmap"
 
         lns : List ( LineNumber, String )
         lns =
-            List.indexedMap (\i ln -> ( i + 1, ln )) (List.map tabFilter (Debug.log "processLines" (List.filter (not << String.isEmpty) (String.lines t))))
+            List.indexedMap (\i ln -> ( i + 1, ln )) (List.map tabFilter (String.lines t))
 
         startState : ContainerStack
         startState =
@@ -675,10 +660,6 @@ processLines t =
 
 processLine : ( LineNumber, String ) -> ContainerM ()
 processLine ( lineNumber, txt ) =
-    let
-        _ =
-            Debug.log "processLine" ( lineNumber, txt )
-    in
     RWS.get
         |> RWS.bind
             (\(ContainerStack ((Container ct cs) as top) rest) ->
@@ -686,9 +667,6 @@ processLine ( lineNumber, txt ) =
                 -- Return the remainder of the string, and the number of unmatched
                 -- containers.
                 let
-                    _ =
-                        Debug.log "ContainerStack" (ContainerStack top rest)
-
                     ( t_, numUnmatched ) =
                         tryOpenContainers (List.reverse (top :: rest)) txt
 
@@ -709,7 +687,7 @@ processLine ( lineNumber, txt ) =
                         RWS.mapM_ addContainer ns
                             |> RWS.bind
                                 (\_ ->
-                                    case Debug.log "addNew1" ( List.reverse ns, lf ) of
+                                    case ( List.reverse ns, lf ) of
                                         -- don't add extra blank at beginning of fenced code block
                                         ( (FencedCode _) :: _, BlankLine _ ) ->
                                             RWS.return ()
@@ -720,7 +698,7 @@ processLine ( lineNumber, txt ) =
                 in
                 -- Process the rest of the line in a way that makes sense given
                 -- the container type at the top of the stack (ct):
-                case Debug.log "ct" ct of
+                case ct of
                     -- If it's a verbatim line container, add the line.
                     RawHtmlBlock ->
                         if numUnmatched == 0 then
@@ -755,7 +733,7 @@ processLine ( lineNumber, txt ) =
 
                     -- otherwise, parse the remainder to see if we have new container starts:
                     _ ->
-                        case Debug.log "tryNewContainers2" (tryNewContainers lastLineIsText (String.length txt - String.length t_) t_) of
+                        case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
                             -- lazy continuation: text line, last line was text, no new containers,
                             -- some unmatched containers:
                             ( [] as ns, (TextLine t) as lf ) ->
@@ -789,7 +767,7 @@ processLine ( lineNumber, txt ) =
                                             RWS.put
                                                 (ContainerStack
                                                     (Container ct
-                                                        (List.reverse (Debug.log "SetextHeader" (L lineNumber (SetextHeader lev t) :: cs_)))
+                                                        (List.reverse (L lineNumber (SetextHeader lev t) :: cs_))
                                                     )
                                                     rest
                                                 )
@@ -807,10 +785,6 @@ processLine ( lineNumber, txt ) =
                             -- otherwise, close all the unmatched containers, add the new
                             -- containers, and finally add the new leaf:
                             ( ns, lf ) ->
-                                let
-                                    _ =
-                                        Debug.log "HEREERERERERERERERERER!!!" ( numUnmatched, ns, lf )
-                                in
                                 -- close unmatched containers, add new ones
                                 RWS.replicateM numUnmatched closeContainer
                                     |> RWS.bind (\_ -> addNew ( ns, lf ))
@@ -856,27 +830,16 @@ tryOpenContainers cs t =
 tryNewContainers : Bool -> Int -> String -> ( List ContainerType, Leaf )
 tryNewContainers lastLineIsText offset t =
     let
-        _ =
-            Debug.log "tryNewContainers" ( lastLineIsText, offset, t )
-
         newContainers =
             getPosition
                 |> bind
                     (\(Position ln _) ->
-                        let
-                            _ =
-                                Debug.log "Position ln" ln
-                        in
                         setPosition (Position ln (offset + 1))
                             |> bind
                                 (\_ ->
                                     many (containerStart lastLineIsText)
                                         |> bind
                                             (\regContainers ->
-                                                let
-                                                    _ =
-                                                        Debug.log "regContainers" regContainers
-                                                in
                                                 option [] (count 1 (verbatimContainerStart lastLineIsText))
                                                     |> bind
                                                         (\verbatimContainers ->
@@ -890,7 +853,7 @@ tryNewContainers lastLineIsText offset t =
                                 )
                     )
     in
-    case Debug.log "tryNewContainers1" (parse newContainers t) of
+    case parse newContainers t of
         Ok ( cs, t_ ) ->
             ( cs, t_ )
 
@@ -970,14 +933,7 @@ scanReference =
 scanBlockquoteStart : Scanner
 scanBlockquoteStart =
     scanChar '>'
-        |> bind
-            (\_ ->
-                let
-                    _ =
-                        Debug.log "scanBlockquoteStart" ()
-                in
-                option () (scanChar ' ')
-            )
+        |> bind (\_ -> option () (scanChar ' '))
 
 
 
@@ -1173,17 +1129,9 @@ parseListMarker =
     getPosition
         |> bind
             (\(Position _ col) ->
-                let
-                    _ =
-                        Debug.log "parseListMarker" col
-                in
                 oneOf parseBullet parseListNumber
                     |> bind
                         (\ty ->
-                            let
-                                _ =
-                                    Debug.log "ty" ty
-                            in
                             -- padding is 1 if list marker followed by a blank line
                             -- or indented code.  otherwise it's the length of the
                             -- whitespace between the list marker and the following text:
@@ -1239,10 +1187,6 @@ parseBullet =
     satisfy (\c -> c == '+' || c == '*' || c == '-')
         |> bind
             (\c ->
-                let
-                    _ =
-                        Debug.log "parseBullet" ()
-                in
                 unless (c == '+') (nfb (count 2 scanSpaces |> bind (\_ -> skip ((==) c))))
                     |> bind
                         (\_ ->
@@ -1262,10 +1206,6 @@ parseListNumber =
     takeWhile1 Char.isDigit
         |> bind
             (\numStr ->
-                let
-                    _ =
-                        Debug.log "numStr" numStr
-                in
                 case String.toInt numStr of
                     Just num ->
                         oneOf (fmap (\_ -> PeriodFollowing) (skip ((==) '.'))) (fmap (\_ -> ParenFollowing) (skip ((==) ')')))

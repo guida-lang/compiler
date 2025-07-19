@@ -270,9 +270,6 @@ sortVars forceMultiline fromExposing fromDocs =
 formatModuleHeader : Bool -> M.Module -> List Box
 formatModuleHeader addDefaultHeader modu =
     let
-        _ =
-            Debug.log "HERE3" ()
-
         maybeHeader : Maybe M.Header
         maybeHeader =
             if addDefaultHeader then
@@ -473,7 +470,7 @@ formatModuleHeader addDefaultHeader modu =
                                     , debug = False
                                     }
                                 )
-                            |> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) (Debug.log "blocks" blocks))
+                            |> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) blocks)
                     )
 
         imports =
@@ -495,7 +492,6 @@ formatImports modu =
             modu.imports
     in
     [ formatComments comments
-        |> Debug.log "formatComments123!!!"
         |> Maybe.toList
     , List.map formatImport imports
     ]
@@ -513,9 +509,6 @@ formatModuleLine :
     -> Box
 formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.At _ name ) preExposing postExposing =
     let
-        _ =
-            Debug.log "HERE4" ()
-
         tag =
             case srcTag of
                 M.NoEffects _ ->
@@ -549,7 +542,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
                 [ oneGroup ] ->
                     oneGroup
                         |> List.map (formatCommented << Src.c2map formatVarValue)
-                        |> ElmStructure.group_ False "(" "," (Maybe.toList (Debug.log "formatComments1" (formatComments extraComments))) ")" False
+                        |> ElmStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" False
 
                 _ ->
                     varsToExpose
@@ -617,7 +610,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
     ElmStructure.spaceSepOrIndented
         (ElmStructure.spaceSepOrIndented
             nameClause
-            (whereClause ++ [ formatCommented ( Debug.log "preExposing" preExposing, postExposing, Box.line (Box.keyword "exposing") ) ])
+            (whereClause ++ [ formatCommented ( preExposing, postExposing, Box.line (Box.keyword "exposing") ) ])
         )
         [ exports ]
 
@@ -625,9 +618,6 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
 formatModule : Bool -> Int -> M.Module -> Box
 formatModule addDefaultHeader spacing modu =
     let
-        _ =
-            Debug.log "HERE2" modu
-
         initialComments_ =
             case modu.initialComments of
                 [] ->
@@ -640,7 +630,7 @@ formatModule addDefaultHeader spacing modu =
         declarations =
             List.concatMap
                 (\decl ->
-                    (case Debug.log "decl" decl of
+                    (case decl of
                         Decl.Value (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
                             -- [ BodyComment (Src.BlockComment (String.lines (String.slice offset (offset + length) fptr))) ]
                             [ DocComment
@@ -692,7 +682,7 @@ formatModule addDefaultHeader spacing modu =
         (List.concat
             [ initialComments_
             , formatModuleHeader addDefaultHeader modu
-            , List.repeat (Debug.log "spaceBeforeBody" spaceBeforeBody) Box.blankLine
+            , List.repeat spaceBeforeBody Box.blankLine
             , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) body)
             ]
         )
@@ -709,26 +699,6 @@ formatModuleBody linesBetween importInfo body =
         entryType : Declaration -> BodyEntryType
         entryType adecl =
             case adecl of
-                -- CommonDeclaration def ->
-                --     case extract (I.unFix def) of
-                --         Definition pat _ _ _ ->
-                --             case extract (I.unFix pat) of
-                --                 VarPattern name ->
-                --                     BodyNamed (VarRef () name)
-                --                 OpPattern name ->
-                --                     BodyNamed (OpRef name)
-                --                 _ ->
-                --                     BodyUnnamed
-                --         TypeAnnotation (C _ name) _ ->
-                --             BodyNamed name
-                -- Datatype (C _ (NameWithArgs name _)) _ ->
-                --     BodyNamed (TagRef () name)
-                -- TypeAlias _ (C _ (NameWithArgs name _)) _ ->
-                --     BodyNamed (TagRef () name)
-                -- PortAnnotation (C _ name) _ _ ->
-                --     BodyNamed (VarRef () name)
-                -- Fixity _ _ _ _ ->
-                --     BodyFixity
                 CommonDeclaration (Decl.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _))) ->
                     BodyNamed (VarRef () name)
 
@@ -880,7 +850,7 @@ formatTopLevelBody linesBetween importInfo body =
             Nothing
 
         _ ->
-            Just (Box.stack1 (Debug.log "boxes" boxes))
+            Just (Box.stack1 boxes)
 
 
 pairs : List a -> List ( a, a )
@@ -983,7 +953,7 @@ formatDocComment importInfo blocks =
 
         content : String
         content =
-            Markdown.formatMarkdown (Maybe.map format << parse) (List.map cleanBlock (Debug.log "blocks" blocks))
+            Markdown.formatMarkdown (Maybe.map format << parse) (List.map cleanBlock blocks)
 
         cleanBlock : Block -> Block
         cleanBlock block =
@@ -999,7 +969,7 @@ formatDocComment importInfo blocks =
 
 formatDocCommentString : String -> Box
 formatDocCommentString docs =
-    case Debug.log "formatDocCommentString" (String.lines docs) of
+    case lines docs of
         [] ->
             Box.line (Box.row [ Box.punc "{-|", Box.space, Box.punc "-}" ])
 
@@ -1015,12 +985,19 @@ formatDocCommentString docs =
                 |> Box.andThen [ Box.line <| Box.punc "-}" ]
 
 
+lines : String -> List String
+lines str =
+    case List.reverse (String.lines str) of
+        "" :: rest ->
+            List.reverse rest
+
+        result ->
+            List.reverse result
+
+
 formatImport : Src.Import -> Box
 formatImport ((Src.Import (A.At _ importName) maybeAlias exposing_) as import__) =
     let
-        _ =
-            Debug.log "import__" import__
-
         maybeRequestedAs =
             maybeAlias
                 |> Maybe.andThen
@@ -1051,7 +1028,7 @@ formatImport ((Src.Import (A.At _ importName) maybeAlias exposing_) as import__)
 
         formatImportClause : (a -> Maybe Box) -> String -> Src.C2 a -> Maybe Box
         formatImportClause format keyw input =
-            case Debug.log "formatImportClause" (Src.c2map format input) of
+            case Src.c2map format input of
                 ( [], [], Nothing ) ->
                     Nothing
 
@@ -1312,7 +1289,7 @@ formatTopLevelStructure importInfo topLevelStructure =
             formatComment c
 
         Entry entry ->
-            Debug.log "formatTopLevelStructure" entry
+            entry
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
@@ -1639,10 +1616,6 @@ formatRecordPair delim formatValue ( ( pre, postK, k ), ( preV, postV, v ), forc
 
 formatPair : String -> Src.Pair Box.Line Box -> Box
 formatPair delim ((Src.Pair a b (Src.ForceMultiline forceMultiline)) as pair) =
-    let
-        _ =
-            Debug.log "pair" pair
-    in
     ElmStructure.equalsPair delim
         forceMultiline
         (formatTailCommented <| Src.c1map Box.line a)
@@ -2173,11 +2146,11 @@ formatPreCommentedExpression importInfo context ( pre, e ) =
 
 formatRecordLike : Maybe (Src.C2 Box) -> List (Src.C2Eol Box) -> Src.FComments -> Src.ForceMultiline -> Box
 formatRecordLike base_ fields trailing multiline =
-    case Debug.log "formatRecordLike" ( base_, fields ) of
+    case ( base_, fields ) of
         ( Just base, pairs_ ) ->
             ElmStructure.extensionGroup_
                 ((\(Src.ForceMultiline b) -> b) multiline)
-                (formatCommented (Debug.log "base" base))
+                (formatCommented base)
                 (formatSequence '|'
                     ','
                     Nothing
@@ -2197,23 +2170,19 @@ formatRecordLike base_ fields trailing multiline =
 
 formatSequence : Char -> Char -> Maybe Char -> Src.ForceMultiline -> Src.FComments -> List (Src.C2Eol Box) -> Box
 formatSequence left delim maybeRight (Src.ForceMultiline multiline) trailing list =
-    case ( maybeRight, Debug.log "formatSequence.list" list ) of
+    case ( maybeRight, list ) of
         ( _, first :: rest ) ->
             let
                 formatItem : Char -> Src.C2Eol Box -> Box
                 formatItem delim_ ( ( pre, post, eol ), item ) =
-                    Maybe.unwrap identity (Box.stack_ << Box.stack_ Box.blankLine) (Debug.log "formatCommentsResult" (formatComments pre)) <|
-                        Debug.log "HERE!" <|
-                            Box.prefix (Box.row [ Box.punc (String.fromChar delim_), Box.space ]) <|
-                                Debug.log "HERE2!" <|
-                                    formatC2Eol ( ( Debug.log "POST" post, [], eol ), item )
+                    Maybe.unwrap identity (Box.stack_ << Box.stack_ Box.blankLine) (formatComments pre) <|
+                        Box.prefix (Box.row [ Box.punc (String.fromChar delim_), Box.space ]) <|
+                            formatC2Eol ( ( post, [], eol ), item )
             in
             ElmStructure.forceableSpaceSepOrStack multiline
-                (Debug.log "forceableRowOrStack"
-                    (ElmStructure.forceableRowOrStack multiline
-                        (Debug.log "formatItem" (formatItem left first))
-                        (List.map (formatItem delim) rest)
-                    )
+                (ElmStructure.forceableRowOrStack multiline
+                    (formatItem left first)
+                    (List.map (formatItem delim) rest)
                 )
                 (Maybe.unwrap [] (flip (::) [] << Box.stack_ Box.blankLine) (formatComments trailing) ++ Maybe.toList (Maybe.map (Box.line << Box.punc << String.fromChar) maybeRight))
 
@@ -2325,7 +2294,7 @@ formatUnit left right comments =
 
 formatComments : Src.FComments -> Maybe Box
 formatComments comments =
-    case Debug.log "formatComments" (List.map formatComment comments) of
+    case List.map formatComment comments of
         [] ->
             Nothing
 
@@ -2409,7 +2378,7 @@ formatOpenCommentedList (Src.OpenCommentedList rest ( preLst, eol, lst )) =
 
 formatComment : Src.FComment -> Box
 formatComment comment =
-    case Debug.log "formatComment" comment of
+    case comment of
         Src.BlockComment c ->
             case c of
                 [] ->
@@ -2743,9 +2712,6 @@ formatType (A.At region atype) =
 
         Src.TRecord fields ext trailing ->
             let
-                _ =
-                    Debug.log "TRecord" ( region, fields, ext )
-
                 base =
                     Maybe.map (Src.c2map A.toValue) ext
 

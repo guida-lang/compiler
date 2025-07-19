@@ -43,15 +43,9 @@ type ParserState
 advance : ParserState -> String -> ParserState
 advance parserState str =
     let
-        _ =
-            Debug.log "advance" ( parserState, str )
-
         go : Char -> ParserState -> ParserState
         go c (ParserState st) =
             let
-                _ =
-                    Debug.log "advance.go" ( c, st )
-
                 (Position line column) =
                     st.position
             in
@@ -156,16 +150,12 @@ oneOf : Parser a -> Parser a -> Parser a
 oneOf (Parser f) (Parser g) =
     Parser
         (\st ->
-            let
-                _ =
-                    Debug.log "oneOf" ()
-            in
-            case Debug.log "oneOf1" (f st) of
+            case f st of
                 Ok res ->
                     Ok res
 
                 Err (ParseError pos msg) ->
-                    case Debug.log "oneOf2" (g st) of
+                    case g st of
                         Ok res ->
                             Ok res
 
@@ -264,19 +254,12 @@ failure (ParserState st) msg =
 
 success : ParserState -> a -> Result ParseError ( ParserState, a )
 success st x =
-    let
-        _ =
-            Debug.log "success" ( st, x )
-    in
     Ok ( st, x )
 
 
 satisfy : (Char -> Bool) -> Parser Char
 satisfy f =
     let
-        _ =
-            Debug.log "satisfy"
-
         g (ParserState st) =
             case String.uncons st.subject of
                 Just ( c, _ ) ->
@@ -425,9 +408,6 @@ takeWhile1 f =
     Parser
         (\(ParserState st) ->
             let
-                _ =
-                    Debug.log "takeWhile1" st
-
                 t =
                     stringTakeWhile f st.subject
             in
@@ -614,11 +594,7 @@ many (Parser p) =
     let
         accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
         accumulate acc state =
-            let
-                _ =
-                    Debug.log "accumulate" ( acc, state )
-            in
-            case Debug.log "case result" (p state) of
+            case p state of
                 Ok ( st_, res ) ->
                     accumulate (res :: acc) st_
 
@@ -650,13 +626,12 @@ stringTakeWhile f str =
     String.toList str
         |> List.foldl
             (\c ( found, acc ) ->
-                if Debug.log "found" found && Debug.log "f" (f c) then
+                if found && f c then
                     ( True, String.cons c acc )
 
                 else
                     ( False, acc )
             )
             ( True, "" )
-        |> Debug.log "stringTakeWhile"
         |> Tuple.second
         |> String.reverse

@@ -99,7 +99,7 @@ formatMardownBlock formatCode context block =
             (String.join "\n" <| List.map ((++) "@docs " << String.join ", ") terms) ++ "\n"
 
         Para inlines ->
-            (String.concat <| List.map (formatMarkdownInline True) <| inlines) ++ "\n"
+            (String.concat <| List.map (formatMarkdownInline True) inlines) ++ "\n"
 
         Header level inlines ->
             "\n" ++ String.repeat level "#" ++ " " ++ (String.concat <| List.map (formatMarkdownInline True) inlines) ++ "\n"
@@ -160,7 +160,7 @@ formatMardownBlock formatCode context block =
                             False
             in
             if isElm && canIndent then
-                Utils.unlines <| List.map ((++) "    ") <| String.lines <| formatted
+                Utils.unlines <| List.map ((++) "    ") <| lines formatted
 
             else
                 "```" ++ codeLang ++ "\n" ++ formatted ++ "```\n"
@@ -173,6 +173,16 @@ formatMardownBlock formatCode context block =
 
         ReferencesBlock refs ->
             String.concat <| List.map formatRef refs
+
+
+lines : String -> List String
+lines str =
+    case List.reverse (String.lines str) of
+        "" :: rest ->
+            List.reverse rest
+
+        result ->
+            List.reverse result
 
 
 formatListItem : (String -> Maybe String) -> ( Int, Blocks ) -> String
@@ -205,7 +215,7 @@ formatRef ( label, url, title ) =
 
 prefix_ : String -> String -> String -> String
 prefix_ preFirst preRest =
-    Utils.unlines << prefix preFirst preRest << String.lines
+    Utils.unlines << prefix preFirst preRest << lines
 
 
 prefix : String -> String -> List String -> List String

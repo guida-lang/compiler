@@ -87,10 +87,6 @@ chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
             (\( initialComments, headerComments, header ) ->
-                let
-                    _ =
-                        Debug.log "initialComments" initialComments
-                in
                 chompImports
                     (if isCore projectType then
                         []
@@ -111,10 +107,6 @@ chompModule syntaxVersion projectType =
                                         P.specialize E.Declarations (chompDecls syntaxVersion)
                                             |> P.fmap
                                                 (\decls ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "HERE" ()
-                                                    in
                                                     Module
                                                         initialComments
                                                         header
@@ -350,10 +342,6 @@ chompModuleDocCommentSpace =
     P.addLocation (freshLine E.FreshLine)
         |> P.bind
             (\(A.At region beforeComments) ->
-                let
-                    _ =
-                        Debug.log "beforeComments" beforeComments
-                in
                 P.oneOfWithFallback
                     [ Space.docComment E.ImportStart E.ModuleSpace
                         |> P.bind

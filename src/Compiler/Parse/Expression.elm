@@ -867,7 +867,7 @@ chompIfEnd syntaxVersion start comments branches =
                                                                                     ifExpr =
                                                                                         Src.If (List.reverse newBranches) ( trailingComments, elseBranch )
                                                                                 in
-                                                                                ( ( Debug.log "postElseBranch" postElseBranch, A.at start elseEnd ifExpr ), elseEnd )
+                                                                                ( ( postElseBranch, A.at start elseEnd ifExpr ), elseEnd )
                                                                             )
                                                                     ]
                                                             )
@@ -984,7 +984,7 @@ case_ syntaxVersion start =
                                                             chompCaseEnd syntaxVersion trailingComments [ firstBranch ] firstEnd
                                                                 |> P.fmap
                                                                     (\( branches, end ) ->
-                                                                        ( Debug.log "!!!" ( [], A.at start end (Src.Case ( preExprComments, postExprComments, expr ) branches) )
+                                                                        ( ( [], A.at start end (Src.Case ( preExprComments, postExprComments, expr ) branches) )
                                                                         , end
                                                                         )
                                                                     )

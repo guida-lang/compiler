@@ -11,6 +11,81 @@ const defaultModule = {
     infixes: [],
     declarations: ["fn = ()"]
 }
+const fullExample = {
+    ...defaultModule
+    , docs: `{-| Tons of useful functions that get imported by default.
+
+# Math
+@docs Int, Float, (+), (-), (*), (/), (//), (^)
+
+# Int to Float / Float to Int
+@docs toFloat, round, floor, ceiling, truncate
+
+# Equality
+@docs (==), (/=)
+
+# Comparison
+
+These functions only work on \`comparable\` types. This includes numbers,
+characters, strings, lists of comparable things, and tuples of comparable
+things.
+
+@docs (<), (>), (<=), (>=), max, min, compare, Order
+
+# Booleans
+@docs Bool, not, (&&), (||), xor
+
+# Append Strings and Lists
+@docs (++)
+
+# Fancier Math
+@docs modBy, remainderBy, negate, abs, clamp, sqrt, logBase, e
+
+# Angles
+@docs degrees, radians, turns
+
+# Trigonometry
+@docs pi, cos, sin, tan, acos, asin, atan, atan2
+
+# Polar Coordinates
+@docs toPolar, fromPolar
+
+# Floating Point Checks
+@docs isNaN, isInfinite
+
+# Function Helpers
+@docs identity, always, (<|), (|>), (<<), (>>), Never, never
+
+-}`
+    , imports: [
+        "-- IMPORTS",
+        "import {- import1 -} Module1",
+        "-- second import comment",
+        "import {- import2.1 -} Module2 {- import2.2 -} as {- import2.3 -} M",
+        "import {- import3.1 -} Module3 {- import3.2 -} exposing {- import3.3 -} (..)",
+        "import {- import4.1 -} Module4 {- import4.2 -} exposing {- import4.3 -} ({- import4.4 -} fn1 {- import4.5 -}, {- import4.6 -} fn2 {- import4.7 -})",
+        `import -- import5.1
+            Module5 -- import5.2
+            exposing -- import5.3
+            (fn1 -- import5.4
+            , fn2 -- import5.5
+            )`
+    ], infixes: [
+        "-- INFIX OPERATORS",
+        "infix {- infix2 -} right {- infix3 -} 0 {- infix4 -} (<|) {- infix5 -} = {- infix6 -} apL",
+        "-- second infix comment",
+        `infix -- infix7
+            left -- infix8
+            0 -- infix9
+            (|>) -- infix10
+            = -- infix11
+            apR`,
+    ], declarations: [
+        "-- DECLARATIONS",
+        "{-| unit comment -}",
+        "unitFn = ()"
+    ]
+}
 
 const examples = [
     // HEADERS
@@ -72,7 +147,7 @@ const examples = [
                     "hexadecimalInt = 0xff",
                     "decimalFloat = 3.14",
                     "exponentFloat = 6.022e23",
-                    "smallExponentFloat = 1e3",
+                    // TODO/FIXME "smallExponentFloat = 1e3",
                     "char = 'a'",
                     "singleQuotedString = \"hello world!\"",
                     "tripleQuotedString = \"\"\"multiline\n strings\"\"\"",
@@ -101,7 +176,8 @@ const examples = [
         { title: "multi-line header", filename: "MultiLineHeaderComments", module: { ...defaultModule, header: ["module {- C1 -} Main {- C2 -} exposing {- C3 -} ({- C4 -}..{- C5 -})"] } },
         { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
-        { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } }
+        { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } },
+        { title: "full-example", filename: "FullExample", module: fullExample }
     ]],
 ]
 

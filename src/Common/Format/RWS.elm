@@ -73,10 +73,6 @@ tell log =
 
 replicateM : Int -> RWS r s a -> RWS r s (List a)
 replicateM n rws =
-    let
-        _ =
-            Debug.log "replicateM" n
-    in
     if n <= 0 then
         return []
 

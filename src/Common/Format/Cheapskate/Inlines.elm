@@ -334,17 +334,13 @@ pSatisfy p =
 
 parseInlines : ReferenceMap -> String -> Inlines
 parseInlines refmap t =
-    let
-        _ =
-            Debug.log "parseInlines" ( refmap, t )
-    in
     case parse (fmap List.concat (leftSequence (many (pInline refmap)) endOfInput)) t of
         Err e ->
             -- should not happen
             crash ("parseInlines: " ++ Debug.toString e)
 
         Ok r ->
-            Debug.log "parseInlines r" r
+            r
 
 
 pInline : ReferenceMap -> Parser Inlines

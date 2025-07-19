@@ -336,7 +336,7 @@ expression syntaxVersion =
                 exprPart syntaxVersion
                     |> P.bind
                         (\ePart ->
-                            exprHelp syntaxVersion start [] (Debug.log "ePart" ePart)
+                            exprHelp syntaxVersion start [] ePart
                         )
             )
 
