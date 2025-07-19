@@ -26,7 +26,7 @@ runRWS rws r s =
 mapM_ : (a -> RWS r s b) -> List a -> RWS r s ()
 mapM_ f xs =
     \r s0 ->
-        List.foldl
+        List.foldr
             (\x ( _, s, w ) ->
                 let
                     ( _, newS, newW ) =

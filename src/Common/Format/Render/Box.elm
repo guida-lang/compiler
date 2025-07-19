@@ -15,6 +15,7 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
 import Compiler.Parse.Primitives as P
+import Compiler.Parse.Space as Space
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -293,12 +294,24 @@ formatModuleHeader addDefaultHeader modu =
 
         documentedVars : List (List String)
         documentedVars =
-            -- TODO
-            -- modu.header
-            --     |> Maybe.andThen (.docs >> Result.toMaybe)
-            --     |> Maybe.toList
-            --     |> List.concatMap extractDocs
-            []
+            modu.header
+                |> Maybe.andThen (.docs >> Result.toMaybe)
+                |> Maybe.map
+                    (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                        String.slice offset (offset + length) fptr
+                            |> String.trim
+                            |> Parse.markdown
+                                (Options
+                                    { sanitize = True
+                                    , allowRawHtml = True
+                                    , preserveHardBreaks = True
+                                    , debug = False
+                                    }
+                                )
+                            |> (\(Doc _ blocks) -> blocks)
+                    )
+                |> Maybe.withDefault []
+                |> List.concatMap extractDocs
 
         documentedVarsSet : EverySet String String
         documentedVarsSet =
@@ -613,7 +626,7 @@ formatModule : Bool -> Int -> M.Module -> Box
 formatModule addDefaultHeader spacing modu =
     let
         _ =
-            Debug.log "HERE2" ()
+            Debug.log "HERE2" modu
 
         initialComments_ =
             case modu.initialComments of
@@ -624,30 +637,63 @@ formatModule addDefaultHeader spacing modu =
                     List.map formatComment comments
                         ++ [ Box.blankLine, Box.blankLine ]
 
+        declarations =
+            List.concatMap
+                (\decl ->
+                    (case Debug.log "decl" decl of
+                        Decl.Value (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
+                            -- [ BodyComment (Src.BlockComment (String.lines (String.slice offset (offset + length) fptr))) ]
+                            [ DocComment
+                                (String.slice offset (offset + length) fptr
+                                    |> String.trim
+                                    |> Parse.markdown
+                                        (Options
+                                            { sanitize = True
+                                            , allowRawHtml = True
+                                            , preserveHardBreaks = True
+                                            , debug = False
+                                            }
+                                        )
+                                    |> (\(Doc _ blocks) -> blocks)
+                                )
+                            ]
+
+                        -- Decl.Union (Just comment) _ ->
+                        --     [ BodyComment comment ]
+                        -- Decl.Alias (Just comment) _ ->
+                        --     [ BodyComment comment ]
+                        -- Decl.Port (Just comment) _ ->
+                        --     [ BodyComment comment ]
+                        _ ->
+                            []
+                    )
+                        ++ [ Entry (CommonDeclaration decl) ]
+                )
+                modu.decls
+
+        body : List (TopLevelStructure Declaration)
+        body =
+            List.map (Entry << InfixDeclaration) (List.reverse modu.infixes)
+                ++ declarations
+
         spaceBeforeBody : Int
         spaceBeforeBody =
-            case ( modu.decls, Maybe.andThen (.docs >> Result.toMaybe) modu.header ) of
-                ( [], _ ) ->
+            case body of
+                [] ->
                     0
 
-                ( _, Just _ ) ->
+                (BodyComment _) :: _ ->
                     spacing + 1
 
                 _ ->
                     spacing
-
-        decls =
-            -- TODO review
-            List.map (Entry << InfixDeclaration) (List.reverse modu.infixes)
-                ++ List.map (Entry << CommonDeclaration) modu.decls
     in
     Box.stack1
         (List.concat
             [ initialComments_
             , formatModuleHeader addDefaultHeader modu
-
-            -- , List.repeat spaceBeforeBody Box.blankLine
-            -- , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) decls)
+            , List.repeat (Debug.log "spaceBeforeBody" spaceBeforeBody) Box.blankLine
+            , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) body)
             ]
         )
 
@@ -834,7 +880,7 @@ formatTopLevelBody linesBetween importInfo body =
             Nothing
 
         _ ->
-            Just (Box.stack1 boxes)
+            Just (Box.stack1 (Debug.log "boxes" boxes))
 
 
 pairs : List a -> List ( a, a )
@@ -937,7 +983,7 @@ formatDocComment importInfo blocks =
 
         content : String
         content =
-            Markdown.formatMarkdown (Maybe.map format << parse) (List.map cleanBlock blocks)
+            Markdown.formatMarkdown (Maybe.map format << parse) (List.map cleanBlock (Debug.log "blocks" blocks))
 
         cleanBlock : Block -> Block
         cleanBlock block =
@@ -953,7 +999,7 @@ formatDocComment importInfo blocks =
 
 formatDocCommentString : String -> Box
 formatDocCommentString docs =
-    case String.lines docs of
+    case Debug.log "formatDocCommentString" (String.lines docs) of
         [] ->
             Box.line (Box.row [ Box.punc "{-|", Box.space, Box.punc "-}" ])
 
@@ -1266,7 +1312,7 @@ formatTopLevelStructure importInfo topLevelStructure =
             formatComment c
 
         Entry entry ->
-            entry
+            Debug.log "formatTopLevelStructure" entry
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box

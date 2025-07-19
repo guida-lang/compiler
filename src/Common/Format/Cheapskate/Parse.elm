@@ -356,12 +356,12 @@ processElts refmap elts =
             case Debug.log "lf" lf of
                 -- Special handling of @docs lines in Elm:
                 TextLine t ->
-                    case stripPrefix "@docs" t of
+                    case stripPrefix "@docs" (Debug.log "@docs.t" t) of
                         Just terms1 ->
                             let
                                 docs : List String
                                 docs =
-                                    terms1 :: List.map (cleanDoc << extractText) docLines
+                                    Debug.log "docs" (Debug.log "terms1" terms1 :: List.map (cleanDoc << extractText) docLines)
 
                                 ( docLines, rest_ ) =
                                     List.partition isDocLine rest
@@ -384,8 +384,10 @@ processElts refmap elts =
                                         Just stripped ->
                                             stripped
                             in
-                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
-                                ++ processElts refmap rest_
+                            Debug.log "processElts!1!"
+                                (List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
+                                    ++ processElts refmap rest_
+                                )
 
                         Nothing ->
                             -- Gobble text lines and make them into a Para:
