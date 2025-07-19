@@ -476,12 +476,18 @@ formatModuleHeader addDefaultHeader modu =
         imports =
             formatImports modu
     in
-    List.intersperse Box.blankLine
-        (List.concat
-            [ Maybe.toList (Maybe.map formatModuleLine_ maybeHeader)
-            , Maybe.toList docs
-            , imports
-            ]
+    List.concat
+        (List.intersperse [ Box.blankLine ]
+            (List.concat
+                [ Maybe.toList (Maybe.map (List.singleton << formatModuleLine_) maybeHeader)
+                , Maybe.toList (Maybe.map List.singleton docs)
+                , if List.isEmpty imports then
+                    []
+
+                  else
+                    [ imports ]
+                ]
+            )
         )
 
 
@@ -998,13 +1004,13 @@ lines str =
 
 
 formatImport : Src.Import -> Box
-formatImport ((Src.Import ( _, A.At _ importName ) maybeAlias exposing_) as import__) =
+formatImport ((Src.Import ( preImportNameComments, A.At _ importName ) maybeAlias exposing_) as import__) =
     let
         maybeRequestedAs =
             maybeAlias
                 |> Maybe.andThen
-                    (\( _, _, aliasName ) ->
-                        if aliasName == importName then
+                    (\aliasName ->
+                        if Src.c2Value aliasName == importName then
                             Nothing
 
                         else
@@ -1018,7 +1024,7 @@ formatImport ((Src.Import ( _, A.At _ importName ) maybeAlias exposing_) as impo
                         formatImportClause
                             (Just << Box.line << formatUppercaseIdentifier)
                             "as"
-                            ( [], [], requestedAs )
+                            requestedAs
                     )
                 |> Maybe.join
 
@@ -1063,7 +1069,7 @@ formatImport ((Src.Import ( _, A.At _ importName ) maybeAlias exposing_) as impo
                     Just (pleaseReport "UNEXPECTED IMPORT" "import clause comments with no clause")
     in
     case
-        ( formatPreCommented (Src.c1map (Box.line << formatQualifiedUppercaseIdentifier) ( [], String.split "." importName ))
+        ( formatPreCommented (Src.c1map (Box.line << formatQualifiedUppercaseIdentifier) ( preImportNameComments, String.split "." importName ))
         , asVar
         , exposingVar
         )

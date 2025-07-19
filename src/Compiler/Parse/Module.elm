@@ -718,13 +718,13 @@ chompImport =
                                         in
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.Import ( preNameComments, name ) Nothing ( trailingComments, [], Src.Explicit (A.At A.zero []) ))
+                                                |> P.fmap (\_ -> Src.Import ( preNameComments, name ) Nothing ( [], [], Src.Explicit (A.At A.zero []) ))
                                             , Space.checkIndent end E.ImportEnd
                                                 |> P.bind
                                                     (\_ ->
                                                         P.oneOf E.ImportAs
-                                                            [ chompAs name
-                                                            , chompExposing name Nothing
+                                                            [ chompAs ( preNameComments, name ) trailingComments
+                                                            , chompExposing ( preNameComments, name ) Nothing
                                                             ]
                                                     )
                                             ]
@@ -733,42 +733,42 @@ chompImport =
             )
 
 
-chompAs : A.Located Name.Name -> P.Parser E.Module Src.Import
-chompAs name =
+chompAs : Src.C1 (A.Located Name.Name) -> Src.FComments -> P.Parser E.Module Src.Import
+chompAs name trailingComments =
     Keyword.as_ E.ImportAs
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
         |> P.bind
-            (\c74 ->
+            (\postAliasComments ->
                 let
                     _ =
-                        Debug.log "c74" c74
+                        Debug.log "c74" postAliasComments
                 in
                 Var.upper E.ImportAlias
-            )
-        |> P.bind
-            (\alias_ ->
-                P.getPosition
                     |> P.bind
-                        (\end ->
-                            Space.chomp E.ModuleSpace
+                        (\alias_ ->
+                            P.getPosition
                                 |> P.bind
-                                    (\c118 ->
-                                        let
-                                            _ =
-                                                Debug.log "c118" c118
-                                        in
-                                        P.oneOf E.ImportEnd
-                                            [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.Import ( [], name ) (Just ( [], [], alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ))
-                                            , Space.checkIndent end E.ImportEnd
-                                                |> P.bind (\_ -> chompExposing name (Just alias_))
-                                            ]
+                                    (\end ->
+                                        Space.chomp E.ModuleSpace
+                                            |> P.bind
+                                                (\c118 ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "c118" c118
+                                                    in
+                                                    P.oneOf E.ImportEnd
+                                                        [ Space.checkFreshLine E.ImportEnd
+                                                            |> P.fmap (\_ -> Src.Import name (Just ( trailingComments, postAliasComments, alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ))
+                                                        , Space.checkIndent end E.ImportEnd
+                                                            |> P.bind (\_ -> chompExposing name (Just alias_))
+                                                        ]
+                                                )
                                     )
                         )
             )
 
 
-chompExposing : A.Located Name.Name -> Maybe Name.Name -> P.Parser E.Module Src.Import
+chompExposing : Src.C1 (A.Located Name.Name) -> Maybe Name.Name -> P.Parser E.Module Src.Import
 chompExposing name maybeAlias =
     Keyword.exposing_ E.ImportExposing
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
@@ -783,7 +783,7 @@ chompExposing name maybeAlias =
         |> P.bind
             (\exposed ->
                 freshLine E.ImportEnd
-                    |> P.fmap (\_ -> Src.Import ( [], name ) (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposed ))
+                    |> P.fmap (\_ -> Src.Import name (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposed ))
             )
 
 
