@@ -177,7 +177,7 @@ addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, _, exposin
             Utils.foldM
                 (addExposedValue home vars rawTypeInfo binops)
                 (State state.vars state.types state.ctors state.binops qvs2 qts2 qcs2)
-                exposedList
+                (List.map Src.c2Value exposedList)
 
 
 addExposed : Env.Exposed a -> Env.Exposed a -> Env.Exposed a

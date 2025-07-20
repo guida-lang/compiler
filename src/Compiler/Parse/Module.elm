@@ -724,7 +724,7 @@ chompImport =
                                                     (\_ ->
                                                         P.oneOf E.ImportAs
                                                             [ chompAs ( preNameComments, name ) trailingComments
-                                                            , chompExposing ( preNameComments, name ) Nothing
+                                                            , chompExposing ( preNameComments, name ) Nothing [] trailingComments
                                                             ]
                                                     )
                                             ]
@@ -751,16 +751,16 @@ chompAs name trailingComments =
                                     (\end ->
                                         Space.chomp E.ModuleSpace
                                             |> P.bind
-                                                (\c118 ->
+                                                (\preExposedComments ->
                                                     let
                                                         _ =
-                                                            Debug.log "c118" c118
+                                                            Debug.log "c118" preExposedComments
                                                     in
                                                     P.oneOf E.ImportEnd
                                                         [ Space.checkFreshLine E.ImportEnd
                                                             |> P.fmap (\_ -> Src.Import name (Just ( trailingComments, postAliasComments, alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ))
                                                         , Space.checkIndent end E.ImportEnd
-                                                            |> P.bind (\_ -> chompExposing name (Just alias_))
+                                                            |> P.bind (\_ -> chompExposing name (Just ( postAliasComments, alias_ )) trailingComments preExposedComments)
                                                         ]
                                                 )
                                     )
@@ -768,22 +768,22 @@ chompAs name trailingComments =
             )
 
 
-chompExposing : Src.C1 (A.Located Name.Name) -> Maybe Name.Name -> P.Parser E.Module Src.Import
-chompExposing name maybeAlias =
+chompExposing : Src.C1 (A.Located Name.Name) -> Maybe (Src.C1 Name.Name) -> Src.FComments -> Src.FComments -> P.Parser E.Module Src.Import
+chompExposing name maybeAlias trailingComments preExposedComments =
     Keyword.exposing_ E.ImportExposing
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
         |> P.bind
-            (\c75 ->
+            (\postExposedComments ->
                 let
                     _ =
-                        Debug.log "c75" c75
+                        Debug.log "c75" postExposedComments
                 in
                 P.specialize E.ImportExposingList exposing_
-            )
-        |> P.bind
-            (\exposed ->
-                freshLine E.ImportEnd
-                    |> P.fmap (\_ -> Src.Import name (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposed ))
+                    |> P.bind
+                        (\exposed ->
+                            freshLine E.ImportEnd
+                                |> P.fmap (\_ -> Src.Import name (Maybe.map (\( postAliasComments, alias_ ) -> ( trailingComments, postAliasComments, alias_ )) maybeAlias) ( preExposedComments, postExposedComments, exposed ))
+                        )
             )
 
 
@@ -799,10 +799,10 @@ exposing_ =
             (\start ->
                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue
                     |> P.bind
-                        (\c76 ->
+                        (\preExposedComments ->
                             let
                                 _ =
-                                    Debug.log "c76" c76
+                                    Debug.log "c76" preExposedComments
                             in
                             P.oneOf E.ExposingValue
                                 [ P.word2 '.' '.' E.ExposingValue
@@ -821,12 +821,12 @@ exposing_ =
                                         (\exposed ->
                                             Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
                                                 |> P.bind
-                                                    (\c78 ->
+                                                    (\postExposedComments ->
                                                         let
                                                             _ =
-                                                                Debug.log "c78" c78
+                                                                Debug.log "c78" postExposedComments
                                                         in
-                                                        P.loop (exposingHelp start) [ exposed ]
+                                                        P.loop (exposingHelp start) [ ( preExposedComments, postExposedComments, exposed ) ]
                                                     )
                                         )
                                 ]
@@ -834,29 +834,29 @@ exposing_ =
             )
 
 
-exposingHelp : A.Position -> List Src.Exposed -> P.Parser E.Exposing (P.Step (List Src.Exposed) Src.Exposing)
+exposingHelp : A.Position -> List (Src.C2 Src.Exposed) -> P.Parser E.Exposing (P.Step (List (Src.C2 Src.Exposed)) Src.Exposing)
 exposingHelp start revExposed =
     P.oneOf E.ExposingEnd
         [ P.word1 ',' E.ExposingEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
             |> P.bind
-                (\c79 ->
+                (\preExposedComments ->
                     let
                         _ =
-                            Debug.log "c79" c79
+                            Debug.log "c79" preExposedComments
                     in
                     chompExposed
-                )
-            |> P.bind
-                (\exposed ->
-                    Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
-                        |> P.fmap
-                            (\c80 ->
-                                let
-                                    _ =
-                                        Debug.log "c80" c80
-                                in
-                                P.Loop (exposed :: revExposed)
+                        |> P.bind
+                            (\exposed ->
+                                Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
+                                    |> P.fmap
+                                        (\postExposedComments ->
+                                            let
+                                                _ =
+                                                    Debug.log "c80" postExposedComments
+                                            in
+                                            P.Loop (( preExposedComments, postExposedComments, exposed ) :: revExposed)
+                                        )
                             )
                 )
         , P.word1 ')' E.ExposingEnd

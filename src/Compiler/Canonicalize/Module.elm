@@ -269,7 +269,7 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
                 names =
                     Dict.fromList identity (List.map valueToName values)
             in
-            R.traverse (checkExposed names unions aliases binops effects) exposeds
+            R.traverse (checkExposed names unions aliases binops effects) (List.map Src.c2Value exposeds)
                 |> R.bind
                     (\infos ->
                         Dups.detect Error.ExportDuplicate (Dups.unions infos)

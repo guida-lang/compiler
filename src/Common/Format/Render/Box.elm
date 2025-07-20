@@ -374,7 +374,6 @@ formatModuleHeader addDefaultHeader modu =
 
                 Src.Explicit (A.At _ exposedList) ->
                     exposedList
-                        |> List.map (\exposed -> ( [], [], exposed ))
                         |> EverySet.fromList
                             (\( _, _, exposed ) ->
                                 case exposed of
@@ -1190,7 +1189,7 @@ formatListing listing =
             Just (parens (formatCommented ( [], [], Box.line (Box.keyword "..") )))
 
 
-formatExposing : (List Src.Exposed -> List Box) -> Src.Exposing -> Maybe Box
+formatExposing : (List (Src.C2 Src.Exposed) -> List Box) -> Src.Exposing -> Maybe Box
 formatExposing format listing =
     case listing of
         Src.Open ->
@@ -1213,7 +1212,7 @@ formatExposing format listing =
                     Just <| ElmStructure.group False "(" "," ")" multiline vars_
 
 
-formatDetailedListing : List Src.Exposed -> List Box
+formatDetailedListing : List (Src.C2 Src.Exposed) -> List Box
 formatDetailedListing exposedList =
     -- List.concat
     --     [ formatCommentedMap (\_ _ -> EQ)
@@ -1231,7 +1230,7 @@ formatDetailedListing exposedList =
     --     ]
     exposedList
         |> List.sortBy
-            (\exposed ->
+            (\( _, _, exposed ) ->
                 case exposed of
                     Src.Lower (A.At _ name) ->
                         ( 3, name )
@@ -1242,12 +1241,7 @@ formatDetailedListing exposedList =
                     Src.Operator _ name ->
                         ( 1, name )
             )
-        |> List.map
-            (\exposed ->
-                formatCommented
-                    -- TODO comments
-                    ( [], [], formatVarValue exposed )
-            )
+        |> List.map (\exposed -> formatCommented (Src.c2map formatVarValue exposed))
 
 
 

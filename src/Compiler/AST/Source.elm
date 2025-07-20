@@ -373,7 +373,7 @@ type Comment
 
 type Exposing
     = Open
-    | Explicit (A.Located (List Exposed))
+    | Explicit (A.Located (List (C2 Exposed)))
 
 
 type Exposed
@@ -683,7 +683,7 @@ exposingEncoder exposing_ =
         Explicit exposedList ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , A.locatedEncoder (BE.list exposedEncoder) exposedList
+                , A.locatedEncoder (BE.list (c2Encoder exposedEncoder)) exposedList
                 ]
 
 
@@ -697,7 +697,7 @@ exposingDecoder =
                         BD.succeed Open
 
                     1 ->
-                        BD.map Explicit (A.locatedDecoder (BD.list exposedDecoder))
+                        BD.map Explicit (A.locatedDecoder (BD.list (c2Decoder exposedDecoder)))
 
                     _ ->
                         BD.fail

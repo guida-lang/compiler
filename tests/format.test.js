@@ -65,11 +65,14 @@ things.
         "import {- import3.1 -} Module3 {- import3.2 -} exposing {- import3.3 -} (..)",
         "import {- import4.1 -} Module4 {- import4.2 -} exposing {- import4.3 -} ({- import4.4 -} fn1 {- import4.5 -}, {- import4.6 -} fn2 {- import4.7 -})",
         `import -- import5.1
-            Module5 -- import5.2
-            exposing -- import5.3
-            (fn1 -- import5.4
-            , fn2 -- import5.5
-            )`
+        Module5 -- import5.2
+        exposing -- import5.3
+        ( -- import5.4
+          fn1 -- import5.5
+        , -- import5.6
+          fn2 -- import5.7
+        )`,
+        "import {- import6.1 -} Module6 {- import6.2 -} as {- import6.3 -} M exposing {- import6.4 -} (..)",
     ], infixes: [
         "-- INFIX OPERATORS",
         "infix {- infix2 -} right {- infix3 -} 0 {- infix4 -} (<|) {- infix5 -} = {- infix6 -} apL",

@@ -110,7 +110,7 @@ toExposing exposing_ =
             All
 
         Src.Explicit (A.At _ exposedList) ->
-            Only (List.foldr addType EverySet.empty exposedList)
+            Only (List.foldr addType EverySet.empty (List.map Src.c2Value exposedList))
 
 
 addType : Src.Exposed -> EverySet String Name -> EverySet String Name
