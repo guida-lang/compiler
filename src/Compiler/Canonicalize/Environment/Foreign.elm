@@ -153,7 +153,7 @@ addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, _, exposin
             addQualified prefix ctors state.q_ctors
     in
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             let
                 vs2 : Env.Exposed Can.Annotation
                 vs2 =

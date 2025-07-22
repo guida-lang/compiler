@@ -63,7 +63,7 @@ collectVars : Src.Module -> LResult i w (Dict String Name.Name Env.Var)
 collectVars (Src.Module _ _ _ _ _ values _ _ _ effects) =
     let
         addDecl : A.Located Src.Value -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
-        addDecl (A.At _ (Src.Value _ (A.At region name) _ _ _)) =
+        addDecl (A.At _ (Src.Value _ ( _, A.At region name ) _ _ _)) =
             Dups.insert name region (Env.TopLevel region)
     in
     Dups.detect Error.DuplicateDecl <|

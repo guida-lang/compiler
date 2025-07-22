@@ -710,7 +710,7 @@ extractExposedPossiblyTests path =
                             exposed : List Name
                             exposed =
                                 case exposing_ of
-                                    Src.Open ->
+                                    Src.Open _ _ ->
                                         []
 
                                     Src.Explicit (A.At _ exposedList) ->

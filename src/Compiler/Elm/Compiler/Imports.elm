@@ -13,7 +13,7 @@ import System.TypeCheck.IO as IO
 
 defaults : List Src.Import
 defaults =
-    [ import_ ModuleName.basics Nothing Src.Open
+    [ import_ ModuleName.basics Nothing (Src.Open [] [])
     , import_ ModuleName.debug Nothing closed
     , import_ ModuleName.list Nothing (operator "::")
     , import_ ModuleName.maybe Nothing (typeOpen Name.maybe)

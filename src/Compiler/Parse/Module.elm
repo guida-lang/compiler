@@ -78,7 +78,7 @@ type alias Module =
     , header : Maybe Header
     , imports : Src.C1 (List Src.Import)
     , infixes : List (A.Located Src.Infix)
-    , decls : List Decl.Decl
+    , decls : List (Src.C2 Decl.Decl)
     }
 
 
@@ -127,7 +127,7 @@ checkModule : SyntaxVersion -> ProjectType -> Module -> Result E.Error Src.Modul
 checkModule syntaxVersion projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
-            categorizeDecls [] [] [] [] module_.decls
+            categorizeDecls [] [] [] [] (List.map Src.c2Value module_.decls)
 
         ( _, imports ) =
             module_.imports
@@ -146,7 +146,7 @@ checkModule syntaxVersion projectType module_ =
                     (Src.Module syntaxVersion
                         (Just name)
                         exports
-                        (toDocs docs module_.decls)
+                        (toDocs docs (List.map Src.c2Value module_.decls))
                         imports
                         values
                         unions
@@ -158,8 +158,8 @@ checkModule syntaxVersion projectType module_ =
             Ok
                 (Src.Module syntaxVersion
                     Nothing
-                    (A.At A.one Src.Open)
-                    (toDocs (Err A.one) module_.decls)
+                    (A.At A.one (Src.Open [] []))
+                    (toDocs (Err A.one) (List.map Src.c2Value module_.decls))
                     imports
                     values
                     unions
@@ -191,7 +191,7 @@ checkEffects projectType ports effects =
                         Application ->
                             Err (E.UnexpectedPort region)
 
-        Ports region ->
+        Ports region _ ->
             case projectType of
                 Package _ ->
                     Err (E.NoPortModulesInPackage region)
@@ -260,7 +260,7 @@ getComments decls comments =
 
         decl :: otherDecls ->
             case decl of
-                Decl.Value c (A.At _ (Src.Value _ n _ _ _)) ->
+                Decl.Value c (A.At _ (Src.Value _ ( _, n ) _ _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
                 Decl.Union c (A.At _ (Src.Union n _ _)) ->
@@ -305,13 +305,13 @@ freshLine toFreshLineError =
 -- CHOMP DECLARATIONS
 
 
-chompDecls : SyntaxVersion -> P.Parser E.Decl (List Decl.Decl)
+chompDecls : SyntaxVersion -> P.Parser E.Decl (List (Src.C2 Decl.Decl))
 chompDecls syntaxVersion =
     Decl.declaration syntaxVersion
         |> P.bind (\( decl, _ ) -> P.loop (chompDeclsHelp syntaxVersion) [ decl ])
 
 
-chompDeclsHelp : SyntaxVersion -> List Decl.Decl -> P.Parser E.Decl (P.Step (List Decl.Decl) (List Decl.Decl))
+chompDeclsHelp : SyntaxVersion -> List (Src.C2 Decl.Decl) -> P.Parser E.Decl (P.Step (List (Src.C2 Decl.Decl)) (List (Src.C2 Decl.Decl)))
 chompDeclsHelp syntaxVersion decls =
     P.oneOfWithFallback
         [ Space.checkFreshLine E.DeclStart
@@ -383,14 +383,14 @@ defaultHeader : Header
 defaultHeader =
     { name = ( [], [], A.At A.zero Name.mainModule )
     , effects = NoEffects A.zero
-    , exports = ( [], [], A.At A.zero Src.Open )
+    , exports = ( [], [], A.At A.zero (Src.Open [] []) )
     , docs = Err A.zero
     }
 
 
 type Effects
     = NoEffects A.Region
-    | Ports A.Region
+    | Ports A.Region Src.FComments
     | Manager A.Region Src.Manager
 
 
@@ -458,55 +458,55 @@ chompHeader =
                                   Keyword.port_ E.PortModuleProblem
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
                                     |> P.bind
-                                        (\c62 ->
+                                        (\postPortComments ->
                                             let
                                                 _ =
-                                                    Debug.log "c62" c62
+                                                    Debug.log "c62" postPortComments
                                             in
                                             Keyword.module_ E.PortModuleProblem
-                                        )
-                                    |> P.bind (\_ -> P.getPosition)
-                                    |> P.bind
-                                        (\effectEnd ->
-                                            Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
+                                                |> P.bind (\_ -> P.getPosition)
                                                 |> P.bind
-                                                    (\beforeNameComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c63" beforeNameComments
-                                                        in
-                                                        P.addLocation (Var.moduleName E.PortModuleName)
+                                                    (\effectEnd ->
+                                                        Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
                                                             |> P.bind
-                                                                (\name ->
-                                                                    Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
+                                                                (\beforeNameComments ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "c63" beforeNameComments
+                                                                    in
+                                                                    P.addLocation (Var.moduleName E.PortModuleName)
                                                                         |> P.bind
-                                                                            (\afterNameComments ->
-                                                                                let
-                                                                                    _ =
-                                                                                        Debug.log "c64" afterNameComments
-                                                                                in
-                                                                                Keyword.exposing_ E.PortModuleProblem
-                                                                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
+                                                                            (\name ->
+                                                                                Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
                                                                                     |> P.bind
-                                                                                        (\beforeExportsComments ->
+                                                                                        (\afterNameComments ->
                                                                                             let
                                                                                                 _ =
-                                                                                                    Debug.log "c65" beforeExportsComments
+                                                                                                    Debug.log "c64" afterNameComments
                                                                                             in
-                                                                                            P.addLocation (P.specialize E.PortModuleExposing exposing_)
+                                                                                            Keyword.exposing_ E.PortModuleProblem
+                                                                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
                                                                                                 |> P.bind
-                                                                                                    (\exports ->
-                                                                                                        chompModuleDocCommentSpace
-                                                                                                            |> P.fmap
-                                                                                                                (\( headerComments, docComment ) ->
-                                                                                                                    ( initialComments
-                                                                                                                    , headerComments
-                                                                                                                    , Just <|
-                                                                                                                        Header ( beforeNameComments, afterNameComments, name )
-                                                                                                                            (Ports (A.Region start effectEnd))
-                                                                                                                            ( beforeExportsComments, [], exports )
-                                                                                                                            docComment
-                                                                                                                    )
+                                                                                                    (\postExportsComments ->
+                                                                                                        let
+                                                                                                            _ =
+                                                                                                                Debug.log "c65" postExportsComments
+                                                                                                        in
+                                                                                                        P.addLocation (P.specialize E.PortModuleExposing exposing_)
+                                                                                                            |> P.bind
+                                                                                                                (\exports ->
+                                                                                                                    chompModuleDocCommentSpace
+                                                                                                                        |> P.fmap
+                                                                                                                            (\( headerComments, docComment ) ->
+                                                                                                                                ( initialComments
+                                                                                                                                , headerComments
+                                                                                                                                , Just <|
+                                                                                                                                    Header ( beforeNameComments, afterNameComments, name )
+                                                                                                                                        (Ports (A.Region start effectEnd) postPortComments)
+                                                                                                                                        ( [], postExportsComments, exports )
+                                                                                                                                        docComment
+                                                                                                                                )
+                                                                                                                            )
                                                                                                                 )
                                                                                                     )
                                                                                         )
@@ -808,14 +808,14 @@ exposing_ =
                                 [ P.word2 '.' '.' E.ExposingValue
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
                                     |> P.bind
-                                        (\c77 ->
+                                        (\postComments ->
                                             let
                                                 _ =
-                                                    Debug.log "c77" c77
+                                                    Debug.log "c77" postComments
                                             in
                                             P.word1 ')' E.ExposingEnd
+                                                |> P.fmap (\_ -> Src.Open preExposedComments postComments)
                                         )
-                                    |> P.fmap (\_ -> Src.Open)
                                 , chompExposed
                                     |> P.bind
                                         (\exposed ->

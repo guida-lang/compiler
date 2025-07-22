@@ -253,7 +253,7 @@ type VarType
 
 
 type Def
-    = Define (A.Located Name) (List Pattern) Expr (Maybe Type)
+    = Define (A.Located Name) (List (C1 Pattern)) Expr (Maybe Type)
     | Destruct Pattern Expr
 
 
@@ -327,7 +327,7 @@ type Import
 
 
 type Value
-    = Value FComments (A.Located Name) (List Pattern) (C1 Expr) (Maybe Type)
+    = Value FComments (C1 (A.Located Name)) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 Type))
 
 
 type Union
@@ -372,7 +372,7 @@ type Comment
 
 
 type Exposing
-    = Open
+    = Open FComments FComments
     | Explicit (A.Located (List (C2 Exposed)))
 
 
@@ -523,6 +523,26 @@ c2EolEncoder encoder ( ( preComments, postComments, eol ), a ) =
         ]
 
 
+c1EolDecoder : BD.Decoder a -> BD.Decoder (C1Eol a)
+c1EolDecoder decoder =
+    BD.map3
+        (\comments eol a ->
+            ( comments, eol, a )
+        )
+        fCommentsDecoder
+        (BD.maybe BD.string)
+        decoder
+
+
+c1EolEncoder : (a -> BE.Encoder) -> C1Eol a -> BE.Encoder
+c1EolEncoder encoder ( comments, eol, a ) =
+    BE.sequence
+        [ fCommentsEncoder comments
+        , BE.maybe BE.string eol
+        , encoder a
+        ]
+
+
 c2EolDecoder : BD.Decoder a -> BD.Decoder (C2Eol a)
 c2EolDecoder decoder =
     BD.map4
@@ -533,6 +553,24 @@ c2EolDecoder decoder =
         fCommentsDecoder
         (BD.maybe BD.string)
         decoder
+
+
+openCommentedListEncoder : (a -> BE.Encoder) -> OpenCommentedList a -> BE.Encoder
+openCommentedListEncoder encoder (OpenCommentedList c2Eols c1Eol) =
+    BE.sequence
+        [ BE.list (c2EolEncoder encoder) c2Eols
+        , c1EolEncoder encoder c1Eol
+        ]
+
+
+openCommentedListDecoder : BD.Decoder a -> BD.Decoder (OpenCommentedList a)
+openCommentedListDecoder decoder =
+    BD.map2
+        (\c2Eols c1Eol ->
+            OpenCommentedList c2Eols c1Eol
+        )
+        (BD.list (c2EolDecoder decoder))
+        (c1EolDecoder decoder)
 
 
 typeEncoder : Type -> BE.Encoder
@@ -677,8 +715,12 @@ moduleDecoder =
 exposingEncoder : Exposing -> BE.Encoder
 exposingEncoder exposing_ =
     case exposing_ of
-        Open ->
-            BE.unsignedInt8 0
+        Open preComments postComments ->
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , fCommentsEncoder preComments
+                , fCommentsEncoder postComments
+                ]
 
         Explicit exposedList ->
             BE.sequence
@@ -694,7 +736,9 @@ exposingDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.succeed Open
+                        BD.map2 Open
+                            fCommentsDecoder
+                            fCommentsDecoder
 
                     1 ->
                         BD.map Explicit (A.locatedDecoder (BD.list (c2Decoder exposedDecoder)))
@@ -764,10 +808,10 @@ valueEncoder : Value -> BE.Encoder
 valueEncoder (Value formatComments name srcArgs body maybeType) =
     BE.sequence
         [ fCommentsEncoder formatComments
-        , A.locatedEncoder BE.string name
-        , BE.list patternEncoder srcArgs
+        , c1Encoder (A.locatedEncoder BE.string) name
+        , BE.list (c1Encoder patternEncoder) srcArgs
         , c1Encoder exprEncoder body
-        , BE.maybe typeEncoder maybeType
+        , BE.maybe (c1Encoder typeEncoder) maybeType
         ]
 
 
@@ -775,10 +819,10 @@ valueDecoder : BD.Decoder Value
 valueDecoder =
     BD.map5 Value
         fCommentsDecoder
-        (A.locatedDecoder BD.string)
-        (BD.list patternDecoder)
+        (c1Decoder (A.locatedDecoder BD.string))
+        (BD.list (c1Decoder patternDecoder))
         (c1Decoder exprDecoder)
-        (BD.maybe typeDecoder)
+        (BD.maybe (c1Decoder typeDecoder))
 
 
 unionEncoder : Union -> BE.Encoder
@@ -1508,7 +1552,7 @@ defEncoder def =
             BE.sequence
                 [ BE.unsignedInt8 0
                 , A.locatedEncoder BE.string name
-                , BE.list patternEncoder srcArgs
+                , BE.list (c1Encoder patternEncoder) srcArgs
                 , exprEncoder body
                 , BE.maybe typeEncoder maybeType
                 ]
@@ -1530,7 +1574,7 @@ defDecoder =
                     0 ->
                         BD.map4 Define
                             (A.locatedDecoder BD.string)
-                            (BD.list patternDecoder)
+                            (BD.list (c1Decoder patternDecoder))
                             exprDecoder
                             (BD.maybe typeDecoder)
 

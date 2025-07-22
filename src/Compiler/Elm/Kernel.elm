@@ -397,7 +397,7 @@ toPrefix home maybeAlias =
 toNames : Src.Exposing -> List Name
 toNames exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             crash "cannot have `exposing (..)` in kernel code."
 
         Src.Explicit (A.At _ exposedList) ->

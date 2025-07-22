@@ -378,12 +378,12 @@ attemptDeclOrExpr lines =
 
         declParser : P.Parser ( Row, Col ) ( PD.Decl, A.Position )
         declParser =
-            P.specialize (toDeclPosition src) (PD.declaration SV.Guida)
+            P.specialize (toDeclPosition src) (P.fmap (Tuple.mapFirst Src.c2Value) (PD.declaration SV.Guida))
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
             case decl of
-                PD.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _)) ->
+                PD.Value _ (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) ->
                     ifDone lines (Decl name src)
 
                 PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->

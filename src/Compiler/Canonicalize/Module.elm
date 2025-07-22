@@ -172,11 +172,11 @@ type alias NodeTwo =
 
 
 toNodeOne : SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne syntaxVersion env (A.At _ (Src.Value _ ((A.At _ name) as aname) srcArgs ( _, body ) maybeType)) =
+toNodeOne syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) srcArgs ( _, body ) maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
-                (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
+                (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
                 |> R.bind
                     (\( args, argBindings ) ->
                         Env.addLocals argBindings env
@@ -198,12 +198,12 @@ toNodeOne syntaxVersion env (A.At _ (Src.Value _ ((A.At _ name) as aname) srcArg
                                 )
                     )
 
-        Just srcType ->
+        Just ( _, srcType ) ->
             Type.toAnnotation syntaxVersion env srcType
                 |> R.bind
                     (\(Can.Forall freeVars tipe) ->
                         Pattern.verify (Error.DPFuncArgs name)
-                            (Expr.gatherTypedArgs syntaxVersion env name srcArgs tipe Index.first [])
+                            (Expr.gatherTypedArgs syntaxVersion env name (List.map Src.c1Value srcArgs) tipe Index.first [])
                             |> R.bind
                                 (\( ( args, resultType ), argBindings ) ->
                                     Env.addLocals argBindings env
@@ -260,7 +260,7 @@ canonicalizeExports :
     -> MResult i w Can.Exports
 canonicalizeExports values unions aliases binops effects (A.At region exposing_) =
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             R.ok (Can.ExportEverything region)
 
         Src.Explicit (A.At _ exposeds) ->
@@ -278,7 +278,7 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
 
 
 valueToName : A.Located Src.Value -> ( Name, () )
-valueToName (A.At _ (Src.Value _ (A.At _ name) _ _ _)) =
+valueToName (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) =
     ( name, () )
 
 

@@ -102,7 +102,7 @@ fromImports knownContents rawImports =
             Dict.fromList identity <|
                 List.map (flip Tuple.pair moduleName) <|
                     case exposing_ of
-                        Src.Open ->
+                        Src.Open _ _ ->
                             moduleContents moduleName
 
                         Src.Explicit _ ->
@@ -174,7 +174,7 @@ fromImports knownContents rawImports =
         exposesAll : Src.Import -> Bool
         exposesAll (Src.Import _ _ ( _, _, exposing_ )) =
             case exposing_ of
-                Src.Open ->
+                Src.Open _ _ ->
                     True
 
                 Src.Explicit _ ->

@@ -345,6 +345,7 @@ formatModuleHeader addDefaultHeader modu =
         definedVars : EverySet String (Src.C2 Src.Exposed)
         definedVars =
             modu.decls
+                |> List.map Src.c2Value
                 |> List.concatMap extractVarName
                 |> List.map (\varName -> ( [], [], varName ))
                 |> EverySet.fromList
@@ -369,7 +370,7 @@ formatModuleHeader addDefaultHeader modu =
         detailedListingToSet : Src.Exposing -> EverySet String (Src.C2 Src.Exposed)
         detailedListingToSet listing =
             case listing of
-                Src.Open ->
+                Src.Open _ _ ->
                     EverySet.empty
 
                 Src.Explicit (A.At _ exposedList) ->
@@ -393,7 +394,7 @@ formatModuleHeader addDefaultHeader modu =
                 A.At region (Src.Explicit _) ->
                     A.isMultiline region
 
-                A.At _ Src.Open ->
+                A.At _ (Src.Open _ _) ->
                     False
 
         varsToExpose : EverySet String (Src.C2 Src.Exposed)
@@ -434,7 +435,7 @@ formatModuleHeader addDefaultHeader modu =
         extractVarName : Decl.Decl -> List Src.Exposed
         extractVarName decl =
             case decl of
-                Decl.Value _ (A.At _ (Src.Value _ name _ _ _)) ->
+                Decl.Value _ (A.At _ (Src.Value _ ( _, name ) _ _ _)) ->
                     [ Src.Lower name ]
 
                 Decl.Union _ (A.At _ (Src.Union name _ _)) ->
@@ -521,12 +522,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
                 M.NoEffects _ ->
                     Box.line (Box.keyword "module")
 
-                M.Ports _ ->
-                    let
-                        comments =
-                            -- TODO
-                            []
-                    in
+                M.Ports _ comments ->
                     ElmStructure.spaceSepOrIndented
                         (formatTailCommented ( comments, Box.line (Box.keyword "port") ))
                         [ Box.line (Box.keyword "module") ]
@@ -571,7 +567,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
                 M.NoEffects _ ->
                     []
 
-                M.Ports _ ->
+                M.Ports _ _ ->
                     []
 
                 M.Manager _ manager ->
@@ -636,35 +632,36 @@ formatModule addDefaultHeader spacing modu =
 
         declarations =
             List.concatMap
-                (\decl ->
-                    (case decl of
-                        Decl.Value (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
-                            -- [ BodyComment (Src.BlockComment (String.lines (String.slice offset (offset + length) fptr))) ]
-                            [ DocComment
-                                (String.slice offset (offset + length) fptr
-                                    |> String.trim
-                                    |> Parse.markdown
-                                        (Options
-                                            { sanitize = True
-                                            , allowRawHtml = True
-                                            , preserveHardBreaks = True
-                                            , debug = False
-                                            }
+                (\( preDeclComments, postDeclComments, decl ) ->
+                    List.map BodyComment preDeclComments
+                        ++ (case decl of
+                                Decl.Value (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
+                                    [ DocComment
+                                        (String.slice offset (offset + length) fptr
+                                            |> String.trim
+                                            |> Parse.markdown
+                                                (Options
+                                                    { sanitize = True
+                                                    , allowRawHtml = True
+                                                    , preserveHardBreaks = True
+                                                    , debug = False
+                                                    }
+                                                )
+                                            |> (\(Doc _ blocks) -> blocks)
                                         )
-                                    |> (\(Doc _ blocks) -> blocks)
-                                )
-                            ]
+                                    ]
 
-                        -- Decl.Union (Just comment) _ ->
-                        --     [ BodyComment comment ]
-                        -- Decl.Alias (Just comment) _ ->
-                        --     [ BodyComment comment ]
-                        -- Decl.Port (Just comment) _ ->
-                        --     [ BodyComment comment ]
-                        _ ->
-                            []
-                    )
-                        ++ [ Entry (CommonDeclaration decl) ]
+                                -- Decl.Union (Just comment) _ ->
+                                --     [ BodyComment comment ]
+                                -- Decl.Alias (Just comment) _ ->
+                                --     [ BodyComment comment ]
+                                -- Decl.Port (Just comment) _ ->
+                                --     [ BodyComment comment ]
+                                _ ->
+                                    []
+                           )
+                        ++ Entry (CommonDeclaration decl)
+                        :: List.map BodyComment postDeclComments
                 )
                 modu.decls
 
@@ -706,7 +703,7 @@ formatModuleBody linesBetween importInfo body =
         entryType : Declaration -> BodyEntryType
         entryType adecl =
             case adecl of
-                CommonDeclaration (Decl.Value _ (A.At _ (Src.Value _ (A.At _ name) _ _ _))) ->
+                CommonDeclaration (Decl.Value _ (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _))) ->
                     BodyNamed (VarRef () name)
 
                 CommonDeclaration (Decl.Union _ (A.At _ (Src.Union (A.At _ name) _ _))) ->
@@ -1192,9 +1189,8 @@ formatListing listing =
 formatExposing : (List (Src.C2 Src.Exposed) -> List Box) -> Src.Exposing -> Maybe Box
 formatExposing format listing =
     case listing of
-        Src.Open ->
-            -- TODO comments
-            Just (parens (formatCommented ( [], [], Box.line (Box.keyword "..") )))
+        Src.Open preComments postComments ->
+            Just (parens (formatCommented ( preComments, postComments, Box.line (Box.keyword "..") )))
 
         Src.Explicit (A.At _ []) ->
             Nothing
@@ -1295,7 +1291,7 @@ formatTopLevelStructure importInfo topLevelStructure =
 
 
 formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
-formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) args ( comments, expr ) maybeType)) =
+formatCommonDeclaration importInfo (A.At _ (Src.Value _ ( postNameComments, A.At nameRegion name ) args ( comments, expr ) maybeType)) =
     let
         formattedDefinition =
             formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args comments expr
@@ -1303,7 +1299,7 @@ formatCommonDeclaration importInfo (A.At _ (Src.Value _ (A.At nameRegion name) a
     case maybeType of
         Just typ ->
             Box.stack1
-                [ formatTypeAnnotation ( [], VarRef () name ) ( [], typ )
+                [ formatTypeAnnotation ( postNameComments, VarRef () name ) typ
                 , formattedDefinition
                 ]
 
@@ -1433,7 +1429,7 @@ formatNameWithArgs name args =
                 )
 
 
-formatDefinition : ImportInfo -> Src.Pattern -> List Src.Pattern -> Src.FComments -> Src.Expr -> Box
+formatDefinition : ImportInfo -> Src.Pattern -> List (Src.C1 Src.Pattern) -> Src.FComments -> Src.Expr -> Box
 formatDefinition importInfo (A.At _ name) args comments expr =
     let
         body =
@@ -1447,7 +1443,7 @@ formatDefinition importInfo (A.At _ name) args comments expr =
     ElmStructure.definition "="
         True
         (syntaxParens SpaceSeparated (formatPattern name))
-        (List.map (\(A.At _ y) -> formatCommentedApostrophe [] (syntaxParens SpaceSeparated (formatPattern y))) args)
+        (List.map (\( x, A.At _ y ) -> formatCommentedApostrophe x (syntaxParens SpaceSeparated (formatPattern y))) args)
         body
 
 

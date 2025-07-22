@@ -1143,7 +1143,7 @@ definition syntaxVersion =
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.Def (Src.C1 (A.Located Src.Def))
+chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> List (Src.C1 Src.Pattern) -> Space.Parser E.Def (Src.C1 (A.Located Src.Def))
 chompDefArgsAndBody syntaxVersion start name tipe revArgs =
     P.oneOf E.DefEquals
         [ P.specialize E.DefArg (Pattern.term syntaxVersion)
@@ -1156,7 +1156,7 @@ chompDefArgsAndBody syntaxVersion start name tipe revArgs =
                                     _ =
                                         Debug.log "c55" c55
                                 in
-                                chompDefArgsAndBody syntaxVersion start name tipe (arg :: revArgs)
+                                chompDefArgsAndBody syntaxVersion start name tipe (( [], arg ) :: revArgs)
                             )
                 )
         , P.word1 '=' E.DefEquals

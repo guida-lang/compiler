@@ -32,18 +32,20 @@ type Decl
     | Port (Maybe Src.Comment) Src.Port
 
 
-declaration : SyntaxVersion -> Space.Parser E.Decl Decl
+declaration : SyntaxVersion -> Space.Parser E.Decl (Src.C2 Decl)
 declaration syntaxVersion =
     chompDocComment
         |> P.bind
-            (\( comments, maybeDocs ) ->
+            (\( docComments, maybeDocs ) ->
                 P.getPosition
                     |> P.bind
                         (\start ->
                             P.oneOf E.DeclStart
                                 [ typeDecl maybeDocs start
+                                    |> P.fmap (\( typeDecl_, position ) -> ( ( [], [], typeDecl_ ), position ))
                                 , portDecl maybeDocs
-                                , valueDecl syntaxVersion maybeDocs comments start
+                                    |> P.fmap (\( portDecl_, position ) -> ( ( [], [], portDecl_ ), position ))
+                                , valueDecl syntaxVersion maybeDocs docComments start
                                 ]
                         )
             )
@@ -78,8 +80,8 @@ chompDocComment =
 -- DEFINITION and ANNOTATION
 
 
-valueDecl : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> Space.Parser E.Decl Decl
-valueDecl syntaxVersion maybeDocs comments start =
+valueDecl : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> Space.Parser E.Decl (Src.C2 Decl)
+valueDecl syntaxVersion maybeDocs docComments start =
     Var.lower E.DeclStart
         |> P.bind
             (\name ->
@@ -89,40 +91,40 @@ valueDecl syntaxVersion maybeDocs comments start =
                             P.specialize (E.DeclDef name) <|
                                 (Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                                     |> P.bind
-                                        (\c1 ->
+                                        (\postNameComments ->
                                             let
                                                 _ =
-                                                    Debug.log "c1" c1
+                                                    Debug.log "c1" postNameComments
                                             in
                                             P.oneOf E.DeclDefEquals
                                                 [ P.word1 ':' E.DeclDefEquals
                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentType)
                                                     |> P.bind
-                                                        (\c2 ->
+                                                        (\preTypeComments ->
                                                             let
                                                                 _ =
-                                                                    Debug.log "c2" c2
+                                                                    Debug.log "c2" preTypeComments
                                                             in
                                                             P.specialize E.DeclDefType Type.expression
-                                                        )
-                                                    |> P.bind
-                                                        (\( ( _, tipe ), _ ) ->
-                                                            Space.checkFreshLine E.DeclDefNameRepeat
-                                                                |> P.bind (\_ -> chompMatchingName name)
                                                                 |> P.bind
-                                                                    (\defName ->
-                                                                        Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
+                                                                    (\( ( _, tipe ), _ ) ->
+                                                                        Space.checkFreshLine E.DeclDefNameRepeat
+                                                                            |> P.bind (\_ -> chompMatchingName name)
                                                                             |> P.bind
-                                                                                (\c3 ->
-                                                                                    let
-                                                                                        _ =
-                                                                                            Debug.log "c3" c3
-                                                                                    in
-                                                                                    chompDefArgsAndBody syntaxVersion maybeDocs comments start defName (Just tipe) []
+                                                                                (\defName ->
+                                                                                    Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
+                                                                                        |> P.bind
+                                                                                            (\preArgComments ->
+                                                                                                let
+                                                                                                    _ =
+                                                                                                        Debug.log "c3" preArgComments
+                                                                                                in
+                                                                                                chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( postNameComments, defName ) (Just ( preTypeComments, tipe )) preArgComments []
+                                                                                            )
                                                                                 )
                                                                     )
                                                         )
-                                                , chompDefArgsAndBody syntaxVersion maybeDocs comments start (A.at start end name) Nothing []
+                                                , chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( [], A.at start end name ) Nothing [] []
                                                 ]
                                         )
                                 )
@@ -130,20 +132,20 @@ valueDecl syntaxVersion maybeDocs comments start =
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> A.Located Name -> Maybe Src.Type -> List Src.Pattern -> Space.Parser E.DeclDef Decl
-chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
+chompDefArgsAndBody : SyntaxVersion -> Maybe Src.Comment -> Src.FComments -> A.Position -> Src.C1 (A.Located Name) -> Maybe (Src.C1 Src.Type) -> Src.FComments -> List (Src.C1 Src.Pattern) -> Space.Parser E.DeclDef (Src.C2 Decl)
+chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe preArgComments revArgs =
     P.oneOf E.DeclDefEquals
         [ P.specialize E.DeclDefArg (Pattern.term syntaxVersion)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                         |> P.bind
-                            (\c4 ->
+                            (\postArgComments ->
                                 let
                                     _ =
-                                        Debug.log "c4" c4
+                                        Debug.log "c4" postArgComments
                                 in
-                                chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe (arg :: revArgs)
+                                chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe postArgComments (( preArgComments, arg ) :: revArgs)
                             )
                 )
         , P.word1 '=' E.DeclDefEquals
@@ -156,17 +158,17 @@ chompDefArgsAndBody syntaxVersion maybeDocs comments start name tipe revArgs =
                     in
                     P.specialize E.DeclDefBody (Expr.expression syntaxVersion)
                         |> P.fmap
-                            (\( ( _, body ), end ) ->
+                            (\( ( trailingComments, body ), end ) ->
                                 let
                                     value : Src.Value
                                     value =
-                                        Src.Value comments name (List.reverse revArgs) ( preBodyComments, body ) tipe
+                                        Src.Value docComments name (List.reverse revArgs) ( preBodyComments, body ) tipe
 
                                     avalue : A.Located Src.Value
                                     avalue =
                                         A.at start end value
                                 in
-                                ( Value maybeDocs avalue, end )
+                                ( ( [], trailingComments, Value maybeDocs avalue ), end )
                             )
                 )
         ]

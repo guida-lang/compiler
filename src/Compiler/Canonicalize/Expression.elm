@@ -407,7 +407,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
             case maybeType of
                 Nothing ->
                     Pattern.verify (Error.DPFuncArgs name)
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
+                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, argBindings ) ->
                                 Env.addLocals argBindings env
@@ -435,7 +435,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
                         |> R.bind
                             (\(Can.Forall freeVars ctipe) ->
                                 Pattern.verify (Error.DPFuncArgs name)
-                                    (gatherTypedArgs syntaxVersion env name srcArgs ctipe Index.first [])
+                                    (gatherTypedArgs syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
                                             Env.addLocals argBindings env

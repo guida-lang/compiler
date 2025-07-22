@@ -106,7 +106,7 @@ toPair (Src.Import ( _, A.At _ name ) alias_ ( _, _, exposing_ )) =
 toExposing : Src.Exposing -> Exposing
 toExposing exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             All
 
         Src.Explicit (A.At _ exposedList) ->

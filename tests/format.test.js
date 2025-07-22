@@ -62,7 +62,7 @@ things.
         "import {- import1 -} Module1",
         "-- second import comment",
         "import {- import2.1 -} Module2 {- import2.2 -} as {- import2.3 -} M",
-        "import {- import3.1 -} Module3 {- import3.2 -} exposing {- import3.3 -} (..)",
+        "import {- import3.1 -} Module3 {- import3.2 -} exposing {- import3.3 -} ({- import3.4 -} .. {- import3.5 -})",
         "import {- import4.1 -} Module4 {- import4.2 -} exposing {- import4.3 -} ({- import4.4 -} fn1 {- import4.5 -}, {- import4.6 -} fn2 {- import4.7 -})",
         `import -- import5.1
         Module5 -- import5.2
@@ -85,8 +85,49 @@ things.
             apR`,
     ], declarations: [
         "-- DECLARATIONS",
+        "{-| port in comment -}",
+        "port {- port-in1 -} messageReceiver {- port-in2 -} : {- port-in3 -} ( {- port-in4 -} String {- port-in5 -} -> {- port-in6 -} msg {- port-in7 -}) {- port-in8 -} -> {- port-in9 -} Sub {- port-in10 -} msg {- port-in11 -}",
+        "{-| port out comment -}",
+        "port {- port-out1 -} sendMessage {- port-out2 -} : {- port-out3 -} String {- port-out4 -} -> {- port-out5 -} Cmd {- port-out6 -} msg {- port-out7 -}",
+        "{-| char comment -}",
+        "charFn {- char1 -} : {- char2 -} Char {- char3 -}",
+        "charFn {- char4 -} = {- char5 -} 'a' {- char6 -}",
+        "{-| string comment -}",
+        "stringFn {- string1 -} : {- string2 -} String {- string3 -}",
+        "stringFn {- string4 -} = {- string5 -} \"hello world!\" {- string6 -}",
+        "{-| int comment -}",
+        "intFn {- int1 -} : {- int2 -} Int {- int3 -}",
+        "intFn {- int4 -} = {- int5 -} 123 {- int6 -}",
+        "{-| float comment -}",
+        "floatFn {- float1 -} : {- float2 -} Float {- float3 -}",
+        "floatFn {- float4 -} = {- float5 -} 3.14 {- float6 -}",
+        "{-| lowVar comment -}",
+        "lowVarFn {- lowVar1 -} : {- lowVar2 -} a {- lowVar3 -} -> {- lowVar4 -} a {- lowVar5 -}",
+        "lowVarFn {- lowVar6 -} a {- lowVar7 -} = {- lowVar8 -} a {- lowVar9 -}",
+        "{-| capVar comment -}",
+        "capVarFn {- capVar1 -} : {- capVar2 -} Order {- capVar3 -}",
+        "capVarFn {- capVar4 -} = {- capVar5 -} EQ {- capVar6 -}",
+        "{-| lowVarQual comment -}",
+        "lowVarQualFn {- lowVarQual1 -} : {- lowVarQual2 -} Float {- lowVarQual3 -}",
+        "lowVarQualFn {- lowVarQual4 -} = {- lowVarQual5 -} Basics.e {- lowVarQual6 -}",
+        "{-| capVarQual comment -}",
+        "capVarQualFn {- capVarQual1 -} : {- capVarQual2 -} Basics.Order {- capVarQual3 -}",
+        "capVarQualFn {- capVarQual4 -} = {- capVarQual5 -} Basics.EQ {- capVarQual6 -}",
+        "{-| list comment -}",
+        "listFn {- list1 -} : {- list2 -} List {- list3 -} Int {- list4 -}",
+        "listFn {- list5 -} = {- list6 -} [ {- list7 -} 1 {- list8 -}, {- list9 -} 2 {- list10 -}, {- list11 -} 3 {- list12 -} ] {- list13 -}",
+        "{-| op comment -}",
+        "opFn {- op1 -} : {- op2 -} Int {- op3 -} -> {- op4 -} Int {- op5 -} -> {- op6 -} Int {- op7 -}",
+        "opFn {- op8 -} = {- op9 -} (+) {- op10 -}",
+        "{-| negate comment -}",
+        "negateFn {- negate1 -} : {- negate2 -} Int {- negate3 -}",
+        "negateFn {- negate4 -} = {- negate5 -} -4 {- negate6 -}",
+        "{-| binops comment -}",
+        "binopsFn {- binops1 -} : {- binops2 -} Int {- binops3 -}",
+        "binopsFn {- binops4 -} = {- binops5 -} 1 {- binops6 -} + {- binops7 -} 2 {- binops8 -}",
         "{-| unit comment -}",
-        "unitFn = ()"
+        "unitFn {- unit1 -} : {- unit2 -} () {- unit3 -}",
+        "unitFn {- unit4 -} = {- unit5 -} () {- unit6 -}",
     ]
 }
 
@@ -178,6 +219,7 @@ const examples = [
         { title: "single-line before header", filename: "SingleLineBeforeHeaderComments", module: { ...defaultModule, header: ["-- COMMENT\nmodule Main exposing (..)"] } },
         { title: "multi-line header", filename: "MultiLineHeaderComments", module: { ...defaultModule, header: ["module {- C1 -} Main {- C2 -} exposing {- C3 -} ({- C4 -}..{- C5 -})"] } },
         { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
+        { title: "port header", filename: "PortHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\nport {- C2 -} module {- C3 -} Main {- C4 -} exposing {- C5 -} (..)"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
         { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } },
         { title: "full-example", filename: "FullExample", module: fullExample }
@@ -207,6 +249,11 @@ describe("format", () => {
 });
 
 const generateModule = ({ header, docs, imports, infixes, declarations }) => {
+    console.log(`${header}
+${docs}
+${imports.join("\n")}
+${infixes.join("\n")}
+${declarations.join("\n")}`);
     return `${header}
 ${docs}
 ${imports.join("\n")}
