@@ -76,8 +76,8 @@ isKernel projectType =
 type alias Module =
     { initialComments : Src.FComments
     , header : Maybe Header
-    , imports : Src.C1 (List Src.Import)
-    , infixes : List (A.Located Src.Infix)
+    , imports : Src.C1 (List (Src.C1 Src.Import))
+    , infixes : List (Src.C1 (A.Located Src.Infix))
     , decls : List (Src.C2 Decl.Decl)
     }
 
@@ -110,7 +110,7 @@ chompModule syntaxVersion projectType =
                                                     Module
                                                         initialComments
                                                         header
-                                                        ( headerComments, imports )
+                                                        ( headerComments, Debug.log "imports" imports )
                                                         infixes
                                                         decls
                                                 )
@@ -147,11 +147,11 @@ checkModule syntaxVersion projectType module_ =
                         (Just name)
                         exports
                         (toDocs docs (List.map Src.c2Value module_.decls))
-                        imports
+                        (List.map Src.c1Value imports)
                         values
                         unions
                         aliases
-                        module_.infixes
+                        (List.map Src.c1Value module_.infixes)
                     )
 
         Nothing ->
@@ -160,11 +160,11 @@ checkModule syntaxVersion projectType module_ =
                     Nothing
                     (A.At A.one (Src.Open [] []))
                     (toDocs (Err A.one) (List.map Src.c2Value module_.decls))
-                    imports
+                    (List.map Src.c1Value imports)
                     values
                     unions
                     aliases
-                    module_.infixes
+                    (List.map Src.c1Value module_.infixes)
                     (case ports of
                         [] ->
                             Src.NoEffects
@@ -324,7 +324,7 @@ chompDeclsHelp syntaxVersion decls =
         (P.Done (List.reverse decls))
 
 
-chompInfixes : List (A.Located Src.Infix) -> P.Parser E.Module (List (A.Located Src.Infix))
+chompInfixes : List (Src.C1 (A.Located Src.Infix)) -> P.Parser E.Module (List (Src.C1 (A.Located Src.Infix)))
 chompInfixes infixes =
     P.oneOfWithFallback
         [ Decl.infix_
@@ -687,7 +687,7 @@ spaces_em =
 -- IMPORTS
 
 
-chompImports : List Src.Import -> P.Parser E.Module (List Src.Import)
+chompImports : List (Src.C1 Src.Import) -> P.Parser E.Module (List (Src.C1 Src.Import))
 chompImports is =
     P.oneOfWithFallback
         [ chompImport
@@ -696,7 +696,7 @@ chompImports is =
         (List.reverse is)
 
 
-chompImport : P.Parser E.Module Src.Import
+chompImport : P.Parser E.Module (Src.C1 Src.Import)
 chompImport =
     Keyword.import_ E.ImportStart
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
@@ -718,7 +718,7 @@ chompImport =
                                         in
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
-                                                |> P.fmap (\_ -> Src.Import ( preNameComments, name ) Nothing ( [], [], Src.Explicit (A.At A.zero []) ))
+                                                |> P.fmap (\_ -> ( trailingComments, Src.Import ( preNameComments, name ) Nothing ( [], [], Src.Explicit (A.At A.zero []) ) ))
                                             , Space.checkIndent end E.ImportEnd
                                                 |> P.bind
                                                     (\_ ->
@@ -733,7 +733,7 @@ chompImport =
             )
 
 
-chompAs : Src.C1 (A.Located Name.Name) -> Src.FComments -> P.Parser E.Module Src.Import
+chompAs : Src.C1 (A.Located Name.Name) -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
 chompAs name trailingComments =
     Keyword.as_ E.ImportAs
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
@@ -758,7 +758,7 @@ chompAs name trailingComments =
                                                     in
                                                     P.oneOf E.ImportEnd
                                                         [ Space.checkFreshLine E.ImportEnd
-                                                            |> P.fmap (\_ -> Src.Import name (Just ( trailingComments, postAliasComments, alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ))
+                                                            |> P.fmap (\_ -> ( preExposedComments, Src.Import name (Just ( trailingComments, postAliasComments, alias_ )) ( [], [], Src.Explicit (A.At A.zero []) ) ))
                                                         , Space.checkIndent end E.ImportEnd
                                                             |> P.bind (\_ -> chompExposing name (Just ( postAliasComments, alias_ )) trailingComments preExposedComments)
                                                         ]
@@ -768,7 +768,7 @@ chompAs name trailingComments =
             )
 
 
-chompExposing : Src.C1 (A.Located Name.Name) -> Maybe (Src.C1 Name.Name) -> Src.FComments -> Src.FComments -> P.Parser E.Module Src.Import
+chompExposing : Src.C1 (A.Located Name.Name) -> Maybe (Src.C1 Name.Name) -> Src.FComments -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
 chompExposing name maybeAlias trailingComments preExposedComments =
     Keyword.exposing_ E.ImportExposing
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
@@ -782,7 +782,7 @@ chompExposing name maybeAlias trailingComments preExposedComments =
                     |> P.bind
                         (\exposed ->
                             freshLine E.ImportEnd
-                                |> P.fmap (\_ -> Src.Import name (Maybe.map (\( postAliasComments, alias_ ) -> ( trailingComments, postAliasComments, alias_ )) maybeAlias) ( preExposedComments, postExposedComments, exposed ))
+                                |> P.fmap (\comments -> ( comments, Src.Import name (Maybe.map (\( postAliasComments, alias_ ) -> ( trailingComments, postAliasComments, alias_ )) maybeAlias) ( preExposedComments, postExposedComments, exposed ) ))
                         )
             )
 

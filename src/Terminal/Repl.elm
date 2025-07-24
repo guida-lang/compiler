@@ -339,12 +339,12 @@ attemptImport lines =
         src =
             linesToByteString lines
 
-        parser : P.Parser () Src.Import
+        parser : P.Parser () (Src.C1 Src.Import)
         parser =
             P.specialize (\_ _ _ -> ()) PM.chompImport
     in
     case P.fromByteString parser (\_ _ -> ()) src of
-        Ok (Src.Import ( _, A.At _ name ) _ _) ->
+        Ok ( _, Src.Import ( _, A.At _ name ) _ _ ) ->
             Done (Import name src)
 
         Err () ->
@@ -515,7 +515,7 @@ annotation =
                 PS.chompAndCheckIndent err_ err
                     |> P.bind (\_ -> P.word1 ':' err)
                     |> P.bind (\_ -> PS.chompAndCheckIndent err_ err)
-                    |> P.bind (\_ -> P.specialize err_ PT.expression)
+                    |> P.bind (\_ -> P.specialize err_ (PT.expression []))
                     |> P.bind (\_ -> PS.checkFreshLine err)
                     |> P.fmap (\_ -> name)
             )

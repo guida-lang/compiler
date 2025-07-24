@@ -1117,7 +1117,7 @@ definition syntaxVersion =
                                                     _ =
                                                         Debug.log "c53" c53
                                                 in
-                                                P.specialize E.DefType Type.expression
+                                                P.specialize E.DefType (Type.expression [])
                                             )
                                         |> P.bind
                                             (\( ( _, tipe ), _ ) ->

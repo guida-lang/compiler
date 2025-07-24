@@ -27,7 +27,7 @@ fromModule knownContents modu =
         ( _, imports ) =
             modu.imports
     in
-    fromImports knownContents (importsToDict imports)
+    fromImports knownContents (importsToDict (List.map Src.c1Value imports))
 
 
 importsToDict : List Src.Import -> Dict String String Src.Import
@@ -64,7 +64,7 @@ fromImports knownContents rawImports =
             --         False
             --   )
             -- ]
-            importsToDict Imports.defaults
+            importsToDict (List.map Src.c1Value Imports.defaults)
 
         imports : Dict String String Src.Import
         imports =

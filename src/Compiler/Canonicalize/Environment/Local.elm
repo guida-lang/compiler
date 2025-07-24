@@ -208,7 +208,7 @@ toNode ((A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ ( _, tipe ))) as alias) =
 getEdges : Src.Type -> List Name.Name -> List Name.Name
 getEdges (A.At _ tipe) edges =
     case tipe of
-        Src.TLambda arg result ->
+        Src.TLambda ( _, arg ) ( _, result ) ->
             getEdges result (getEdges arg edges)
 
         Src.TVar _ ->
@@ -298,7 +298,7 @@ checkAliasFreeVars (A.At aliasRegion (Src.Alias _ ( _, _, A.At _ name ) args ( _
 addFreeVars : Src.Type -> Dict String Name.Name A.Region -> Dict String Name.Name A.Region
 addFreeVars (A.At region tipe) freeVars =
     case tipe of
-        Src.TLambda arg result ->
+        Src.TLambda ( _, arg ) ( _, result ) ->
             addFreeVars result (addFreeVars arg freeVars)
 
         Src.TVar name ->

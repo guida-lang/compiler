@@ -126,13 +126,13 @@ decoder =
 
 parser : P.Parser () Type
 parser =
-    P.specialize (\_ _ _ -> ()) (P.fmap fromRawType (P.fmap (Tuple.first >> Tuple.second) Type.expression))
+    P.specialize (\_ _ _ -> ()) (P.fmap fromRawType (P.fmap (Tuple.first >> Tuple.second) (Type.expression [])))
 
 
 fromRawType : Src.Type -> Type
 fromRawType (A.At _ astType) =
     case astType of
-        Src.TLambda t1 t2 ->
+        Src.TLambda ( _, t1 ) ( _, t2 ) ->
             Lambda (fromRawType t1) (fromRawType t2)
 
         Src.TVar x ->

@@ -11,19 +11,19 @@ import System.TypeCheck.IO as IO
 -- DEFAULTS
 
 
-defaults : List Src.Import
+defaults : List (Src.C1 Src.Import)
 defaults =
-    [ import_ ModuleName.basics Nothing (Src.Open [] [])
-    , import_ ModuleName.debug Nothing closed
-    , import_ ModuleName.list Nothing (operator "::")
-    , import_ ModuleName.maybe Nothing (typeOpen Name.maybe)
-    , import_ ModuleName.result Nothing (typeOpen Name.result)
-    , import_ ModuleName.string Nothing (typeClosed Name.string)
-    , import_ ModuleName.char Nothing (typeClosed Name.char)
-    , import_ ModuleName.tuple Nothing closed
-    , import_ ModuleName.platform Nothing (typeClosed Name.program)
-    , import_ ModuleName.cmd (Just Name.cmd) (typeClosed Name.cmd)
-    , import_ ModuleName.sub (Just Name.sub) (typeClosed Name.sub)
+    [ ( [], import_ ModuleName.basics Nothing (Src.Open [] []) )
+    , ( [], import_ ModuleName.debug Nothing closed )
+    , ( [], import_ ModuleName.list Nothing (operator "::") )
+    , ( [], import_ ModuleName.maybe Nothing (typeOpen Name.maybe) )
+    , ( [], import_ ModuleName.result Nothing (typeOpen Name.result) )
+    , ( [], import_ ModuleName.string Nothing (typeClosed Name.string) )
+    , ( [], import_ ModuleName.char Nothing (typeClosed Name.char) )
+    , ( [], import_ ModuleName.tuple Nothing closed )
+    , ( [], import_ ModuleName.platform Nothing (typeClosed Name.program) )
+    , ( [], import_ ModuleName.cmd (Just Name.cmd) (typeClosed Name.cmd) )
+    , ( [], import_ ModuleName.sub (Just Name.sub) (typeClosed Name.sub) )
     ]
 
 

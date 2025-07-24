@@ -161,7 +161,7 @@ vrecord entries maybeExt =
 srcToDoc : Context -> Src.Type -> D.Doc
 srcToDoc context (A.At _ tipe) =
     case tipe of
-        Src.TLambda arg1 result ->
+        Src.TLambda ( _, arg1 ) ( _, result ) ->
             let
                 ( arg2, rest ) =
                     collectSrcArgs result
@@ -195,7 +195,7 @@ srcFieldToDocs ( _, _, ( ( _, A.At _ fieldName ), ( _, fieldType ) ) ) =
 collectSrcArgs : Src.Type -> ( Src.Type, List Src.Type )
 collectSrcArgs tipe =
     case tipe of
-        A.At _ (Src.TLambda a result) ->
+        A.At _ (Src.TLambda ( _, a ) ( _, result )) ->
             let
                 ( b, cs ) =
                     collectSrcArgs result

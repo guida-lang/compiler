@@ -105,7 +105,7 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                 _ =
                                                                     Debug.log "c2" preTypeComments
                                                             in
-                                                            P.specialize E.DeclDefType Type.expression
+                                                            P.specialize E.DeclDefType (Type.expression [])
                                                                 |> P.bind
                                                                     (\( ( _, tipe ), _ ) ->
                                                                         Space.checkFreshLine E.DeclDefNameRepeat
@@ -230,7 +230,7 @@ typeDecl maybeDocs start =
                                         chompAliasNameToEquals
                                             |> P.bind
                                                 (\( ( name, args, postComments ), preTypeComments ) ->
-                                                    P.specialize E.AliasBody Type.expression
+                                                    P.specialize E.AliasBody (Type.expression [])
                                                         |> P.fmap
                                                             (\( ( _, tipe ), end ) ->
                                                                 let
@@ -421,7 +421,7 @@ portDecl maybeDocs =
                                     _ =
                                         Debug.log "c17" c17
                                 in
-                                P.specialize E.PortType Type.expression
+                                P.specialize E.PortType (Type.expression [])
                                     |> P.fmap
                                         (\( ( _, tipe ), end ) ->
                                             ( Port maybeDocs (Src.Port name tipe)
@@ -439,7 +439,7 @@ portDecl maybeDocs =
 --
 
 
-infix_ : P.Parser E.Module (A.Located Src.Infix)
+infix_ : P.Parser E.Module (Src.C1 (A.Located Src.Infix))
 infix_ =
     let
         err : P.Row -> P.Col -> E.Module
@@ -497,14 +497,14 @@ infix_ =
                                                                                                             (\end ->
                                                                                                                 Space.chomp err_
                                                                                                                     |> P.bind
-                                                                                                                        (\c109 ->
+                                                                                                                        (\comments ->
                                                                                                                             let
                                                                                                                                 _ =
-                                                                                                                                    Debug.log "c109" c109
+                                                                                                                                    Debug.log "c109" comments
                                                                                                                             in
                                                                                                                             Space.checkFreshLine err
+                                                                                                                                |> P.fmap (\_ -> ( comments, A.at start end (Src.Infix ( preOpComments, postOpComments, op ) associativity precedence ( preNameComments, name )) ))
                                                                                                                         )
-                                                                                                                    |> P.fmap (\_ -> A.at start end (Src.Infix ( preOpComments, postOpComments, op ) associativity precedence ( preNameComments, name )))
                                                                                                             )
                                                                                                 )
                                                                                     )

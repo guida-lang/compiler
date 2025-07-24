@@ -61,7 +61,7 @@ term =
                                             _ =
                                                 Debug.log "c94" c94
                                         in
-                                        P.specialize E.TTupleType expression
+                                        P.specialize E.TTupleType (expression [])
                                             |> P.bind
                                                 (\( ( _, tipe ), end ) ->
                                                     Space.checkIndent end E.TTupleIndentEnd
@@ -120,9 +120,9 @@ term =
                                                                                                 _ =
                                                                                                     Debug.log "c98" preTypeComments
                                                                                             in
-                                                                                            P.specialize E.TRecordType expression
+                                                                                            P.specialize E.TRecordType (expression [])
                                                                                                 |> P.bind
-                                                                                                    (\( ( postExpressionComments, tipe ), end ) ->
+                                                                                                    (\( ( ( postExpressionComments, _, _ ), tipe ), end ) ->
                                                                                                         Space.checkIndent end E.TRecordIndentEnd
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
@@ -146,13 +146,14 @@ term =
 -- TYPE EXPRESSIONS
 
 
-expression : Space.Parser E.Type (Src.C1 Src.Type)
-expression =
+expression : Src.FComments -> Space.Parser E.Type (Src.C2Eol Src.Type)
+expression trailingComments =
     P.getPosition
         |> P.bind
             (\start ->
                 P.oneOf E.TStart
                     [ app start
+                        |> P.fmap (Debug.log "appResult")
                     , term
                         |> P.bind
                             (\eterm ->
@@ -172,7 +173,7 @@ expression =
                             )
                     ]
                     |> P.bind
-                        (\(( ( comments1, tipe1 ), end1 ) as term1) ->
+                        (\( ( postTipe1comments, tipe1 ), end1 ) ->
                             P.oneOfWithFallback
                                 [ -- should never trigger
                                   Space.checkIndent end1 E.TIndentStart
@@ -189,21 +190,21 @@ expression =
                                                                         _ =
                                                                             Debug.log "c99" c99
                                                                     in
-                                                                    expression
+                                                                    expression c99
                                                                         |> P.fmap
-                                                                            (\( ( comments2, tipe2 ), end2 ) ->
+                                                                            (\( ( ( preTipe2Comments, postTipe2Comments, tipe2Eol ), tipe2 ), end2 ) ->
                                                                                 let
                                                                                     tipe : A.Located Src.Type_
                                                                                     tipe =
-                                                                                        A.at start end2 (Src.TLambda tipe1 tipe2)
+                                                                                        A.at start end2 (Debug.log "expressionTipe" (Src.TLambda ( Nothing, tipe1 ) ( ( postTipe1comments, preTipe2Comments, tipe2Eol ), tipe2 )))
                                                                                 in
-                                                                                ( ( comments2, tipe ), end2 )
+                                                                                ( ( ( trailingComments, postTipe2Comments, Nothing ), tipe ), end2 )
                                                                             )
                                                                 )
                                                     )
                                         )
                                 ]
-                                term1
+                                ( ( ( trailingComments, postTipe1comments, Nothing ), tipe1 ), end1 )
                         )
             )
 
@@ -244,7 +245,7 @@ app start =
                                                                 Var.Qualified home name ->
                                                                     Src.TTypeQual region home name args
                                                     in
-                                                    ( ( comments, A.at start end tipe ), end )
+                                                    Debug.log "app" ( ( comments, A.at start end tipe ), end )
                                                 )
                                     )
                         )
@@ -296,7 +297,7 @@ chompTupleEnd start firstType revTypes =
                                     _ =
                                         Debug.log "c100" c100
                                 in
-                                P.specialize E.TTupleType expression
+                                P.specialize E.TTupleType (expression [])
                                     |> P.bind
                                         (\( ( _, tipe ), end ) ->
                                             Space.checkIndent end E.TTupleIndentEnd
@@ -378,9 +379,9 @@ chompField =
                                                         _ =
                                                             Debug.log "c103" preTypeComments
                                                     in
-                                                    P.specialize E.TRecordType expression
+                                                    P.specialize E.TRecordType (expression [])
                                                         |> P.bind
-                                                            (\( ( postTypeComments, tipe ), end ) ->
+                                                            (\( ( ( postTypeComments, _, _ ), tipe ), end ) ->
                                                                 Space.checkIndent end E.TRecordIndentEnd
                                                                     |> P.fmap (\_ -> ( postTypeComments, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ))
                                                             )

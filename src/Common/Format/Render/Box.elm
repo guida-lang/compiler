@@ -15,7 +15,6 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
 import Compiler.Parse.Primitives as P
-import Compiler.Parse.Space as Space
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -267,7 +266,7 @@ sortVars forceMultiline fromExposing fromDocs =
         )
 
 
-formatModuleHeader : Bool -> M.Module -> List Box
+formatModuleHeader : Bool -> M.Module -> Src.C1 (List Box)
 formatModuleHeader addDefaultHeader modu =
     let
         maybeHeader : Maybe M.Header
@@ -472,40 +471,53 @@ formatModuleHeader addDefaultHeader modu =
                                 )
                             |> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) blocks)
                     )
-
-        imports =
-            formatImports modu
     in
-    List.concat
-        (List.intersperse [ Box.blankLine ]
-            (List.concat
-                [ Maybe.toList (Maybe.map (List.singleton << formatModuleLine_) maybeHeader)
-                , Maybe.toList (Maybe.map List.singleton docs)
-                , if List.isEmpty imports then
-                    []
+    Src.c1map
+        (\imports ->
+            List.concat
+                (List.intersperse [ Box.blankLine ]
+                    (List.concat
+                        [ Maybe.toList (Maybe.map (List.singleton << formatModuleLine_) maybeHeader)
+                        , Maybe.toList (Maybe.map List.singleton docs)
+                        , if List.isEmpty imports then
+                            []
 
-                  else
-                    [ imports ]
-                ]
-            )
+                          else
+                            [ imports ]
+                        ]
+                    )
+                )
         )
+        (formatImports modu)
 
 
-formatImports : M.Module -> List Box
+formatImports : M.Module -> Src.C1 (List Box)
 formatImports modu =
     let
         ( comments, imports ) =
             modu.imports
+
+        ( postImportComments, restImports ) =
+            case List.reverse imports of
+                [] ->
+                    ( [], [] )
+
+                ( lastComments, _ ) :: firstImports ->
+                    ( lastComments, List.reverse firstImports )
     in
-    [ formatComments comments
-        |> Maybe.toList
-    , imports
-        |> List.sortBy (\(Src.Import ( _, A.At _ importName ) _ _) -> importName)
-        |> List.map formatImport
-    ]
+    ( postImportComments
+    , [ List.foldl (\( importComments, _ ) acc -> acc ++ importComments) comments restImports
+            |> formatComments
+            |> Maybe.toList
+      , imports
+            |> List.map Src.c1Value
+            |> List.sortBy (\(Src.Import ( _, A.At _ importName ) _ _) -> importName)
+            |> List.map formatImport
+      ]
         |> List.filter (not << List.isEmpty)
         |> List.intersperse [ Box.blankLine ]
         |> List.concat
+    )
 
 
 formatModuleLine :
@@ -665,9 +677,18 @@ formatModule addDefaultHeader spacing modu =
                 )
                 modu.decls
 
+        ( moduleHeaderComments, moduleHeader ) =
+            formatModuleHeader addDefaultHeader modu
+
         body : List (TopLevelStructure Declaration)
         body =
-            List.map (Entry << InfixDeclaration) (List.reverse modu.infixes)
+            List.map BodyComment moduleHeaderComments
+                ++ List.concatMap
+                    (\( commments, infix_ ) ->
+                        Entry (InfixDeclaration infix_)
+                            :: List.map BodyComment commments
+                    )
+                    (List.reverse modu.infixes)
                 ++ declarations
 
         spaceBeforeBody : Int
@@ -685,7 +706,7 @@ formatModule addDefaultHeader spacing modu =
     Box.stack1
         (List.concat
             [ initialComments_
-            , formatModuleHeader addDefaultHeader modu
+            , moduleHeader
             , List.repeat spaceBeforeBody Box.blankLine
             , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) body)
             ]
@@ -1311,7 +1332,7 @@ formatDeclaration : ImportInfo -> Declaration -> Box
 formatDeclaration importInfo decl =
     case decl of
         CommonDeclaration (Decl.Value _ value) ->
-            formatCommonDeclaration importInfo value
+            formatCommonDeclaration importInfo (Debug.log "VALUE!" value)
 
         CommonDeclaration (Decl.Union _ (A.At _ (Src.Union name args tags))) ->
             let
@@ -2617,15 +2638,16 @@ formatTypeConstructor name =
 
 formatType : Src.Type -> ( TypeParensInner, Box )
 formatType (A.At region atype) =
-    case atype of
+    case Debug.log "atype" atype of
         Src.TLambda arg result ->
             let
                 first : Src.C0Eol Src.Type
                 first =
-                    ( Nothing, arg )
+                    Debug.log "first" arg
 
+                rest : List (Src.C2Eol Src.Type)
                 rest =
-                    Src.OpenCommentedList [] ( [], Nothing, result )
+                    [ result ]
 
                 forceMultiline =
                     -- TODO
@@ -2633,6 +2655,10 @@ formatType (A.At region atype) =
 
                 formatRight : Src.C2Eol Src.Type -> Box
                 formatRight ( ( preOp, postOp, eol ), term ) =
+                    let
+                        _ =
+                            Debug.log "formatRight" ( preOp, postOp, eol )
+                    in
                     ElmStructure.forceableSpaceSepOrStack1 False <|
                         List.concat
                             [ Maybe.toList <| formatComments preOp
@@ -2649,7 +2675,7 @@ formatType (A.At region atype) =
                 ElmStructure.forceableSpaceSepOrStack
                     forceMultiline
                     (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatType) first))
-                    (List.map formatRight (Src.toCommentedList rest))
+                    (List.map formatRight rest)
 
         Src.TVar name ->
             ( NotNeeded

@@ -59,9 +59,9 @@ things.
 -}`
     , imports: [
         "-- IMPORTS",
-        "import {- import1 -} Module1",
+        "import {- import1 -} Module1 -- first import comment",
         "-- second import comment",
-        "import {- import2.1 -} Module2 {- import2.2 -} as {- import2.3 -} M",
+        "import {- import2.1 -} Module2 {- import2.2 -} as {- import2.3 -} M {- import2.4 -}",
         "import {- import3.1 -} Module3 {- import3.2 -} exposing {- import3.3 -} ({- import3.4 -} .. {- import3.5 -})",
         "import {- import4.1 -} Module4 {- import4.2 -} exposing {- import4.3 -} ({- import4.4 -} fn1 {- import4.5 -}, {- import4.6 -} fn2 {- import4.7 -})",
         `import -- import5.1
@@ -128,6 +128,9 @@ things.
         "{-| unit comment -}",
         "unitFn {- unit1 -} : {- unit2 -} () {- unit3 -}",
         "unitFn {- unit4 -} = {- unit5 -} () {- unit6 -}",
+        "{-| lambda arguments -}",
+        "lambdaArgFn {- lambdaArg1 -} : {- lambdaArg2 -} ( {- lambdaArg3 -} Int {- lambdaArg4 -} -> {- lambdaArg5 -} Bool {- lambdaArg6 -} ) {- lambdaArg7 -} -> List {- lambdaArg8 -} String {- lambdaArg9 -} -> {- lambdaArg10 -} Int {- lambdaArg11 -}",
+        "lambdaArgFn {- lambdaArg12 -} f {- lambdaArg13 -} = {- lambdaArg14 -} () {- lambdaArg15 -}",
     ]
 }
 

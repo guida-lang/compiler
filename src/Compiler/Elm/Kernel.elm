@@ -87,7 +87,7 @@ addField chunk fields =
 
 
 type Content
-    = Content (List Src.Import) (List Chunk)
+    = Content (List (Src.C1 Src.Import)) (List Chunk)
 
 
 type alias Foreigns =
@@ -339,13 +339,13 @@ type alias VarTable =
     Dict String Name Chunk
 
 
-toVarTable : Pkg.Name -> Foreigns -> List Src.Import -> VarTable
+toVarTable : Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
 toVarTable pkg foreigns imports =
     List.foldl (addImport pkg foreigns) Dict.empty imports
 
 
-addImport : Pkg.Name -> Foreigns -> Src.Import -> VarTable -> VarTable
-addImport pkg foreigns (Src.Import ( _, A.At _ importName ) maybeAlias ( _, _, exposing_ )) vtable =
+addImport : Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
+addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, _, exposing_ ) ) vtable =
     if Name.isKernel importName then
         case maybeAlias of
             Just _ ->
