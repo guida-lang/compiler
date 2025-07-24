@@ -443,7 +443,7 @@ formatModuleHeader addDefaultHeader modu =
                 Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, name ) _ _)) ->
                     [ Src.Upper name Src.Private ]
 
-                Decl.Port _ (Src.Port name _) ->
+                Decl.Port _ (Src.Port _ ( _, _, name ) _) ->
                     [ Src.Lower name ]
 
         formatModuleLine_ : M.Header -> Box
@@ -645,9 +645,40 @@ formatModule addDefaultHeader spacing modu =
         declarations =
             List.concatMap
                 (\( preDeclComments, postDeclComments, decl ) ->
+                    let
+                        _ =
+                            Debug.log "declaration!123" ( preDeclComments, postDeclComments, decl )
+                    in
                     List.map BodyComment preDeclComments
                         ++ (case decl of
-                                Decl.Value (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
+                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments _ _ _ _)) ->
+                                    (maybeDocs
+                                        |> Maybe.map
+                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                                [ DocComment
+                                                    (String.slice offset (offset + length) fptr
+                                                        |> String.trim
+                                                        |> Parse.markdown
+                                                            (Options
+                                                                { sanitize = True
+                                                                , allowRawHtml = True
+                                                                , preserveHardBreaks = True
+                                                                , debug = False
+                                                                }
+                                                            )
+                                                        |> (\(Doc _ blocks) -> blocks)
+                                                    )
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+                                    )
+                                        ++ List.map BodyComment preValueComments
+
+                                -- Decl.Union (Just comment) _ ->
+                                --     [ BodyComment comment ]
+                                -- Decl.Alias (Just comment) _ ->
+                                --     [ BodyComment comment ]
+                                Decl.Port (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
                                     [ DocComment
                                         (String.slice offset (offset + length) fptr
                                             |> String.trim
@@ -663,12 +694,6 @@ formatModule addDefaultHeader spacing modu =
                                         )
                                     ]
 
-                                -- Decl.Union (Just comment) _ ->
-                                --     [ BodyComment comment ]
-                                -- Decl.Alias (Just comment) _ ->
-                                --     [ BodyComment comment ]
-                                -- Decl.Port (Just comment) _ ->
-                                --     [ BodyComment comment ]
                                 _ ->
                                     []
                            )
@@ -733,7 +758,7 @@ formatModuleBody linesBetween importInfo body =
                 CommonDeclaration (Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ _))) ->
                     BodyNamed (TagRef () name)
 
-                CommonDeclaration (Decl.Port _ (Src.Port (A.At _ name) _)) ->
+                CommonDeclaration (Decl.Port _ (Src.Port _ ( _, _, A.At _ name ) _)) ->
                     BodyNamed (VarRef () name)
 
                 InfixDeclaration (A.At _ (Src.Infix _ _ _ _)) ->
@@ -1402,16 +1427,11 @@ formatDeclaration importInfo decl =
                 ]
                 (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) typ)
 
-        CommonDeclaration (Decl.Port _ (Src.Port (A.At _ name) typ)) ->
-            let
-                typeComments =
-                    -- TODO
-                    []
-            in
+        CommonDeclaration (Decl.Port _ (Src.Port typeComments ( preNameComments, postNameComments, A.At _ name ) typ)) ->
             ElmStructure.definition ":"
                 False
                 (Box.line (Box.keyword "port"))
-                [ formatCommented (Src.c2map (Box.line << formatLowercaseIdentifier []) ( [], [], name )) ]
+                [ formatCommented (Src.c2map (Box.line << formatLowercaseIdentifier []) ( preNameComments, postNameComments, name )) ]
                 (formatCommentedApostrophe typeComments (typeParens NotRequired (formatType typ)))
 
         InfixDeclaration (A.At _ (Src.Infix op associativity precedence name)) ->

@@ -61,9 +61,13 @@ term =
                                             _ =
                                                 Debug.log "c94" c94
                                         in
-                                        P.specialize E.TTupleType (expression [])
+                                        P.specialize E.TTupleType (expression c94)
                                             |> P.bind
-                                                (\( ( _, tipe ), end ) ->
+                                                (\( ( foo, tipe ), end ) ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "foo1" foo
+                                                    in
                                                     Space.checkIndent end E.TTupleIndentEnd
                                                         |> P.bind (\_ -> chompTupleEnd start tipe [])
                                                 )
@@ -165,9 +169,9 @@ expression trailingComments =
                                                     (\c122 ->
                                                         let
                                                             _ =
-                                                                Debug.log "c122" c122
+                                                                Debug.log "c122" ( c122, eterm )
                                                         in
-                                                        ( ( [], eterm ), end )
+                                                        ( ( c122, eterm ), end )
                                                     )
                                         )
                             )
@@ -188,7 +192,7 @@ expression trailingComments =
                                                                 (\c99 ->
                                                                     let
                                                                         _ =
-                                                                            Debug.log "c99" c99
+                                                                            Debug.log "c99" ( c99, ( postTipe1comments, tipe1 ) )
                                                                     in
                                                                     expression c99
                                                                         |> P.fmap
@@ -204,7 +208,7 @@ expression trailingComments =
                                                     )
                                         )
                                 ]
-                                ( ( ( trailingComments, postTipe1comments, Nothing ), tipe1 ), end1 )
+                                ( Debug.log "DEFAULT expression" ( ( trailingComments, postTipe1comments, Nothing ), tipe1 ), end1 )
                         )
             )
 

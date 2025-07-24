@@ -183,7 +183,7 @@ checkEffects projectType ports effects =
                 [] ->
                     Ok Src.NoEffects
 
-                (Src.Port name _) :: _ ->
+                (Src.Port _ ( _, _, name ) _) :: _ ->
                     case projectType of
                         Package _ ->
                             Err (E.NoPortsInPackage name)
@@ -269,7 +269,7 @@ getComments decls comments =
                 Decl.Alias c (A.At _ (Src.Alias _ ( _, _, n ) _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Port c (Src.Port n _) ->
+                Decl.Port c (Src.Port _ ( _, _, n ) _) ->
                     getComments otherDecls (addComment c n comments)
 
 

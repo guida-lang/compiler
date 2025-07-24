@@ -79,7 +79,7 @@ toEffectDups effects =
         Src.Ports ports ->
             let
                 addPort : Src.Port -> Dups.Tracker Env.Var -> Dups.Tracker Env.Var
-                addPort (Src.Port (A.At region name) _) =
+                addPort (Src.Port _ ( _, _, A.At region name ) _) =
                     Dups.insert name region (Env.TopLevel region)
             in
             List.foldl addPort Dups.none ports

@@ -44,7 +44,6 @@ declaration syntaxVersion =
                                 [ typeDecl maybeDocs start
                                     |> P.fmap (\( typeDecl_, position ) -> ( ( [], [], typeDecl_ ), position ))
                                 , portDecl maybeDocs
-                                    |> P.fmap (\( portDecl_, position ) -> ( ( [], [], portDecl_ ), position ))
                                 , valueDecl syntaxVersion maybeDocs docComments start
                                 ]
                         )
@@ -107,7 +106,11 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                             in
                                                             P.specialize E.DeclDefType (Type.expression [])
                                                                 |> P.bind
-                                                                    (\( ( _, tipe ), _ ) ->
+                                                                    (\( ( postTipeComments, tipe ), _ ) ->
+                                                                        let
+                                                                            _ =
+                                                                                Debug.log "valueDecl1" ( postTipeComments, tipe )
+                                                                        in
                                                                         Space.checkFreshLine E.DeclDefNameRepeat
                                                                             |> P.bind (\_ -> chompMatchingName name)
                                                                             |> P.bind
@@ -117,14 +120,16 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                                             (\preArgComments ->
                                                                                                 let
                                                                                                     _ =
-                                                                                                        Debug.log "c3" preArgComments
+                                                                                                        Debug.log "c3" ( preArgComments, ( maybeDocs, docComments, ( postNameComments, defName ) ), ( preTypeComments, tipe ) )
                                                                                                 in
                                                                                                 chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( postNameComments, defName ) (Just ( preTypeComments, tipe )) preArgComments []
+                                                                                                    |> P.fmap (Debug.log "HERE!!! after c3")
                                                                                             )
                                                                                 )
                                                                     )
                                                         )
                                                 , chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( [], A.at start end name ) Nothing [] []
+                                                    |> P.fmap (Debug.log "HERE!!!2")
                                                 ]
                                         )
                                 )
@@ -391,42 +396,42 @@ chompVariants variants end =
 -- PORT
 
 
-portDecl : Maybe Src.Comment -> Space.Parser E.Decl Decl
+portDecl : Maybe Src.Comment -> Space.Parser E.Decl (Src.C2 Decl)
 portDecl maybeDocs =
     P.inContext E.Port (Keyword.port_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.PortSpace E.PortIndentName
             |> P.bind
-                (\c15 ->
+                (\preNameComments ->
                     let
                         _ =
-                            Debug.log "c15" c15
+                            Debug.log "c15" preNameComments
                     in
                     P.addLocation (Var.lower E.PortName)
-                )
-            |> P.bind
-                (\name ->
-                    Space.chompAndCheckIndent E.PortSpace E.PortIndentColon
                         |> P.bind
-                            (\c16 ->
-                                let
-                                    _ =
-                                        Debug.log "c16" c16
-                                in
-                                P.word1 ':' E.PortColon
-                            )
-                        |> P.bind (\_ -> Space.chompAndCheckIndent E.PortSpace E.PortIndentType)
-                        |> P.bind
-                            (\c17 ->
-                                let
-                                    _ =
-                                        Debug.log "c17" c17
-                                in
-                                P.specialize E.PortType (Type.expression [])
-                                    |> P.fmap
-                                        (\( ( _, tipe ), end ) ->
-                                            ( Port maybeDocs (Src.Port name tipe)
-                                            , end
-                                            )
+                            (\name ->
+                                Space.chompAndCheckIndent E.PortSpace E.PortIndentColon
+                                    |> P.bind
+                                        (\postNameComments ->
+                                            let
+                                                _ =
+                                                    Debug.log "c16" postNameComments
+                                            in
+                                            P.word1 ':' E.PortColon
+                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.PortSpace E.PortIndentType)
+                                                |> P.bind
+                                                    (\typeComments ->
+                                                        let
+                                                            _ =
+                                                                Debug.log "c17" typeComments
+                                                        in
+                                                        P.specialize E.PortType (Type.expression [])
+                                                            |> P.fmap
+                                                                (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), end ) ->
+                                                                    ( ( preTipeComments, postTipeComments, Port maybeDocs (Src.Port typeComments ( preNameComments, postNameComments, name ) tipe) )
+                                                                    , end
+                                                                    )
+                                                                )
+                                                    )
                                         )
                             )
                 )

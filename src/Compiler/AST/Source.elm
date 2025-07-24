@@ -343,7 +343,7 @@ type Infix
 
 
 type Port
-    = Port (A.Located Name) Type
+    = Port FComments (C2 (A.Located Name)) Type
 
 
 type Effects
@@ -933,17 +933,19 @@ commentDecoder =
 
 
 portEncoder : Port -> BE.Encoder
-portEncoder (Port name tipe) =
+portEncoder (Port typeComments name tipe) =
     BE.sequence
-        [ A.locatedEncoder BE.string name
+        [ fCommentsEncoder typeComments
+        , c2Encoder (A.locatedEncoder BE.string) name
         , typeEncoder tipe
         ]
 
 
 portDecoder : BD.Decoder Port
 portDecoder =
-    BD.map2 Port
-        (A.locatedDecoder BD.string)
+    BD.map3 Port
+        fCommentsDecoder
+        (c2Decoder (A.locatedDecoder BD.string))
         typeDecoder
 
 
