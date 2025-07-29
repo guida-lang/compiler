@@ -29,7 +29,7 @@ defaults =
 
 import_ : IO.Canonical -> Maybe Name -> Src.Exposing -> Src.Import
 import_ (IO.Canonical _ name) maybeAlias exposing_ =
-    Src.Import ( [], A.At A.zero name ) (Maybe.map (\alias_ -> ( [], [], alias_ )) maybeAlias) ( [], [], exposing_ )
+    Src.Import ( [], A.At A.zero name ) (Maybe.map (\alias_ -> ( ( [], [] ), alias_ )) maybeAlias) ( ( [], [] ), exposing_ )
 
 
 
@@ -43,14 +43,14 @@ closed =
 
 typeOpen : Name -> Src.Exposing
 typeOpen name =
-    Src.Explicit (A.At A.zero [ ( [], [], Src.Upper (A.At A.zero name) (Src.Public A.zero) ) ])
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Upper (A.At A.zero name) (Src.Public A.zero) ) ])
 
 
 typeClosed : Name -> Src.Exposing
 typeClosed name =
-    Src.Explicit (A.At A.zero [ ( [], [], Src.Upper (A.At A.zero name) Src.Private ) ])
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Upper (A.At A.zero name) Src.Private ) ])
 
 
 operator : Name -> Src.Exposing
 operator op =
-    Src.Explicit (A.At A.zero [ ( [], [], Src.Operator A.zero op ) ])
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Operator A.zero op ) ])

@@ -146,7 +146,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Access (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
-            Src.Update ( _, _, name ) fields ->
+            Src.Update ( _, name ) fields ->
                 let
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
@@ -165,7 +165,7 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Unit ->
                 R.ok Can.Unit
 
-            Src.Tuple ( _, _, a ) ( _, _, b ) cs ->
+            Src.Tuple ( _, a ) ( _, b ) cs ->
                 R.fmap Can.Tuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
                     |> R.apply (canonicalizeTupleExtras syntaxVersion region env (List.map Src.c2Value cs))
@@ -353,7 +353,7 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PRecord ( _, fields ) ->
             let
                 addField : Src.C2 (A.Located Name) -> Dups.Tracker A.Region -> Dups.Tracker A.Region
-                addField ( _, _, A.At fieldRegion name ) dict =
+                addField ( _, A.At fieldRegion name ) dict =
                     Dups.insert name fieldRegion fieldRegion dict
             in
             List.foldl addField bindings fields
@@ -539,7 +539,7 @@ getPatternNames names (A.At region pattern) =
         Src.PUnit _ ->
             names
 
-        Src.PTuple ( _, _, a ) ( _, _, b ) cs ->
+        Src.PTuple ( _, a ) ( _, b ) cs ->
             List.foldl (flip getPatternNames) (getPatternNames (getPatternNames names a) b) (List.map Src.c2Value cs)
 
         Src.PCtor _ _ args ->

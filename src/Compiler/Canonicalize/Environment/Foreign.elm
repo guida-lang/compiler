@@ -103,7 +103,7 @@ isNormal (Src.Import ( _, A.At _ name ) maybeAlias _) =
 
 
 addImport : Dict String ModuleName.Raw I.Interface -> State -> Src.Import -> FResult i w State
-addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, _, exposing_ )) =
+addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, exposing_ )) =
     let
         (I.Interface pkg defs unions aliases binops) =
             Utils.find identity name ifaces

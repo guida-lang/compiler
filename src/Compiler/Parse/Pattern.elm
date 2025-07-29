@@ -174,7 +174,7 @@ record start =
                                                     _ =
                                                         Debug.log "c85" c85
                                                 in
-                                                recordHelp start [ ( [], [], var ) ]
+                                                recordHelp start [ ( ( [], [] ), var ) ]
                                             )
                                 )
                         , P.word1 '}' E.PRecordEnd
@@ -206,7 +206,7 @@ recordHelp start vars =
                                     _ =
                                         Debug.log "c87" c87
                                 in
-                                recordHelp start (( [], [], var ) :: vars)
+                                recordHelp start (( ( [], [] ), var ) :: vars)
                             )
                 )
         , P.word1 '}' E.PRecordEnd
@@ -258,7 +258,7 @@ tupleHelp syntaxVersion start firstPattern revPatterns =
             |> P.bind
                 (\( ( _, pattern ), end ) ->
                     Space.checkIndent end E.PTupleIndentEnd
-                        |> P.bind (\_ -> tupleHelp syntaxVersion start firstPattern (( [], [], pattern ) :: revPatterns))
+                        |> P.bind (\_ -> tupleHelp syntaxVersion start firstPattern (( ( [], [] ), pattern ) :: revPatterns))
                 )
         , P.word1 ')' E.PTupleEnd
             |> P.bind
@@ -268,7 +268,7 @@ tupleHelp syntaxVersion start firstPattern revPatterns =
                             P.pure firstPattern
 
                         secondPattern :: otherPatterns ->
-                            P.addEnd start (Src.PTuple ( [], [], firstPattern ) secondPattern otherPatterns)
+                            P.addEnd start (Src.PTuple ( ( [], [] ), firstPattern ) secondPattern otherPatterns)
                 )
         ]
 
@@ -292,7 +292,7 @@ list syntaxVersion start =
                             |> P.bind
                                 (\( ( _, pattern ), end ) ->
                                     Space.checkIndent end E.PListIndentEnd
-                                        |> P.bind (\_ -> listHelp syntaxVersion start [ ( [], [], pattern ) ])
+                                        |> P.bind (\_ -> listHelp syntaxVersion start [ ( ( [], [] ), pattern ) ])
                                 )
                         , P.word1 ']' E.PListEnd
                             |> P.bind (\_ -> P.addEnd start (Src.PList ( [], [] )))
@@ -317,7 +317,7 @@ listHelp syntaxVersion start patterns =
             |> P.bind
                 (\( ( _, pattern ), end ) ->
                     Space.checkIndent end E.PListIndentEnd
-                        |> P.bind (\_ -> listHelp syntaxVersion start (( [], [], pattern ) :: patterns))
+                        |> P.bind (\_ -> listHelp syntaxVersion start (( ( [], [] ), pattern ) :: patterns))
                 )
         , P.word1 ']' E.PListEnd
             |> P.bind (\_ -> P.addEnd start (Src.PList ( [], List.reverse patterns )))

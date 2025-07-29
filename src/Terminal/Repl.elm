@@ -389,7 +389,7 @@ attemptDeclOrExpr lines =
                 PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
-                PD.Alias _ (A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ _)) ->
+                PD.Alias _ (A.At _ (Src.Alias _ ( _, A.At _ name ) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Port _ _ ->

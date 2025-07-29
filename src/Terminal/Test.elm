@@ -715,7 +715,7 @@ extractExposedPossiblyTests path =
 
                                     Src.Explicit (A.At _ exposedList) ->
                                         List.filterMap
-                                            (\( _, _, exposedValue ) ->
+                                            (\( _, exposedValue ) ->
                                                 case exposedValue of
                                                     Src.Lower (A.At _ lowerName) ->
                                                         Just lowerName

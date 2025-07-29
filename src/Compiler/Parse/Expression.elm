@@ -182,7 +182,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                     |> P.bind
                                                         (\( ( postEntryComments, entry ), end ) ->
                                                             Space.checkIndent end E.TupleIndentEnd
-                                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
+                                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( ( preEntryComments, postEntryComments ), entry ) [])
                                                         )
 
                                             else
@@ -229,7 +229,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                                             |> P.bind
                                                                                 (\( ( postEntryComments, entry ), end ) ->
                                                                                     Space.checkIndent end E.TupleIndentEnd
-                                                                                        |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
+                                                                                        |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( ( preEntryComments, postEntryComments ), entry ) [])
                                                                                 )
                                                                         ]
 
@@ -243,7 +243,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                         |> P.bind
                                                             (\( ( postEntryComments, entry ), end ) ->
                                                                 Space.checkIndent end E.TupleIndentEnd
-                                                                    |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( preEntryComments, postEntryComments, entry ) [])
+                                                                    |> P.bind (\_ -> chompTupleEnd syntaxVersion start ( ( preEntryComments, postEntryComments ), entry ) [])
                                                             )
                                                     ]
                                         )
@@ -253,7 +253,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
 
 
 chompTupleEnd : SyntaxVersion -> A.Position -> Src.C2 Src.Expr -> List (Src.C2 Src.Expr) -> P.Parser E.Tuple Src.Expr
-chompTupleEnd syntaxVersion start (( _, _, innerFirstExpr ) as firstExpr) revExprs =
+chompTupleEnd syntaxVersion start (( _, innerFirstExpr ) as firstExpr) revExprs =
     P.oneOf E.TupleEnd
         [ P.word1 ',' E.TupleEnd
             |> P.bind
@@ -269,7 +269,7 @@ chompTupleEnd syntaxVersion start (( _, _, innerFirstExpr ) as firstExpr) revExp
                                     |> P.bind
                                         (\( ( postEntryComments, entry ), end ) ->
                                             Space.checkIndent end E.TupleIndentEnd
-                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start firstExpr (( preEntryComments, postEntryComments, entry ) :: revExprs))
+                                                |> P.bind (\_ -> chompTupleEnd syntaxVersion start firstExpr (( ( preEntryComments, postEntryComments ), entry ) :: revExprs))
                                         )
                             )
                 )
@@ -327,7 +327,7 @@ record syntaxVersion start =
                                                                         chompField syntaxVersion
                                                                     )
                                                                 |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
-                                                                |> P.bind (\fields -> P.addEnd start (Src.Update ( preStarterNameComments, postStarterNameComments, A.At starterPosition (Src.Var Src.LowVar starterName) ) fields))
+                                                                |> P.bind (\fields -> P.addEnd start (Src.Update ( ( preStarterNameComments, postStarterNameComments ), A.At starterPosition (Src.Var Src.LowVar starterName) ) fields))
                                                             , P.word1 '=' E.RecordEquals
                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
                                                                 |> P.bind
@@ -390,7 +390,7 @@ record syntaxVersion start =
                                                                     chompField syntaxVersion
                                                                 )
                                                             |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
-                                                            |> P.bind (\fields -> P.addEnd start (Src.Update ( [], [], starter ) fields))
+                                                            |> P.bind (\fields -> P.addEnd start (Src.Update ( ( [], [] ), starter ) fields))
                                                     )
                                         )
                                 , P.addLocation (Var.lower E.RecordField)
@@ -854,7 +854,7 @@ chompIfEnd syntaxVersion start comments branches =
 
                                                                     newBranches : List (Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ))
                                                                     newBranches =
-                                                                        ( comments, ( ( preConditionComments, postConditionComments, condition ), ( preThenBranchComments, postThenBranchComments, thenBranch ) ) ) :: branches
+                                                                        ( comments, ( ( ( preConditionComments, postConditionComments ), condition ), ( ( preThenBranchComments, postThenBranchComments ), thenBranch ) ) ) :: branches
                                                                 in
                                                                 P.oneOf E.IfElseBranchStart
                                                                     [ Keyword.if_ E.IfElseBranchStart
@@ -984,7 +984,7 @@ case_ syntaxVersion start =
                                                             chompCaseEnd syntaxVersion trailingComments [ firstBranch ] firstEnd
                                                                 |> P.fmap
                                                                     (\( branches, end ) ->
-                                                                        ( ( [], A.at start end (Src.Case ( preExprComments, postExprComments, expr ) branches) )
+                                                                        ( ( [], A.at start end (Src.Case ( ( preExprComments, postExprComments ), expr ) branches) )
                                                                         , end
                                                                         )
                                                                     )
@@ -1011,7 +1011,7 @@ chompBranch syntaxVersion prePatternComments =
                                     Debug.log "c49" preBranchExprComments
                             in
                             P.specialize E.CaseBranch (expression syntaxVersion)
-                                |> P.fmap (\( ( trailingComments, branchExpr ), end ) -> ( ( trailingComments, ( ( prePatternComments, postPatternComments, pattern ), ( preBranchExprComments, branchExpr ) ) ), end ))
+                                |> P.fmap (\( ( trailingComments, branchExpr ), end ) -> ( ( trailingComments, ( ( ( prePatternComments, postPatternComments ), pattern ), ( preBranchExprComments, branchExpr ) ) ), end ))
                         )
             )
 
@@ -1043,7 +1043,7 @@ let_ syntaxVersion start =
                         in
                         P.withIndent <|
                             (chompLetDef syntaxVersion
-                                |> P.bind (\( ( postDefComments, def ), end ) -> chompLetDefs syntaxVersion [ ( preDefComments, postDefComments, def ) ] end)
+                                |> P.bind (\( ( postDefComments, def ), end ) -> chompLetDefs syntaxVersion [ ( ( preDefComments, postDefComments ), def ) ] end)
                             )
                     )
             )
@@ -1074,7 +1074,7 @@ chompLetDefs syntaxVersion revDefs end =
     P.oneOfWithFallback
         [ Space.checkAligned E.LetDefAlignment
             |> P.bind (\_ -> chompLetDef syntaxVersion)
-            |> P.bind (\( ( postDefComments, def ), newEnd ) -> chompLetDefs syntaxVersion (( [], postDefComments, def ) :: revDefs) newEnd)
+            |> P.bind (\( ( postDefComments, def ), newEnd ) -> chompLetDefs syntaxVersion (( ( [], postDefComments ), def ) :: revDefs) newEnd)
         ]
         ( List.reverse revDefs, end )
 

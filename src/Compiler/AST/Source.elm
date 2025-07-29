@@ -104,26 +104,26 @@ c1Value ( _, a ) =
 
 
 type alias C2 a =
-    ( FComments, FComments, a )
+    ( ( FComments, FComments ), a )
 
 
 c2map : (a -> b) -> C2 a -> C2 b
-c2map f ( before, after, a ) =
-    ( before, after, f a )
+c2map f ( ( before, after ), a ) =
+    ( ( before, after ), f a )
 
 
 c2Value : C2 a -> a
-c2Value ( _, _, a ) =
+c2Value ( _, a ) =
     a
 
 
 sequenceAC2 : List (C2 a) -> C2 (List a)
 sequenceAC2 =
     List.foldr
-        (\( before, after, a ) ( beforeAcc, afterAcc, acc ) ->
-            ( before ++ beforeAcc, after ++ afterAcc, a :: acc )
+        (\( ( before, after ), a ) ( ( beforeAcc, afterAcc ), acc ) ->
+            ( ( before ++ beforeAcc, after ++ afterAcc ), a :: acc )
         )
-        ( [], [], [] )
+        ( ( [], [] ), [] )
 
 
 type alias C3 a =
@@ -323,7 +323,7 @@ getImportName (Import ( _, A.At _ name ) _ _) =
 
 
 type Import
-    = Import (C1 (A.Located Name)) (Maybe (C2 Name.Name)) (C2 Exposing)
+    = Import (C1 (A.Located Name)) (Maybe (C2 Name)) (C2 Exposing)
 
 
 type Value
@@ -494,7 +494,7 @@ c1Decoder decoder =
 
 
 c2Encoder : (a -> BE.Encoder) -> C2 a -> BE.Encoder
-c2Encoder encoder ( preComments, postComments, a ) =
+c2Encoder encoder ( ( preComments, postComments ), a ) =
     BE.sequence
         [ fCommentsEncoder preComments
         , fCommentsEncoder postComments
@@ -506,7 +506,7 @@ c2Decoder : BD.Decoder a -> BD.Decoder (C2 a)
 c2Decoder decoder =
     BD.map3
         (\preComments postComments a ->
-            ( preComments, postComments, a )
+            ( ( preComments, postComments ), a )
         )
         fCommentsDecoder
         fCommentsDecoder

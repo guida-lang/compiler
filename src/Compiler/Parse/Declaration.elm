@@ -42,7 +42,7 @@ declaration syntaxVersion =
                         (\start ->
                             P.oneOf E.DeclStart
                                 [ typeDecl maybeDocs start
-                                    |> P.fmap (\( typeDecl_, position ) -> ( ( [], [], typeDecl_ ), position ))
+                                    |> P.fmap (\( typeDecl_, position ) -> ( ( ( [], [] ), typeDecl_ ), position ))
                                 , portDecl maybeDocs
                                 , valueDecl syntaxVersion maybeDocs docComments start
                                 ]
@@ -128,7 +128,7 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                                 )
                                                                     )
                                                         )
-                                                , chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( [], A.at start end name ) Nothing [] []
+                                                , chompDefArgsAndBody syntaxVersion maybeDocs docComments start ( postNameComments, A.at start end name ) Nothing [] []
                                                     |> P.fmap (Debug.log "HERE!!!2")
                                                 ]
                                         )
@@ -173,7 +173,7 @@ chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe preArgCo
                                     avalue =
                                         A.at start end value
                                 in
-                                ( ( [], trailingComments, Value maybeDocs avalue ), end )
+                                ( ( ( [], trailingComments ), Value maybeDocs avalue ), end )
                             )
                 )
         ]
@@ -241,7 +241,7 @@ typeDecl maybeDocs start =
                                                                 let
                                                                     alias_ : A.Located Src.Alias
                                                                     alias_ =
-                                                                        A.at start end (Src.Alias preAlias ( preComments, postComments, name ) args ( preTypeComments, tipe ))
+                                                                        A.at start end (Src.Alias preAlias ( ( preComments, postComments ), name ) args ( preTypeComments, tipe ))
                                                                 in
                                                                 ( Alias maybeDocs alias_, end )
                                                             )
@@ -427,7 +427,7 @@ portDecl maybeDocs =
                                                         P.specialize E.PortType (Type.expression [])
                                                             |> P.fmap
                                                                 (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), end ) ->
-                                                                    ( ( preTipeComments, postTipeComments, Port maybeDocs (Src.Port typeComments ( preNameComments, postNameComments, name ) tipe) )
+                                                                    ( ( ( preTipeComments, postTipeComments ), Port maybeDocs (Src.Port typeComments ( ( preNameComments, postNameComments ), name ) tipe) )
                                                                     , end
                                                                     )
                                                                 )
@@ -508,7 +508,7 @@ infix_ =
                                                                                                                                     Debug.log "c109" comments
                                                                                                                             in
                                                                                                                             Space.checkFreshLine err
-                                                                                                                                |> P.fmap (\_ -> ( comments, A.at start end (Src.Infix ( preOpComments, postOpComments, op ) associativity precedence ( preNameComments, name )) ))
+                                                                                                                                |> P.fmap (\_ -> ( comments, A.at start end (Src.Infix ( ( preOpComments, postOpComments ), op ) associativity precedence ( preNameComments, name )) ))
                                                                                                                         )
                                                                                                             )
                                                                                                 )

@@ -84,7 +84,7 @@ canonicalize syntaxVersion env (A.At region pattern) =
             Src.PUnit _ ->
                 R.ok Can.PUnit
 
-            Src.PTuple ( _, _, a ) ( _, _, b ) cs ->
+            Src.PTuple ( _, a ) ( _, b ) cs ->
                 R.fmap Can.PTuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
                     |> R.apply (canonicalizeTuple syntaxVersion region env (List.map Src.c2Value cs))

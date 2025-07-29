@@ -345,7 +345,7 @@ toVarTable pkg foreigns imports =
 
 
 addImport : Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
-addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, _, exposing_ ) ) vtable =
+addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
     if Name.isKernel importName then
         case maybeAlias of
             Just _ ->

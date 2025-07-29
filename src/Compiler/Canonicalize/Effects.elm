@@ -95,7 +95,7 @@ canonicalize syntaxVersion env values unions effects =
 
 
 canonicalizePort : SyntaxVersion -> Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
-canonicalizePort syntaxVersion env (Src.Port _ ( _, _, A.At region portName ) tipe) =
+canonicalizePort syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe) =
     Type.toAnnotation syntaxVersion env tipe
         |> R.bind
             (\(Can.Forall freeVars ctipe) ->

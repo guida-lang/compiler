@@ -156,12 +156,12 @@ fromRawType (A.At _ astType) =
         Src.TRecord fields maybeExt _ ->
             let
                 fromField : Src.C2 ( Src.C1 (A.Located a), Src.C1 Src.Type ) -> ( a, Type )
-                fromField ( _, _, ( ( _, A.At _ field ), ( _, tipe ) ) ) =
+                fromField ( _, ( ( _, A.At _ field ), ( _, tipe ) ) ) =
                     ( field, fromRawType tipe )
             in
             Record
                 (List.map fromField fields)
-                (Maybe.map (\( _, _, A.At _ ext ) -> ext) maybeExt)
+                (Maybe.map (\( _, A.At _ ext ) -> ext) maybeExt)
 
 
 

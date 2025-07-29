@@ -74,7 +74,7 @@ canonicalize pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values
 
 
 canonicalizeBinop : A.Located Src.Infix -> ( Name, Can.Binop )
-canonicalizeBinop (A.At _ (Src.Infix ( _, _, op ) ( _, associativity ) ( _, precedence ) ( _, func ))) =
+canonicalizeBinop (A.At _ (Src.Infix ( _, op ) ( _, associativity ) ( _, precedence ) ( _, func ))) =
     ( op, Can.Binop_ associativity precedence func )
 
 

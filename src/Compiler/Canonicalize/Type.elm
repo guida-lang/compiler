@@ -61,7 +61,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
         Src.TRecord fields maybeExt _ ->
             Dups.checkFields (canonicalizeFields syntaxVersion env fields)
                 |> R.bind (Utils.sequenceADict identity compare)
-                |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map (\( _, _, A.At _ ext ) -> ext) maybeExt))
+                |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map (\( _, A.At _ ext ) -> ext) maybeExt))
 
         Src.TUnit ->
             R.ok Can.TUnit
@@ -92,7 +92,7 @@ canonicalizeFields : SyntaxVersion -> Env.Env -> List (Src.C2 ( Src.C1 (A.Locate
 canonicalizeFields syntaxVersion env fields =
     let
         canonicalizeField : Int -> Src.C2 ( Src.C1 a, Src.C1 Src.Type ) -> ( a, R.RResult i w Error.Error Can.FieldType )
-        canonicalizeField index ( _, _, ( ( _, name ), ( _, srcType ) ) ) =
+        canonicalizeField index ( _, ( ( _, name ), ( _, srcType ) ) ) =
             ( name, R.fmap (Can.FieldType index) (canonicalize syntaxVersion env srcType) )
     in
     List.indexedMap canonicalizeField fields

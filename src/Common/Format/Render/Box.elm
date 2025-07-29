@@ -11,7 +11,7 @@ import Common.Format.Render.Markdown as Markdown
 import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
-import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Data.Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Module as M
 import Compiler.Parse.Primitives as P
@@ -22,6 +22,153 @@ import Hex
 import Language.GLSL.Syntax exposing (Statement(..))
 import Maybe.Extra as Maybe
 import Utils.Crash exposing (crash)
+
+
+type alias Module =
+    { importInfo : ImportInfo
+    , initialComments : Src.FComments
+    , header : Maybe Header
+    , docs : A.Located (Maybe Blocks)
+    , imports : Src.C1 (Dict (List String) (List Name) (Src.C1 ImportMethod))
+    , body : List (TopLevelStructure Declaration)
+    }
+
+
+type Header
+    = Header SourceTag (Src.C2 (List Name)) (Maybe (Src.C2 SourceSettings)) (Maybe (Src.C2 (Listing DetailedListing)))
+
+
+defaultHeader : Header
+defaultHeader =
+    Header Normal ( ( [], [] ), [ "Main" ] ) Nothing Nothing
+
+
+type alias SourceSettings =
+    List ( Src.C2 Name, Src.C2 Name )
+
+
+type SourceTag
+    = Normal
+    | Effect Src.FComments
+    | Port Src.FComments
+
+
+type alias UserImport =
+    ( Src.C1 (List Name), ImportMethod )
+
+
+type ImportMethod
+    = ImportMethod (Maybe (Src.C2 Name)) (Src.C2 (Listing DetailedListing))
+
+
+{-| A listing of values. Something like (a,b,c) or (..) or (a,b,..)
+-}
+type Listing a
+    = ExplicitListing a Bool
+    | OpenListing (Src.C2 ())
+    | ClosedListing
+
+
+type alias DetailedListing =
+    { values : CommentedMap Name ()
+    , operators : CommentedMap Name ()
+    , types : CommentedMap Name (Src.C1 (Listing (CommentedMap Name ())))
+    }
+
+
+type alias CommentedMap k v =
+    Dict String k (Src.C2 v)
+
+
+{-| A value that can be imported or exported
+-}
+type Value
+    = Value Name
+    | OpValue Name
+    | Union (Src.C1 Name) (Listing (CommentedMap Name ()))
+
+
+type Declaration
+    = CommonDeclaration CommonDeclaration
+    | Datatype (Src.C2 (NameWithArgs Name Name)) (Src.OpenCommentedList (NameWithArgs Name Src.Type))
+    | TypeAlias Src.FComments (Src.C2 (NameWithArgs Name Name)) (Src.C1 Src.Type)
+    | PortAnnotation (Src.C2 Name) Src.FComments Src.Type
+    | Fixity (Src.C1 Binop.Associativity) (Src.C1 Binop.Precedence) (Src.C2 Name) (Src.C1 Name)
+
+
+type CommonDeclaration
+    = Definition Src.Pattern (List (Src.C1 Src.Pattern)) Src.FComments Src.Expr
+    | TypeAnnotation (Src.C1 (Ref ())) (Src.C1 Src.Type)
+
+
+type NameWithArgs name arg
+    = NameWithArgs name (List (Src.C1 arg))
+
+
+type TopLevelStructure a
+    = DocComment Blocks
+    | BodyComment Src.FComment
+    | Entry a
+
+
+topLevelStructureMap : (a -> b) -> TopLevelStructure a -> TopLevelStructure b
+topLevelStructureMap f topLevelStructure =
+    case topLevelStructure of
+        DocComment blocks ->
+            DocComment blocks
+
+        BodyComment comment ->
+            BodyComment comment
+
+        Entry a ->
+            Entry (f a)
+
+
+type Ref ns
+    = VarRef ns String
+    | TagRef ns String
+    | OpRef String
+
+
+refMap : (a -> b) -> Ref a -> Ref b
+refMap f ref =
+    case ref of
+        VarRef namespace name ->
+            VarRef (f namespace) name
+
+        TagRef namespace name ->
+            TagRef (f namespace) name
+
+        OpRef name ->
+            OpRef name
+
+
+pairs : List a -> List ( a, a )
+pairs input =
+    let
+        step next ( prev, acc ) =
+            case prev of
+                Nothing ->
+                    ( Just next, acc )
+
+                Just prev_ ->
+                    ( Just next, ( next, prev_ ) :: acc )
+    in
+    List.foldr step ( Nothing, [] ) input
+        |> Tuple.second
+
+
+intersperseMap : (a -> a -> List b) -> (a -> b) -> List a -> List b
+intersperseMap spacer fn list =
+    case list of
+        [] ->
+            []
+
+        first :: _ ->
+            fn first
+                :: (pairs list
+                        |> List.concatMap (\( a, b ) -> spacer a b ++ [ fn b ])
+                   )
 
 
 pleaseReport__ : String -> String -> String
@@ -150,13 +297,13 @@ declarationType decl =
             DComment
 
 
-removeDuplicates : List (List (Src.C2 Src.Exposed)) -> List (List (Src.C2 Src.Exposed))
+removeDuplicates : List (List (Src.C2 Value)) -> List (List (Src.C2 Value))
 removeDuplicates input =
     let
         step :
-            List (Src.C2 Src.Exposed)
-            -> ( List (List (Src.C2 Src.Exposed)), EverySet String (Src.C2 Src.Exposed) )
-            -> ( List (List (Src.C2 Src.Exposed)), EverySet String (Src.C2 Src.Exposed) )
+            List (Src.C2 Value)
+            -> ( List (List (Src.C2 Value)), EverySet String (Src.C2 Value) )
+            -> ( List (List (Src.C2 Value)), EverySet String (Src.C2 Value) )
         step next ( acc, seen ) =
             case List.foldl stepChildren ( [], seen ) next |> (\( a, b ) -> ( List.reverse a, b )) of
                 ( [], seen_ ) ->
@@ -166,42 +313,42 @@ removeDuplicates input =
                     ( children_ :: acc, seen_ )
 
         stepChildren :
-            Src.C2 Src.Exposed
-            -> ( List (Src.C2 Src.Exposed), EverySet String (Src.C2 Src.Exposed) )
-            -> ( List (Src.C2 Src.Exposed), EverySet String (Src.C2 Src.Exposed) )
+            Src.C2 Value
+            -> ( List (Src.C2 Value), EverySet String (Src.C2 Value) )
+            -> ( List (Src.C2 Value), EverySet String (Src.C2 Value) )
         stepChildren next ( acc, seen ) =
-            if EverySet.member (\( _, v, _ ) -> Debug.todo "v") next seen then
+            if EverySet.member (\( _, v ) -> Debug.todo "v") next seen then
                 ( acc, seen )
 
             else
-                ( next :: acc, EverySet.insert (\( _, v, _ ) -> Debug.todo "v") next seen )
+                ( next :: acc, EverySet.insert (\( _, v ) -> Debug.todo "v") next seen )
     in
     List.foldl step ( [], EverySet.empty ) input
         |> Tuple.first
         |> List.reverse
 
 
-sortVars : Bool -> EverySet String (Src.C2 Src.Exposed) -> List (List String) -> ( List (List (Src.C2 Src.Exposed)), Src.FComments )
+sortVars : Bool -> EverySet String (Src.C2 Value) -> List (List String) -> ( List (List (Src.C2 Value)), Src.FComments )
 sortVars forceMultiline fromExposing fromDocs =
     let
-        varOrder : Src.C2 Src.Exposed -> ( Int, String )
-        varOrder ( _, _, exposed ) =
-            case exposed of
-                Src.Operator _ name ->
+        varOrder : Src.C2 Value -> ( Int, String )
+        varOrder ( _, value ) =
+            case value of
+                OpValue name ->
                     ( 1, name )
 
-                Src.Upper (A.At _ name) _ ->
+                Union ( _, name ) _ ->
                     ( 2, name )
 
-                Src.Lower (A.At _ name) ->
+                Value name ->
                     ( 3, name )
 
-        listedInDocs : List (List (Src.C2 Src.Exposed))
+        listedInDocs : List (List (Src.C2 Value))
         listedInDocs =
             fromDocs
                 |> List.map (List.filterMap (\v -> Map.get identity v allowedInDocs))
                 |> List.filter (not << List.isEmpty)
-                |> List.map (List.map (\v -> ( [], [], v )))
+                |> List.map (List.map (Tuple.pair ( [], [] )))
                 |> removeDuplicates
 
         listedInExposing =
@@ -209,37 +356,37 @@ sortVars forceMultiline fromExposing fromDocs =
                 |> EverySet.toList (\a b -> compare (varName a) (varName b))
                 |> List.sortBy varOrder
 
-        varName : Src.C2 Src.Exposed -> String
-        varName ( _, _, exposed ) =
-            case exposed of
-                Src.Lower (A.At _ name) ->
+        varName : Src.C2 Value -> String
+        varName ( _, value ) =
+            case value of
+                Value name ->
                     name
 
-                Src.Upper (A.At _ name) _ ->
+                OpValue name ->
                     name
 
-                Src.Operator _ name ->
+                Union ( _, name ) _ ->
                     name
 
-        varSetToMap : EverySet String (Src.C2 Src.Exposed) -> Dict String String Src.Exposed
+        varSetToMap : EverySet String (Src.C2 Value) -> Dict String String Value
         varSetToMap set =
             EverySet.toList (\a b -> compare (varName a) (varName b)) set
-                |> List.map (\(( _, _, exposed ) as var) -> ( varName var, exposed ))
+                |> List.map (\( c, var ) -> ( varName ( c, var ), var ))
                 |> Map.fromList identity
 
-        allowedInDocs : Dict String String Src.Exposed
+        allowedInDocs : Dict String String Value
         allowedInDocs =
             varSetToMap fromExposing
 
         allFromDocs : EverySet String String
         allFromDocs =
-            EverySet.fromList identity (List.map varName (List.concat listedInDocs))
+            EverySet.fromList identity <| List.map varName <| List.concat listedInDocs
 
-        inDocs : Src.C2 Src.Exposed -> Bool
+        inDocs : Src.C2 Value -> Bool
         inDocs x =
             EverySet.member identity (varName x) allFromDocs
 
-        remainingFromExposing : List (Src.C2 Src.Exposed)
+        remainingFromExposing : List (Src.C2 Value)
         remainingFromExposing =
             listedInExposing
                 |> List.filter (not << inDocs)
@@ -248,11 +395,11 @@ sortVars forceMultiline fromExposing fromDocs =
         commentsFromReorderedVars =
             listedInExposing
                 |> List.filter inDocs
-                |> List.map (\( pre, post, _ ) -> pre ++ post)
+                |> List.map (\( ( pre, post ), _ ) -> pre ++ post)
                 |> List.concat
     in
     if List.isEmpty listedInDocs && forceMultiline then
-        ( List.map List.singleton remainingFromExposing, commentsFromReorderedVars )
+        ( List.map (\x -> [ x ]) remainingFromExposing, commentsFromReorderedVars )
 
     else
         ( listedInDocs
@@ -266,17 +413,18 @@ sortVars forceMultiline fromExposing fromDocs =
         )
 
 
-formatModuleHeader : Bool -> M.Module -> Src.C1 (List Box)
+formatModuleHeader : Bool -> Module -> List Box
 formatModuleHeader addDefaultHeader modu =
     let
-        maybeHeader : Maybe M.Header
+        maybeHeader : Maybe Header
         maybeHeader =
             if addDefaultHeader then
-                Just (Maybe.withDefault M.defaultHeader modu.header)
+                Just (Maybe.withDefault defaultHeader modu.header)
 
             else
                 modu.header
 
+        refName : Ref (List String) -> String
         refName ref =
             case ref of
                 VarRef _ name ->
@@ -288,24 +436,22 @@ formatModuleHeader addDefaultHeader modu =
                 OpRef name ->
                     name
 
+        varName : Src.C2 Value -> Name
+        varName var =
+            case var of
+                ( _, Value name ) ->
+                    name
+
+                ( _, OpValue name ) ->
+                    name
+
+                ( _, Union ( _, name ) _ ) ->
+                    name
+
         documentedVars : List (List String)
         documentedVars =
-            modu.header
-                |> Maybe.andThen (.docs >> Result.toMaybe)
-                |> Maybe.map
-                    (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                        String.slice offset (offset + length) fptr
-                            |> String.trim
-                            |> Parse.markdown
-                                (Options
-                                    { sanitize = True
-                                    , allowRawHtml = True
-                                    , preserveHardBreaks = True
-                                    , debug = False
-                                    }
-                                )
-                            |> (\(Doc _ blocks) -> blocks)
-                    )
+            modu.docs
+                |> A.toValue
                 |> Maybe.withDefault []
                 |> List.concatMap extractDocs
 
@@ -325,234 +471,230 @@ formatModuleHeader addDefaultHeader modu =
         textToRef : String -> Ref (List String)
         textToRef text =
             case String.toList text of
-                c :: [] ->
+                (c :: _) as s ->
                     if Char.isUpper c then
                         TagRef [] text
 
-                    else
+                    else if Char.isLower c then
                         VarRef [] text
 
-                [ '(', a, ')' ] ->
-                    OpRef (String.fromChar a)
+                    else
+                        case s of
+                            [ '(', a, ')' ] ->
+                                OpRef (String.fromChar a)
 
-                [ '(', a, b, ')' ] ->
-                    OpRef (String.fromList [ a, b ])
+                            [ '(', a, b, ')' ] ->
+                                OpRef (String.fromList [ a, b ])
+
+                            _ ->
+                                VarRef [] text
 
                 _ ->
                     VarRef [] text
 
-        definedVars : EverySet String (Src.C2 Src.Exposed)
+        definedVars : EverySet String (Src.C2 Value)
         definedVars =
-            modu.decls
-                |> List.map Src.c2Value
+            modu.body
                 |> List.concatMap extractVarName
-                |> List.map (\varName -> ( [], [], varName ))
+                |> List.map (Tuple.pair ( [], [] ))
                 |> EverySet.fromList
-                    (\( _, _, exposed ) ->
-                        case exposed of
-                            Src.Lower (A.At _ name) ->
+                    (\( _, value ) ->
+                        case value of
+                            Value name ->
                                 name
 
-                            Src.Operator _ name ->
+                            OpValue name ->
                                 name
 
-                            Src.Upper (A.At _ name) _ ->
+                            Union ( _, name ) _ ->
                                 name
                     )
 
-        exportsList : A.Located Src.Exposing
+        exportsList : Listing DetailedListing
         exportsList =
-            Maybe.withDefault M.defaultHeader maybeHeader
-                |> .exports
-                |> (\( _, _, v ) -> v)
+            case Maybe.withDefault defaultHeader maybeHeader of
+                Header _ _ _ (Just ( _, e )) ->
+                    e
 
-        detailedListingToSet : Src.Exposing -> EverySet String (Src.C2 Src.Exposed)
-        detailedListingToSet listing =
-            case listing of
-                Src.Open _ _ ->
+                Header _ _ _ Nothing ->
+                    ClosedListing
+
+        detailedListingToSet : Listing DetailedListing -> EverySet String (Src.C2 Value)
+        detailedListingToSet value =
+            case value of
+                OpenListing _ ->
                     EverySet.empty
 
-                Src.Explicit (A.At _ exposedList) ->
-                    exposedList
-                        |> EverySet.fromList
-                            (\( _, _, exposed ) ->
-                                case exposed of
-                                    Src.Lower (A.At _ name) ->
-                                        name
+                ClosedListing ->
+                    EverySet.empty
 
-                                    Src.Operator _ name ->
-                                        name
+                ExplicitListing { values, operators, types } _ ->
+                    let
+                        toComparable : Src.C2 Value -> Name
+                        toComparable ( _, v ) =
+                            case v of
+                                OpValue name ->
+                                    name
 
-                                    Src.Upper (A.At _ name) _ ->
-                                        name
-                            )
+                                Union ( _, name ) _ ->
+                                    name
 
-        detailedListingIsMultiline : A.Located Src.Exposing -> Bool
+                                Value name ->
+                                    name
+                    in
+                    List.foldl EverySet.union EverySet.empty <|
+                        [ Map.toList compare values |> List.map (\( name, ( c, () ) ) -> ( c, Value name )) |> EverySet.fromList toComparable
+                        , Map.toList compare operators |> List.map (\( name, ( c, () ) ) -> ( c, OpValue name )) |> EverySet.fromList toComparable
+                        , Map.toList compare types |> List.map (\( name, ( c, ( preListing, listing ) ) ) -> ( c, Union ( preListing, name ) listing )) |> EverySet.fromList toComparable
+                        ]
+
+        detailedListingIsMultiline : Listing a -> Bool
         detailedListingIsMultiline listing =
             case listing of
-                A.At region (Src.Explicit _) ->
-                    A.isMultiline region
+                ExplicitListing _ isMultiline ->
+                    isMultiline
 
-                A.At _ (Src.Open _ _) ->
+                _ ->
                     False
 
-        varsToExpose : EverySet String (Src.C2 Src.Exposed)
+        varsToExpose : EverySet String (Src.C2 Value)
         varsToExpose =
-            case Maybe.map .exports maybeHeader of
+            case Maybe.andThen (\(Header _ _ _ exports) -> exports) maybeHeader of
                 Nothing ->
                     if List.all List.isEmpty documentedVars then
                         definedVars
 
                     else
-                        EverySet.filter
-                            (\( _, _, v ) ->
-                                EverySet.member identity
-                                    (case v of
-                                        Src.Lower (A.At _ name) ->
-                                            name
+                        definedVars |> EverySet.filter (\v -> EverySet.member identity (varName v) documentedVarsSet)
 
-                                        Src.Operator _ name ->
-                                            name
-
-                                        Src.Upper (A.At _ name) _ ->
-                                            name
-                                    )
-                                    documentedVarsSet
-                            )
-                            definedVars
-
-                Just ( _, _, A.At _ e ) ->
+                Just ( _, e ) ->
                     detailedListingToSet e
 
-        sortedExports : ( List (List (Src.C2 Src.Exposed)), Src.FComments )
+        sortedExports : ( List (List (Src.C2 Value)), Src.FComments )
         sortedExports =
             sortVars
                 (detailedListingIsMultiline exportsList)
                 varsToExpose
                 documentedVars
 
-        extractVarName : Decl.Decl -> List Src.Exposed
+        extractVarName : TopLevelStructure Declaration -> List Value
         extractVarName decl =
             case decl of
-                Decl.Value _ (A.At _ (Src.Value _ ( _, name ) _ _ _)) ->
-                    [ Src.Lower name ]
+                DocComment _ ->
+                    []
 
-                Decl.Union _ (A.At _ (Src.Union name _ _)) ->
-                    [ Src.Upper name (Src.Public A.zero) ]
+                BodyComment _ ->
+                    []
 
-                Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, name ) _ _)) ->
-                    [ Src.Upper name Src.Private ]
+                Entry (PortAnnotation ( _, name ) _ _) ->
+                    [ Value name ]
 
-                Decl.Port _ (Src.Port _ ( _, _, name ) _) ->
-                    [ Src.Lower name ]
+                Entry (CommonDeclaration def) ->
+                    case def of
+                        Definition (A.At _ pat) _ _ _ ->
+                            case pat of
+                                Src.PVar name ->
+                                    [ Value name ]
 
-        formatModuleLine_ : M.Header -> Box
-        formatModuleLine_ header =
-            let
-                ( preExposing, postExposing, _ ) =
-                    header.exports
-            in
-            formatModuleLine sortedExports header.effects header.name preExposing postExposing
+                                Src.PRecord ( _, fields ) ->
+                                    List.map (\( _, A.At _ field ) -> Value field) fields
 
-        docs =
-            modu.header
-                |> Maybe.andThen (.docs >> Result.toMaybe)
-                |> Maybe.map
-                    (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                        String.slice offset (offset + length) fptr
-                            |> String.trim
-                            |> Parse.markdown
-                                (Options
-                                    { sanitize = True
-                                    , allowRawHtml = True
-                                    , preserveHardBreaks = True
-                                    , debug = False
-                                    }
-                                )
-                            |> (\(Doc _ blocks) -> formatDocComment (ImportInfo.fromModule KnownContents.mempty modu) blocks)
-                    )
-    in
-    Src.c1map
-        (\imports ->
-            List.concat
-                (List.intersperse [ Box.blankLine ]
-                    (List.concat
-                        [ Maybe.toList (Maybe.map (List.singleton << formatModuleLine_) maybeHeader)
-                        , Maybe.toList (Maybe.map List.singleton docs)
-                        , if List.isEmpty imports then
+                                _ ->
+                                    []
+
+                        _ ->
                             []
 
-                          else
-                            [ imports ]
-                        ]
-                    )
-                )
+                Entry (Datatype ( _, NameWithArgs name _ ) _) ->
+                    [ Union ( [], name ) (OpenListing ( ( [], [] ), () )) ]
+
+                Entry (TypeAlias _ ( _, NameWithArgs name _ ) _) ->
+                    [ Union ( [], name ) ClosedListing ]
+
+                Entry _ ->
+                    []
+
+        formatModuleLine_ : Header -> Box
+        formatModuleLine_ (Header srcTag name moduleSettings exports) =
+            let
+                ( preExposing, postExposing ) =
+                    case exports of
+                        Nothing ->
+                            ( [], [] )
+
+                        Just ( ( pre, post ), _ ) ->
+                            ( pre, post )
+            in
+            formatModuleLine sortedExports srcTag name moduleSettings preExposing postExposing
+
+        docs : Maybe Box
+        docs =
+            Maybe.map (formatDocComment modu.importInfo) <| A.toValue <| modu.docs
+
+        imports : List Box
+        imports =
+            formatImports modu
+    in
+    List.concat
+        (List.intersperse [ Box.blankLine ] <|
+            List.concat
+                [ Maybe.toList (Maybe.map (List.singleton << formatModuleLine_) maybeHeader)
+                , Maybe.toList (Maybe.map List.singleton docs)
+                , if List.isEmpty imports then
+                    []
+
+                  else
+                    [ imports ]
+                ]
         )
-        (formatImports modu)
 
 
-formatImports : M.Module -> Src.C1 (List Box)
+formatImports : Module -> List Box
 formatImports modu =
     let
         ( comments, imports ) =
             modu.imports
-
-        ( postImportComments, restImports ) =
-            case List.reverse imports of
-                [] ->
-                    ( [], [] )
-
-                ( lastComments, _ ) :: firstImports ->
-                    ( lastComments, List.reverse firstImports )
     in
-    ( postImportComments
-    , [ List.foldl (\( importComments, _ ) acc -> acc ++ importComments) comments restImports
-            |> formatComments
-            |> Maybe.toList
-      , imports
-            |> List.map Src.c1Value
-            |> List.sortBy (\(Src.Import ( _, A.At _ importName ) _ _) -> importName)
-            |> List.map formatImport
-      ]
+    [ formatComments comments
+        |> Maybe.toList
+    , imports
+        |> Map.toList compare
+        |> List.map (\( name, ( pre, method ) ) -> formatImport ( ( pre, name ), method ))
+    ]
         |> List.filter (not << List.isEmpty)
         |> List.intersperse [ Box.blankLine ]
         |> List.concat
-    )
 
 
 formatModuleLine :
-    ( List (List (Src.C2 Src.Exposed)), Src.FComments )
-    -> M.Effects
-    -> Src.C2 (A.Located Name.Name)
+    ( List (List (Src.C2 Value)), Src.FComments )
+    -> SourceTag
+    -> Src.C2 (List Name)
+    -> Maybe (Src.C2 SourceSettings)
     -> Src.FComments
     -> Src.FComments
     -> Box
-formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.At _ name ) preExposing postExposing =
+formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preExposing postExposing =
     let
         tag =
             case srcTag of
-                M.NoEffects _ ->
+                Normal ->
                     Box.line (Box.keyword "module")
 
-                M.Ports _ comments ->
+                Port comments ->
                     ElmStructure.spaceSepOrIndented
-                        (formatTailCommented ( comments, Box.line (Box.keyword "port") ))
+                        (formatTailCommented ( comments, Box.line <| Box.keyword "port" ))
                         [ Box.line (Box.keyword "module") ]
 
-                M.Manager _ _ ->
-                    let
-                        comments =
-                            -- TODO
-                            []
-                    in
+                Effect comments ->
                     ElmStructure.spaceSepOrIndented
-                        (formatTailCommented ( comments, Box.line (Box.keyword "effect") ))
+                        (formatTailCommented ( comments, Box.line <| Box.keyword "effect" ))
                         [ Box.line (Box.keyword "module") ]
 
         exports =
             case varsToExpose of
                 [] ->
-                    Box.line (Box.keyword "(..)")
+                    Box.line <| Box.keyword "(..)"
 
                 [ oneGroup ] ->
                     oneGroup
@@ -575,36 +717,15 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
 
         whereClause : List Box
         whereClause =
-            case srcTag of
-                M.NoEffects _ ->
-                    []
-
-                M.Ports _ _ ->
-                    []
-
-                M.Manager _ manager ->
-                    let
-                        settings : List ( Src.C2 String, Src.C2 Name.Name )
-                        settings =
-                            case manager of
-                                Src.Cmd (A.At _ cmdType) ->
-                                    [ ( ( [], [], "command" ), ( [], [], cmdType ) ) ]
-
-                                Src.Sub (A.At _ subType) ->
-                                    [ ( ( [], [], "subscription" ), ( [], [], subType ) ) ]
-
-                                Src.Fx (A.At _ cmdType) (A.At _ subType) ->
-                                    [ ( ( [], [], "command" ), ( [], [], cmdType ) )
-                                    , ( ( [], [], "subscription" ), ( [], [], subType ) )
-                                    ]
-                    in
-                    -- TODO add comments around manager/settings (`where` part)
-                    [ formatKeywordCommented "where" ( [], [], formatSettings settings ) ]
+            moduleSettings
+                |> Maybe.map (formatKeywordCommented "where" << Src.c2map formatSettings)
+                |> Maybe.map (\x -> [ x ])
+                |> Maybe.withDefault []
 
         nameClause =
             case
                 ( tag
-                , formatCommented ( preName, postName, Box.line (formatQualifiedUppercaseIdentifier (String.split "." name)) )
+                , formatCommented <| Src.c2map (Box.line << formatQualifiedUppercaseIdentifier) name
                 )
             of
                 ( Box.SingleLine tag_, Box.SingleLine name_ ) ->
@@ -625,7 +746,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
     ElmStructure.spaceSepOrIndented
         (ElmStructure.spaceSepOrIndented
             nameClause
-            (whereClause ++ [ formatCommented ( preExposing, postExposing, Box.line (Box.keyword "exposing") ) ])
+            (whereClause ++ [ formatCommented ( ( preExposing, postExposing ), Box.line <| Box.keyword "exposing" ) ])
         )
         [ exports ]
 
@@ -633,25 +754,12 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag ( preName, postName, A.A
 formatModule : Bool -> Int -> M.Module -> Box
 formatModule addDefaultHeader spacing modu =
     let
-        initialComments_ =
-            case modu.initialComments of
-                [] ->
-                    []
-
-                comments ->
-                    List.map formatComment comments
-                        ++ [ Box.blankLine, Box.blankLine ]
-
         declarations =
             List.concatMap
-                (\( preDeclComments, postDeclComments, decl ) ->
-                    let
-                        _ =
-                            Debug.log "declaration!123" ( preDeclComments, postDeclComments, decl )
-                    in
+                (\( ( preDeclComments, postDeclComments ), decl ) ->
                     List.map BodyComment preDeclComments
                         ++ (case decl of
-                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments _ _ _ _)) ->
+                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments ( _, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType)) ->
                                     (maybeDocs
                                         |> Maybe.map
                                             (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
@@ -673,52 +781,281 @@ formatModule addDefaultHeader spacing modu =
                                         |> Maybe.withDefault []
                                     )
                                         ++ List.map BodyComment preValueComments
+                                        ++ Maybe.toList (Maybe.map (\typ -> Entry (CommonDeclaration (TypeAnnotation ( [], VarRef () name ) typ))) maybeType)
+                                        ++ [ Entry (CommonDeclaration (Definition (A.At nameRegion (Src.PVar name)) srcArgs valueBodyComments valueBody)) ]
 
-                                -- Decl.Union (Just comment) _ ->
-                                --     [ BodyComment comment ]
-                                -- Decl.Alias (Just comment) _ ->
-                                --     [ BodyComment comment ]
-                                Decl.Port (Just (Src.Comment (P.Snippet { fptr, offset, length }))) _ ->
-                                    [ DocComment
-                                        (String.slice offset (offset + length) fptr
-                                            |> String.trim
-                                            |> Parse.markdown
-                                                (Options
-                                                    { sanitize = True
-                                                    , allowRawHtml = True
-                                                    , preserveHardBreaks = True
-                                                    , debug = False
-                                                    }
+                                Decl.Union maybeDocs (A.At _ (Src.Union (A.At _ name) args constructors)) ->
+                                    let
+                                        tags : Src.OpenCommentedList (NameWithArgs Name Src.Type)
+                                        tags =
+                                            case constructors of
+                                                ( A.At _ firstName, firstArgs ) :: restConstructors ->
+                                                    Src.OpenCommentedList
+                                                        (List.map
+                                                            (\( A.At _ constructorName, constructorArgs ) ->
+                                                                ( ( [], [], Nothing ), NameWithArgs constructorName (List.map (Tuple.pair []) constructorArgs) )
+                                                            )
+                                                            restConstructors
+                                                        )
+                                                        ( [], Nothing, NameWithArgs firstName (List.map (Tuple.pair []) firstArgs) )
+
+                                                _ ->
+                                                    Debug.todo "tags"
+                                    in
+                                    (maybeDocs
+                                        |> Maybe.map
+                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                                [ DocComment
+                                                    (String.slice offset (offset + length) fptr
+                                                        |> String.trim
+                                                        |> Parse.markdown
+                                                            (Options
+                                                                { sanitize = True
+                                                                , allowRawHtml = True
+                                                                , preserveHardBreaks = True
+                                                                , debug = False
+                                                                }
+                                                            )
+                                                        |> (\(Doc _ blocks) -> blocks)
+                                                    )
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+                                    )
+                                        ++ [ Entry (Datatype ( ( [], [] ), NameWithArgs name (List.map (\(A.At _ arg) -> ( [], arg )) args) ) tags) ]
+
+                                Decl.Alias maybeDocs (A.At _ (Src.Alias comments name args tipe)) ->
+                                    let
+                                        nameWithArgs =
+                                            Src.c2map
+                                                (\(A.At _ n) ->
+                                                    NameWithArgs n (List.map (Src.c1map A.toValue) args)
                                                 )
-                                            |> (\(Doc _ blocks) -> blocks)
-                                        )
-                                    ]
+                                                name
+                                    in
+                                    (maybeDocs
+                                        |> Maybe.map
+                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                                [ DocComment
+                                                    (String.slice offset (offset + length) fptr
+                                                        |> String.trim
+                                                        |> Parse.markdown
+                                                            (Options
+                                                                { sanitize = True
+                                                                , allowRawHtml = True
+                                                                , preserveHardBreaks = True
+                                                                , debug = False
+                                                                }
+                                                            )
+                                                        |> (\(Doc _ blocks) -> blocks)
+                                                    )
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+                                    )
+                                        ++ [ Entry (TypeAlias comments nameWithArgs tipe) ]
 
-                                _ ->
-                                    []
+                                Decl.Port maybeDocs (Src.Port comments name tipe) ->
+                                    (maybeDocs
+                                        |> Maybe.map
+                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                                [ DocComment
+                                                    (String.slice offset (offset + length) fptr
+                                                        |> String.trim
+                                                        |> Parse.markdown
+                                                            (Options
+                                                                { sanitize = True
+                                                                , allowRawHtml = True
+                                                                , preserveHardBreaks = True
+                                                                , debug = False
+                                                                }
+                                                            )
+                                                        |> (\(Doc _ blocks) -> blocks)
+                                                    )
+                                                ]
+                                            )
+                                        |> Maybe.withDefault []
+                                    )
+                                        ++ [ Entry (PortAnnotation (Src.c2map A.toValue name) comments tipe) ]
                            )
-                        ++ Entry (CommonDeclaration decl)
-                        :: List.map BodyComment postDeclComments
+                        ++ List.map BodyComment postDeclComments
                 )
                 modu.decls
 
-        ( moduleHeaderComments, moduleHeader ) =
-            formatModuleHeader addDefaultHeader modu
+        ( moduleHeaderComments, imports ) =
+            List.foldl
+                (\( comments, Src.Import ( importNameComments, A.At _ importName ) maybeAlias exposing_ ) ( importCommentsAcc, ( importComments, importsAcc ) ) ->
+                    let
+                        exposedVars =
+                            Src.c2map
+                                (\exposing__ ->
+                                    case exposing__ of
+                                        Src.Open preComments postComments ->
+                                            OpenListing ( ( preComments, postComments ), () )
+
+                                        Src.Explicit (A.At _ []) ->
+                                            ClosedListing
+
+                                        Src.Explicit (A.At region exposed) ->
+                                            ExplicitListing
+                                                (List.foldl
+                                                    (\( entryComments, entry ) acc ->
+                                                        case entry of
+                                                            Src.Lower (A.At _ name) ->
+                                                                { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
+
+                                                            Src.Upper (A.At _ name) (Src.Public _) ->
+                                                                { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
+
+                                                            Src.Upper (A.At _ name) Src.Private ->
+                                                                { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
+
+                                                            Src.Operator _ name ->
+                                                                { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
+                                                    )
+                                                    { values = Map.empty
+                                                    , operators = Map.empty
+                                                    , types = Map.empty
+                                                    }
+                                                    exposed
+                                                )
+                                                (A.isMultiline region)
+                                )
+                                exposing_
+                    in
+                    ( comments
+                    , ( importComments ++ importCommentsAcc
+                      , Map.insert identity (String.split "." importName) ( importNameComments, ImportMethod maybeAlias exposedVars ) importsAcc
+                      )
+                    )
+                )
+                ( [], Src.c1map (\_ -> Map.empty) modu.imports )
+                (Src.c1Value modu.imports)
 
         body : List (TopLevelStructure Declaration)
         body =
             List.map BodyComment moduleHeaderComments
                 ++ List.concatMap
-                    (\( commments, infix_ ) ->
-                        Entry (InfixDeclaration infix_)
-                            :: List.map BodyComment commments
+                    (\( commments, A.At _ (Src.Infix op associativity precedence name) ) ->
+                        Entry (Fixity associativity precedence op name) :: List.map BodyComment commments
                     )
                     (List.reverse modu.infixes)
                 ++ declarations
 
+        formatModu : Module
+        formatModu =
+            { importInfo = ImportInfo.fromModule KnownContents.mempty modu
+            , initialComments = modu.initialComments
+            , header =
+                Maybe.map
+                    (\header ->
+                        let
+                            ( sourceTag, sourceSettings ) =
+                                case header.effects of
+                                    M.NoEffects _ ->
+                                        ( Normal, Nothing )
+
+                                    M.Ports _ comments ->
+                                        ( Port comments, Nothing )
+
+                                    M.Manager _ manager ->
+                                        -- TODO comments
+                                        ( Effect []
+                                        , Just
+                                            ( ( [], [] )
+                                            , case manager of
+                                                Src.Cmd (A.At _ cmdType) ->
+                                                    [ ( ( ( [], [] ), "command" ), ( ( [], [] ), cmdType ) )
+                                                    ]
+
+                                                Src.Sub (A.At _ subType) ->
+                                                    [ ( ( ( [], [] ), "subscription" ), ( ( [], [] ), subType ) )
+                                                    ]
+
+                                                Src.Fx (A.At _ cmdType) (A.At _ subType) ->
+                                                    [ ( ( ( [], [] ), "command" ), ( ( [], [] ), cmdType ) )
+                                                    , ( ( ( [], [] ), "subscription" ), ( ( [], [] ), subType ) )
+                                                    ]
+                                            )
+                                        )
+
+                            exportsListing =
+                                Src.c2map
+                                    (\(A.At _ exposing_) ->
+                                        case exposing_ of
+                                            Src.Open preComments postComments ->
+                                                OpenListing ( ( preComments, postComments ), () )
+
+                                            Src.Explicit (A.At region exposed) ->
+                                                ExplicitListing
+                                                    (List.foldl
+                                                        (\( entryComments, entry ) acc ->
+                                                            case entry of
+                                                                Src.Lower (A.At _ name) ->
+                                                                    { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
+
+                                                                Src.Upper (A.At _ name) (Src.Public _) ->
+                                                                    { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
+
+                                                                Src.Upper (A.At _ name) Src.Private ->
+                                                                    { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
+
+                                                                Src.Operator _ name ->
+                                                                    { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
+                                                        )
+                                                        { values = Map.empty
+                                                        , operators = Map.empty
+                                                        , types = Map.empty
+                                                        }
+                                                        exposed
+                                                    )
+                                                    (A.isMultiline region)
+                                    )
+                                    header.exports
+                        in
+                        Header sourceTag (Src.c2map (String.split "." << A.toValue) header.name) sourceSettings (Just exportsListing)
+                    )
+                    modu.header
+            , docs =
+                modu.header
+                    |> Maybe.andThen (.docs >> Result.toMaybe)
+                    |> Maybe.map
+                        (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                            String.slice offset (offset + length) fptr
+                                |> String.trim
+                                |> Parse.markdown
+                                    (Options
+                                        { sanitize = True
+                                        , allowRawHtml = True
+                                        , preserveHardBreaks = True
+                                        , debug = False
+                                        }
+                                    )
+                                |> (\(Doc _ blocks) -> blocks)
+                        )
+                    |> A.At A.zero
+            , imports = imports
+            , body = body
+            }
+    in
+    formatModule_ addDefaultHeader spacing formatModu
+
+
+formatModule_ : Bool -> Int -> Module -> Box
+formatModule_ addDefaultHeader spacing modu =
+    let
+        initialComments_ =
+            case modu.initialComments of
+                [] ->
+                    []
+
+                comments ->
+                    List.map formatComment comments
+                        ++ [ Box.blankLine, Box.blankLine ]
+
         spaceBeforeBody : Int
         spaceBeforeBody =
-            case body of
+            case modu.body of
                 [] ->
                     0
 
@@ -727,20 +1064,17 @@ formatModule addDefaultHeader spacing modu =
 
                 _ ->
                     spacing
+
+        decls =
+            modu.body
     in
-    Box.stack1
-        (List.concat
+    Box.stack1 <|
+        List.concat
             [ initialComments_
-            , moduleHeader
+            , formatModuleHeader addDefaultHeader modu
             , List.repeat spaceBeforeBody Box.blankLine
-            , Maybe.toList (formatModuleBody spacing (ImportInfo.fromModule KnownContents.mempty modu) body)
+            , Maybe.toList <| formatModuleBody spacing modu.importInfo decls
             ]
-        )
-
-
-type Declaration
-    = CommonDeclaration Decl.Decl
-    | InfixDeclaration (A.Located Src.Infix)
 
 
 formatModuleBody : Int -> ImportInfo -> List (TopLevelStructure Declaration) -> Maybe Box
@@ -749,19 +1083,29 @@ formatModuleBody linesBetween importInfo body =
         entryType : Declaration -> BodyEntryType
         entryType adecl =
             case adecl of
-                CommonDeclaration (Decl.Value _ (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _))) ->
-                    BodyNamed (VarRef () name)
+                CommonDeclaration def ->
+                    case def of
+                        Definition (A.At _ pat) _ _ _ ->
+                            case pat of
+                                Src.PVar name ->
+                                    BodyNamed <| VarRef () name
 
-                CommonDeclaration (Decl.Union _ (A.At _ (Src.Union (A.At _ name) _ _))) ->
-                    BodyNamed (TagRef () name)
+                                _ ->
+                                    BodyUnnamed
 
-                CommonDeclaration (Decl.Alias _ (A.At _ (Src.Alias _ ( _, _, A.At _ name ) _ _))) ->
-                    BodyNamed (TagRef () name)
+                        TypeAnnotation ( _, name ) _ ->
+                            BodyNamed name
 
-                CommonDeclaration (Decl.Port _ (Src.Port _ ( _, _, A.At _ name ) _)) ->
-                    BodyNamed (VarRef () name)
+                Datatype ( _, NameWithArgs name _ ) _ ->
+                    BodyNamed <| TagRef () name
 
-                InfixDeclaration (A.At _ (Src.Infix _ _ _ _)) ->
+                TypeAlias _ ( _, NameWithArgs name _ ) _ ->
+                    BodyNamed <| TagRef () name
+
+                PortAnnotation ( _, name ) _ _ ->
+                    BodyNamed <| VarRef () name
+
+                Fixity _ _ _ _ ->
                     BodyFixity
     in
     formatTopLevelBody linesBetween importInfo <|
@@ -772,44 +1116,6 @@ type BodyEntryType
     = BodyNamed (Ref ())
     | BodyUnnamed
     | BodyFixity
-
-
-type Ref ns
-    = VarRef ns String
-    | TagRef ns String
-    | OpRef String
-
-
-refMap : (a -> b) -> Ref a -> Ref b
-refMap f ref =
-    case ref of
-        VarRef namespace name ->
-            VarRef (f namespace) name
-
-        TagRef namespace name ->
-            TagRef (f namespace) name
-
-        OpRef name ->
-            OpRef name
-
-
-type TopLevelStructure a
-    = DocComment Blocks
-    | BodyComment Src.FComment
-    | Entry a
-
-
-topLevelStructureMap : (a -> b) -> TopLevelStructure a -> TopLevelStructure b
-topLevelStructureMap f topLevelStructure =
-    case topLevelStructure of
-        DocComment blocks ->
-            DocComment blocks
-
-        BodyComment comment ->
-            BodyComment comment
-
-        Entry a ->
-            Entry (f a)
 
 
 formatTopLevelBody :
@@ -891,7 +1197,7 @@ formatTopLevelBody linesBetween importInfo body =
 
         boxes : List Box
         boxes =
-            intersperseMap (\a b -> extraLines (spacer a b))
+            intersperseMap (\a b -> extraLines <| spacer a b)
                 (formatTopLevelStructure importInfo << topLevelStructureMap Tuple.second)
                 body
     in
@@ -900,41 +1206,13 @@ formatTopLevelBody linesBetween importInfo body =
             Nothing
 
         _ ->
-            Just (Box.stack1 boxes)
-
-
-pairs : List a -> List ( a, a )
-pairs input =
-    let
-        step next ( prev, acc ) =
-            case prev of
-                Nothing ->
-                    ( Just next, acc )
-
-                Just prev_ ->
-                    ( Just next, ( next, prev_ ) :: acc )
-    in
-    List.foldr step ( Nothing, [] ) input
-        |> Tuple.second
-
-
-intersperseMap : (a -> a -> List b) -> (a -> b) -> List a -> List b
-intersperseMap spacer fn list =
-    case list of
-        [] ->
-            []
-
-        first :: _ ->
-            fn first
-                :: (pairs list
-                        |> List.concatMap (\( a, b ) -> spacer a b ++ [ fn b ])
-                   )
+            Just <| Box.stack1 boxes
 
 
 type ElmCodeBlock
     = DeclarationsCode (List (TopLevelStructure Declaration))
     | ExpressionsCode (List (TopLevelStructure (Src.C0Eol Src.Expr)))
-    | ModuleCode M.Module
+    | ModuleCode Module
 
 
 
@@ -972,20 +1250,19 @@ formatDocComment importInfo blocks =
         parse : String -> Maybe ElmCodeBlock
         parse source =
             -- source
-            --     |> Debug.log "formatDocComment.source"
             --     |> firstOf
             --         [ Maybe.map DeclarationsCode << Result.toMaybe << Parse.parseDeclarations
             --         , Maybe.map ExpressionsCode << Result.toMaybe << Parse.parseExpressions
             --         , Maybe.map ModuleCode << Result.toMaybe << Parse.parseModule
             --         ]
-            -- TODO!!!!
+            -- TODO
             Nothing
 
         format : ElmCodeBlock -> String
         format result =
             case result of
                 ModuleCode modu ->
-                    formatModule False 1 modu
+                    formatModule_ False 1 modu
                         |> Box.render
 
                 DeclarationsCode declarations ->
@@ -1009,7 +1286,10 @@ formatDocComment importInfo blocks =
         cleanBlock block =
             case block of
                 ElmDocs docs ->
-                    ElmDocs ((List.map << List.map) (String.replace "(..)" "") docs)
+                    ElmDocs <|
+                        (List.map << List.map)
+                            (String.replace "(..)" "")
+                            docs
 
                 _ ->
                     block
@@ -1021,12 +1301,12 @@ formatDocCommentString : String -> Box
 formatDocCommentString docs =
     case lines docs of
         [] ->
-            Box.line (Box.row [ Box.punc "{-|", Box.space, Box.punc "-}" ])
+            Box.line <| Box.row [ Box.punc "{-|", Box.space, Box.punc "-}" ]
 
         [ first ] ->
             Box.stack1
-                [ Box.line (Box.row [ Box.punc "{-|", Box.space, Box.literal first ])
-                , Box.line (Box.punc "-}")
+                [ Box.line <| Box.row [ Box.punc "{-|", Box.space, Box.literal first ]
+                , Box.line <| Box.punc "-}"
                 ]
 
         first :: rest ->
@@ -1045,44 +1325,43 @@ lines str =
             List.reverse result
 
 
-formatImport : Src.Import -> Box
-formatImport ((Src.Import ( preImportNameComments, A.At _ importName ) maybeAlias exposing_) as import__) =
+formatImport : UserImport -> Box
+formatImport ( ( _, rawName ) as name, (ImportMethod _ exposedVars) as method ) =
     let
-        maybeRequestedAs =
-            maybeAlias
-                |> Maybe.andThen
-                    (\aliasName ->
-                        if Src.c2Value aliasName == importName then
-                            Nothing
+        requestedAs =
+            case method of
+                ImportMethod ((Just ( _, aliasName )) as other) _ ->
+                    if [ aliasName ] == rawName then
+                        Nothing
 
-                        else
-                            Just aliasName
-                    )
+                    else
+                        other
+
+                ImportMethod other _ ->
+                    other
 
         asVar =
-            maybeRequestedAs
+            requestedAs
                 |> Maybe.map
-                    (\requestedAs ->
-                        formatImportClause
-                            (Just << Box.line << formatUppercaseIdentifier)
-                            "as"
-                            requestedAs
+                    (formatImportClause
+                        (Just << Box.line << formatUppercaseIdentifier)
+                        "as"
                     )
                 |> Maybe.join
 
         exposingVar =
             formatImportClause
-                (formatExposing formatDetailedListing)
+                (formatListing formatDetailedListing)
                 "exposing"
-                exposing_
+                exposedVars
 
         formatImportClause : (a -> Maybe Box) -> String -> Src.C2 a -> Maybe Box
         formatImportClause format keyw input =
             case Src.c2map format input of
-                ( [], [], Nothing ) ->
+                ( ( [], [] ), Nothing ) ->
                     Nothing
 
-                ( preKeyword, postKeyword, Just listing_ ) ->
+                ( ( preKeyword, postKeyword ), Just listing_ ) ->
                     case
                         ( formatPreCommented ( preKeyword, Box.line (Box.keyword keyw) )
                         , formatPreCommented ( postKeyword, listing_ )
@@ -1111,7 +1390,7 @@ formatImport ((Src.Import ( preImportNameComments, A.At _ importName ) maybeAlia
                     Just (pleaseReport "UNEXPECTED IMPORT" "import clause comments with no clause")
     in
     case
-        ( formatPreCommented (Src.c1map (Box.line << formatQualifiedUppercaseIdentifier) ( preImportNameComments, String.split "." importName ))
+        ( formatPreCommented <| Src.c1map (Box.line << formatQualifiedUppercaseIdentifier) name
         , asVar
         , exposingVar
         )
@@ -1221,105 +1500,101 @@ formatImport ((Src.Import ( preImportNameComments, A.At _ importName ) maybeAlia
                 ]
 
 
-formatListing : Src.Privacy -> Maybe Box
-formatListing listing =
+formatListing : (a -> List Box) -> Listing a -> Maybe Box
+formatListing format listing =
     case listing of
-        Src.Private ->
+        ClosedListing ->
             Nothing
 
-        Src.Public _ ->
-            -- TODO comments
-            Just (parens (formatCommented ( [], [], Box.line (Box.keyword "..") )))
+        OpenListing ( comments, () ) ->
+            Just <| parens <| formatCommented <| Tuple.pair comments <| Box.line <| Box.keyword ".."
 
-
-formatExposing : (List (Src.C2 Src.Exposed) -> List Box) -> Src.Exposing -> Maybe Box
-formatExposing format listing =
-    case listing of
-        Src.Open preComments postComments ->
-            Just (parens (formatCommented ( preComments, postComments, Box.line (Box.keyword "..") )))
-
-        Src.Explicit (A.At _ []) ->
-            Nothing
-
-        Src.Explicit (A.At region exposedList) ->
-            case format exposedList of
+        ExplicitListing vars multiline ->
+            case format vars of
                 [] ->
                     Nothing
 
                 vars_ ->
-                    let
-                        multiline =
-                            A.isMultiline region
-                    in
                     Just <| ElmStructure.group False "(" "," ")" multiline vars_
 
 
-formatDetailedListing : List (Src.C2 Src.Exposed) -> List Box
-formatDetailedListing exposedList =
-    -- List.concat
-    --     [ formatCommentedMap (\_ _ -> EQ)
-    --         (\name () -> Src.Operator A.zero name)
-    --         formatVarValue
-    --         listing.operators
-    --     , formatCommentedMap (\_ _ -> EQ)
-    --         (\name _ -> Src.Upper (A.At A.zero name) Src.Private)
-    --         formatVarValue
-    --         listing.types
-    --     , formatCommentedMap (\_ _ -> EQ)
-    --         (\name () -> Src.Lower (A.At A.zero name))
-    --         formatVarValue
-    --         listing.values
-    --     ]
-    exposedList
-        |> List.sortBy
-            (\( _, _, exposed ) ->
-                case exposed of
-                    Src.Lower (A.At _ name) ->
-                        ( 3, name )
 
-                    Src.Upper (A.At _ name) _ ->
-                        ( 2, name )
-
-                    Src.Operator _ name ->
-                        ( 1, name )
-            )
-        |> List.map (\exposed -> formatCommented (Src.c2map formatVarValue exposed))
+-- formatExposing : (List (Src.C2 Src.Exposed) -> List Box) -> Src.Exposing -> Maybe Box
+-- formatExposing format listing =
+--     case listing of
+--         Src.Open preComments postComments ->
+--             Just (parens (formatCommented ( preComments, postComments, Box.line (Box.keyword "..") )))
+--         Src.Explicit (A.At _ []) ->
+--             Nothing
+--         Src.Explicit (A.At region exposedList) ->
+--             case format exposedList of
+--                 [] ->
+--                     Nothing
+--                 vars_ ->
+--                     let
+--                         multiline =
+--                             A.isMultiline region
+--                     in
+--                     Just <| ElmStructure.group False "(" "," ")" multiline vars_
 
 
+formatDetailedListing : DetailedListing -> List Box
+formatDetailedListing listing =
+    List.concat
+        [ formatCommentedMap
+            (\name () -> OpValue name)
+            formatVarValue
+            listing.operators
+        , formatCommentedMap
+            (\name ( inner, listing_ ) -> Union ( inner, name ) listing_)
+            formatVarValue
+            listing.types
+        , formatCommentedMap
+            (\name () -> Value name)
+            formatVarValue
+            listing.values
+        ]
 
--- formatCommentedMap : (k -> k -> Order) -> (k -> v -> a) -> (a -> Box) -> Dict comparable k (C2 v) -> List Box
--- formatCommentedMap keyComparison construct format values =
---     let
---         format_ ( k, ( beforeComments, v, afterComments ) ) =
---             formatCommented ( beforeComments, format (construct k v), afterComments )
---     in
---     values
---         |> Map.toList keyComparison
---         |> List.map format_
+
+formatCommentedMap : (k -> v -> a) -> (a -> Box) -> CommentedMap k v -> List Box
+formatCommentedMap construct format values =
+    let
+        format_ ( k, ( c, v ) ) =
+            formatCommented ( c, format (construct k v) )
+    in
+    values
+        -- TODO
+        |> Map.toList (\_ _ -> EQ)
+        |> List.map format_
 
 
-formatVarValue : Src.Exposed -> Box
+formatVarValue : Value -> Box
 formatVarValue aval =
     case aval of
-        Src.Lower (A.At _ val) ->
-            Box.line (formatLowercaseIdentifier [] val)
+        Value val ->
+            Box.line <| formatLowercaseIdentifier [] val
 
-        Src.Operator _ name ->
-            Box.line (Box.identifier ("(" ++ name ++ ")"))
+        OpValue name ->
+            Box.line <| Box.identifier <| "(" ++ name ++ ")"
 
-        Src.Upper (A.At _ name) privacy ->
+        Union name listing ->
             case
-                ( formatListing privacy
-                  -- TODO post-comments on `name`
-                , formatTailCommented ( [], Box.line (formatUppercaseIdentifier name) )
+                ( formatListing
+                    (formatCommentedMap
+                        (\name_ () -> name_)
+                        (Box.line << formatUppercaseIdentifier)
+                    )
+                    listing
+                , formatTailCommented <| Src.c1map (Box.line << formatUppercaseIdentifier) name
+                , (\( c, _ ) -> c) name
                 )
             of
-                ( Just _, _ ) ->
+                ( Just _, _, _ ) ->
                     formatTailCommented <|
-                        -- TODO post-comments on `name`
-                        ( [], Box.line (Box.row [ formatUppercaseIdentifier name, Box.keyword "(..)" ]) )
+                        Src.c1map (\n -> Box.line <| Box.row [ formatUppercaseIdentifier n, Box.keyword "(..)" ])
+                            name
 
-                ( Nothing, name_ ) ->
+                ( Nothing, name_, _ ) ->
                     name_
 
 
@@ -1336,64 +1611,48 @@ formatTopLevelStructure importInfo topLevelStructure =
             entry
 
 
-formatCommonDeclaration : ImportInfo -> A.Located Src.Value -> Box
-formatCommonDeclaration importInfo (A.At _ (Src.Value _ ( postNameComments, A.At nameRegion name ) args ( comments, expr ) maybeType)) =
-    let
-        formattedDefinition =
-            formatDefinition importInfo (A.At nameRegion (Src.PVar name)) args comments expr
-    in
-    case maybeType of
-        Just typ ->
-            Box.stack1
-                [ formatTypeAnnotation ( postNameComments, VarRef () name ) typ
-                , formattedDefinition
-                ]
+formatCommonDeclaration : ImportInfo -> CommonDeclaration -> Box
+formatCommonDeclaration importInfo decl =
+    case decl of
+        Definition name args comments expr ->
+            formatDefinition importInfo name args comments expr
 
-        Nothing ->
-            formattedDefinition
+        TypeAnnotation name typ ->
+            formatTypeAnnotation name typ
 
 
 formatDeclaration : ImportInfo -> Declaration -> Box
 formatDeclaration importInfo decl =
     case decl of
-        CommonDeclaration (Decl.Value _ value) ->
-            formatCommonDeclaration importInfo (Debug.log "VALUE!" value)
+        CommonDeclaration def ->
+            formatCommonDeclaration importInfo def
 
-        CommonDeclaration (Decl.Union _ (A.At _ (Src.Union name args tags))) ->
+        Datatype nameWithArgs tags ->
             let
-                tags_ : Src.OpenCommentedList ( A.Located Name, List Src.Type )
-                tags_ =
-                    case tags of
-                        firstTag :: restTags ->
-                            Src.OpenCommentedList (List.map (\tag -> ( ( [], [], Nothing ), tag )) restTags)
-                                ( [], Nothing, firstTag )
-
-                        _ ->
-                            Debug.todo "tags"
-
-                ctor : ( A.Located Name, List Src.Type ) -> Box
-                ctor ( A.At _ tag, args_ ) =
-                    case Box.allSingles (List.map (\arg -> formatPreCommented ( [], typeParens ForCtor (formatType arg) )) args_) of
+                ctor : NameWithArgs Name Src.Type -> Box
+                ctor (NameWithArgs tag args_) =
+                    case Box.allSingles <| List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args_ of
                         Ok args__ ->
                             Box.line <| Box.row <| List.intersperse Box.space <| formatUppercaseIdentifier tag :: args__
 
                         Err [] ->
-                            Box.line (formatUppercaseIdentifier tag)
+                            Box.line <| formatUppercaseIdentifier tag
 
                         Err args__ ->
                             Box.stack1
-                                [ Box.line (formatUppercaseIdentifier tag)
+                                [ Box.line <| formatUppercaseIdentifier tag
                                 , Box.stack1 args__
                                     |> Box.indent
                                 ]
             in
-            case formatOpenCommentedList (Src.openCommentedListMap ctor tags_) of
+            case
+                formatOpenCommentedList <| Src.openCommentedListMap ctor tags
+            of
                 [] ->
                     crash "List can't be empty"
 
                 first :: rest ->
-                    -- TODO add comments surrounding name+args
-                    case formatCommented ( [], [], formatNameWithArgs (A.toValue name) (List.map (\(A.At _ arg) -> ( [], arg )) args) ) of
+                    case formatCommented <| Src.c2map formatNameWithArgs nameWithArgs of
                         Box.SingleLine nameWithArgs_ ->
                             Box.stack1
                                 [ Box.line <|
@@ -1418,23 +1677,23 @@ formatDeclaration importInfo decl =
                                     |> Box.indent
                                 ]
 
-        CommonDeclaration (Decl.Alias _ (A.At _ (Src.Alias preAlias ( preNameComments, postArgsComments, A.At _ name ) args typ))) ->
+        TypeAlias preAlias nameWithArgs typ ->
             ElmStructure.definition "="
                 True
-                (Box.line (Box.keyword "type"))
-                [ formatPreCommented ( preAlias, Box.line (Box.keyword "alias") )
-                , formatCommented ( preNameComments, postArgsComments, formatNameWithArgs name (List.map (Src.c1map A.toValue) args) )
+                (Box.line <| Box.keyword "type")
+                [ formatPreCommented ( preAlias, Box.line <| Box.keyword "alias" )
+                , formatCommented <| Src.c2map formatNameWithArgs nameWithArgs
                 ]
                 (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) typ)
 
-        CommonDeclaration (Decl.Port _ (Src.Port typeComments ( preNameComments, postNameComments, A.At _ name ) typ)) ->
+        PortAnnotation name typeComments typ ->
             ElmStructure.definition ":"
                 False
-                (Box.line (Box.keyword "port"))
-                [ formatCommented (Src.c2map (Box.line << formatLowercaseIdentifier []) ( preNameComments, postNameComments, name )) ]
-                (formatCommentedApostrophe typeComments (typeParens NotRequired (formatType typ)))
+                (Box.line <| Box.keyword "port")
+                [ formatCommented <| Src.c2map (Box.line << formatLowercaseIdentifier []) name ]
+                (formatCommentedApostrophe typeComments <| typeParens NotRequired <| formatType typ)
 
-        InfixDeclaration (A.At _ (Src.Infix op associativity precedence name)) ->
+        Fixity assoc precedence name value ->
             let
                 formatAssoc a =
                     case a of
@@ -1448,26 +1707,25 @@ formatDeclaration importInfo decl =
                             Box.keyword "non  "
             in
             ElmStructure.spaceSepOrIndented
-                (Box.line (Box.keyword "infix"))
-                [ formatPreCommented (Src.c1map (Box.line << formatAssoc) associativity)
-                , formatPreCommented (Src.c1map (Box.line << Box.literal << String.fromInt) precedence)
-                , formatCommented (Src.c2map (Box.line << formatSymbolIdentifierInParens) op)
-                , Box.line (Box.keyword "=")
-                , formatPreCommented (Src.c1map (Box.line << Box.identifier << formatVarName) name)
+                (Box.line <| Box.keyword "infix")
+                [ formatPreCommented <| Src.c1map (Box.line << formatAssoc) assoc
+                , formatPreCommented <| Src.c1map (Box.line << Box.literal << String.fromInt) precedence
+                , formatCommented <| Src.c2map (Box.line << formatSymbolIdentifierInParens) name
+                , Box.line <| Box.keyword "="
+                , formatPreCommented <| Src.c1map (Box.line << Box.identifier << formatVarName) value
                 ]
 
 
-formatNameWithArgs : Name -> List (Src.C1 Name) -> Box
-formatNameWithArgs name args =
+formatNameWithArgs : NameWithArgs Name Name -> Box
+formatNameWithArgs (NameWithArgs name args) =
     case Box.allSingles <| List.map (formatPreCommented << Src.c1map (Box.line << formatLowercaseIdentifier [])) args of
         Ok args_ ->
-            Box.line (Box.row (List.intersperse Box.space (formatUppercaseIdentifier name :: args_)))
+            Box.line <| Box.row <| List.intersperse Box.space (formatUppercaseIdentifier name :: args_)
 
         Err args_ ->
-            Box.stack1
-                ((Box.line <| formatUppercaseIdentifier name)
+            Box.stack1 <|
+                (Box.line <| formatUppercaseIdentifier name)
                     :: List.map Box.indent args_
-                )
 
 
 formatDefinition : ImportInfo -> Src.Pattern -> List (Src.C1 Src.Pattern) -> Src.FComments -> Src.Expr -> Box
@@ -1643,18 +1901,17 @@ formatPattern apattern =
 
 
 formatRecordPair : String -> (v -> Box) -> ( Src.C2 String, Src.C2 v, Bool ) -> Box
-formatRecordPair delim formatValue ( ( pre, postK, k ), ( preV, postV, v ), forceMultiline ) =
-    formatPreCommented
-        ( pre
-        , ElmStructure.equalsPair delim
-            forceMultiline
-            (formatCommented ( [], postK, Box.line (formatLowercaseIdentifier [] k) ))
-            (formatCommented ( preV, postV, formatValue v ))
-        )
+formatRecordPair delim formatValue ( ( ( pre, postK ), k ), v, forceMultiline ) =
+    ElmStructure.equalsPair delim
+        forceMultiline
+        (formatCommented <| Src.c2map (Box.line << formatLowercaseIdentifier []) ( ( [], postK ), k ))
+        (formatCommented <| Src.c2map formatValue v)
+        |> Tuple.pair pre
+        |> formatPreCommented
 
 
 formatPair : String -> Src.Pair Box.Line Box -> Box
-formatPair delim ((Src.Pair a b (Src.ForceMultiline forceMultiline)) as pair) =
+formatPair delim (Src.Pair a b (Src.ForceMultiline forceMultiline)) =
     ElmStructure.equalsPair delim
         forceMultiline
         (formatTailCommented <| Src.c1map Box.line a)
@@ -1938,14 +2195,14 @@ formatExpression importInfo (A.At region aexpr) =
                 |> Box.andThen
                     [ Box.blankLine
                     , Box.line (Box.keyword "else")
-                    , Box.indent <| formatCommented_ True <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) ( elsComments, [], els )
+                    , Box.indent <| formatCommented_ True <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) ( ( elsComments, [] ), els )
                     ]
             )
 
         Src.Let defs bodyComments expr ->
             let
                 letDeclarations : Src.C2 (A.Located Src.Def) -> List LetDeclaration
-                letDeclarations ( preDefComments, postDefComments, def ) =
+                letDeclarations ( ( preDefComments, postDefComments ), def ) =
                     List.map LetComment preDefComments
                         ++ LetCommonDeclaration def
                         :: List.map LetComment postDefComments
@@ -1998,7 +2255,7 @@ formatExpression importInfo (A.At region aexpr) =
                     ]
             )
 
-        Src.Case (( _, _, A.At subjectRegion _ ) as subject) clauses ->
+        Src.Case (( _, A.At subjectRegion _ ) as subject) clauses ->
             let
                 opening =
                     case
@@ -2024,14 +2281,14 @@ formatExpression importInfo (A.At region aexpr) =
                                 ]
 
                 clause : ( Src.C2 Src.Pattern, Src.C1 Src.Expr ) -> Box
-                clause ( ( prePat, postPat, A.At _ pat ), ( preExpr, expr ) ) =
+                clause ( ( ( prePat, postPat ), A.At _ pat ), ( preExpr, expr ) ) =
                     case
                         ( ( postPat
                           , formatPattern pat
                                 |> syntaxParens SyntaxSeparated
                                 |> negativeCasePatternWorkaround pat
                           )
-                        , ( formatCommentedStack (Src.c2map (syntaxParens SyntaxSeparated << formatPattern) ( prePat, postPat, pat ))
+                        , ( formatCommentedStack (Src.c2map (syntaxParens SyntaxSeparated << formatPattern) ( ( prePat, postPat ), pat ))
                                 |> negativeCasePatternWorkaround pat
                           , formatPreCommentedStack <| Src.c1map (syntaxParens SyntaxSeparated << formatExpression importInfo) ( preExpr, expr )
                           )
@@ -2156,7 +2413,7 @@ type LetDeclaration
 
 
 formatCommentedExpression : ImportInfo -> Src.C2 Src.Expr -> Box
-formatCommentedExpression importInfo ( pre, post, e ) =
+formatCommentedExpression importInfo ( ( pre, post ), e ) =
     let
         commented_ =
             -- TODO
@@ -2164,7 +2421,7 @@ formatCommentedExpression importInfo ( pre, post, e ) =
             --     Src.Parens (C ( pre__, post__ ) e__) ->
             --         ( pre ++ pre__, e__, post__ ++ post )
             --     _ ->
-            ( pre, post, e )
+            ( ( pre, post ), e )
     in
     formatCommented <| Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) commented_
 
@@ -2278,40 +2535,6 @@ formatBinops importInfo left ops multiline =
         (mapIsLast formatPair_ ops)
 
 
-
--- nowhere : A.Position
--- nowhere =
---     A.Position 0 0
--- noRegion : a -> A.Located a
--- noRegion =
---     A.at nowhere nowhere
--- formatRange_0_18 :
---     ImportInfo (List UppercaseIdentifier)
---     -> C2 before after (ASTNS annf (List UppercaseIdentifier) ExpressionNK)
---     -> C2 before after (ASTNS annf (List UppercaseIdentifier) ExpressionNK)
---     -> ( SyntaxContext, Box )
--- formatRange_0_18 importInfo left right =
---     case ( left, right ) of
---         ( C ( preLeft, [] ) left_, C ( preRight, [] ) right_ ) ->
---             App
---                 (I.Fix <| Identity <| VarExpr <| VarRef [ UppercaseIdentifier "List" ] <| LowercaseIdentifier "range")
---                 [ C preLeft <| I.convert (pure << extract) left_
---                 , C preRight <| I.convert (pure << extract) right_
---                 ]
---                 (FAJoinFirst JoinAll)
---                 |> (I.Fix << pure)
---                 |> formatExpression importInfo
---         _ ->
---             App
---                 (I.Fix <| Identity <| VarExpr <| VarRef [ UppercaseIdentifier "List" ] <| LowercaseIdentifier "range")
---                 [ C [] <| I.Fix <| pure <| Parens <| fmap (I.convert (pure << extract)) left
---                 , C [] <| I.Fix <| pure <| Parens <| fmap (I.convert (pure << extract)) right
---                 ]
---                 (FAJoinFirst JoinAll)
---                 |> (I.Fix << pure)
---                 |> formatExpression importInfo
-
-
 formatUnit : Char -> Char -> Src.FComments -> Box
 formatUnit left right comments =
     case ( left, comments ) of
@@ -2342,7 +2565,7 @@ formatComments comments =
 
 
 formatCommented_ : Bool -> Src.C2 Box -> Box
-formatCommented_ forceMultiline ( pre, post, inner ) =
+formatCommented_ forceMultiline ( ( pre, post ), inner ) =
     ElmStructure.forceableSpaceSepOrStack1 forceMultiline <|
         List.concat
             [ Maybe.toList (formatComments pre)
@@ -2363,17 +2586,17 @@ formatPreCommented ( pre, inner ) =
 
 formatCommentedApostrophe : Src.FComments -> Box -> Box
 formatCommentedApostrophe pre inner =
-    formatCommented ( pre, [], inner )
+    formatCommented ( ( pre, [] ), inner )
 
 
 formatTailCommented : Src.C1 Box -> Box
 formatTailCommented ( post, inner ) =
-    formatCommented ( [], post, inner )
+    formatCommented ( ( [], post ), inner )
 
 
 formatC2Eol : Src.C2Eol Box -> Box
 formatC2Eol ( ( pre, post, eol ), a ) =
-    formatCommented ( pre, post, formatEolCommented ( eol, a ) )
+    formatCommented ( ( pre, post ), formatEolCommented ( eol, a ) )
 
 
 formatEolCommented : ( Maybe String, Box ) -> Box
@@ -2390,7 +2613,7 @@ formatEolCommented ( post, inner ) =
 
 
 formatCommentedStack : Src.C2 Box -> Box
-formatCommentedStack ( pre, post, inner ) =
+formatCommentedStack ( ( pre, post ), inner ) =
     Box.stack1 <|
         List.map formatComment pre
             ++ inner
@@ -2399,13 +2622,13 @@ formatCommentedStack ( pre, post, inner ) =
 
 formatPreCommentedStack : Src.C1 Box -> Box
 formatPreCommentedStack ( pre, inner ) =
-    formatCommentedStack ( pre, [], inner )
+    formatCommentedStack ( ( pre, [] ), inner )
 
 
 formatKeywordCommented : String -> Src.C2 Box -> Box
-formatKeywordCommented word ( pre, post, value ) =
+formatKeywordCommented word ( ( pre, post ), value ) =
     ElmStructure.spaceSepOrIndented
-        (formatCommented ( pre, post, Box.line (Box.keyword word) ))
+        (formatCommented ( ( pre, post ), Box.line (Box.keyword word) ))
         [ value ]
 
 
@@ -2762,7 +2985,7 @@ formatType (A.At region atype) =
                 fields_ : List (Src.C2Eol (Src.Pair Name Src.Type))
                 fields_ =
                     List.map
-                        (\( preFieldComments, postFieldComments, ( ( postNameComments, A.At _ name ), ( preTypeComments, typ ) ) ) ->
+                        (\( ( preFieldComments, postFieldComments ), ( ( postNameComments, A.At _ name ), ( preTypeComments, typ ) ) ) ->
                             ( ( preFieldComments, postFieldComments, Nothing )
                             , Src.Pair ( postNameComments, name ) ( preTypeComments, typ ) (Src.ForceMultiline False)
                             )

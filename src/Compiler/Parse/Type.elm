@@ -109,8 +109,8 @@ term =
                                                                                             chompField
                                                                                                 |> P.bind
                                                                                                     (\( postFieldComments, field ) ->
-                                                                                                        chompRecordEnd postFieldComments [ ( [], preFieldComments, field ) ]
-                                                                                                            |> P.bind (\( trailingComments, fields ) -> P.addEnd start (Src.TRecord fields (Just ( initialComments, postNameComments, name )) trailingComments))
+                                                                                                        chompRecordEnd postFieldComments [ ( ( [], preFieldComments ), field ) ]
+                                                                                                            |> P.bind (\( trailingComments, fields ) -> P.addEnd start (Src.TRecord fields (Just ( ( initialComments, postNameComments ), name )) trailingComments))
                                                                                                     )
                                                                                         )
                                                                             )
@@ -130,7 +130,7 @@ term =
                                                                                                         Space.checkIndent end E.TRecordIndentEnd
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
-                                                                                                                    chompRecordEnd postExpressionComments [ ( [], initialComments, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ) ]
+                                                                                                                    chompRecordEnd postExpressionComments [ ( ( [], initialComments ), ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ) ]
                                                                                                                         |> P.bind (\( trailingComments, fields ) -> P.addEnd start (Src.TRecord fields Nothing trailingComments))
                                                                                                                 )
                                                                                                     )
@@ -349,7 +349,7 @@ chompRecordEnd comments fields =
                                 chompField
                                     |> P.bind
                                         (\( postFieldComments, field ) ->
-                                            chompRecordEnd postFieldComments (( comments, preNameComments, field ) :: fields)
+                                            chompRecordEnd postFieldComments (( ( comments, preNameComments ), field ) :: fields)
                                         )
                             )
                 )

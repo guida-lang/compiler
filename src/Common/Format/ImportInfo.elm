@@ -98,7 +98,7 @@ fromImports knownContents rawImports =
                         |> Maybe.withDefault []
 
         getExposed : String -> Src.Import -> Dict String String String
-        getExposed moduleName (Src.Import _ _ ( _, _, exposing_ )) =
+        getExposed moduleName (Src.Import _ _ ( _, exposing_ )) =
             Dict.fromList identity <|
                 List.map (flip Tuple.pair moduleName) <|
                     case exposing_ of
@@ -172,7 +172,7 @@ fromImports knownContents rawImports =
             Dict.empty
 
         exposesAll : Src.Import -> Bool
-        exposesAll (Src.Import _ _ ( _, _, exposing_ )) =
+        exposesAll (Src.Import _ _ ( _, exposing_ )) =
             case exposing_ of
                 Src.Open _ _ ->
                     True
