@@ -470,7 +470,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
 
 
 isMain : A.Located Src.Value -> Bool
-isMain (A.At _ (Src.Value (A.At _ name) _ _ _)) =
+isMain (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) =
     name == Name.main_
 
 
@@ -711,7 +711,7 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 
         regionDict : Dict String Name.Name A.Region
         regionDict =
-            Dict.fromList identity (List.map (\(Src.Import (A.At region name) _ _) -> ( name, region )) imports)
+            Dict.fromList identity (List.map (\(Src.Import ( _, A.At region name ) _ _) -> ( name, region )) imports)
 
         toError : ( Name.Name, Import.Problem ) -> Import.Error
         toError ( name, problem ) =

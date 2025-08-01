@@ -339,12 +339,12 @@ attemptImport lines =
         src =
             linesToByteString lines
 
-        parser : P.Parser () Src.Import
+        parser : P.Parser () (Src.C1 Src.Import)
         parser =
             P.specialize (\_ _ _ -> ()) PM.chompImport
     in
     case P.fromByteString parser (\_ _ -> ()) src of
-        Ok (Src.Import (A.At _ name) _ _) ->
+        Ok ( _, Src.Import ( _, A.At _ name ) _ _ ) ->
             Done (Import name src)
 
         Err () ->
@@ -378,18 +378,18 @@ attemptDeclOrExpr lines =
 
         declParser : P.Parser ( Row, Col ) ( PD.Decl, A.Position )
         declParser =
-            P.specialize (toDeclPosition src) (PD.declaration SV.Guida)
+            P.specialize (toDeclPosition src) (P.fmap (Tuple.mapFirst Src.c2Value) (PD.declaration SV.Guida))
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
             case decl of
-                PD.Value _ (A.At _ (Src.Value (A.At _ name) _ _ _)) ->
+                PD.Value _ (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) ->
                     ifDone lines (Decl name src)
 
                 PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
                     ifDone lines (Type name src)
 
-                PD.Alias _ (A.At _ (Src.Alias (A.At _ name) _ _)) ->
+                PD.Alias _ (A.At _ (Src.Alias _ ( _, A.At _ name ) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Port _ _ ->
@@ -404,7 +404,7 @@ attemptDeclOrExpr lines =
 
             else
                 let
-                    exprParser : P.Parser ( Row, Col ) ( Src.Expr, A.Position )
+                    exprParser : P.Parser ( Row, Col ) ( Src.C1 Src.Expr, A.Position )
                     exprParser =
                         P.specialize (toExprPosition src) (PE.expression SV.Guida)
                 in
@@ -515,7 +515,7 @@ annotation =
                 PS.chompAndCheckIndent err_ err
                     |> P.bind (\_ -> P.word1 ':' err)
                     |> P.bind (\_ -> PS.chompAndCheckIndent err_ err)
-                    |> P.bind (\_ -> P.specialize err_ PT.expression)
+                    |> P.bind (\_ -> P.specialize err_ (PT.expression []))
                     |> P.bind (\_ -> PS.checkFreshLine err)
                     |> P.fmap (\_ -> name)
             )

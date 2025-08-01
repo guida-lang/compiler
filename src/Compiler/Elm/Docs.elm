@@ -18,6 +18,7 @@ module Compiler.Elm.Docs exposing
     , jsonEncoder
     , jsonModuleDecoder
     , jsonModuleEncoder
+    , parseOverview
     )
 
 import Basics.Extra exposing (flip)
@@ -328,7 +329,7 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 
         Can.Export exportDict ->
             case docs of
-                Src.NoDocs region ->
+                Src.NoDocs region _ ->
                     Err (E.NoDocs region)
 
                 Src.YesDocs overview comments ->
@@ -367,7 +368,14 @@ chompOverviewHelp names =
             (\isDocs ->
                 if isDocs then
                     Space.chomp E.Space
-                        |> P.bind (\_ -> chompDocs names)
+                        |> P.bind
+                            (\c104 ->
+                                let
+                                    _ =
+                                        Debug.log "c104" c104
+                                in
+                                chompDocs names
+                            )
                         |> P.fmap P.Loop
 
                 else
@@ -393,7 +401,11 @@ chompDocsHelp names =
             (\name ->
                 Space.chomp E.Space
                     |> P.bind
-                        (\_ ->
+                        (\c105 ->
+                            let
+                                _ =
+                                    Debug.log "c105" c105
+                            in
                             P.oneOfWithFallback
                                 [ P.getPosition
                                     |> P.bind
@@ -405,7 +417,14 @@ chompDocsHelp names =
                                                             |> P.bind
                                                                 (\_ ->
                                                                     Space.chomp E.Space
-                                                                        |> P.fmap (\_ -> P.Loop (name :: names))
+                                                                        |> P.fmap
+                                                                            (\c106 ->
+                                                                                let
+                                                                                    _ =
+                                                                                        Debug.log "c106" c106
+                                                                                in
+                                                                                P.Loop (name :: names)
+                                                                            )
                                                                 )
                                                     )
                                         )

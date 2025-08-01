@@ -90,7 +90,7 @@ simplify (A.At _ pattern) =
         Can.PInt int ->
             Literal (Int int)
 
-        Can.PStr str ->
+        Can.PStr str _ ->
             Literal (Str str)
 
         Can.PChr chr ->

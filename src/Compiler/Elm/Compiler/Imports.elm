@@ -11,25 +11,25 @@ import System.TypeCheck.IO as IO
 -- DEFAULTS
 
 
-defaults : List Src.Import
+defaults : List (Src.C1 Src.Import)
 defaults =
-    [ import_ ModuleName.basics Nothing Src.Open
-    , import_ ModuleName.debug Nothing closed
-    , import_ ModuleName.list Nothing (operator "::")
-    , import_ ModuleName.maybe Nothing (typeOpen Name.maybe)
-    , import_ ModuleName.result Nothing (typeOpen Name.result)
-    , import_ ModuleName.string Nothing (typeClosed Name.string)
-    , import_ ModuleName.char Nothing (typeClosed Name.char)
-    , import_ ModuleName.tuple Nothing closed
-    , import_ ModuleName.platform Nothing (typeClosed Name.program)
-    , import_ ModuleName.cmd (Just Name.cmd) (typeClosed Name.cmd)
-    , import_ ModuleName.sub (Just Name.sub) (typeClosed Name.sub)
+    [ ( [], import_ ModuleName.basics Nothing (Src.Open [] []) )
+    , ( [], import_ ModuleName.debug Nothing closed )
+    , ( [], import_ ModuleName.list Nothing (operator "::") )
+    , ( [], import_ ModuleName.maybe Nothing (typeOpen Name.maybe) )
+    , ( [], import_ ModuleName.result Nothing (typeOpen Name.result) )
+    , ( [], import_ ModuleName.string Nothing (typeClosed Name.string) )
+    , ( [], import_ ModuleName.char Nothing (typeClosed Name.char) )
+    , ( [], import_ ModuleName.tuple Nothing closed )
+    , ( [], import_ ModuleName.platform Nothing (typeClosed Name.program) )
+    , ( [], import_ ModuleName.cmd (Just Name.cmd) (typeClosed Name.cmd) )
+    , ( [], import_ ModuleName.sub (Just Name.sub) (typeClosed Name.sub) )
     ]
 
 
 import_ : IO.Canonical -> Maybe Name -> Src.Exposing -> Src.Import
 import_ (IO.Canonical _ name) maybeAlias exposing_ =
-    Src.Import (A.At A.zero name) maybeAlias exposing_
+    Src.Import ( [], A.At A.zero name ) (Maybe.map (\alias_ -> ( ( [], [] ), alias_ )) maybeAlias) ( ( [], [] ), exposing_ )
 
 
 
@@ -38,19 +38,19 @@ import_ (IO.Canonical _ name) maybeAlias exposing_ =
 
 closed : Src.Exposing
 closed =
-    Src.Explicit []
+    Src.Explicit (A.At A.zero [])
 
 
 typeOpen : Name -> Src.Exposing
 typeOpen name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) (Src.Public A.zero) ]
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Upper (A.At A.zero name) (Src.Public A.zero) ) ])
 
 
 typeClosed : Name -> Src.Exposing
 typeClosed name =
-    Src.Explicit [ Src.Upper (A.At A.zero name) Src.Private ]
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Upper (A.At A.zero name) Src.Private ) ])
 
 
 operator : Name -> Src.Exposing
 operator op =
-    Src.Explicit [ Src.Operator A.zero op ]
+    Src.Explicit (A.At A.zero [ ( ( [], [] ), Src.Operator A.zero op ) ])

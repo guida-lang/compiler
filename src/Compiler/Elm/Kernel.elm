@@ -87,7 +87,7 @@ addField chunk fields =
 
 
 type Content
-    = Content (List Src.Import) (List Chunk)
+    = Content (List (Src.C1 Src.Import)) (List Chunk)
 
 
 type alias Foreigns =
@@ -108,7 +108,14 @@ parser : Pkg.Name -> Foreigns -> P.Parser () Content
 parser pkg foreigns =
     P.word2 '/' '*' toError
         |> P.bind (\_ -> Space.chomp ignoreError)
-        |> P.bind (\_ -> Space.checkFreshLine toError)
+        |> P.bind
+            (\c107 ->
+                let
+                    _ =
+                        Debug.log "c107" c107
+                in
+                Space.checkFreshLine toError
+            )
         |> P.bind (\_ -> P.specialize ignoreError (Module.chompImports []))
         |> P.bind
             (\imports ->
@@ -332,13 +339,13 @@ type alias VarTable =
     Dict String Name Chunk
 
 
-toVarTable : Pkg.Name -> Foreigns -> List Src.Import -> VarTable
+toVarTable : Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
 toVarTable pkg foreigns imports =
     List.foldl (addImport pkg foreigns) Dict.empty imports
 
 
-addImport : Pkg.Name -> Foreigns -> Src.Import -> VarTable -> VarTable
-addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vtable =
+addImport : Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
+addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
     if Name.isKernel importName then
         case maybeAlias of
             Just _ ->
@@ -364,7 +371,7 @@ addImport pkg foreigns (Src.Import (A.At _ importName) maybeAlias exposing_) vta
 
             prefix : Name
             prefix =
-                toPrefix importName maybeAlias
+                toPrefix importName (Maybe.map Src.c2Value maybeAlias)
 
             add : Name -> Dict String Name Chunk -> Dict String Name Chunk
             add name table =
@@ -390,11 +397,11 @@ toPrefix home maybeAlias =
 toNames : Src.Exposing -> List Name
 toNames exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             crash "cannot have `exposing (..)` in kernel code."
 
-        Src.Explicit exposedList ->
-            List.map toName exposedList
+        Src.Explicit (A.At _ exposedList) ->
+            List.map (Src.c2Value >> toName) exposedList
 
 
 toName : Src.Exposed -> Name

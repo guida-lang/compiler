@@ -710,12 +710,12 @@ extractExposedPossiblyTests path =
                             exposed : List Name
                             exposed =
                                 case exposing_ of
-                                    Src.Open ->
+                                    Src.Open _ _ ->
                                         []
 
-                                    Src.Explicit exposedList ->
+                                    Src.Explicit (A.At _ exposedList) ->
                                         List.filterMap
-                                            (\exposedValue ->
+                                            (\( _, exposedValue ) ->
                                                 case exposedValue of
                                                     Src.Lower (A.At _ lowerName) ->
                                                         Just lowerName

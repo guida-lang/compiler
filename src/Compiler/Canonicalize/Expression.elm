@@ -59,16 +59,16 @@ canonicalize : SyntaxVersion -> Env.Env -> Src.Expr -> EResult FreeLocals (List 
 canonicalize syntaxVersion env (A.At region expression) =
     R.fmap (A.At region) <|
         case expression of
-            Src.Str string ->
+            Src.Str string _ ->
                 R.ok (Can.Str string)
 
             Src.Chr char ->
                 R.ok (Can.Chr char)
 
-            Src.Int int ->
+            Src.Int int _ ->
                 R.ok (Can.Int int)
 
-            Src.Float float ->
+            Src.Float float _ ->
                 R.ok (Can.Float float)
 
             Src.Var varType name ->
@@ -87,8 +87,8 @@ canonicalize syntaxVersion env (A.At region expression) =
                     Src.CapVar ->
                         R.fmap (toVarCtor name) (Env.findCtorQual region env prefix name)
 
-            Src.List exprs ->
-                R.fmap Can.List (R.traverse (canonicalize syntaxVersion env) exprs)
+            Src.List exprs _ ->
+                R.fmap Can.List (R.traverse (canonicalize syntaxVersion env) (List.map Tuple.second exprs))
 
             Src.Op op ->
                 Env.findBinop region env op
@@ -103,10 +103,10 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Binops ops final ->
                 R.fmap A.toValue (canonicalizeBinops syntaxVersion region env ops final)
 
-            Src.Lambda srcArgs body ->
+            Src.Lambda ( _, srcArgs ) ( _, body ) ->
                 delayedUsage <|
                     (Pattern.verify Error.DPLambdaArgs
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
+                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, bindings ) ->
                                 Env.addLocals bindings env
@@ -123,18 +123,21 @@ canonicalize syntaxVersion env (A.At region expression) =
 
             Src.Call func args ->
                 R.fmap Can.Call (canonicalize syntaxVersion env func)
-                    |> R.apply (R.traverse (canonicalize syntaxVersion env) args)
+                    |> R.apply (R.traverse (canonicalize syntaxVersion env) (List.map Src.c1Value args))
 
             Src.If branches finally ->
-                R.fmap Can.If (R.traverse (canonicalizeIfBranch syntaxVersion env) branches)
-                    |> R.apply (canonicalize syntaxVersion env finally)
+                R.fmap Can.If
+                    (R.traverse (canonicalizeIfBranch syntaxVersion env)
+                        (List.map (Src.c1Value >> Tuple.mapBoth Src.c2Value Src.c2Value) branches)
+                    )
+                    |> R.apply (canonicalize syntaxVersion env (Src.c1Value finally))
 
-            Src.Let defs expr ->
-                R.fmap A.toValue (canonicalizeLet syntaxVersion region env defs expr)
+            Src.Let defs _ expr ->
+                R.fmap A.toValue (canonicalizeLet syntaxVersion region env (List.map Src.c2Value defs) expr)
 
             Src.Case expr branches ->
-                R.fmap Can.Case (canonicalize syntaxVersion env expr)
-                    |> R.apply (R.traverse (canonicalizeCaseBranch syntaxVersion env) branches)
+                R.fmap Can.Case (canonicalize syntaxVersion env (Src.c2Value expr))
+                    |> R.apply (R.traverse (canonicalizeCaseBranch syntaxVersion env) (List.map (Tuple.mapBoth Src.c2Value Src.c1Value) branches))
 
             Src.Accessor field ->
                 R.pure (Can.Accessor field)
@@ -143,7 +146,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Access (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
-            Src.Update name fields ->
+            Src.Update ( _, name ) fields ->
                 let
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
@@ -162,10 +165,10 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Unit ->
                 R.ok Can.Unit
 
-            Src.Tuple a b cs ->
+            Src.Tuple ( _, a ) ( _, b ) cs ->
                 R.fmap Can.Tuple (canonicalize syntaxVersion env a)
                     |> R.apply (canonicalize syntaxVersion env b)
-                    |> R.apply (canonicalizeTupleExtras syntaxVersion region env cs)
+                    |> R.apply (canonicalizeTupleExtras syntaxVersion region env (List.map Src.c2Value cs))
 
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)
@@ -347,43 +350,43 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PVar name ->
             Dups.insert name region region bindings
 
-        Src.PRecord fields ->
+        Src.PRecord ( _, fields ) ->
             let
-                addField : A.Located Name -> Dups.Tracker A.Region -> Dups.Tracker A.Region
-                addField (A.At fieldRegion name) dict =
+                addField : Src.C2 (A.Located Name) -> Dups.Tracker A.Region -> Dups.Tracker A.Region
+                addField ( _, A.At fieldRegion name ) dict =
                     Dups.insert name fieldRegion fieldRegion dict
             in
             List.foldl addField bindings fields
 
-        Src.PUnit ->
+        Src.PUnit _ ->
             bindings
 
         Src.PTuple a b cs ->
-            List.foldl (flip addBindingsHelp) bindings (a :: b :: cs)
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c2Value (a :: b :: cs))
 
         Src.PCtor _ _ patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c1Value patterns)
 
         Src.PCtorQual _ _ _ patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c1Value patterns)
 
-        Src.PList patterns ->
-            List.foldl (flip addBindingsHelp) bindings patterns
+        Src.PList ( _, patterns ) ->
+            List.foldl (flip addBindingsHelp) bindings (List.map Src.c2Value patterns)
 
-        Src.PCons hd tl ->
+        Src.PCons ( _, hd ) ( _, tl ) ->
             addBindingsHelp (addBindingsHelp bindings hd) tl
 
-        Src.PAlias aliasPattern (A.At nameRegion name) ->
+        Src.PAlias ( _, aliasPattern ) ( _, A.At nameRegion name ) ->
             Dups.insert name nameRegion nameRegion <|
                 addBindingsHelp bindings aliasPattern
 
         Src.PChr _ ->
             bindings
 
-        Src.PStr _ ->
+        Src.PStr _ _ ->
             bindings
 
-        Src.PInt _ ->
+        Src.PInt _ _ ->
             bindings
 
 
@@ -404,7 +407,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
             case maybeType of
                 Nothing ->
                     Pattern.verify (Error.DPFuncArgs name)
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) srcArgs)
+                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, argBindings ) ->
                                 Env.addLocals argBindings env
@@ -432,7 +435,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
                         |> R.bind
                             (\(Can.Forall freeVars ctipe) ->
                                 Pattern.verify (Error.DPFuncArgs name)
-                                    (gatherTypedArgs syntaxVersion env name srcArgs ctipe Index.first [])
+                                    (gatherTypedArgs syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
                                             Env.addLocals argBindings env
@@ -527,37 +530,37 @@ getPatternNames names (A.At region pattern) =
         Src.PVar name ->
             A.At region name :: names
 
-        Src.PRecord fields ->
-            fields ++ names
+        Src.PRecord ( _, fields ) ->
+            List.map Src.c2Value fields ++ names
 
-        Src.PAlias ptrn name ->
+        Src.PAlias ( _, ptrn ) ( _, name ) ->
             getPatternNames (name :: names) ptrn
 
-        Src.PUnit ->
+        Src.PUnit _ ->
             names
 
-        Src.PTuple a b cs ->
-            List.foldl (flip getPatternNames) (getPatternNames (getPatternNames names a) b) cs
+        Src.PTuple ( _, a ) ( _, b ) cs ->
+            List.foldl (flip getPatternNames) (getPatternNames (getPatternNames names a) b) (List.map Src.c2Value cs)
 
         Src.PCtor _ _ args ->
-            List.foldl (flip getPatternNames) names args
+            List.foldl (flip getPatternNames) names (List.map Src.c1Value args)
 
         Src.PCtorQual _ _ _ args ->
-            List.foldl (flip getPatternNames) names args
+            List.foldl (flip getPatternNames) names (List.map Src.c1Value args)
 
-        Src.PList patterns ->
-            List.foldl (flip getPatternNames) names patterns
+        Src.PList ( _, patterns ) ->
+            List.foldl (flip getPatternNames) names (List.map Src.c2Value patterns)
 
-        Src.PCons hd tl ->
+        Src.PCons ( _, hd ) ( _, tl ) ->
             getPatternNames (getPatternNames names hd) tl
 
         Src.PChr _ ->
             names
 
-        Src.PStr _ ->
+        Src.PStr _ _ ->
             names
 
-        Src.PInt _ ->
+        Src.PInt _ _ ->
             names
 
 

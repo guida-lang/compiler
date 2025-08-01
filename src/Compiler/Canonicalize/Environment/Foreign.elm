@@ -85,7 +85,7 @@ toSafeImports (IO.Canonical package _) imports =
 
 
 isNormal : Src.Import -> Bool
-isNormal (Src.Import (A.At _ name) maybeAlias _) =
+isNormal (Src.Import ( _, A.At _ name ) maybeAlias _) =
     if Name.isKernel name then
         case maybeAlias of
             Nothing ->
@@ -103,14 +103,14 @@ isNormal (Src.Import (A.At _ name) maybeAlias _) =
 
 
 addImport : Dict String ModuleName.Raw I.Interface -> State -> Src.Import -> FResult i w State
-addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
+addImport ifaces state (Src.Import ( _, A.At _ name ) maybeAlias ( _, exposing_ )) =
     let
         (I.Interface pkg defs unions aliases binops) =
             Utils.find identity name ifaces
 
         prefix : Name
         prefix =
-            Maybe.withDefault name maybeAlias
+            Maybe.withDefault name (Maybe.map Src.c2Value maybeAlias)
 
         home : IO.Canonical
         home =
@@ -153,7 +153,7 @@ addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
             addQualified prefix ctors state.q_ctors
     in
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             let
                 vs2 : Env.Exposed Can.Annotation
                 vs2 =
@@ -173,11 +173,11 @@ addImport ifaces state (Src.Import (A.At _ name) maybeAlias exposing_) =
             in
             R.ok (State vs2 ts2 cs2 bs2 qvs2 qts2 qcs2)
 
-        Src.Explicit exposedList ->
+        Src.Explicit (A.At _ exposedList) ->
             Utils.foldM
                 (addExposedValue home vars rawTypeInfo binops)
                 (State state.vars state.types state.ctors state.binops qvs2 qts2 qcs2)
-                exposedList
+                (List.map Src.c2Value exposedList)
 
 
 addExposed : Env.Exposed a -> Env.Exposed a -> Env.Exposed a

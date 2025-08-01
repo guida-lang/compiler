@@ -32,8 +32,8 @@ isDecimalDigit word =
 
 
 type Number
-    = Int Int
-    | Float Float
+    = Int Int String
+    | Float Float String
 
 
 number : (Row -> Col -> x) -> (E.Number -> Row -> Col -> x) -> P.Parser x Number
@@ -79,7 +79,7 @@ number toExpectation toError =
 
                                 integer : Number
                                 integer =
-                                    Int n
+                                    Int n (String.slice pos newPos src)
 
                                 newState : P.State
                                 newState =
@@ -93,9 +93,13 @@ number toExpectation toError =
                                 newCol =
                                     col + (newPos - pos)
 
+                                copySrc : String
+                                copySrc =
+                                    String.slice pos newPos src
+
                                 copy : Float
                                 copy =
-                                    case String.toFloat (String.slice pos newPos src) of
+                                    case String.toFloat copySrc of
                                         Just copy_ ->
                                             copy_
 
@@ -104,7 +108,7 @@ number toExpectation toError =
 
                                 float : Number
                                 float =
-                                    Float copy
+                                    Float copy copySrc
 
                                 newState : P.State
                                 newState =
