@@ -141,11 +141,11 @@ fromRawType (A.At _ astType) =
         Src.TUnit ->
             Unit
 
-        Src.TTuple a b cs ->
+        Src.TTuple ( _, a ) ( _, b ) cs ->
             Tuple
                 (fromRawType a)
                 (fromRawType b)
-                (List.map fromRawType cs)
+                (List.map (Src.c2EolValue >> fromRawType) cs)
 
         Src.TType _ name args ->
             Type name (List.map fromRawType (List.map Tuple.second args))

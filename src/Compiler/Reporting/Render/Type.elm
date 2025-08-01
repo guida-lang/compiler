@@ -183,8 +183,8 @@ srcToDoc context (A.At _ tipe) =
         Src.TUnit ->
             D.fromChars "()"
 
-        Src.TTuple a b cs ->
-            tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) cs)
+        Src.TTuple ( _, a ) ( _, b ) cs ->
+            tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) (List.map Src.c2EolValue cs))
 
 
 srcFieldToDocs : Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type ) -> ( D.Doc, D.Doc )

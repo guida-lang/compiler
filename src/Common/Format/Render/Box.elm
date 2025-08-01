@@ -759,7 +759,7 @@ formatModule addDefaultHeader spacing modu =
                 (\( ( preDeclComments, postDeclComments ), decl ) ->
                     List.map BodyComment preDeclComments
                         ++ (case decl of
-                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments ( _, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType)) ->
+                                Decl.Value maybeDocs (A.At _ ((Src.Value preValueComments ( postNameComments, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType) as x)) ->
                                     (maybeDocs
                                         |> Maybe.map
                                             (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
@@ -781,8 +781,15 @@ formatModule addDefaultHeader spacing modu =
                                         |> Maybe.withDefault []
                                     )
                                         ++ List.map BodyComment preValueComments
-                                        ++ Maybe.toList (Maybe.map (\typ -> Entry (CommonDeclaration (TypeAnnotation ( [], VarRef () name ) typ))) maybeType)
-                                        ++ [ Entry (CommonDeclaration (Definition (A.At nameRegion (Src.PVar name)) srcArgs valueBodyComments valueBody)) ]
+                                        ++ (maybeType
+                                                |> Maybe.map
+                                                    (\( postComments, ( ( preTypComments, postTypeComments ), typ ) ) ->
+                                                        Entry (CommonDeclaration (TypeAnnotation ( preTypComments, VarRef () name ) ( postTypeComments, typ )))
+                                                            :: List.map BodyComment postComments
+                                                    )
+                                                |> Maybe.withDefault []
+                                           )
+                                        ++ [ Entry (CommonDeclaration (Definition (A.At nameRegion (Src.PVar name)) srcArgs (postNameComments ++ valueBodyComments) valueBody)) ]
 
                                 Decl.Union maybeDocs (A.At _ (Src.Union (A.At _ name) args constructors)) ->
                                     let
@@ -2401,7 +2408,7 @@ formatExpression importInfo (A.At region aexpr) =
             , Box.line <|
                 Box.row
                     [ Box.punc "[glsl|"
-                    , Box.literal src
+                    , Box.literal (Shader.unescape src)
                     , Box.punc "|]"
                     ]
             )
@@ -3016,7 +3023,7 @@ formatType (A.At region atype) =
         Src.TTuple a b cs ->
             let
                 types =
-                    List.map (Tuple.pair ( [], [], Nothing )) (a :: b :: cs)
+                    a :: b :: cs
 
                 forceMultiline =
                     -- TODO

@@ -198,7 +198,7 @@ toNodeOne syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) s
                                 )
                     )
 
-        Just ( _, srcType ) ->
+        Just ( _, ( _, srcType ) ) ->
             Type.toAnnotation syntaxVersion env srcType
                 |> R.bind
                     (\(Can.Forall freeVars tipe) ->

@@ -63,11 +63,7 @@ term =
                                         in
                                         P.specialize E.TTupleType (expression c94)
                                             |> P.bind
-                                                (\( ( foo, tipe ), end ) ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "foo1" foo
-                                                    in
+                                                (\( tipe, end ) ->
                                                     Space.checkIndent end E.TTupleIndentEnd
                                                         |> P.bind (\_ -> chompTupleEnd start tipe [])
                                                 )
@@ -288,26 +284,26 @@ chompArgs preComments args end =
 -- TUPLES
 
 
-chompTupleEnd : A.Position -> Src.Type -> List Src.Type -> P.Parser E.TTuple Src.Type
-chompTupleEnd start firstType revTypes =
+chompTupleEnd : A.Position -> Src.C2Eol Src.Type -> List (Src.C2Eol Src.Type) -> P.Parser E.TTuple Src.Type
+chompTupleEnd start ( firstTimeComments, firstType ) revTypes =
     P.oneOf E.TTupleEnd
         [ P.word1 ',' E.TTupleEnd
             |> P.bind
                 (\_ ->
                     Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentTypeN
                         |> P.bind
-                            (\c100 ->
+                            (\preExpressionComments ->
                                 let
                                     _ =
-                                        Debug.log "c100" c100
+                                        Debug.log "c100" preExpressionComments
                                 in
-                                P.specialize E.TTupleType (expression [])
+                                P.specialize E.TTupleType (expression preExpressionComments)
                                     |> P.bind
-                                        (\( ( _, tipe ), end ) ->
+                                        (\( tipe, end ) ->
                                             Space.checkIndent end E.TTupleIndentEnd
                                                 |> P.bind
                                                     (\_ ->
-                                                        chompTupleEnd start firstType (tipe :: revTypes)
+                                                        chompTupleEnd start ( firstTimeComments, firstType ) (tipe :: revTypes)
                                                     )
                                         )
                             )
@@ -320,7 +316,7 @@ chompTupleEnd start firstType revTypes =
                             P.pure firstType
 
                         secondType :: otherTypes ->
-                            P.addEnd start (Src.TTuple firstType secondType otherTypes)
+                            P.addEnd start (Src.TTuple ( firstTimeComments, firstType ) secondType otherTypes)
                 )
         ]
 

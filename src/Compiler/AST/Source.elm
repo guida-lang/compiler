@@ -296,7 +296,7 @@ type Type_
     | TTypeQual A.Region Name Name (List (C1 Type))
     | TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
     | TUnit
-    | TTuple Type Type (List Type)
+    | TTuple (C2Eol Type) (C2Eol Type) (List (C2Eol Type))
 
 
 
@@ -327,7 +327,7 @@ type Import
 
 
 type Value
-    = Value FComments (C1 (A.Located Name)) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 Type))
+    = Value FComments (C1 (A.Located Name)) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 (C2 Type)))
 
 
 type Union
@@ -630,9 +630,9 @@ internalTypeEncoder type_ =
         TTuple a b cs ->
             BE.sequence
                 [ BE.unsignedInt8 6
-                , typeEncoder a
-                , typeEncoder b
-                , BE.list typeEncoder cs
+                , c2EolEncoder typeEncoder a
+                , c2EolEncoder typeEncoder b
+                , BE.list (c2EolEncoder typeEncoder) cs
                 ]
 
 
@@ -674,9 +674,9 @@ internalTypeDecoder =
 
                     6 ->
                         BD.map3 TTuple
-                            typeDecoder
-                            typeDecoder
-                            (BD.list typeDecoder)
+                            (c2EolDecoder typeDecoder)
+                            (c2EolDecoder typeDecoder)
+                            (BD.list (c2EolDecoder typeDecoder))
 
                     _ ->
                         BD.fail
@@ -811,7 +811,7 @@ valueEncoder (Value formatComments name srcArgs body maybeType) =
         , c1Encoder (A.locatedEncoder BE.string) name
         , BE.list (c1Encoder patternEncoder) srcArgs
         , c1Encoder exprEncoder body
-        , BE.maybe (c1Encoder typeEncoder) maybeType
+        , BE.maybe (c1Encoder (c2Encoder typeEncoder)) maybeType
         ]
 
 
@@ -822,7 +822,7 @@ valueDecoder =
         (c1Decoder (A.locatedDecoder BD.string))
         (BD.list (c1Decoder patternDecoder))
         (c1Decoder exprDecoder)
-        (BD.maybe (c1Decoder typeDecoder))
+        (BD.maybe (c1Decoder (c2Decoder typeDecoder)))
 
 
 unionEncoder : Union -> BE.Encoder

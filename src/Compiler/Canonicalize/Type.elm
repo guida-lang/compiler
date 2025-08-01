@@ -66,7 +66,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
         Src.TUnit ->
             R.ok Can.TUnit
 
-        Src.TTuple a b cs ->
+        Src.TTuple ( _, a ) ( _, b ) cs ->
             R.fmap Can.TTuple (canonicalize syntaxVersion env a)
                 |> R.apply (canonicalize syntaxVersion env b)
                 |> R.apply
@@ -74,7 +74,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                         [] ->
                             R.ok []
 
-                        [ c ] ->
+                        [ ( _, c ) ] ->
                             canonicalize syntaxVersion env c
                                 |> R.fmap List.singleton
 
@@ -84,7 +84,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                                     R.throw (Error.TupleLargerThanThree typeRegion)
 
                                 SV.Guida ->
-                                    R.traverse (canonicalize syntaxVersion env) cs
+                                    R.traverse (canonicalize syntaxVersion env) (List.map Src.c2EolValue cs)
                     )
 
 
