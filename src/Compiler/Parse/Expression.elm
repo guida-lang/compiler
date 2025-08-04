@@ -304,7 +304,7 @@ record syntaxVersion start =
                             in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
-                                    |> P.bind (\_ -> P.addEnd start (Src.Record []))
+                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( [ Src.BlockComment [ "TODO17" ] ], [] )))
                                 , P.addLocation (Var.lower E.RecordField)
                                     |> P.bind
                                         (\((A.At starterPosition starterName) as starter) ->
@@ -319,30 +319,34 @@ record syntaxVersion start =
                                                             [ P.word1 '|' E.RecordEquals
                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
                                                                 |> P.bind
-                                                                    (\c29 ->
+                                                                    (\postPipeComments ->
                                                                         let
                                                                             _ =
-                                                                                Debug.log "c29" c29
+                                                                                Debug.log "c29" postPipeComments
                                                                         in
-                                                                        chompField syntaxVersion
+                                                                        chompField syntaxVersion [] postPipeComments
                                                                     )
-                                                                |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
+                                                                |> P.bind (\( postFirstFieldComments, firstField ) -> chompFields syntaxVersion postFirstFieldComments [ firstField ])
                                                                 |> P.bind (\fields -> P.addEnd start (Src.Update ( ( preStarterNameComments, postStarterNameComments ), A.At starterPosition (Src.Var Src.LowVar starterName) ) fields))
                                                             , P.word1 '=' E.RecordEquals
                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
                                                                 |> P.bind
-                                                                    (\c30 ->
+                                                                    (\preValueComments ->
                                                                         let
                                                                             _ =
-                                                                                Debug.log "c30" c30
+                                                                                Debug.log "c30" preValueComments
                                                                         in
                                                                         P.specialize E.RecordExpr (expression syntaxVersion)
-                                                                    )
-                                                                |> P.bind
-                                                                    (\( ( _, value ), end ) ->
-                                                                        Space.checkIndent end E.RecordIndentEnd
-                                                                            |> P.bind (\_ -> chompFields syntaxVersion [ ( starter, value ) ])
-                                                                            |> P.bind (\fields -> P.addEnd start (Src.Record fields))
+                                                                            |> P.bind
+                                                                                (\( ( postValueComments, value ), end ) ->
+                                                                                    let
+                                                                                        _ =
+                                                                                            Debug.log "postValueComments" postValueComments
+                                                                                    in
+                                                                                    Space.checkIndent end E.RecordIndentEnd
+                                                                                        |> P.bind (\_ -> chompFields syntaxVersion postValueComments [ ( ( [], preStarterNameComments, Nothing ), ( ( postStarterNameComments, starter ), ( preValueComments, value ) ) ) ])
+                                                                                        |> P.bind (\fields -> P.addEnd start (Src.Record fields))
+                                                                                )
                                                                     )
                                                             ]
                                                     )
@@ -362,7 +366,7 @@ record syntaxVersion start =
                             in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
-                                    |> P.bind (\_ -> P.addEnd start (Src.Record []))
+                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( [ Src.BlockComment [ "TODO6" ] ], [] )))
                                 , P.getPosition
                                     |> P.bind
                                         (\nameStart ->
@@ -387,10 +391,10 @@ record syntaxVersion start =
                                                                         _ =
                                                                             Debug.log "c33" c33
                                                                     in
-                                                                    chompField syntaxVersion
+                                                                    chompField syntaxVersion [] []
                                                                 )
-                                                            |> P.bind (\firstField -> chompFields syntaxVersion [ firstField ])
-                                                            |> P.bind (\fields -> P.addEnd start (Src.Update ( ( [], [] ), starter ) fields))
+                                                            |> P.bind (\( postFirstFieldComments, firstField ) -> chompFields syntaxVersion postFirstFieldComments [ firstField ])
+                                                            |> P.bind (\fields -> P.addEnd start (Src.Update ( ( [ Src.BlockComment [ "TODO7" ] ], [ Src.BlockComment [ "TODO8" ] ] ), starter ) fields))
                                                     )
                                         )
                                 , P.addLocation (Var.lower E.RecordField)
@@ -415,9 +419,9 @@ record syntaxVersion start =
                                                         P.specialize E.RecordExpr (expression syntaxVersion)
                                                     )
                                                 |> P.bind
-                                                    (\( ( _, value ), end ) ->
+                                                    (\( value, end ) ->
                                                         Space.checkIndent end E.RecordIndentEnd
-                                                            |> P.bind (\_ -> chompFields syntaxVersion [ ( starter, value ) ])
+                                                            |> P.bind (\_ -> chompFields syntaxVersion [] [ ( ( [ Src.BlockComment [ "TODO10" ] ], [ Src.BlockComment [ "TODO11" ] ], Nothing ), ( ( [ Src.BlockComment [ "TODO12" ] ], starter ), value ) ) ])
                                                             |> P.bind (\fields -> P.addEnd start (Src.Record fields))
                                                     )
                                         )
@@ -519,55 +523,59 @@ foreignAlphaHelp src pos end col =
 
 
 type alias Field =
-    ( A.Located Name.Name, Src.Expr )
+    Src.C2Eol ( Src.C1 (A.Located Name.Name), Src.C1 Src.Expr )
 
 
-chompFields : SyntaxVersion -> List Field -> P.Parser E.Record (List Field)
-chompFields syntaxVersion fields =
+chompFields : SyntaxVersion -> Src.FComments -> List Field -> P.Parser E.Record (Src.C1 (List Field))
+chompFields syntaxVersion trailingComments fields =
     P.oneOf E.RecordEnd
         [ P.word1 ',' E.RecordEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentField)
             |> P.bind
-                (\c36 ->
+                (\postCommaComments ->
                     let
                         _ =
-                            Debug.log "c36" c36
+                            Debug.log "c36" postCommaComments
                     in
-                    chompField syntaxVersion
+                    chompField syntaxVersion trailingComments postCommaComments
                 )
-            |> P.bind (\f -> chompFields syntaxVersion (f :: fields))
+            |> P.bind (\( postFieldComments, f ) -> chompFields syntaxVersion postFieldComments (f :: fields))
         , P.word1 '}' E.RecordEnd
-            |> P.fmap (\_ -> List.reverse fields)
+            |> P.fmap (\_ -> ( trailingComments, List.reverse fields ))
         ]
 
 
-chompField : SyntaxVersion -> P.Parser E.Record Field
-chompField syntaxVersion =
+chompField : SyntaxVersion -> Src.FComments -> Src.FComments -> P.Parser E.Record (Src.C1 Field)
+chompField syntaxVersion preCommaComents postCommaComments =
     P.addLocation (Var.lower E.RecordField)
         |> P.bind
             (\key ->
                 Space.chompAndCheckIndent E.RecordSpace E.RecordIndentEquals
                     |> P.bind
-                        (\c37 ->
+                        (\preEqualSignComments ->
                             let
                                 _ =
-                                    Debug.log "c37" c37
+                                    Debug.log "c37" preEqualSignComments
                             in
                             P.word1 '=' E.RecordEquals
-                        )
-                    |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
-                    |> P.bind
-                        (\c38 ->
-                            let
-                                _ =
-                                    Debug.log "c38" c38
-                            in
-                            P.specialize E.RecordExpr (expression syntaxVersion)
-                        )
-                    |> P.bind
-                        (\( ( _, value ), end ) ->
-                            Space.checkIndent end E.RecordIndentEnd
-                                |> P.fmap (\_ -> ( key, value ))
+                                |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
+                                |> P.bind
+                                    (\c38 ->
+                                        let
+                                            _ =
+                                                Debug.log "c38" c38
+                                        in
+                                        P.specialize E.RecordExpr (expression syntaxVersion)
+                                            |> P.bind
+                                                (\( ( postFieldComments, value ), end ) ->
+                                                    let
+                                                        _ =
+                                                            Debug.log "x" postFieldComments
+                                                    in
+                                                    Space.checkIndent end E.RecordIndentEnd
+                                                        |> P.fmap (\_ -> ( postFieldComments, ( ( preCommaComents, postCommaComments, Nothing ), ( ( preEqualSignComments, key ), ( c38, value ) ) ) ))
+                                                )
+                                    )
                         )
             )
 
@@ -770,11 +778,12 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                 )
         ]
         -- done
-        (case ops of
+        (case Debug.log "ops!" ops of
             [] ->
-                ( ( comments, toCall expr args )
-                , end
-                )
+                Debug.log "result.ops!"
+                    ( ( comments, toCall expr args )
+                    , end
+                    )
 
             _ ->
                 ( ( comments, A.at start end (Src.Binops (List.reverse ops) (toCall expr args)) )
@@ -981,10 +990,10 @@ case_ syntaxVersion start =
                                                 (chompBranch syntaxVersion comments
                                                     |> P.bind
                                                         (\( ( trailingComments, firstBranch ), firstEnd ) ->
-                                                            chompCaseEnd syntaxVersion trailingComments [ firstBranch ] firstEnd
+                                                            chompCaseEnd syntaxVersion (Debug.log "trailingCommentsaaa" trailingComments) [ firstBranch ] firstEnd
                                                                 |> P.fmap
-                                                                    (\( branches, end ) ->
-                                                                        ( ( [], A.at start end (Src.Case ( ( preExprComments, postExprComments ), expr ) branches) )
+                                                                    (\( ( branchesTrailingComments, branches ), end ) ->
+                                                                        ( ( branchesTrailingComments, A.at start end (Src.Case ( ( preExprComments, postExprComments ), expr ) branches) )
                                                                         , end
                                                                         )
                                                                     )
@@ -1011,19 +1020,19 @@ chompBranch syntaxVersion prePatternComments =
                                     Debug.log "c49" preBranchExprComments
                             in
                             P.specialize E.CaseBranch (expression syntaxVersion)
-                                |> P.fmap (\( ( trailingComments, branchExpr ), end ) -> ( ( trailingComments, ( ( ( prePatternComments, postPatternComments ), pattern ), ( preBranchExprComments, branchExpr ) ) ), end ))
+                                |> P.fmap (\( ( trailingComments, branchExpr ), end ) -> Debug.log "chompBranch!!!!!!1111" ( ( trailingComments, ( ( ( prePatternComments, postPatternComments ), pattern ), ( preBranchExprComments, branchExpr ) ) ), end ))
                         )
             )
 
 
-chompCaseEnd : SyntaxVersion -> Src.FComments -> List ( Src.C2 Src.Pattern, Src.C1 Src.Expr ) -> A.Position -> Space.Parser E.Case (List ( Src.C2 Src.Pattern, Src.C1 Src.Expr ))
+chompCaseEnd : SyntaxVersion -> Src.FComments -> List ( Src.C2 Src.Pattern, Src.C1 Src.Expr ) -> A.Position -> Space.Parser E.Case (Src.C1 (List ( Src.C2 Src.Pattern, Src.C1 Src.Expr )))
 chompCaseEnd syntaxVersion prePatternComments branches end =
     P.oneOfWithFallback
         [ Space.checkAligned E.CasePatternAlignment
             |> P.bind (\_ -> chompBranch syntaxVersion prePatternComments)
             |> P.bind (\( ( comments, branch ), newEnd ) -> chompCaseEnd syntaxVersion comments (branch :: branches) newEnd)
         ]
-        ( List.reverse branches, end )
+        ( ( prePatternComments, List.reverse branches ), end )
 
 
 

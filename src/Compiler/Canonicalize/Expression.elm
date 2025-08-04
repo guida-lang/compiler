@@ -146,17 +146,17 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Access (canonicalize syntaxVersion env record)
                     |> R.apply (R.ok field)
 
-            Src.Update ( _, name ) fields ->
+            Src.Update ( _, name ) ( _, fields ) ->
                 let
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
-                        Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize syntaxVersion env t)) fields
+                        Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize syntaxVersion env t)) (List.map (Src.c2EolValue >> Tuple.mapBoth Src.c1Value Src.c1Value) fields)
                 in
                 R.fmap Can.Update (canonicalize syntaxVersion env name)
                     |> R.apply (R.bind (Utils.sequenceADict A.toValue A.compareLocated) makeCanFields)
 
-            Src.Record fields ->
-                Dups.checkLocatedFields fields
+            Src.Record ( _, fields ) ->
+                Dups.checkLocatedFields (List.map (Src.c2EolValue >> Tuple.mapBoth Src.c1Value Src.c1Value) fields)
                     |> R.bind
                         (\fieldDict ->
                             R.fmap Can.Record (R.traverseDict A.toValue A.compareLocated (canonicalize syntaxVersion env) fieldDict)

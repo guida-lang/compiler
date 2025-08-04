@@ -236,8 +236,8 @@ type Expr_
     | Case (C2 Expr) (List ( C2 Pattern, C1 Expr ))
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update (C2 Expr) (List ( A.Located Name, Expr ))
-    | Record (List ( A.Located Name, Expr ))
+    | Update (C2 Expr) (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
+    | Record (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
     | Unit
     | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
     | Shader Shader.Source Shader.Types
@@ -1377,13 +1377,13 @@ expr_Encoder expr_ =
             BE.sequence
                 [ BE.unsignedInt8 17
                 , c2Encoder exprEncoder name
-                , BE.list (BE.jsonPair (A.locatedEncoder BE.string) exprEncoder) fields
+                , c1Encoder (BE.list (c2EolEncoder (BE.jsonPair (c1Encoder (A.locatedEncoder BE.string)) (c1Encoder exprEncoder)))) fields
                 ]
 
         Record fields ->
             BE.sequence
                 [ BE.unsignedInt8 18
-                , BE.list (BE.jsonPair (A.locatedEncoder BE.string) exprEncoder) fields
+                , c1Encoder (BE.list (c2EolEncoder (BE.jsonPair (c1Encoder (A.locatedEncoder BE.string)) (c1Encoder exprEncoder)))) fields
                 ]
 
         Unit ->
@@ -1493,11 +1493,11 @@ expr_Decoder =
                     17 ->
                         BD.map2 Update
                             (c2Decoder exprDecoder)
-                            (BD.list (BD.jsonPair (A.locatedDecoder BD.string) exprDecoder))
+                            (c1Decoder (BD.list (c2EolDecoder (BD.jsonPair (c1Decoder (A.locatedDecoder BD.string)) (c1Decoder exprDecoder)))))
 
                     18 ->
                         BD.map Record
-                            (BD.list (BD.jsonPair (A.locatedDecoder BD.string) exprDecoder))
+                            (c1Decoder (BD.list (c2EolDecoder (BD.jsonPair (c1Decoder (A.locatedDecoder BD.string)) (c1Decoder exprDecoder)))))
 
                     19 ->
                         BD.succeed Unit

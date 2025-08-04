@@ -122,7 +122,11 @@ term =
                                                                                             in
                                                                                             P.specialize E.TRecordType (expression [])
                                                                                                 |> P.bind
-                                                                                                    (\( ( ( postExpressionComments, _, _ ), tipe ), end ) ->
+                                                                                                    (\( ( ( _, postExpressionComments, _ ), tipe ) as x, end ) ->
+                                                                                                        let
+                                                                                                            _ =
+                                                                                                                Debug.log "XXX123" x
+                                                                                                        in
                                                                                                         Space.checkIndent end E.TRecordIndentEnd
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
@@ -153,7 +157,6 @@ expression trailingComments =
             (\start ->
                 P.oneOf E.TStart
                     [ app start
-                        |> P.fmap (Debug.log "appResult")
                     , term
                         |> P.bind
                             (\eterm ->
@@ -165,7 +168,7 @@ expression trailingComments =
                                                     (\c122 ->
                                                         let
                                                             _ =
-                                                                Debug.log "c122" ( c122, eterm )
+                                                                Debug.log "c122" c122
                                                         in
                                                         ( ( c122, eterm ), end )
                                                     )
@@ -174,6 +177,10 @@ expression trailingComments =
                     ]
                     |> P.bind
                         (\( ( postTipe1comments, tipe1 ), end1 ) ->
+                            let
+                                _ =
+                                    Debug.log "postTipe1comments" postTipe1comments
+                            in
                             P.oneOfWithFallback
                                 [ -- should never trigger
                                   Space.checkIndent end1 E.TIndentStart
@@ -204,7 +211,7 @@ expression trailingComments =
                                                     )
                                         )
                                 ]
-                                ( Debug.log "DEFAULT expression" ( ( trailingComments, postTipe1comments, Nothing ), tipe1 ), end1 )
+                                ( ( ( trailingComments, postTipe1comments, Nothing ), tipe1 ), end1 )
                         )
             )
 
@@ -232,6 +239,9 @@ app start =
                                             |> P.fmap
                                                 (\( ( comments, args ), end ) ->
                                                     let
+                                                        _ =
+                                                            Debug.log "comments.c123" comments
+
                                                         region : A.Region
                                                         region =
                                                             A.Region start upperEnd
@@ -245,7 +255,7 @@ app start =
                                                                 Var.Qualified home name ->
                                                                     Src.TTypeQual region home name args
                                                     in
-                                                    Debug.log "app" ( ( comments, A.at start end tipe ), end )
+                                                    ( ( comments, A.at start end tipe ), end )
                                                 )
                                     )
                         )
@@ -345,6 +355,10 @@ chompRecordEnd comments fields =
                                 chompField
                                     |> P.bind
                                         (\( postFieldComments, field ) ->
+                                            let
+                                                _ =
+                                                    Debug.log "postFieldComments" ( postFieldComments, field, comments )
+                                            in
                                             chompRecordEnd postFieldComments (( ( comments, preNameComments ), field ) :: fields)
                                         )
                             )
@@ -352,7 +366,7 @@ chompRecordEnd comments fields =
         , P.word1 '}' E.TRecordEnd
             |> P.fmap
                 (\_ ->
-                    ( comments, List.reverse fields )
+                    Debug.log "end of chompRecordEnd" ( comments, List.reverse fields )
                 )
         ]
 
@@ -381,9 +395,13 @@ chompField =
                                                     in
                                                     P.specialize E.TRecordType (expression [])
                                                         |> P.bind
-                                                            (\( ( ( postTypeComments, _, _ ), tipe ), end ) ->
+                                                            (\( ( ( postTypeComments, x1, _ ), tipe ) as x, end ) ->
+                                                                let
+                                                                    _ =
+                                                                        Debug.log "X2" x
+                                                                in
                                                                 Space.checkIndent end E.TRecordIndentEnd
-                                                                    |> P.fmap (\_ -> ( postTypeComments, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ))
+                                                                    |> P.fmap (\_ -> Debug.log "X2!" ( x1, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ))
                                                             )
                                                 )
                                     )

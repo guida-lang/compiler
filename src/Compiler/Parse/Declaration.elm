@@ -107,10 +107,6 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                             P.specialize E.DeclDefType (Type.expression [])
                                                                 |> P.bind
                                                                     (\( ( ( _, postTipeComments, _ ), tipe ), _ ) ->
-                                                                        let
-                                                                            _ =
-                                                                                Debug.log "valueDecl1" ( postTipeComments, tipe )
-                                                                        in
                                                                         Space.checkFreshLine E.DeclDefNameRepeat
                                                                             |> P.bind (\_ -> chompMatchingName name)
                                                                             |> P.bind
@@ -119,13 +115,11 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                                         |> P.bind
                                                                                             (\preArgComments ->
                                                                                                 chompDefArgsAndBody syntaxVersion maybeDocs docComments start defName (Just ( postTipeComments, ( ( postNameComments, preTypeComments ), tipe ) )) preArgComments []
-                                                                                                    |> P.fmap (Debug.log "HERE!!! after c3")
                                                                                             )
                                                                                 )
                                                                     )
                                                         )
                                                 , chompDefArgsAndBody syntaxVersion maybeDocs docComments start (A.at start end name) Nothing postNameComments []
-                                                    |> P.fmap (Debug.log "HERE!!!2")
                                                 ]
                                         )
                                 )

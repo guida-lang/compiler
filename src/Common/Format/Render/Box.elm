@@ -2346,41 +2346,35 @@ formatExpression importInfo (A.At region aexpr) =
                 |> Box.addSuffix (Box.row [ Box.punc ".", formatLowercaseIdentifier [] field ])
             )
 
-        Src.Update name fields ->
+        Src.Update name ( trailing, fields ) ->
             let
-                trailing =
-                    -- TODO
-                    []
-
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
 
+                fields_ : List (Src.C2Eol (Src.Pair Name Src.Expr))
                 fields_ =
-                    List.map (\( A.At _ name_, expr ) -> Src.Pair ( [], name_ ) ( [], expr ) multiline) fields
+                    List.map (Src.c2EolMap (\( ( nameComments, A.At _ name_ ), expr ) -> Src.Pair ( nameComments, name_ ) expr multiline)) fields
             in
             ( SyntaxSeparated
             , formatRecordLike
                 (Just (Src.c2map (syntaxParens SyntaxSeparated << formatExpression importInfo) name))
-                (List.map (Tuple.pair ( [], [], Nothing ) << formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo)) fields_)
+                (List.map (Src.c2EolMap (formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo))) fields_)
                 trailing
                 multiline
             )
 
-        Src.Record fields ->
+        Src.Record ( trailing, fields ) ->
             let
-                trailing =
-                    -- TODO
-                    []
-
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
 
+                fields_ : List (Src.C2Eol (Src.Pair Name Src.Expr))
                 fields_ =
-                    List.map (\( A.At _ name_, expr ) -> Src.Pair ( [], name_ ) ( [], expr ) multiline) fields
+                    List.map (Src.c2EolMap (\( ( nameComments, A.At _ name_ ), expr ) -> Src.Pair ( nameComments, name_ ) expr multiline)) fields
             in
             ( SyntaxSeparated
             , formatRecordLike Nothing
-                (List.map (Tuple.pair ( [], [], Nothing ) << formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo)) fields_)
+                (List.map (Src.c2EolMap (formatPair "=" << Src.mapPair (formatLowercaseIdentifier []) (syntaxParens SyntaxSeparated << formatExpression importInfo))) fields_)
                 trailing
                 multiline
             )
@@ -2870,15 +2864,6 @@ typeParensNeeded outer typeParensInner =
         ForFunctionType ->
             -- outer >= ForLambda
             outer == ForLambda || outer == ForCtor
-
-
-
--- commaSpace : Line
--- commaSpace =
---     row
---         [ punc ","
---         , space
---         ]
 
 
 formatTypeConstructor : String -> Box

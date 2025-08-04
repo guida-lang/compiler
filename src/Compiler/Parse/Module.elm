@@ -110,7 +110,7 @@ chompModule syntaxVersion projectType =
                                                     Module
                                                         initialComments
                                                         header
-                                                        ( headerComments, Debug.log "imports" imports )
+                                                        ( headerComments, imports )
                                                         infixes
                                                         decls
                                                 )
