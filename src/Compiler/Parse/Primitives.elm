@@ -486,7 +486,7 @@ snippetDecoder =
     BD.map5
         (\fptr offset length offRow offCol ->
             Snippet
-                { fptr = fptr
+                { fptr = String.fromList (String.toList fptr)
                 , offset = offset
                 , length = length
                 , offRow = offRow
