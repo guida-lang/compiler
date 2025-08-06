@@ -16,10 +16,10 @@ import Compiler.Elm.Version as V
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
-import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 

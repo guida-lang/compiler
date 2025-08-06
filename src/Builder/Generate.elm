@@ -10,7 +10,6 @@ import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.File as File
 import Builder.Reporting.Exit as Exit
-import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Name as N
@@ -23,11 +22,11 @@ import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
-import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Main as Utils exposing (FilePath, MVar)
+import Utils.Task.Extra as TE
 
 
 

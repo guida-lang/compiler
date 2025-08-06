@@ -17,9 +17,9 @@ module Terminal.Terminal.Chomp exposing
 
 import Basics.Extra exposing (flip)
 import Maybe.Extra as Maybe
-import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (ArgError(..), Error(..), Expectation(..), Flag(..), FlagError(..), Flags(..), Parser(..))
+import Utils.Task.Extra as TE
 
 
 

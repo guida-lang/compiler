@@ -14,7 +14,6 @@ import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
-import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
@@ -29,6 +28,7 @@ import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
 import Task exposing (Task)
+import Utils.Task.Extra as TE
 
 
 

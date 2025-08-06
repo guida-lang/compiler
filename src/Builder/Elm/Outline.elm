@@ -31,12 +31,12 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 

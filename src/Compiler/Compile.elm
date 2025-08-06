@@ -19,9 +19,9 @@ import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
-import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
+import Utils.Task.Extra as TE
 
 
 

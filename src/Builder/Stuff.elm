@@ -23,11 +23,11 @@ import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Prelude
-import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
+import Utils.Task.Extra as TE
 
 
 

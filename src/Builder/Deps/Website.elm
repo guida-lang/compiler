@@ -6,9 +6,9 @@ module Builder.Deps.Website exposing
 import Builder.Http as Http
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
-import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Utils.Main as Utils
+import Utils.Task.Extra as TE
 
 
 domain : Task Never String

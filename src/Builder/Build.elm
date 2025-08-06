@@ -48,13 +48,13 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar(..))
+import Utils.Task.Extra as TE
 
 
 

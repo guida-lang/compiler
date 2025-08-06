@@ -25,7 +25,6 @@ import Builder.File as File
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
@@ -48,13 +47,13 @@ import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
+import Utils.Task.Extra as TE
 
 
 

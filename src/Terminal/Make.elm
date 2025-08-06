@@ -18,19 +18,18 @@ import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
 import Maybe.Extra as Maybe
-import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
