@@ -228,7 +228,7 @@ type Expr_
     | List (List (C2Eol Expr)) FComments
     | Op Name
     | Negate Expr
-    | Binops (List ( Expr, A.Located Name )) Expr
+    | Binops (List ( Expr, C2 (A.Located Name) )) Expr
     | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
     | Call Expr (List (C1 Expr))
     | If (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
@@ -253,8 +253,8 @@ type VarType
 
 
 type Def
-    = Define (A.Located Name) (List (C1 Pattern)) Expr (Maybe Type)
-    | Destruct Pattern Expr
+    = Define (A.Located Name) (List (C1 Pattern)) (C1 Expr) (Maybe Type)
+    | Destruct Pattern (C1 Expr)
 
 
 
@@ -1320,7 +1320,7 @@ expr_Encoder expr_ =
         Binops ops final ->
             BE.sequence
                 [ BE.unsignedInt8 9
-                , BE.list (BE.jsonPair exprEncoder (A.locatedEncoder BE.string)) ops
+                , BE.list (BE.jsonPair exprEncoder (c2Encoder (A.locatedEncoder BE.string))) ops
                 , exprEncoder final
                 ]
 
@@ -1453,7 +1453,7 @@ expr_Decoder =
 
                     9 ->
                         BD.map2 Binops
-                            (BD.list (BD.jsonPair exprDecoder (A.locatedDecoder BD.string)))
+                            (BD.list (BD.jsonPair exprDecoder (c2Decoder (A.locatedDecoder BD.string))))
                             exprDecoder
 
                     10 ->
@@ -1555,7 +1555,7 @@ defEncoder def =
                 [ BE.unsignedInt8 0
                 , A.locatedEncoder BE.string name
                 , BE.list (c1Encoder patternEncoder) srcArgs
-                , exprEncoder body
+                , c1Encoder exprEncoder body
                 , BE.maybe typeEncoder maybeType
                 ]
 
@@ -1563,7 +1563,7 @@ defEncoder def =
             BE.sequence
                 [ BE.unsignedInt8 1
                 , patternEncoder pattern
-                , exprEncoder body
+                , c1Encoder exprEncoder body
                 ]
 
 
@@ -1577,13 +1577,13 @@ defDecoder =
                         BD.map4 Define
                             (A.locatedDecoder BD.string)
                             (BD.list (c1Decoder patternDecoder))
-                            exprDecoder
+                            (c1Decoder exprDecoder)
                             (BD.maybe typeDecoder)
 
                     1 ->
                         BD.map2 Destruct
                             patternDecoder
-                            exprDecoder
+                            (c1Decoder exprDecoder)
 
                     _ ->
                         BD.fail

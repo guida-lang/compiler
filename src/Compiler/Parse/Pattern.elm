@@ -158,10 +158,10 @@ record start =
     P.inContext E.PRecord (P.word1 '{' E.PStart) <|
         (Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentOpen
             |> P.bind
-                (\c84 ->
+                (\preVarComments ->
                     let
                         _ =
-                            Debug.log "c84" c84
+                            Debug.log "c84" preVarComments
                     in
                     P.oneOf E.PRecordOpen
                         [ P.addLocation (Var.lower E.PRecordField)
@@ -169,16 +169,16 @@ record start =
                                 (\var ->
                                     Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
                                         |> P.bind
-                                            (\c85 ->
+                                            (\postVarComments ->
                                                 let
                                                     _ =
-                                                        Debug.log "c85" c85
+                                                        Debug.log "c85" postVarComments
                                                 in
-                                                recordHelp start [ ( ( [], [] ), var ) ]
+                                                recordHelp start [ ( ( preVarComments, postVarComments ), var ) ]
                                             )
                                 )
                         , P.word1 '}' E.PRecordEnd
-                            |> P.bind (\_ -> P.addEnd start (Src.PRecord ( [], [] )))
+                            |> P.bind (\_ -> P.addEnd start (Src.PRecord ( preVarComments, [] )))
                         ]
                 )
         )

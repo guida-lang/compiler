@@ -133,13 +133,22 @@ things.
         "lambdaArgFn {- lambdaArg12 -} f {- lambdaArg13 -} = {- lambdaArg14 -} () {- lambdaArg15 -}",
         "{-| call comments -}",
         "callFn {- call1 -} : {- call2 -} Int {- call3 -}",
-        "callFn {- call4 -} = {- call5 -} negate {- call5 -} 1 {- call6 -}",
+        "callFn {- call4 -} = {- call5 -} negate {- call6 -} 1 {- call7 -}",
+        "{-| call multiple arguments comments -}",
+        "callMultiArgsFn {- callMultiArgs1 -} : {- callMultiArgs2 -} Int {- callMultiArgs3 -}",
+        "callMultiArgsFn {- callMultiArgs4 -} = {- callMultiArgs5 -} max {- callMultiArgs6 -} 1 {- callMultiArgs7 -} 2 {- callMultiArgs8 -}",
         "{-| if comments -}",
         "ifFn {- if1 -} : {- if2 -} Int {- if3 -}",
         "ifFn {- if4 -} = {- if5 -} if {- if5 -} True {- if6 -} then {- if7 -} 1 {- if8 -} else  {- if9 -} 2 {- if10 -}",
         "{-| let comments -}",
         "letFn {- let1 -} : {- let2 -} Int {- let3 -}",
-        "letFn {- let4 -} = {- let5 -} let {- let5 -} val {- let6 -} = {- let7 -} 42 {- let8 -} in  {- let9 -} val {- let10 -}",
+        "letFn {- let4 -} = {- let5 -} let {- let6 -} val {- let7 -} = {- let8 -} 42 {- let9 -} in  {- let10 -} val {- let11 -}",
+        "{-| let multiple comments -}",
+        "letMultipleFn {- letMultiple1 -} : {- letMultiple2 -} Int {- letMultiple3 -}",
+        "letMultipleFn {- letMultiple4 -} = {- letMultiple5 -}\n let\n  {- letMultiple6 -}\n  val1 {- letMultiple7 -} = {- letMultiple8 -} 42 {- letMultiple9 -}\n  {- letMultiple10 -}\n  val2 {- letMultiple11 -} = {- letMultiple12 -} 43 {- letMultiple13 -}\n in  {- letMultiple14 -} val {- letMultiple15 -}",
+        "{-| let destructure comments -}",
+        "letDestructureFn {- letDestructure1 -} : {- letDestructure2 -} Int {- letDestructure3 -}",
+        "letDestructureFn {- letDestructure4 -} = {- letDestructure5 -} let {- letDestructure6 -} { {- letDestructure7 -} val {- letDestructure8 -} } {- letDestructure9 -} = {- letDestructure10 -} someRecord {- letDestructure11 -} in  {- letDestructure12 -} val {- letDestructure13 -}",
         "{-| case comments -}",
         "caseFn {- case1 -} : {- case2 -} Int {- case3 -}",
         "caseFn {- case4 -} = {- case5 -} case {- case5 -} () {- case6 -} of {- case7 -}\n _ {- case8 -} -> {- case9 -} 1 {- case10 -}",
@@ -226,8 +235,10 @@ const examples = [
                     "exponentFloat = 6.022e23",
                     // TODO/FIXME "smallExponentFloat = 1e3",
                     "char = 'a'",
-                    "singleQuotedString = \"hello world!\"",
-                    "tripleQuotedString = \"\"\"multiline\n strings\"\"\"",
+                    `singleQuotedString = "hello world!"`,
+                    `stringWithSingleQuotes = "string with 'single quotes'"`,
+                    `stringWithDoubleQuotes = "string with \\"double quotes\\""`,
+                    `tripleQuotedString = """multiline\n strings\n with 'single quotes' and \\"double quotes\\""""`,
                 ]
             }
         },
@@ -255,6 +266,23 @@ const examples = [
         { title: "port header", filename: "PortHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\nport {- C2 -} module {- C3 -} Main {- C4 -} exposing {- C5 -} (..)"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
         { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } },
+        {
+            title: "top-level after lambda", filename: "TopLevelAfterLambdaComments", module: {
+                ...defaultModule, declarations: [
+                    "lambdaFn = \\_ -> ()",
+                    "-- COMMENT",
+                    "anotherFn = 2"
+                ]
+            }
+        },
+        {
+            title: "trailing top-level", filename: "TrailingTopLevelComments", module: {
+                ...defaultModule, declarations: [
+                    "fn = 1",
+                    "-- COMMENT",
+                ]
+            }
+        },
         { title: "full-example", filename: "FullExample", module: fullExample }
     ]],
 ]

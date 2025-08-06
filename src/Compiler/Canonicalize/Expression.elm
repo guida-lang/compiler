@@ -101,7 +101,7 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Negate (canonicalize syntaxVersion env expr)
 
             Src.Binops ops final ->
-                R.fmap A.toValue (canonicalizeBinops syntaxVersion region env ops final)
+                R.fmap A.toValue (canonicalizeBinops syntaxVersion region env (List.map (Tuple.mapSecond Src.c2Value) ops) final)
 
             Src.Lambda ( _, srcArgs ) ( _, body ) ->
                 delayedUsage <|
@@ -403,7 +403,7 @@ type Binding
 addDefNodes : SyntaxVersion -> Env.Env -> List Node -> A.Located Src.Def -> EResult FreeLocals (List W.Warning) (List Node)
 addDefNodes syntaxVersion env nodes (A.At _ def) =
     case def of
-        Src.Define ((A.At _ name) as aname) srcArgs body maybeType ->
+        Src.Define ((A.At _ name) as aname) srcArgs ( _, body ) maybeType ->
             case maybeType of
                 Nothing ->
                     Pattern.verify (Error.DPFuncArgs name)
@@ -459,7 +459,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
                                         )
                             )
 
-        Src.Destruct pattern body ->
+        Src.Destruct pattern ( _, body ) ->
             Pattern.verify Error.DPDestruct
                 (Pattern.canonicalize syntaxVersion env pattern)
                 |> R.bind

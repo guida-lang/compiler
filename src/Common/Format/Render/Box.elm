@@ -759,7 +759,7 @@ formatModule addDefaultHeader spacing modu =
                 (\( ( preDeclComments, postDeclComments ), decl ) ->
                     List.map BodyComment preDeclComments
                         ++ (case decl of
-                                Decl.Value maybeDocs (A.At _ ((Src.Value preValueComments ( postNameComments, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType) as x)) ->
+                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments ( postNameComments, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType)) ->
                                     (maybeDocs
                                         |> Maybe.map
                                             (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
@@ -1986,7 +1986,7 @@ needsParensInContext inner outer =
 
 formatExpression : ImportInfo -> Src.Expr -> ( SyntaxContext, Box )
 formatExpression importInfo (A.At region aexpr) =
-    case aexpr of
+    case Debug.log "aexpr" aexpr of
         Src.Chr char ->
             ( SyntaxSeparated, formatString SChar char )
 
@@ -2044,8 +2044,8 @@ formatExpression importInfo (A.At region aexpr) =
             let
                 ( left, clauses ) =
                     List.foldr
-                        (\( currExpr, A.At _ currOp ) ( leftAcc, clausesAcc ) ->
-                            ( currExpr, BinopsClause [] (OpRef currOp) [] leftAcc :: clausesAcc )
+                        (\( currExpr, ( ( preOpComments, postOpComments ), A.At _ currOp ) ) ( leftAcc, clausesAcc ) ->
+                            ( currExpr, BinopsClause preOpComments (OpRef currOp) postOpComments leftAcc :: clausesAcc )
                         )
                         ( final, [] )
                         ops
@@ -2209,15 +2209,29 @@ formatExpression importInfo (A.At region aexpr) =
         Src.Let defs bodyComments expr ->
             let
                 letDeclarations : Src.C2 (A.Located Src.Def) -> List LetDeclaration
-                letDeclarations ( ( preDefComments, postDefComments ), def ) =
+                letDeclarations ( ( preDefComments, postDefComments ), A.At _ def ) =
+                    let
+                        ( typeAnnotation, commonDeclaration ) =
+                            case def of
+                                Src.Define (A.At nameRegion name) srcArgs ( comments, body ) maybeType ->
+                                    ( maybeType
+                                        |> Maybe.map (\typ -> [ LetCommonDeclaration (TypeAnnotation ( [], VarRef () name ) ( [], typ )) ])
+                                        |> Maybe.withDefault []
+                                    , Definition (A.At nameRegion (Src.PVar name)) srcArgs comments body
+                                    )
+
+                                Src.Destruct pattern ( comments, body ) ->
+                                    ( [], Definition pattern [] comments body )
+                    in
                     List.map LetComment preDefComments
-                        ++ LetCommonDeclaration def
+                        ++ typeAnnotation
+                        ++ LetCommonDeclaration commonDeclaration
                         :: List.map LetComment postDefComments
 
                 spacer : LetDeclaration -> LetDeclaration -> List Box
                 spacer first _ =
                     case first of
-                        LetCommonDeclaration _ ->
+                        LetCommonDeclaration (Definition _ _ _ _) ->
                             [ Box.blankLine ]
 
                         _ ->
@@ -2226,21 +2240,11 @@ formatExpression importInfo (A.At region aexpr) =
                 formatDefinition_ : LetDeclaration -> Box
                 formatDefinition_ def =
                     case def of
-                        LetCommonDeclaration (A.At _ (Src.Define (A.At nameRegion name) srcArgs body maybeType)) ->
-                            let
-                                comments =
-                                    -- TODO
-                                    []
-                            in
-                            formatDefinition importInfo (A.At nameRegion (Src.PVar name)) srcArgs comments body
+                        LetCommonDeclaration (Definition name args comments expr_) ->
+                            formatDefinition importInfo name args comments expr_
 
-                        LetCommonDeclaration (A.At _ (Src.Destruct pattern body)) ->
-                            let
-                                comments =
-                                    -- TODO
-                                    []
-                            in
-                            formatDefinition importInfo pattern [] comments body
+                        LetCommonDeclaration (TypeAnnotation name typ) ->
+                            formatTypeAnnotation name typ
 
                         LetComment comment ->
                             formatComment comment
@@ -2409,7 +2413,7 @@ formatExpression importInfo (A.At region aexpr) =
 
 
 type LetDeclaration
-    = LetCommonDeclaration (A.Located Src.Def)
+    = LetCommonDeclaration CommonDeclaration
     | LetComment Src.FComment
 
 
@@ -2882,7 +2886,7 @@ formatType (A.At region atype) =
 
                 rest : List (Src.C2Eol Src.Type)
                 rest =
-                    [ result ]
+                    Debug.log "result" [ result ]
 
                 forceMultiline =
                     -- TODO
