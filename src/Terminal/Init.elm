@@ -22,6 +22,7 @@ import Data.Map as Dict exposing (Dict)
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Main as Utils
+import Utils.Task.Extra as TE
 
 
 
@@ -36,10 +37,10 @@ run : () -> Flags -> Task Never ()
 run () (Flags package autoYes) =
     Reporting.attempt Exit.initToReport <|
         (Utils.dirDoesFileExist "elm.json"
-            |> IO.bind
+            |> TE.bind
                 (\exists ->
                     if exists then
-                        IO.pure (Err Exit.InitAlreadyExists)
+                        TE.pure (Err Exit.InitAlreadyExists)
 
                     else
                         let
@@ -47,7 +48,7 @@ run () (Flags package autoYes) =
                             askQuestion =
                                 if autoYes then
                                     Help.toStdout (information [ D.fromChars "" ])
-                                        |> IO.fmap (\_ -> True)
+                                        |> TE.fmap (\_ -> True)
 
                                 else
                                     Reporting.ask
@@ -57,14 +58,14 @@ run () (Flags package autoYes) =
                                         )
                         in
                         askQuestion
-                            |> IO.bind
+                            |> TE.bind
                                 (\approved ->
                                     if approved then
                                         init package
 
                                     else
                                         IO.putStrLn "Okay, I did not make any changes!"
-                                            |> IO.fmap (\_ -> Ok ())
+                                            |> TE.fmap (\_ -> Ok ())
                                 )
                 )
         )
@@ -109,11 +110,11 @@ information question =
 init : Bool -> Task Never (Result Exit.Init ())
 init package =
     Solver.initEnv
-        |> IO.bind
+        |> TE.bind
             (\eitherEnv ->
                 case eitherEnv of
                     Err problem ->
-                        IO.pure (Err (Exit.InitRegistryProblem problem))
+                        TE.pure (Err (Exit.InitRegistryProblem problem))
 
                     Ok (Solver.Env cache _ connection registry) ->
                         verify cache connection registry defaults <|
@@ -121,9 +122,9 @@ init package =
                                 verify cache connection registry testDefaults <|
                                     \testDetails ->
                                         Utils.dirCreateDirectoryIfMissing True "src"
-                                            |> IO.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
-                                            |> IO.bind (\_ -> File.writeUtf8 "tests/Example.elm" testExample)
-                                            |> IO.bind
+                                            |> TE.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
+                                            |> TE.bind (\_ -> File.writeUtf8 "tests/Example.elm" testExample)
+                                            |> TE.bind
                                                 (\_ ->
                                                     let
                                                         outline : Outline.Outline
@@ -203,25 +204,25 @@ init package =
                                                     in
                                                     Outline.write "." outline
                                                 )
-                                            |> IO.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
-                                            |> IO.fmap (\_ -> Ok ())
+                                            |> TE.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
+                                            |> TE.fmap (\_ -> Ok ())
             )
 
 
 verify : Stuff.PackageCache -> Solver.Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name Con.Constraint -> (Dict ( String, String ) Pkg.Name Solver.Details -> Task Never (Result Exit.Init ())) -> Task Never (Result Exit.Init ())
 verify cache connection registry constraints callback =
     Solver.verify cache connection registry constraints
-        |> IO.bind
+        |> TE.bind
             (\result ->
                 case result of
                     Solver.SolverErr exit ->
-                        IO.pure (Err (Exit.InitSolverProblem exit))
+                        TE.pure (Err (Exit.InitSolverProblem exit))
 
                     Solver.NoSolution ->
-                        IO.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
+                        TE.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
 
                     Solver.NoOfflineSolution ->
-                        IO.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare constraints)))
+                        TE.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare constraints)))
 
                     Solver.SolverOk details ->
                         callback details

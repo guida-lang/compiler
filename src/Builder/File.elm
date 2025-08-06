@@ -22,6 +22,7 @@ import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
@@ -34,7 +35,7 @@ type Time
 
 getTime : FilePath -> Task Never Time
 getTime path =
-    IO.fmap Time (Utils.dirGetModificationTime path)
+    TE.fmap Time (Utils.dirGetModificationTime path)
 
 
 zeroTime : Time
@@ -54,21 +55,21 @@ writeBinary toEncoder path value =
             Utils.fpDropFileName path
     in
     Utils.dirCreateDirectoryIfMissing True dir
-        |> IO.bind (\_ -> Utils.binaryEncodeFile toEncoder path value)
+        |> TE.bind (\_ -> Utils.binaryEncodeFile toEncoder path value)
 
 
 readBinary : BD.Decoder a -> FilePath -> Task Never (Maybe a)
 readBinary decoder path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> TE.bind
             (\pathExists ->
                 if pathExists then
                     Utils.binaryDecodeFileOrFail decoder path
-                        |> IO.bind
+                        |> TE.bind
                             (\result ->
                                 case result of
                                     Ok a ->
-                                        IO.pure (Just a)
+                                        TE.pure (Just a)
 
                                     Err ( offset, message ) ->
                                         IO.hPutStrLn IO.stderr
@@ -83,11 +84,11 @@ readBinary decoder path =
                                                 , "+-------------------------------------------------------------------------------"
                                                 ]
                                             )
-                                            |> IO.fmap (\_ -> Nothing)
+                                            |> TE.fmap (\_ -> Nothing)
                             )
 
                 else
-                    IO.pure Nothing
+                    TE.pure Nothing
             )
 
 
@@ -122,7 +123,7 @@ writePackage : FilePath -> Zip.Archive -> Task Never ()
 writePackage destination archive =
     case Zip.zEntries archive of
         [] ->
-            IO.pure ()
+            TE.pure ()
 
         entry :: entries ->
             let
@@ -153,7 +154,7 @@ writeEntry destination root entry =
             writeUtf8 (Utils.fpCombine destination path) (Zip.fromEntry entry)
 
     else
-        IO.pure ()
+        TE.pure ()
 
 
 
@@ -172,13 +173,13 @@ exists path =
 remove : FilePath -> Task Never ()
 remove path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> TE.bind
             (\exists_ ->
                 if exists_ then
                     Utils.dirRemoveFile path
 
                 else
-                    IO.pure ()
+                    TE.pure ()
             )
 
 

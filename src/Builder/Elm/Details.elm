@@ -25,7 +25,7 @@ import Builder.File as File
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as WasRepTask
+import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
@@ -48,7 +48,7 @@ import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.IO as IO
+import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
@@ -138,7 +138,7 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 verifyInstall : BW.Scope -> FilePath -> Solver.Env -> Outline.Outline -> Task Never (Result Exit.Details ())
 verifyInstall scope root (Solver.Env cache manager connection registry) outline =
     File.getTime (root ++ "/elm.json")
-        |> IO.bind
+        |> TE.bind
             (\time ->
                 let
                     key : Reporting.Key msg
@@ -151,10 +151,10 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
                 in
                 case outline of
                     Outline.Pkg pkg ->
-                        WasRepTask.run (WasRepTask.fmap (\_ -> ()) (verifyPkg env time pkg))
+                        TE.toResult (TE.fmap (\_ -> ()) (verifyPkg env time pkg))
 
                     Outline.App app ->
-                        WasRepTask.run (WasRepTask.fmap (\_ -> ()) (verifyApp env time app))
+                        TE.toResult (TE.fmap (\_ -> ()) (verifyApp env time app))
             )
 
 
@@ -165,10 +165,10 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 load : Reporting.Style -> BW.Scope -> FilePath -> Task Never (Result Exit.Details Details)
 load style scope root =
     File.getTime (root ++ "/elm.json")
-        |> IO.bind
+        |> TE.bind
             (\newTime ->
                 File.readBinary detailsDecoder (Stuff.details root)
-                    |> IO.bind
+                    |> TE.bind
                         (\maybeDetails ->
                             case maybeDetails of
                                 Nothing ->
@@ -176,7 +176,7 @@ load style scope root =
 
                                 Just (Details oldTime outline buildID locals foreigns extras) ->
                                     if oldTime == newTime then
-                                        IO.pure (Ok (Details oldTime outline (buildID + 1) locals foreigns extras))
+                                        TE.pure (Ok (Details oldTime outline (buildID + 1) locals foreigns extras))
 
                                     else
                                         generate style scope root newTime
@@ -193,19 +193,19 @@ generate style scope root time =
     Reporting.trackDetails style
         (\key ->
             initEnv key scope root
-                |> IO.bind
+                |> TE.bind
                     (\result ->
                         case result of
                             Err exit ->
-                                IO.pure (Err exit)
+                                TE.pure (Err exit)
 
                             Ok ( env, outline ) ->
                                 case outline of
                                     Outline.Pkg pkg ->
-                                        WasRepTask.run (verifyPkg env time pkg)
+                                        TE.toResult (verifyPkg env time pkg)
 
                                     Outline.App app ->
-                                        WasRepTask.run (verifyApp env time app)
+                                        TE.toResult (verifyApp env time app)
                     )
         )
 
@@ -221,18 +221,18 @@ type Env
 initEnv : Reporting.DKey -> BW.Scope -> FilePath -> Task Never (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork resultRegistryProblemEnvEncoder Solver.initEnv
-        |> IO.bind
+        |> TE.bind
             (\mvar ->
                 Outline.read root
-                    |> IO.bind
+                    |> TE.bind
                         (\eitherOutline ->
                             case eitherOutline of
                                 Err problem ->
-                                    IO.pure (Err (Exit.DetailsBadOutline problem))
+                                    TE.pure (Err (Exit.DetailsBadOutline problem))
 
                                 Ok outline ->
                                     Utils.readMVar resultRegistryProblemEnvDecoder mvar
-                                        |> IO.fmap
+                                        |> TE.fmap
                                             (\maybeEnv ->
                                                 case maybeEnv of
                                                     Err problem ->
@@ -253,8 +253,8 @@ verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Exit.Details Details
 verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
         union identity Pkg.compareName noDups direct testDirect
-            |> WasRepTask.bind (verifyConstraints env)
-            |> WasRepTask.bind
+            |> TE.bind (verifyConstraints env)
+            |> TE.bind
                 (\solution ->
                     let
                         exposedList : List ModuleName.Raw
@@ -271,37 +271,37 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
                 )
 
     else
-        WasRepTask.throw (Exit.DetailsBadElmInPkg elm)
+        TE.throw (Exit.DetailsBadElmInPkg elm)
 
 
 verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Exit.Details Details
 verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outline) =
     if elmVersion == V.elmCompiler then
         checkAppDeps outline
-            |> WasRepTask.bind
+            |> TE.bind
                 (\stated ->
                     verifyConstraints env (Dict.map (\_ -> Con.exactly) stated)
-                        |> WasRepTask.bind
+                        |> TE.bind
                             (\actual ->
                                 if Dict.size stated == Dict.size actual then
                                     verifyDependencies env time (ValidApp srcDirs) actual direct
 
                                 else
-                                    WasRepTask.throw Exit.DetailsHandEditedDependencies
+                                    TE.throw Exit.DetailsHandEditedDependencies
                             )
                 )
 
     else
-        WasRepTask.throw (Exit.DetailsBadElmInAppOutline elmVersion)
+        TE.throw (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
 checkAppDeps : Outline.AppOutline -> Task Exit.Details (Dict ( String, String ) Pkg.Name V.Version)
 checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
     union identity Pkg.compareName allowEqualDups indirect testDirect
-        |> WasRepTask.bind
+        |> TE.bind
             (\x ->
                 union identity Pkg.compareName noDups direct testIndirect
-                    |> WasRepTask.bind (\y -> union identity Pkg.compareName noDups x y)
+                    |> TE.bind (\y -> union identity Pkg.compareName noDups x y)
             )
 
 
@@ -311,21 +311,21 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 
 verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Exit.Details (Dict ( String, String ) Pkg.Name Solver.Details)
 verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
-    WasRepTask.io (Solver.verify cache connection registry constraints)
-        |> WasRepTask.bind
+    TE.io (Solver.verify cache connection registry constraints)
+        |> TE.bind
             (\result ->
                 case result of
                     Solver.SolverOk details ->
-                        WasRepTask.pure details
+                        TE.pure details
 
                     Solver.NoSolution ->
-                        WasRepTask.throw Exit.DetailsNoSolution
+                        TE.throw Exit.DetailsNoSolution
 
                     Solver.NoOfflineSolution ->
-                        WasRepTask.throw Exit.DetailsNoOfflineSolution
+                        TE.throw Exit.DetailsNoOfflineSolution
 
                     Solver.SolverErr exit ->
-                        WasRepTask.throw (Exit.DetailsSolverProblem exit)
+                        TE.throw (Exit.DetailsSolverProblem exit)
             )
 
 
@@ -336,29 +336,29 @@ verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
 union : (k -> comparable) -> (k -> k -> Order) -> (k -> v -> v -> Task Exit.Details v) -> Dict comparable k v -> Dict comparable k v -> Task Exit.Details (Dict comparable k v)
 union toComparable keyComparison tieBreaker deps1 deps2 =
     Dict.merge keyComparison
-        (\k dep -> WasRepTask.fmap (Dict.insert toComparable k dep))
+        (\k dep -> TE.fmap (Dict.insert toComparable k dep))
         (\k dep1 dep2 acc ->
             tieBreaker k dep1 dep2
-                |> WasRepTask.bind (\v -> WasRepTask.fmap (Dict.insert toComparable k v) acc)
+                |> TE.bind (\v -> TE.fmap (Dict.insert toComparable k v) acc)
         )
-        (\k dep -> WasRepTask.fmap (Dict.insert toComparable k dep))
+        (\k dep -> TE.fmap (Dict.insert toComparable k dep))
         deps1
         deps2
-        (WasRepTask.pure Dict.empty)
+        (TE.pure Dict.empty)
 
 
 noDups : k -> v -> v -> Task Exit.Details v
 noDups _ _ _ =
-    WasRepTask.throw Exit.DetailsHandEditedDependencies
+    TE.throw Exit.DetailsHandEditedDependencies
 
 
 allowEqualDups : k -> v -> v -> Task Exit.Details v
 allowEqualDups _ v1 v2 =
     if v1 == v2 then
-        WasRepTask.pure v1
+        TE.pure v1
 
     else
-        WasRepTask.throw Exit.DetailsHandEditedDependencies
+        TE.throw Exit.DetailsHandEditedDependencies
 
 
 
@@ -368,10 +368,10 @@ allowEqualDups _ v1 v2 =
 fork : (a -> BE.Encoder) -> Task Never a -> Task Never (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
-        |> IO.bind
+        |> TE.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
-                    |> IO.fmap (\_ -> mvar)
+                Utils.forkIO (TE.bind (Utils.putMVar encoder mvar) work)
+                    |> TE.fmap (\_ -> mvar)
             )
 
 
@@ -381,25 +381,25 @@ fork encoder work =
 
 verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.Name Solver.Details -> Dict ( String, String ) Pkg.Name a -> Task Exit.Details Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
-    WasRepTask.eio identity
+    TE.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
-            |> IO.bind (\_ -> Utils.newEmptyMVar)
-            |> IO.bind
+            |> TE.bind (\_ -> Utils.newEmptyMVar)
+            |> TE.bind
                 (\mvar ->
                     Stuff.withRegistryLock cache
                         (Utils.mapTraverseWithKey identity Pkg.compareName (\k v -> fork depEncoder (verifyDep env mvar solution k v)) solution)
-                        |> IO.bind
+                        |> TE.bind
                             (\mvars ->
                                 Utils.putMVar dictNameMVarDepEncoder mvar mvars
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\_ ->
                                             Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) mvars
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\deps ->
                                                         case Utils.sequenceDictResult identity Pkg.compareName deps of
                                                             Err _ ->
                                                                 Stuff.getElmHome
-                                                                    |> IO.fmap
+                                                                    |> TE.fmap
                                                                         (\home ->
                                                                             Err
                                                                                 (Exit.DetailsBadDeps home
@@ -426,9 +426,9 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                         Details time outline 0 Dict.empty foreigns (ArtifactsFresh ifaces objs)
                                                                 in
                                                                 BW.writeBinary Opt.globalGraphEncoder scope (Stuff.objects root) objs
-                                                                    |> IO.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
-                                                                    |> IO.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
-                                                                    |> IO.fmap (\_ -> Ok details)
+                                                                    |> TE.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
+                                                                    |> TE.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
+                                                                    |> TE.fmap (\_ -> Ok details)
                                                     )
                                         )
                             )
@@ -494,14 +494,14 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
             Utils.mapIntersectionWith identity Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
     in
     Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
-        |> IO.bind
+        |> TE.bind
             (\exists ->
                 if exists then
                     Reporting.report key Reporting.DCached
-                        |> IO.bind
+                        |> TE.bind
                             (\_ ->
                                 File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.dat")
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\maybeCache ->
                                             case maybeCache of
                                                 Nothing ->
@@ -509,7 +509,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
                                                     if EverySet.member toComparableFingerprint fingerprint fingerprints then
-                                                        IO.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
+                                                        TE.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
 
                                                     else
                                                         build key cache depsMVar pkg details fingerprint fingerprints
@@ -518,19 +518,19 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                 else
                     Reporting.report key Reporting.DRequested
-                        |> IO.bind
+                        |> TE.bind
                             (\_ ->
                                 downloadPackage cache manager pkg vsn
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\result ->
                                             case result of
                                                 Err problem ->
                                                     Reporting.report key (Reporting.DFailed pkg vsn)
-                                                        |> IO.fmap (\_ -> Err (Just (Exit.BD_BadDownload pkg vsn problem)))
+                                                        |> TE.fmap (\_ -> Err (Just (Exit.BD_BadDownload pkg vsn problem)))
 
                                                 Ok () ->
                                                     Reporting.report key (Reporting.DReceived pkg vsn)
-                                                        |> IO.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
+                                                        |> TE.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
                                         )
                             )
             )
@@ -561,28 +561,28 @@ toComparableFingerprint fingerprint =
 build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Outline.read (Stuff.package cache pkg vsn)
-        |> IO.bind
+        |> TE.bind
             (\eitherOutline ->
                 case eitherOutline of
                     Err _ ->
                         Reporting.report key Reporting.DBroken
-                            |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                            |> TE.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.App _) ->
                         Reporting.report key Reporting.DBroken
-                            |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                            |> TE.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
                         Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
-                            |> IO.bind
+                            |> TE.bind
                                 (\allDeps ->
                                     Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps deps)
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\directDeps ->
                                                 case Utils.sequenceDictResult identity Pkg.compareName directDeps of
                                                     Err _ ->
                                                         Reporting.report key Reporting.DBroken
-                                                            |> IO.fmap (\_ -> Err Nothing)
+                                                            |> TE.fmap (\_ -> Err Nothing)
 
                                                     Ok directArtifacts ->
                                                         let
@@ -599,39 +599,39 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                 Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
                                                         in
                                                         getDocsStatus cache pkg vsn
-                                                            |> IO.bind
+                                                            |> TE.bind
                                                                 (\docsStatus ->
                                                                     Utils.newEmptyMVar
-                                                                        |> IO.bind
+                                                                        |> TE.bind
                                                                             (\mvar ->
                                                                                 Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
-                                                                                    |> IO.bind
+                                                                                    |> TE.bind
                                                                                         (\mvars ->
                                                                                             Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
-                                                                                                |> IO.bind
+                                                                                                |> TE.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                                                                                |> TE.bind (\_ -> TE.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                |> TE.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
                                                                                                             Nothing ->
                                                                                                                 Reporting.report key Reporting.DBroken
-                                                                                                                    |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                                    |> TE.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                                                                                                             Just statuses ->
                                                                                                                 Utils.newEmptyMVar
-                                                                                                                    |> IO.bind
+                                                                                                                    |> TE.bind
                                                                                                                         (\rmvar ->
                                                                                                                             Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
-                                                                                                                                |> IO.bind
+                                                                                                                                |> TE.bind
                                                                                                                                     (\rmvars ->
                                                                                                                                         Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
-                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
-                                                                                                                                            |> IO.bind
+                                                                                                                                            |> TE.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
+                                                                                                                                            |> TE.bind
                                                                                                                                                 (\maybeResults ->
                                                                                                                                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                                                                                                                                         Nothing ->
                                                                                                                                                             Reporting.report key Reporting.DBroken
-                                                                                                                                                                |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                                                                                |> TE.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                                                                                                                                                         Just results ->
                                                                                                                                                             let
@@ -656,9 +656,9 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                     EverySet.insert toComparableFingerprint f fs
                                                                                                                                                             in
                                                                                                                                                             writeDocs cache pkg vsn docsStatus results
-                                                                                                                                                                |> IO.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
-                                                                                                                                                                |> IO.bind (\_ -> Reporting.report key Reporting.DBuilt)
-                                                                                                                                                                |> IO.fmap (\_ -> Ok artifacts)
+                                                                                                                                                                |> TE.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
+                                                                                                                                                                |> TE.bind (\_ -> Reporting.report key Reporting.DBuilt)
+                                                                                                                                                                |> TE.fmap (\_ -> Ok artifacts)
                                                                                                                                                 )
                                                                                                                                     )
                                                                                                                         )
@@ -803,21 +803,21 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             path "elm"
     in
     File.exists guidaPath
-        |> IO.bind
+        |> TE.bind
             (\guidaExists ->
                 File.exists elmPath
-                    |> IO.bind
+                    |> TE.bind
                         (\elmExists ->
                             case Dict.get identity name foreignDeps of
                                 Just ForeignAmbiguous ->
-                                    IO.pure Nothing
+                                    TE.pure Nothing
 
                                 Just (ForeignSpecific iface) ->
                                     if guidaExists || elmExists then
-                                        IO.pure Nothing
+                                        TE.pure Nothing
 
                                     else
-                                        IO.pure (Just (SForeign iface))
+                                        TE.pure (Just (SForeign iface))
 
                                 Nothing ->
                                     if guidaExists then
@@ -830,7 +830,7 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
                                         crawlKernel foreignDeps mvar pkg src name
 
                                     else
-                                        IO.pure Nothing
+                                        TE.pure Nothing
                         )
             )
 
@@ -838,26 +838,26 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
 crawlFile : SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
 crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
-        |> IO.bind
+        |> TE.bind
             (\bytes ->
                 case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports
-                                |> IO.fmap (\deps -> Just (SLocal docsStatus deps modul))
+                                |> TE.fmap (\deps -> Just (SLocal docsStatus deps modul))
 
                         else
-                            IO.pure Nothing
+                            TE.pure Nothing
 
                     _ ->
-                        IO.pure Nothing
+                        TE.pure Nothing
             )
 
 
 crawlImports : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
 crawlImports foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
-        |> IO.bind
+        |> TE.bind
             (\statusDict ->
                 let
                     deps : Dict String Name.Name ()
@@ -869,11 +869,11 @@ crawlImports foreignDeps mvar pkg src imports =
                         Dict.diff deps statusDict
                 in
                 Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
-                    |> IO.bind
+                    |> TE.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
-                                |> IO.fmap (\_ -> deps)
+                                |> TE.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                |> TE.fmap (\_ -> deps)
                         )
             )
 
@@ -886,23 +886,23 @@ crawlKernel foreignDeps mvar pkg src name =
             Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
     in
     File.exists path
-        |> IO.bind
+        |> TE.bind
             (\exists ->
                 if exists then
                     File.readUtf8 path
-                        |> IO.bind
+                        |> TE.bind
                             (\bytes ->
                                 case Kernel.fromByteString pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
-                                        IO.pure Nothing
+                                        TE.pure Nothing
 
                                     Just (Kernel.Content imports chunks) ->
                                         crawlImports foreignDeps mvar pkg src imports
-                                            |> IO.fmap (\_ -> Just (SKernelLocal chunks))
+                                            |> TE.fmap (\_ -> Just (SKernelLocal chunks))
                             )
 
                 else
-                    IO.pure (Just SKernelForeign)
+                    TE.pure (Just SKernelForeign)
             )
 
 
@@ -932,15 +932,15 @@ compile pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
-                |> IO.bind
+                |> TE.bind
                     (\resultsDict ->
                         Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) (Dict.intersection compare resultsDict deps)
-                            |> IO.bind
+                            |> TE.bind
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                         Just results ->
                                             Compile.compile pkg (Utils.mapMapMaybe identity compare getInterface results) modul
-                                                |> IO.fmap
+                                                |> TE.fmap
                                                     (\result ->
                                                         case result of
                                                             Err _ ->
@@ -960,18 +960,18 @@ compile pkg mvar status =
                                                     )
 
                                         Nothing ->
-                                            IO.pure Nothing
+                                            TE.pure Nothing
                                 )
                     )
 
         SForeign iface ->
-            IO.pure (Just (RForeign iface))
+            TE.pure (Just (RForeign iface))
 
         SKernelLocal chunks ->
-            IO.pure (Just (RKernelLocal chunks))
+            TE.pure (Just (RKernelLocal chunks))
 
         SKernelForeign ->
-            IO.pure (Just RKernelForeign)
+            TE.pure (Just RKernelForeign)
 
 
 getInterface : DResult -> Maybe I.Interface
@@ -1002,7 +1002,7 @@ type DocsStatus
 getDocsStatus : Stuff.PackageCache -> Pkg.Name -> V.Version -> Task Never DocsStatus
 getDocsStatus cache pkg vsn =
     File.exists (Stuff.package cache pkg vsn ++ "/docs.json")
-        |> IO.fmap
+        |> TE.fmap
             (\exists ->
                 if exists then
                     DocsNotNeeded
@@ -1035,7 +1035,7 @@ writeDocs cache pkg vsn status results =
                 (Docs.encode (Utils.mapMapMaybe identity compare toDocs results))
 
         DocsNotNeeded ->
-            IO.pure ()
+            TE.pure ()
 
 
 toDocs : DResult -> Maybe Docs.Module
@@ -1061,28 +1061,28 @@ toDocs result =
 downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> Task Never (Result Exit.PackageProblem ())
 downloadPackage cache manager pkg vsn =
     Website.metadata pkg vsn "endpoint.json"
-        |> IO.bind
+        |> TE.bind
             (\url ->
-                Http.get manager url [] identity (IO.pure << Ok)
-                    |> IO.bind
+                Http.get manager url [] identity (TE.pure << Ok)
+                    |> TE.bind
                         (\eitherByteString ->
                             case eitherByteString of
                                 Err err ->
-                                    IO.pure (Err (Exit.PP_BadEndpointRequest err))
+                                    TE.pure (Err (Exit.PP_BadEndpointRequest err))
 
                                 Ok byteString ->
                                     case D.fromByteString endpointDecoder byteString of
                                         Err _ ->
-                                            IO.pure (Err (Exit.PP_BadEndpointContent url))
+                                            TE.pure (Err (Exit.PP_BadEndpointContent url))
 
                                         Ok ( endpoint, expectedHash ) ->
                                             Http.getArchive manager endpoint Exit.PP_BadArchiveRequest (Exit.PP_BadArchiveContent endpoint) <|
                                                 \( sha, archive ) ->
                                                     if expectedHash == Http.shaToChars sha then
-                                                        IO.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
+                                                        TE.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
 
                                                     else
-                                                        IO.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
+                                                        TE.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
                         )
             )
 

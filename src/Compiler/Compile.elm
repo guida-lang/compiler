@@ -19,7 +19,7 @@ import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
-import System.IO as IO
+import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 
@@ -34,8 +34,8 @@ type Artifacts
 
 compile : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
 compile pkg ifaces modul =
-    IO.pure (canonicalize pkg ifaces modul)
-        |> IO.fmap
+    TE.pure (canonicalize pkg ifaces modul)
+        |> TE.fmap
             (\canonicalResult ->
                 case canonicalResult of
                     Ok canonical ->

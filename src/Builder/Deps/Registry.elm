@@ -22,7 +22,7 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
@@ -71,7 +71,7 @@ fetch manager cache =
                     Stuff.registry cache
             in
             File.writeBinary registryEncoder path registry
-                |> IO.fmap (\_ -> registry)
+                |> TE.fmap (\_ -> registry)
 
 
 addEntry : KnownVersions -> Int -> Int
@@ -112,7 +112,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
         \news ->
             case news of
                 [] ->
-                    IO.pure oldRegistry
+                    TE.pure oldRegistry
 
                 _ :: _ ->
                     let
@@ -129,7 +129,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                             Registry newSize newPkgs
                     in
                     File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
-                        |> IO.fmap (\_ -> newRegistry)
+                        |> TE.fmap (\_ -> newRegistry)
 
 
 addNew : ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
@@ -179,7 +179,7 @@ bail _ _ =
 latest : Http.Manager -> Stuff.PackageCache -> Task Never (Result Exit.RegistryProblem Registry)
 latest manager cache =
     read cache
-        |> IO.bind
+        |> TE.bind
             (\maybeOldRegistry ->
                 case maybeOldRegistry of
                     Just oldRegistry ->
@@ -216,16 +216,16 @@ getVersions_ name (Registry _ versions) =
 post : Http.Manager -> String -> D.Decoder x a -> (a -> Task Never b) -> Task Never (Result Exit.RegistryProblem b)
 post manager path decoder callback =
     Website.route path []
-        |> IO.bind
+        |> TE.bind
             (\url ->
                 Http.post manager url [] Exit.RP_Http <|
                     \body ->
                         case D.fromByteString decoder body of
                             Ok a ->
-                                IO.fmap Ok (callback a)
+                                TE.fmap Ok (callback a)
 
                             Err _ ->
-                                IO.pure <| Err <| Exit.RP_Data url body
+                                TE.pure <| Err <| Exit.RP_Data url body
             )
 
 

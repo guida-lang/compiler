@@ -1,13 +1,15 @@
-module Builder.Reporting.Task exposing
-    ( bind
+module Utils.Task.Extra exposing
+    ( apply
+    , bind
     , eio
     , fmap
     , io
     , mapError
+    , mapM
     , mio
     , pure
-    , run
     , throw
+    , toResult
     , void
     )
 
@@ -18,21 +20,21 @@ import Task exposing (Task)
 -- TASKS
 
 
-run : Task x a -> Task Never (Result x a)
-run task =
+toResult : Task x a -> Task Never (Result x a)
+toResult task =
     task
         |> Task.andThen (\r -> Ok r |> Task.succeed)
         |> Task.onError (\err -> Err err |> Task.succeed)
 
 
 throw : x -> Task x a
-throw x =
-    Task.fail x
+throw =
+    Task.fail
 
 
 mapError : (x -> y) -> Task x a -> Task y a
-mapError func task =
-    Task.mapError func task
+mapError =
+    Task.mapError
 
 
 
@@ -101,3 +103,8 @@ fmap =
 bind : (a -> Task x b) -> Task x a -> Task x b
 bind =
     Task.andThen
+
+
+mapM : (a -> Task x b) -> List a -> Task x (List b)
+mapM f =
+    List.map f >> Task.sequence

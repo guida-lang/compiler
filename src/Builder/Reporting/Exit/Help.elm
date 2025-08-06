@@ -16,6 +16,7 @@ import Compiler.Reporting.Error as Error
 import Maybe.Extra as Maybe
 import System.IO as IO
 import Task exposing (Task)
+import Utils.Task.Extra as TE
 
 
 
@@ -129,7 +130,7 @@ toStderr doc =
 toHandle : IO.Handle -> D.Doc -> Task Never ()
 toHandle handle doc =
     IO.hIsTerminalDevice handle
-        |> IO.bind
+        |> TE.bind
             (\isTerminal ->
                 if isTerminal then
                     D.toAnsi handle doc

@@ -27,7 +27,7 @@ import Compiler.Elm.Version as V
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Url.Builder
 import Utils.Bytes.Decode as BD
@@ -66,7 +66,7 @@ managerDecoder =
 getManager : Task Never Manager
 getManager =
     -- TODO newManager tlsManagerSettings
-    IO.pure Manager
+    TE.pure Manager
 
 
 

@@ -130,7 +130,6 @@ module Utils.Main exposing
     )
 
 import Basics.Extra exposing (flip)
-import Builder.Reporting.Task as WasRepTask
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Reporting.Result as R
@@ -151,6 +150,7 @@ import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
+import Utils.Task.Extra as TE
 
 
 liftInputT : Task Never () -> ReplInputT ()
@@ -237,8 +237,8 @@ filterM : (a -> Task Never Bool) -> List a -> Task Never (List a)
 filterM p =
     List.foldr
         (\x acc ->
-            IO.apply acc
-                (IO.fmap
+            TE.apply acc
+                (TE.fmap
                     (\flg ->
                         if flg then
                             (::) x
@@ -249,7 +249,7 @@ filterM p =
                     (p x)
                 )
         )
-        (IO.pure [])
+        (TE.pure [])
 
 
 find : (k -> comparable) -> k -> Dict comparable k a -> a
@@ -393,9 +393,9 @@ mapM_ f =
     let
         c : a -> Task Never () -> Task Never ()
         c x k =
-            IO.bind (\_ -> k) (f x)
+            TE.bind (\_ -> k) (f x)
     in
-    List.foldr c (IO.pure ())
+    List.foldr c (TE.pure ())
 
 
 dictMapM_ : (k -> k -> Order) -> (a -> Task Never b) -> Dict c k a -> Task Never ()
@@ -403,9 +403,9 @@ dictMapM_ keyComparison f =
     let
         c : k -> a -> Task Never () -> Task Never ()
         c _ x k =
-            IO.bind (\_ -> k) (f x)
+            TE.bind (\_ -> k) (f x)
     in
-    Map.foldl keyComparison c (IO.pure ())
+    Map.foldl keyComparison c (TE.pure ())
 
 
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -443,8 +443,8 @@ mapTraverse toComparable keyComparison f =
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k b)
 mapTraverseWithKey toComparable keyComparison f =
     Map.foldl keyComparison
-        (\k a -> IO.bind (\c -> IO.fmap (\va -> Map.insert toComparable k va c) (f k a)))
-        (IO.pure Map.empty)
+        (\k a -> TE.bind (\c -> TE.fmap (\va -> Map.insert toComparable k va c) (f k a)))
+        (TE.pure Map.empty)
 
 
 mapTraverseResult : (k -> comparable) -> (k -> k -> Order) -> (a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
@@ -461,7 +461,7 @@ mapTraverseWithKeyResult toComparable keyComparison f =
 
 listTraverse : (a -> Task Never b) -> List a -> Task Never (List b)
 listTraverse =
-    IO.mapM
+    TE.mapM
 
 
 listMaybeTraverse : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -472,25 +472,25 @@ listMaybeTraverse f =
 
 nonEmptyListTraverse : (a -> Task Never b) -> NE.Nonempty a -> Task Never (NE.Nonempty b)
 nonEmptyListTraverse f (NE.Nonempty x list) =
-    List.foldl (\a -> IO.bind (\c -> IO.fmap (\va -> NE.cons va c) (f a)))
-        (IO.fmap NE.singleton (f x))
+    List.foldl (\a -> TE.bind (\c -> TE.fmap (\va -> NE.cons va c) (f a)))
+        (TE.fmap NE.singleton (f x))
         list
 
 
 listTraverse_ : (a -> Task Never b) -> List a -> Task Never ()
 listTraverse_ f =
     listTraverse f
-        >> IO.fmap (\_ -> ())
+        >> TE.fmap (\_ -> ())
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
 maybeTraverseTask f a =
     case Maybe.map f a of
         Just b ->
-            WasRepTask.fmap Just b
+            TE.fmap Just b
 
         Nothing ->
-            WasRepTask.pure Nothing
+            TE.pure Nothing
 
 
 zipWithM : (a -> b -> Maybe c) -> List a -> List b -> Maybe (List c)
@@ -744,11 +744,11 @@ lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
             lockFile path
-                |> IO.bind ioFunc
-                |> IO.bind
+                |> TE.bind ioFunc
+                |> TE.bind
                     (\a ->
                         unlockFile path
-                            |> IO.fmap (\_ -> a)
+                            |> TE.fmap (\_ -> a)
                     )
 
 
@@ -861,7 +861,7 @@ dirCanonicalizePath path =
 dirWithCurrentDirectory : FilePath -> Task Never a -> Task Never a
 dirWithCurrentDirectory dir action =
     dirGetCurrentDirectory
-        |> IO.bind
+        |> TE.bind
             (\currentDir ->
                 bracket_
                     (Impure.task "dirWithCurrentDirectory"
@@ -900,7 +900,7 @@ envLookupEnv name =
 
 envGetProgName : Task Never String
 envGetProgName =
-    IO.pure "guida"
+    TE.pure "guida"
 
 
 envGetArgs : Task Never (List String)
@@ -986,13 +986,13 @@ type AsyncException
 bracket : Task Never a -> (a -> Task Never b) -> (a -> Task Never c) -> Task Never c
 bracket before after thing =
     before
-        |> IO.bind
+        |> TE.bind
             (\a ->
                 thing a
-                    |> IO.bind
+                    |> TE.bind
                         (\r ->
                             after a
-                                |> IO.fmap (\_ -> r)
+                                |> TE.fmap (\_ -> r)
                         )
             )
 
@@ -1026,10 +1026,10 @@ type MVar a
 newMVar : (a -> BE.Encoder) -> a -> Task Never (MVar a)
 newMVar toEncoder value =
     newEmptyMVar
-        |> IO.bind
+        |> TE.bind
             (\mvar ->
                 putMVar toEncoder mvar value
-                    |> IO.fmap (\_ -> mvar)
+                    |> TE.fmap (\_ -> mvar)
             )
 
 
@@ -1044,11 +1044,11 @@ readMVar decoder (MVar ref) =
 modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> Task Never ( a, b )) -> Task Never b
 modifyMVar decoder toEncoder m io =
     takeMVar decoder m
-        |> IO.bind io
-        |> IO.bind
+        |> TE.bind io
+        |> TE.bind
             (\( a, b ) ->
                 putMVar toEncoder m a
-                    |> IO.fmap (\_ -> b)
+                    |> TE.fmap (\_ -> b)
             )
 
 
@@ -1095,13 +1095,13 @@ type ChItem a
 newChan : (MVar (ChItem a) -> BE.Encoder) -> Task Never (Chan a)
 newChan toEncoder =
     newEmptyMVar
-        |> IO.bind
+        |> TE.bind
             (\hole ->
                 newMVar toEncoder hole
-                    |> IO.bind
+                    |> TE.bind
                         (\readVar ->
                             newMVar toEncoder hole
-                                |> IO.fmap
+                                |> TE.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
                                     )
@@ -1114,7 +1114,7 @@ readChan decoder (Chan readVar _) =
     modifyMVar mVarDecoder mVarEncoder readVar <|
         \read_end ->
             readMVar (chItemDecoder decoder) read_end
-                |> IO.fmap
+                |> TE.fmap
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
                         -- else dupChan doesn't work
@@ -1125,13 +1125,13 @@ readChan decoder (Chan readVar _) =
 writeChan : (a -> BE.Encoder) -> Chan a -> a -> Task Never ()
 writeChan toEncoder (Chan _ writeVar) val =
     newEmptyMVar
-        |> IO.bind
+        |> TE.bind
             (\new_hole ->
                 takeMVar mVarDecoder writeVar
-                    |> IO.bind
+                    |> TE.bind
                         (\old_hole ->
                             putMVar (chItemEncoder toEncoder) old_hole (ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                                |> TE.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
                         )
             )
 

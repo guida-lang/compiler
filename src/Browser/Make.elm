@@ -17,14 +17,14 @@ import Builder.Elm.Details as Details
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as ReportingTask
+import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
 import Maybe.Extra as Maybe
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
@@ -56,14 +56,14 @@ type ReportType
 run : String -> Flags -> Task Never (Result Exit.Make String)
 run path flags =
     Stuff.findRoot
-        |> IO.bind
+        |> TE.bind
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
                         runHelp root path flags
 
                     Nothing ->
-                        IO.pure (Err Exit.MakeNoOutline)
+                        TE.pure (Err Exit.MakeNoOutline)
             )
 
 
@@ -72,29 +72,29 @@ runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock root <|
-                ReportingTask.run <|
+                TE.toResult <|
                     (getMode debug optimize
-                        |> ReportingTask.bind
+                        |> TE.bind
                             (\desiredMode ->
                                 let
                                     style : Reporting.Style
                                     style =
                                         Reporting.json
                                 in
-                                ReportingTask.eio Exit.MakeBadDetails (Details.load style scope root)
-                                    |> ReportingTask.bind
+                                TE.eio Exit.MakeBadDetails (Details.load style scope root)
+                                    |> TE.bind
                                         (\details ->
                                             buildPaths style root details (NE.Nonempty path [])
-                                                |> ReportingTask.bind
+                                                |> TE.bind
                                                     (\artifacts ->
                                                         case getMains artifacts of
                                                             [] ->
-                                                                -- ReportingTask.pure ()
+                                                                -- TE.pure ()
                                                                 crash "No main!"
 
                                                             [ name ] ->
                                                                 toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                    |> ReportingTask.bind (ReportingTask.pure << Html.sandwich name)
+                                                                    |> TE.bind (TE.pure << Html.sandwich name)
 
                                                             _ ->
                                                                 crash "TODO"
@@ -113,16 +113,16 @@ getMode : Bool -> Bool -> Task Exit.Make DesiredMode
 getMode debug optimize =
     case ( debug, optimize ) of
         ( True, True ) ->
-            ReportingTask.throw Exit.MakeCannotOptimizeAndDebug
+            TE.throw Exit.MakeCannotOptimizeAndDebug
 
         ( True, False ) ->
-            ReportingTask.pure Debug
+            TE.pure Debug
 
         ( False, False ) ->
-            ReportingTask.pure Dev
+            TE.pure Dev
 
         ( False, True ) ->
-            ReportingTask.pure Prod
+            TE.pure Prod
 
 
 
@@ -131,7 +131,7 @@ getMode debug optimize =
 
 buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
-    ReportingTask.eio Exit.MakeCannotBuild <|
+    TE.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths
 
 
@@ -181,7 +181,7 @@ type DesiredMode
 
 toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
 toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
-    ReportingTask.mapError Exit.MakeBadGenerate <|
+    TE.mapError Exit.MakeBadGenerate <|
         case desiredMode of
             Debug ->
                 Generate.debug withSourceMaps leadingLines root details artifacts
@@ -202,8 +202,8 @@ reportType =
     Parser
         { singular = "report type"
         , plural = "report types"
-        , suggest = \_ -> IO.pure [ "json" ]
-        , examples = \_ -> IO.pure [ "json" ]
+        , suggest = \_ -> TE.pure [ "json" ]
+        , examples = \_ -> TE.pure [ "json" ]
         }
 
 
@@ -221,8 +221,8 @@ output =
     Parser
         { singular = "output file"
         , plural = "output files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "elm.js", "index.html", "/dev/null" ]
+        , suggest = \_ -> TE.pure []
+        , examples = \_ -> TE.pure [ "elm.js", "index.html", "/dev/null" ]
         }
 
 
@@ -246,8 +246,8 @@ docsFile =
     Parser
         { singular = "json file"
         , plural = "json files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "docs.json", "documentation.json" ]
+        , suggest = \_ -> TE.pure []
+        , examples = \_ -> TE.pure [ "docs.json", "documentation.json" ]
         }
 
 

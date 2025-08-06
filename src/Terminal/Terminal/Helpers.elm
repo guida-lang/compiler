@@ -16,7 +16,7 @@ import Compiler.Elm.Version as V
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
@@ -32,7 +32,7 @@ version =
         { singular = "version"
         , plural = "versions"
         , suggest = suggestVersion
-        , examples = IO.pure << exampleVersions
+        , examples = TE.pure << exampleVersions
         }
 
 
@@ -48,7 +48,7 @@ parseVersion chars =
 
 suggestVersion : String -> Task Never (List String)
 suggestVersion _ =
-    IO.pure []
+    TE.pure []
 
 
 exampleVersions : String -> List String
@@ -89,7 +89,7 @@ guidaOrElmFile =
     Parser
         { singular = "guida or elm file"
         , plural = "guida or elm files"
-        , suggest = \_ -> IO.pure []
+        , suggest = \_ -> TE.pure []
         , examples = exampleGuidaOrElmFiles
         }
 
@@ -109,7 +109,7 @@ parseGuidaOrElmFile chars =
 
 exampleGuidaOrElmFiles : String -> Task Never (List String)
 exampleGuidaOrElmFiles _ =
-    IO.pure [ "Main.guida", "src/Main.guida", "Main.elm" ]
+    TE.pure [ "Main.guida", "src/Main.guida", "Main.elm" ]
 
 
 
@@ -121,7 +121,7 @@ filePath =
     Parser
         { singular = "file path"
         , plural = "file paths"
-        , suggest = \_ -> IO.pure []
+        , suggest = \_ -> TE.pure []
         , examples = exampleFilePaths
         }
 
@@ -133,7 +133,7 @@ parseFilePath =
 
 exampleFilePaths : String -> Task Never (List String)
 exampleFilePaths _ =
-    IO.pure [ "Main.elm", "src" ]
+    TE.pure [ "Main.elm", "src" ]
 
 
 
@@ -163,10 +163,10 @@ parsePackage chars =
 suggestPackages : String -> Task Never (List String)
 suggestPackages given =
     Stuff.getPackageCache
-        |> IO.bind
+        |> TE.bind
             (\cache ->
                 Registry.read cache
-                    |> IO.fmap
+                    |> TE.fmap
                         (\maybeRegistry ->
                             case maybeRegistry of
                                 Nothing ->
@@ -182,10 +182,10 @@ suggestPackages given =
 examplePackages : String -> Task Never (List String)
 examplePackages given =
     Stuff.getPackageCache
-        |> IO.bind
+        |> TE.bind
             (\cache ->
                 Registry.read cache
-                    |> IO.fmap
+                    |> TE.fmap
                         (\maybeRegistry ->
                             case maybeRegistry of
                                 Nothing ->

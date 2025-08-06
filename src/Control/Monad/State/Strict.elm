@@ -15,6 +15,7 @@ import Json.Encode as Encode
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Impure as Impure
+import Utils.Task.Extra as TE
 
 
 {-| newtype StateT s m a
@@ -35,12 +36,12 @@ type StateT s a
 
 evalStateT : StateT s a -> s -> Task Never a
 evalStateT (StateT f) =
-    f >> IO.fmap Tuple.first
+    f >> TE.fmap Tuple.first
 
 
 liftIO : Task Never a -> StateT s a
 liftIO io =
-    StateT (\s -> IO.fmap (\a -> ( a, s )) io)
+    StateT (\s -> TE.fmap (\a -> ( a, s )) io)
 
 
 apply : StateT s a -> StateT s (a -> b) -> StateT s b
@@ -48,10 +49,10 @@ apply (StateT arg) (StateT func) =
     StateT
         (\s ->
             arg s
-                |> IO.bind
+                |> TE.bind
                     (\( a, sa ) ->
                         func sa
-                            |> IO.fmap (\( fb, sb ) -> ( fb a, sb ))
+                            |> TE.fmap (\( fb, sb ) -> ( fb a, sb ))
                     )
         )
 
@@ -63,7 +64,7 @@ fmap func argStateT =
 
 pure : a -> StateT s a
 pure value =
-    StateT (\s -> IO.pure ( value, s ))
+    StateT (\s -> TE.pure ( value, s ))
 
 
 get : StateT s IO.ReplState

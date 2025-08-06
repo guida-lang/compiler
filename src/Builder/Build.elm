@@ -48,7 +48,7 @@ import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import System.IO as IO
+import Utils.Task.Extra as TE
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
@@ -70,11 +70,11 @@ makeEnv key root (Details.Details _ validOutline buildID locals foreigns _) =
     case validOutline of
         Details.ValidApp givenSrcDirs ->
             Utils.listTraverse (toAbsoluteSrcDir root) (NE.toList givenSrcDirs)
-                |> IO.fmap (\srcDirs -> Env key root Parse.Application srcDirs buildID locals foreigns)
+                |> TE.fmap (\srcDirs -> Env key root Parse.Application srcDirs buildID locals foreigns)
 
         Details.ValidPkg pkg _ _ ->
             toAbsoluteSrcDir root (Outline.RelativeSrcDir "src")
-                |> IO.fmap (\srcDir -> Env key root (Parse.Package pkg) [ srcDir ] buildID locals foreigns)
+                |> TE.fmap (\srcDir -> Env key root (Parse.Package pkg) [ srcDir ] buildID locals foreigns)
 
 
 
@@ -87,7 +87,7 @@ type AbsoluteSrcDir
 
 toAbsoluteSrcDir : FilePath -> Outline.SrcDir -> Task Never AbsoluteSrcDir
 toAbsoluteSrcDir root srcDir =
-    IO.fmap AbsoluteSrcDir
+    TE.fmap AbsoluteSrcDir
         (Utils.dirCanonicalizePath
             (case srcDir of
                 Outline.AbsoluteSrcDir dir ->
@@ -115,10 +115,10 @@ described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Sim
 fork : (a -> BE.Encoder) -> Task Never a -> Task Never (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
-        |> IO.bind
+        |> TE.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
-                    |> IO.fmap (\_ -> mvar)
+                Utils.forkIO (TE.bind (Utils.putMVar encoder mvar) work)
+                    |> TE.fmap (\_ -> mvar)
             )
 
 
@@ -136,14 +136,14 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
     Reporting.trackBuild docsDecoder docsEncoder style <|
         \key ->
             makeEnv key root details
-                |> IO.bind
+                |> TE.bind
                     (\env ->
                         Details.loadInterfaces root details
-                            |> IO.bind
+                            |> TE.bind
                                 (\dmvar ->
                                     -- crawl
                                     Utils.newEmptyMVar
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\mvar ->
                                                 let
                                                     docsNeed : DocsNeed
@@ -151,40 +151,40 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                         toDocsNeed docsGoal
                                                 in
                                                 Map.fromKeysA identity (fork statusEncoder << crawlModule env mvar docsNeed) (e :: es)
-                                                    |> IO.bind
+                                                    |> TE.bind
                                                         (\roots ->
                                                             Utils.putMVar statusDictEncoder mvar roots
-                                                                |> IO.bind
+                                                                |> TE.bind
                                                                     (\_ ->
                                                                         Utils.dictMapM_ compare (Utils.readMVar statusDecoder) roots
-                                                                            |> IO.bind
+                                                                            |> TE.bind
                                                                                 (\_ ->
-                                                                                    IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
-                                                                                        |> IO.bind
+                                                                                    TE.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                                                        |> TE.bind
                                                                                             (\statuses ->
                                                                                                 -- compile
                                                                                                 checkMidpoint dmvar statuses
-                                                                                                    |> IO.bind
+                                                                                                    |> TE.bind
                                                                                                         (\midpoint ->
                                                                                                             case midpoint of
                                                                                                                 Err problem ->
-                                                                                                                    IO.pure (Err (Exit.BuildProjectProblem problem))
+                                                                                                                    TE.pure (Err (Exit.BuildProjectProblem problem))
 
                                                                                                                 Ok foreigns ->
                                                                                                                     Utils.newEmptyMVar
-                                                                                                                        |> IO.bind
+                                                                                                                        |> TE.bind
                                                                                                                             (\rmvar ->
                                                                                                                                 forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
-                                                                                                                                    |> IO.bind
+                                                                                                                                    |> TE.bind
                                                                                                                                         (\resultMVars ->
                                                                                                                                             Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
-                                                                                                                                                |> IO.bind
+                                                                                                                                                |> TE.bind
                                                                                                                                                     (\_ ->
                                                                                                                                                         Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
-                                                                                                                                                            |> IO.bind
+                                                                                                                                                            |> TE.bind
                                                                                                                                                                 (\results ->
                                                                                                                                                                     writeDetails root details results
-                                                                                                                                                                        |> IO.bind
+                                                                                                                                                                        |> TE.bind
                                                                                                                                                                             (\_ ->
                                                                                                                                                                                 finalizeExposed root docsGoal exposed results
                                                                                                                                                                             )
@@ -224,60 +224,60 @@ fromPaths style root details paths =
     Reporting.trackBuild artifactsDecoder artifactsEncoder style <|
         \key ->
             makeEnv key root details
-                |> IO.bind
+                |> TE.bind
                     (\env ->
                         findRoots env paths
-                            |> IO.bind
+                            |> TE.bind
                                 (\elroots ->
                                     case elroots of
                                         Err problem ->
-                                            IO.pure (Err (Exit.BuildProjectProblem problem))
+                                            TE.pure (Err (Exit.BuildProjectProblem problem))
 
                                         Ok lroots ->
                                             -- crawl
                                             Details.loadInterfaces root details
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\dmvar ->
                                                         Utils.newMVar statusDictEncoder Dict.empty
-                                                            |> IO.bind
+                                                            |> TE.bind
                                                                 (\smvar ->
                                                                     Utils.nonEmptyListTraverse (fork rootStatusEncoder << crawlRoot env smvar) lroots
-                                                                        |> IO.bind
+                                                                        |> TE.bind
                                                                             (\srootMVars ->
                                                                                 Utils.nonEmptyListTraverse (Utils.readMVar rootStatusDecoder) srootMVars
-                                                                                    |> IO.bind
+                                                                                    |> TE.bind
                                                                                         (\sroots ->
-                                                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder smvar)
-                                                                                                |> IO.bind
+                                                                                            TE.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder smvar)
+                                                                                                |> TE.bind
                                                                                                     (\statuses ->
                                                                                                         checkMidpointAndRoots dmvar statuses sroots
-                                                                                                            |> IO.bind
+                                                                                                            |> TE.bind
                                                                                                                 (\midpoint ->
                                                                                                                     case midpoint of
                                                                                                                         Err problem ->
-                                                                                                                            IO.pure (Err (Exit.BuildProjectProblem problem))
+                                                                                                                            TE.pure (Err (Exit.BuildProjectProblem problem))
 
                                                                                                                         Ok foreigns ->
                                                                                                                             -- compile
                                                                                                                             Utils.newEmptyMVar
-                                                                                                                                |> IO.bind
+                                                                                                                                |> TE.bind
                                                                                                                                     (\rmvar ->
                                                                                                                                         forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
-                                                                                                                                            |> IO.bind
+                                                                                                                                            |> TE.bind
                                                                                                                                                 (\resultsMVars ->
                                                                                                                                                     Utils.putMVar resultDictEncoder rmvar resultsMVars
-                                                                                                                                                        |> IO.bind
+                                                                                                                                                        |> TE.bind
                                                                                                                                                             (\_ ->
                                                                                                                                                                 Utils.nonEmptyListTraverse (fork rootResultEncoder << checkRoot env resultsMVars) sroots
-                                                                                                                                                                    |> IO.bind
+                                                                                                                                                                    |> TE.bind
                                                                                                                                                                         (\rrootMVars ->
                                                                                                                                                                             Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultsMVars
-                                                                                                                                                                                |> IO.bind
+                                                                                                                                                                                |> TE.bind
                                                                                                                                                                                     (\results ->
                                                                                                                                                                                         writeDetails root details results
-                                                                                                                                                                                            |> IO.bind
+                                                                                                                                                                                            |> TE.bind
                                                                                                                                                                                                 (\_ ->
-                                                                                                                                                                                                    IO.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultDecoder) rrootMVars)
+                                                                                                                                                                                                    TE.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultDecoder) rrootMVars)
                                                                                                                                                                                                 )
                                                                                                                                                                                     )
                                                                                                                                                                         )
@@ -338,7 +338,7 @@ crawlDeps env mvar deps blockedValue =
             fork statusEncoder (crawlModule env mvar (DocsNeed False) name)
     in
     Utils.takeMVar statusDictDecoder mvar
-        |> IO.bind
+        |> TE.bind
             (\statusDict ->
                 let
                     depsDict : Dict String ModuleName.Raw ()
@@ -350,13 +350,13 @@ crawlDeps env mvar deps blockedValue =
                         Dict.diff depsDict statusDict
                 in
                 Utils.mapTraverseWithKey identity compare crawlNew newsDict
-                    |> IO.bind
+                    |> TE.bind
                         (\statuses ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union statuses statusDict)
-                                |> IO.bind
+                                |> TE.bind
                                     (\_ ->
                                         Utils.dictMapM_ compare (Utils.readMVar statusDecoder) statuses
-                                            |> IO.fmap (\_ -> blockedValue)
+                                            |> TE.fmap (\_ -> blockedValue)
                                     )
                         )
             )
@@ -374,27 +374,27 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
             ModuleName.toFilePath name ++ ".elm"
     in
     Utils.filterM File.exists (List.map (flip addRelative guidaFileName) srcDirs)
-        |> IO.bind
+        |> TE.bind
             (\guidaPaths ->
                 case guidaPaths of
                     [ path ] ->
-                        IO.pure [ path ]
+                        TE.pure [ path ]
 
                     _ ->
                         Utils.filterM File.exists (List.map (flip addRelative elmFileName) srcDirs)
-                            |> IO.fmap (\elmPaths -> guidaPaths ++ elmPaths)
+                            |> TE.fmap (\elmPaths -> guidaPaths ++ elmPaths)
             )
-        |> IO.bind
+        |> TE.bind
             (\paths ->
                 case paths of
                     [ path ] ->
                         case Dict.get identity name foreigns of
                             Just (Details.Foreign dep deps) ->
-                                IO.pure <| SBadImport <| Import.Ambiguous path [] dep deps
+                                TE.pure <| SBadImport <| Import.Ambiguous path [] dep deps
 
                             Nothing ->
                                 File.getTime path
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\newTime ->
                                             case Dict.get identity name locals of
                                                 Nothing ->
@@ -409,22 +409,22 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         )
 
                     p1 :: p2 :: ps ->
-                        IO.pure <| SBadImport <| Import.AmbiguousLocal (Utils.fpMakeRelative root p1) (Utils.fpMakeRelative root p2) (List.map (Utils.fpMakeRelative root) ps)
+                        TE.pure <| SBadImport <| Import.AmbiguousLocal (Utils.fpMakeRelative root p1) (Utils.fpMakeRelative root p2) (List.map (Utils.fpMakeRelative root) ps)
 
                     [] ->
                         case Dict.get identity name foreigns of
                             Just (Details.Foreign dep deps) ->
                                 case deps of
                                     [] ->
-                                        IO.pure <| SForeign dep
+                                        TE.pure <| SForeign dep
 
                                     d :: ds ->
-                                        IO.pure <| SBadImport <| Import.AmbiguousForeign dep d ds
+                                        TE.pure <| SBadImport <| Import.AmbiguousForeign dep d ds
 
                             Nothing ->
                                 if Name.isKernel name && Parse.isKernel projectType then
                                     File.exists ("src/" ++ ModuleName.toFilePath name ++ ".js")
-                                        |> IO.fmap
+                                        |> TE.fmap
                                             (\exists ->
                                                 if exists then
                                                     SKernel
@@ -434,23 +434,23 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                             )
 
                                 else
-                                    IO.pure <| SBadImport Import.NotFound
+                                    TE.pure <| SBadImport Import.NotFound
             )
 
 
 crawlFile : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> Task Never Status
 crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
     File.readUtf8 (Utils.fpCombine root path)
-        |> IO.bind
+        |> TE.bind
             (\source ->
                 case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                     Err err ->
-                        IO.pure <| SBadSyntax path time source err
+                        TE.pure <| SBadSyntax path time source err
 
                     Ok ((Src.Module _ maybeActualName _ _ imports values _ _ _ _) as modul) ->
                         case maybeActualName of
                             Nothing ->
-                                IO.pure <| SBadSyntax path time source (Syntax.ModuleNameUnspecified expectedName)
+                                TE.pure <| SBadSyntax path time source (Syntax.ModuleNameUnspecified expectedName)
 
                             Just ((A.At _ actualName) as name) ->
                                 if expectedName == actualName then
@@ -466,7 +466,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                                     crawlDeps env mvar deps (SChanged local source modul docsNeed)
 
                                 else
-                                    IO.pure <| SBadSyntax path time source (Syntax.ModuleNameMismatch expectedName name)
+                                    TE.pure <| SBadSyntax path time source (Syntax.ModuleNameMismatch expectedName name)
             )
 
 
@@ -505,41 +505,41 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
     case status of
         SCached ((Details.Local path time deps hasMain lastChange lastCompile) as local) ->
             Utils.readMVar resultDictDecoder resultsMVar
-                |> IO.bind
+                |> TE.bind
                     (\results ->
                         checkDeps root results deps lastCompile
-                            |> IO.bind
+                            |> TE.bind
                                 (\depsStatus ->
                                     case depsStatus of
                                         DepsChange ifaces ->
                                             File.readUtf8 path
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\source ->
                                                         case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                                                             Ok modul ->
                                                                 compile env (DocsNeed False) local source ifaces modul
 
                                                             Err err ->
-                                                                IO.pure <|
+                                                                TE.pure <|
                                                                     RProblem <|
                                                                         Error.Module name path time source (Error.BadSyntax err)
                                                     )
 
                                         DepsSame _ _ ->
                                             Utils.newMVar cachedInterfaceEncoder Unneeded
-                                                |> IO.fmap
+                                                |> TE.fmap
                                                     (\mvar ->
                                                         RCached hasMain lastChange mvar
                                                     )
 
                                         DepsBlock ->
-                                            IO.pure RBlocked
+                                            TE.pure RBlocked
 
                                         DepsNotFound problems ->
                                             File.readUtf8 path
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\source ->
-                                                        IO.pure <|
+                                                        TE.pure <|
                                                             RProblem <|
                                                                 Error.Module name path time source <|
                                                                     case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
@@ -554,10 +554,10 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
 
         SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
             Utils.readMVar resultDictDecoder resultsMVar
-                |> IO.bind
+                |> TE.bind
                     (\results ->
                         checkDeps root results deps lastCompile
-                            |> IO.bind
+                            |> TE.bind
                                 (\depsStatus ->
                                     case depsStatus of
                                         DepsChange ifaces ->
@@ -565,21 +565,21 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
 
                                         DepsSame same cached ->
                                             loadInterfaces root same cached
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\maybeLoaded ->
                                                         case maybeLoaded of
                                                             Nothing ->
-                                                                IO.pure RBlocked
+                                                                TE.pure RBlocked
 
                                                             Just ifaces ->
                                                                 compile env docsNeed local source ifaces modul
                                                     )
 
                                         DepsBlock ->
-                                            IO.pure RBlocked
+                                            TE.pure RBlocked
 
                                         DepsNotFound problems ->
-                                            IO.pure <|
+                                            TE.pure <|
                                                 RProblem <|
                                                     Error.Module name path time source <|
                                                         Error.BadImports (toImportErrors env results imports problems)
@@ -587,10 +587,10 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                     )
 
         SBadImport importProblem ->
-            IO.pure (RNotFound importProblem)
+            TE.pure (RNotFound importProblem)
 
         SBadSyntax path time source err ->
-            IO.pure <|
+            TE.pure <|
                 RProblem <|
                     Error.Module name path time source <|
                         Error.BadSyntax err
@@ -598,13 +598,13 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
         SForeign home ->
             case Utils.find ModuleName.toComparableCanonical (TypeCheck.Canonical home name) foreigns of
                 I.Public iface ->
-                    IO.pure (RForeign iface)
+                    TE.pure (RForeign iface)
 
                 I.Private _ _ _ ->
                     crash <| "mistakenly seeing private interface for " ++ Pkg.toChars home ++ " " ++ name
 
         SKernel ->
-            IO.pure RKernel
+            TE.pure RKernel
 
 
 
@@ -636,7 +636,7 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
     case deps of
         dep :: otherDeps ->
             Utils.readMVar bResultDecoder (Utils.find identity dep results)
-                |> IO.bind
+                |> TE.bind
                     (\result ->
                         case result of
                             RNew (Details.Local _ _ _ _ lastChange _) iface _ _ ->
@@ -667,25 +667,25 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
         [] ->
             case List.reverse importProblems of
                 p :: ps ->
-                    IO.pure <| DepsNotFound (NE.Nonempty p ps)
+                    TE.pure <| DepsNotFound (NE.Nonempty p ps)
 
                 [] ->
                     if isBlocked then
-                        IO.pure <| DepsBlock
+                        TE.pure <| DepsBlock
 
                     else if List.isEmpty new && lastDepChange <= lastCompile then
-                        IO.pure <| DepsSame same cached
+                        TE.pure <| DepsSame same cached
 
                     else
                         loadInterfaces root same cached
-                            |> IO.bind
+                            |> TE.bind
                                 (\maybeLoaded ->
                                     case maybeLoaded of
                                         Nothing ->
-                                            IO.pure DepsBlock
+                                            TE.pure DepsBlock
 
                                         Just ifaces ->
-                                            IO.pure <| DepsChange <| Dict.union (Dict.fromList identity new) ifaces
+                                            TE.pure <| DepsChange <| Dict.union (Dict.fromList identity new) ifaces
                                 )
 
 
@@ -728,17 +728,17 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 loadInterfaces : FilePath -> List Dep -> List CDep -> Task Never (Maybe (Dict String ModuleName.Raw I.Interface))
 loadInterfaces root same cached =
     Utils.listTraverse (fork maybeDepEncoder << loadInterface root) cached
-        |> IO.bind
+        |> TE.bind
             (\loading ->
                 Utils.listTraverse (Utils.readMVar maybeDepDecoder) loading
-                    |> IO.bind
+                    |> TE.bind
                         (\maybeLoaded ->
                             case Utils.sequenceListMaybe maybeLoaded of
                                 Nothing ->
-                                    IO.pure Nothing
+                                    TE.pure Nothing
 
                                 Just loaded ->
-                                    IO.pure <| Just <| Dict.union (Dict.fromList identity loaded) (Dict.fromList identity same)
+                                    TE.pure <| Just <| Dict.union (Dict.fromList identity loaded) (Dict.fromList identity same)
                         )
             )
 
@@ -746,29 +746,29 @@ loadInterfaces root same cached =
 loadInterface : FilePath -> CDep -> Task Never (Maybe Dep)
 loadInterface root ( name, ciMvar ) =
     Utils.takeMVar cachedInterfaceDecoder ciMvar
-        |> IO.bind
+        |> TE.bind
             (\cachedInterface ->
                 case cachedInterface of
                     Corrupted ->
                         Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
-                            |> IO.fmap (\_ -> Nothing)
+                            |> TE.fmap (\_ -> Nothing)
 
                     Loaded iface ->
                         Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
-                            |> IO.fmap (\_ -> Just ( name, iface ))
+                            |> TE.fmap (\_ -> Just ( name, iface ))
 
                     Unneeded ->
                         File.readBinary I.interfaceDecoder (Stuff.guidai root name)
-                            |> IO.bind
+                            |> TE.bind
                                 (\maybeIface ->
                                     case maybeIface of
                                         Nothing ->
                                             Utils.putMVar cachedInterfaceEncoder ciMvar Corrupted
-                                                |> IO.fmap (\_ -> Nothing)
+                                                |> TE.fmap (\_ -> Nothing)
 
                                         Just iface ->
                                             Utils.putMVar cachedInterfaceEncoder ciMvar (Loaded iface)
-                                                |> IO.fmap (\_ -> Just ( name, iface ))
+                                                |> TE.fmap (\_ -> Just ( name, iface ))
                                 )
             )
 
@@ -782,7 +782,7 @@ checkMidpoint dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
             Utils.readMVar maybeDependenciesDecoder dmvar
-                |> IO.fmap
+                |> TE.fmap
                     (\maybeForeigns ->
                         case maybeForeigns of
                             Nothing ->
@@ -794,7 +794,7 @@ checkMidpoint dmvar statuses =
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar maybeDependenciesDecoder dmvar
-                |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> TE.fmap (\_ -> Err (Exit.BP_Cycle name names))
 
 
 checkMidpointAndRoots : MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> NE.Nonempty RootStatus -> Task Never (Result Exit.BuildProjectProblem Dependencies)
@@ -804,23 +804,23 @@ checkMidpointAndRoots dmvar statuses sroots =
             case checkUniqueRoots statuses sroots of
                 Nothing ->
                     Utils.readMVar maybeDependenciesDecoder dmvar
-                        |> IO.bind
+                        |> TE.bind
                             (\maybeForeigns ->
                                 case maybeForeigns of
                                     Nothing ->
-                                        IO.pure (Err Exit.BP_CannotLoadDependencies)
+                                        TE.pure (Err Exit.BP_CannotLoadDependencies)
 
                                     Just fs ->
-                                        IO.pure (Ok fs)
+                                        TE.pure (Ok fs)
                             )
 
                 Just problem ->
                     Utils.readMVar maybeDependenciesDecoder dmvar
-                        |> IO.fmap (\_ -> Err problem)
+                        |> TE.fmap (\_ -> Err problem)
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar maybeDependenciesDecoder dmvar
-                |> IO.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> TE.fmap (\_ -> Err (Exit.BP_Cycle name names))
 
 
 
@@ -971,13 +971,13 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
             projectTypeToPkg projectType
     in
     Compile.compile pkg ifaces modul
-        |> IO.bind
+        |> TE.bind
             (\result ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
                         case makeDocs docsNeed canonical of
                             Err err ->
-                                IO.pure <|
+                                TE.pure <|
                                     RProblem <|
                                         Error.Module (Src.getName modul) path time source (Error.BadDocs err)
 
@@ -996,17 +996,17 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                         Stuff.guidai root name
                                 in
                                 File.writeBinary Opt.localGraphEncoder (Stuff.guidao root name) objects
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\_ ->
                                             File.readBinary I.interfaceDecoder guidai
-                                                |> IO.bind
+                                                |> TE.bind
                                                     (\maybeOldi ->
                                                         case maybeOldi of
                                                             Just oldi ->
                                                                 if oldi == iface then
                                                                     -- iface should be fully forced by equality check
                                                                     Reporting.report key Reporting.BDone
-                                                                        |> IO.fmap
+                                                                        |> TE.fmap
                                                                             (\_ ->
                                                                                 let
                                                                                     local : Details.Local
@@ -1018,10 +1018,10 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                                                                 else
                                                                     File.writeBinary I.interfaceEncoder guidai iface
-                                                                        |> IO.bind
+                                                                        |> TE.bind
                                                                             (\_ ->
                                                                                 Reporting.report key Reporting.BDone
-                                                                                    |> IO.fmap
+                                                                                    |> TE.fmap
                                                                                         (\_ ->
                                                                                             let
                                                                                                 local : Details.Local
@@ -1035,10 +1035,10 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                                             _ ->
                                                                 -- iface may be lazy still
                                                                 File.writeBinary I.interfaceEncoder guidai iface
-                                                                    |> IO.bind
+                                                                    |> TE.bind
                                                                         (\_ ->
                                                                             Reporting.report key Reporting.BDone
-                                                                                |> IO.fmap
+                                                                                |> TE.fmap
                                                                                     (\_ ->
                                                                                         let
                                                                                             local : Details.Local
@@ -1052,7 +1052,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
                                         )
 
                     Err err ->
-                        IO.pure <|
+                        TE.pure <|
                             RProblem <|
                                 Error.Module (Src.getName modul) path time source err
             )
@@ -1114,15 +1114,15 @@ finalizeExposed : FilePath -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Dic
 finalizeExposed root docsGoal exposed results =
     case List.foldr (addImportProblems results) [] (NE.toList exposed) of
         p :: ps ->
-            IO.pure <| Err <| Exit.BuildProjectProblem (Exit.BP_MissingExposed (NE.Nonempty p ps))
+            TE.pure <| Err <| Exit.BuildProjectProblem (Exit.BP_MissingExposed (NE.Nonempty p ps))
 
         [] ->
             case Dict.foldr compare (\_ -> addErrors) [] results of
                 [] ->
-                    IO.fmap Ok (finalizeDocs docsGoal results)
+                    TE.fmap Ok (finalizeDocs docsGoal results)
 
                 e :: es ->
-                    IO.pure <| Err <| Exit.BuildBadModules root e es
+                    TE.pure <| Err <| Exit.BuildBadModules root e es
 
 
 addErrors : BResult -> List Error.Module -> List Error.Module
@@ -1241,13 +1241,13 @@ finalizeDocs : DocsGoal docs -> Dict String ModuleName.Raw BResult -> Task Never
 finalizeDocs goal results =
     case goal of
         KeepDocs f ->
-            IO.pure <| f results
+            TE.pure <| f results
 
         WriteDocs f ->
             f results
 
         IgnoreDocs val ->
-            IO.pure val
+            TE.pure val
 
 
 toDocs : BResult -> Maybe Docs.Module
@@ -1292,15 +1292,15 @@ type ReplArtifacts
 fromRepl : FilePath -> Details.Details -> String -> Task Never (Result Exit.Repl ReplArtifacts)
 fromRepl root details source =
     makeEnv Reporting.ignorer root details
-        |> IO.bind
+        |> TE.bind
             (\((Env _ _ projectType _ _ _ _) as env) ->
                 case Parse.fromByteString SV.Guida projectType source of
                     Err syntaxError ->
-                        IO.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
+                        TE.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
                     Ok ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
                         Details.loadInterfaces root details
-                            |> IO.bind
+                            |> TE.bind
                                 (\dmvar ->
                                     let
                                         deps : List Name.Name
@@ -1308,39 +1308,39 @@ fromRepl root details source =
                                             List.map Src.getImportName imports
                                     in
                                     Utils.newMVar statusDictEncoder Dict.empty
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\mvar ->
                                                 crawlDeps env mvar deps ()
-                                                    |> IO.bind
+                                                    |> TE.bind
                                                         (\_ ->
-                                                            IO.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
-                                                                |> IO.bind
+                                                            TE.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                                |> TE.bind
                                                                     (\statuses ->
                                                                         checkMidpoint dmvar statuses
-                                                                            |> IO.bind
+                                                                            |> TE.bind
                                                                                 (\midpoint ->
                                                                                     case midpoint of
                                                                                         Err problem ->
-                                                                                            IO.pure <| Err <| Exit.ReplProjectProblem problem
+                                                                                            TE.pure <| Err <| Exit.ReplProjectProblem problem
 
                                                                                         Ok foreigns ->
                                                                                             Utils.newEmptyMVar
-                                                                                                |> IO.bind
+                                                                                                |> TE.bind
                                                                                                     (\rmvar ->
                                                                                                         forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
-                                                                                                            |> IO.bind
+                                                                                                            |> TE.bind
                                                                                                                 (\resultMVars ->
                                                                                                                     Utils.putMVar resultDictEncoder rmvar resultMVars
-                                                                                                                        |> IO.bind
+                                                                                                                        |> TE.bind
                                                                                                                             (\_ ->
                                                                                                                                 Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
-                                                                                                                                    |> IO.bind
+                                                                                                                                    |> TE.bind
                                                                                                                                         (\results ->
                                                                                                                                             writeDetails root details results
-                                                                                                                                                |> IO.bind
+                                                                                                                                                |> TE.bind
                                                                                                                                                     (\_ ->
                                                                                                                                                         checkDeps root resultMVars deps 0
-                                                                                                                                                            |> IO.bind
+                                                                                                                                                            |> TE.bind
                                                                                                                                                                 (\depsStatus ->
                                                                                                                                                                     finalizeReplArtifacts env source modul depsStatus resultMVars results
                                                                                                                                                                 )
@@ -1367,7 +1367,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
         compileInput : Dict String ModuleName.Raw I.Interface -> Task Never (Result Exit.Repl ReplArtifacts)
         compileInput ifaces =
             Compile.compile pkg ifaces modul
-                |> IO.fmap
+                |> TE.fmap
                     (\result ->
                         case result of
                             Ok (Compile.Artifacts ((Can.Module name _ _ _ _ _ _ _) as canonical) annotations objects) ->
@@ -1396,26 +1396,26 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
 
         DepsSame same cached ->
             loadInterfaces root same cached
-                |> IO.bind
+                |> TE.bind
                     (\maybeLoaded ->
                         case maybeLoaded of
                             Just ifaces ->
                                 compileInput ifaces
 
                             Nothing ->
-                                IO.pure <| Err <| Exit.ReplBadCache
+                                TE.pure <| Err <| Exit.ReplBadCache
                     )
 
         DepsBlock ->
             case Dict.foldr compare (\_ -> addErrors) [] results of
                 [] ->
-                    IO.pure <| Err <| Exit.ReplBlocked
+                    TE.pure <| Err <| Exit.ReplBlocked
 
                 e :: es ->
-                    IO.pure <| Err <| Exit.ReplBadLocalDeps root e es
+                    TE.pure <| Err <| Exit.ReplBadLocalDeps root e es
 
         DepsNotFound problems ->
-            IO.pure <|
+            TE.pure <|
                 Err <|
                     Exit.ReplBadInput source <|
                         Error.BadImports <|
@@ -1439,12 +1439,12 @@ type RootLocation
 findRoots : Env -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProjectProblem (NE.Nonempty RootLocation))
 findRoots env paths =
     Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
-        |> IO.bind
+        |> TE.bind
             (\mvars ->
                 Utils.nonEmptyListTraverse (Utils.readMVar resultBuildProjectProblemRootInfoDecoder) mvars
-                    |> IO.bind
+                    |> TE.bind
                         (\einfos ->
-                            IO.pure (Result.andThen checkRoots (Utils.sequenceNonemptyListResult einfos))
+                            TE.pure (Result.andThen checkRoots (Utils.sequenceNonemptyListResult einfos))
                         )
             )
 
@@ -1482,13 +1482,13 @@ type RootInfo
 getRootInfo : Env -> FilePath -> Task Never (Result Exit.BuildProjectProblem RootInfo)
 getRootInfo env path =
     File.exists path
-        |> IO.bind
+        |> TE.bind
             (\exists ->
                 if exists then
-                    IO.bind (getRootInfoHelp env path) (Utils.dirCanonicalizePath path)
+                    TE.bind (getRootInfoHelp env path) (Utils.dirCanonicalizePath path)
 
                 else
-                    IO.pure (Err (Exit.BP_PathUnknown path))
+                    TE.pure (Err (Exit.BP_PathUnknown path))
             )
 
 
@@ -1509,7 +1509,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
         in
         case List.filterMap (isInsideSrcDirByPath absoluteSegments) srcDirs of
             [] ->
-                IO.pure <| Ok <| RootInfo absolutePath path (LOutside path)
+                TE.pure <| Ok <| RootInfo absolutePath path (LOutside path)
 
             [ ( _, Ok names ) ] ->
                 let
@@ -1518,7 +1518,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                         String.join "." names
                 in
                 Utils.filterM (isInsideSrcDirByName names ext) srcDirs
-                    |> IO.bind
+                    |> TE.bind
                         (\matchingDirs ->
                             case matchingDirs of
                                 d1 :: d2 :: _ ->
@@ -1531,20 +1531,20 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                                         p2 =
                                             addRelative d2 (Utils.fpJoinPath names ++ ext)
                                     in
-                                    IO.pure <| Err <| Exit.BP_RootNameDuplicate name p1 p2
+                                    TE.pure <| Err <| Exit.BP_RootNameDuplicate name p1 p2
 
                                 _ ->
-                                    IO.pure <| Ok <| RootInfo absolutePath path (LInside name)
+                                    TE.pure <| Ok <| RootInfo absolutePath path (LInside name)
                         )
 
             [ ( s, Err names ) ] ->
-                IO.pure <| Err <| Exit.BP_RootNameInvalid path s names
+                TE.pure <| Err <| Exit.BP_RootNameInvalid path s names
 
             ( s1, _ ) :: ( s2, _ ) :: _ ->
-                IO.pure <| Err <| Exit.BP_WithAmbiguousSrcDir path s1 s2
+                TE.pure <| Err <| Exit.BP_WithAmbiguousSrcDir path s1 s2
 
     else
-        IO.pure <| Err <| Exit.BP_WithBadExtension path
+        TE.pure <| Err <| Exit.BP_WithBadExtension path
 
 
 isInsideSrcDirByName : List String -> String -> AbsoluteSrcDir -> Task Never Bool
@@ -1613,26 +1613,26 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
     case root of
         LInside name ->
             Utils.newEmptyMVar
-                |> IO.bind
+                |> TE.bind
                     (\statusMVar ->
                         Utils.takeMVar statusDictDecoder mvar
-                            |> IO.bind
+                            |> TE.bind
                                 (\statusDict ->
                                     Utils.putMVar statusDictEncoder mvar (Dict.insert identity name statusMVar statusDict)
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\_ ->
-                                                IO.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule env mvar (DocsNeed False) name)
-                                                    |> IO.fmap (\_ -> SInside name)
+                                                TE.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule env mvar (DocsNeed False) name)
+                                                    |> TE.fmap (\_ -> SInside name)
                                             )
                                 )
                     )
 
         LOutside path ->
             File.getTime path
-                |> IO.bind
+                |> TE.bind
                     (\time ->
                         File.readUtf8 path
-                            |> IO.bind
+                            |> TE.bind
                                 (\source ->
                                     case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
                                         Ok ((Src.Module _ _ _ _ imports values _ _ _ _) as modul) ->
@@ -1648,7 +1648,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                                             crawlDeps env mvar deps (SOutsideOk local source modul)
 
                                         Err syntaxError ->
-                                            IO.pure <|
+                                            TE.pure <|
                                                 SOutsideErr <|
                                                     Error.Module "???" path time source (Error.BadSyntax syntaxError)
                                 )
@@ -1670,14 +1670,14 @@ checkRoot : Env -> ResultDict -> RootStatus -> Task Never RootResult
 checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
     case rootStatus of
         SInside name ->
-            IO.pure (RInside name)
+            TE.pure (RInside name)
 
         SOutsideErr err ->
-            IO.pure (ROutsideErr err)
+            TE.pure (ROutsideErr err)
 
         SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
             checkDeps root results deps lastCompile
-                |> IO.bind
+                |> TE.bind
                     (\depsStatus ->
                         case depsStatus of
                             DepsChange ifaces ->
@@ -1685,21 +1685,21 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
 
                             DepsSame same cached ->
                                 loadInterfaces root same cached
-                                    |> IO.bind
+                                    |> TE.bind
                                         (\maybeLoaded ->
                                             case maybeLoaded of
                                                 Nothing ->
-                                                    IO.pure ROutsideBlocked
+                                                    TE.pure ROutsideBlocked
 
                                                 Just ifaces ->
                                                     compileOutside env local source ifaces modul
                                         )
 
                             DepsBlock ->
-                                IO.pure ROutsideBlocked
+                                TE.pure ROutsideBlocked
 
                             DepsNotFound problems ->
-                                IO.pure <|
+                                TE.pure <|
                                     ROutsideErr <|
                                         Error.Module (Src.getName modul) path time source <|
                                             Error.BadImports (toImportErrors env results imports problems)
@@ -1718,15 +1718,15 @@ compileOutside (Env key _ projectType _ _ _ _) (Details.Local path time _ _ _ _)
             Src.getName modul
     in
     Compile.compile pkg ifaces modul
-        |> IO.bind
+        |> TE.bind
             (\result ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
                         Reporting.report key Reporting.BDone
-                            |> IO.fmap (\_ -> ROutsideOk name (I.fromModule pkg canonical annotations) objects)
+                            |> TE.fmap (\_ -> ROutsideOk name (I.fromModule pkg canonical annotations) objects)
 
                     Err errors ->
-                        IO.pure <| ROutsideErr <| Error.Module name path time source errors
+                        TE.pure <| ROutsideErr <| Error.Module name path time source errors
             )
 
 

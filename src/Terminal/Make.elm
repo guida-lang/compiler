@@ -18,14 +18,14 @@ import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as WasRepTask
+import Utils.Task.Extra as TE
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
 import Maybe.Extra as Maybe
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Bytes.Decode as BD
@@ -58,10 +58,10 @@ type ReportType
 run : List String -> Flags -> Task Never ()
 run paths ((Flags _ _ _ _ report _) as flags) =
     getStyle report
-        |> IO.bind
+        |> TE.bind
             (\style ->
                 Stuff.findRoot
-                    |> IO.bind
+                    |> TE.bind
                         (\maybeRoot ->
                             Reporting.attemptWithStyle style Exit.makeToReport <|
                                 case maybeRoot of
@@ -69,7 +69,7 @@ run paths ((Flags _ _ _ _ report _) as flags) =
                                         runHelp root paths style flags
 
                                     Nothing ->
-                                        IO.pure (Err Exit.MakeNoOutline)
+                                        TE.pure (Err Exit.MakeNoOutline)
                         )
             )
 
@@ -79,63 +79,63 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
     BW.withScope
         (\scope ->
             Stuff.withRootLock root <|
-                WasRepTask.run <|
+                TE.toResult <|
                     (getMode debug optimize
-                        |> WasRepTask.bind
+                        |> TE.bind
                             (\desiredMode ->
-                                WasRepTask.eio Exit.MakeBadDetails (Details.load style scope root)
-                                    |> WasRepTask.bind
+                                TE.eio Exit.MakeBadDetails (Details.load style scope root)
+                                    |> TE.bind
                                         (\details ->
                                             case paths of
                                                 [] ->
                                                     getExposed details
-                                                        |> WasRepTask.bind (\exposed -> buildExposed style root details maybeDocs exposed)
+                                                        |> TE.bind (\exposed -> buildExposed style root details maybeDocs exposed)
 
                                                 p :: ps ->
                                                     buildPaths style root details (NE.Nonempty p ps)
-                                                        |> WasRepTask.bind
+                                                        |> TE.bind
                                                             (\artifacts ->
                                                                 case maybeOutput of
                                                                     Nothing ->
                                                                         case getMains artifacts of
                                                                             [] ->
-                                                                                WasRepTask.pure ()
+                                                                                TE.pure ()
 
                                                                             [ name ] ->
                                                                                 toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                                    |> WasRepTask.bind
+                                                                                    |> TE.bind
                                                                                         (\builder ->
                                                                                             generate style "index.html" (Html.sandwich name builder) (NE.Nonempty name [])
                                                                                         )
 
                                                                             name :: names ->
                                                                                 toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                                                    |> WasRepTask.bind
+                                                                                    |> TE.bind
                                                                                         (\builder ->
                                                                                             generate style "elm.js" builder (NE.Nonempty name names)
                                                                                         )
 
                                                                     Just DevNull ->
-                                                                        WasRepTask.pure ()
+                                                                        TE.pure ()
 
                                                                     Just (JS target) ->
                                                                         case getNoMains artifacts of
                                                                             [] ->
                                                                                 toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                                                    |> WasRepTask.bind
+                                                                                    |> TE.bind
                                                                                         (\builder ->
                                                                                             generate style target builder (Build.getRootNames artifacts)
                                                                                         )
 
                                                                             name :: names ->
-                                                                                WasRepTask.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
+                                                                                TE.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
 
                                                                     Just (Html target) ->
                                                                         hasOneMain artifacts
-                                                                            |> WasRepTask.bind
+                                                                            |> TE.bind
                                                                                 (\name ->
                                                                                     toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                                        |> WasRepTask.bind
+                                                                                        |> TE.bind
                                                                                             (\builder ->
                                                                                                 generate style target (Html.sandwich name builder) (NE.Nonempty name [])
                                                                                             )
@@ -158,38 +158,38 @@ getStyle report =
             Reporting.terminal
 
         Just Json ->
-            IO.pure Reporting.json
+            TE.pure Reporting.json
 
 
 getMode : Bool -> Bool -> Task Exit.Make DesiredMode
 getMode debug optimize =
     case ( debug, optimize ) of
         ( True, True ) ->
-            WasRepTask.throw Exit.MakeCannotOptimizeAndDebug
+            TE.throw Exit.MakeCannotOptimizeAndDebug
 
         ( True, False ) ->
-            WasRepTask.pure Debug
+            TE.pure Debug
 
         ( False, False ) ->
-            WasRepTask.pure Dev
+            TE.pure Dev
 
         ( False, True ) ->
-            WasRepTask.pure Prod
+            TE.pure Prod
 
 
 getExposed : Details.Details -> Task Exit.Make (NE.Nonempty ModuleName.Raw)
 getExposed (Details.Details _ validOutline _ _ _ _) =
     case validOutline of
         Details.ValidApp _ ->
-            WasRepTask.throw Exit.MakeAppNeedsFileNames
+            TE.throw Exit.MakeAppNeedsFileNames
 
         Details.ValidPkg _ exposed _ ->
             case exposed of
                 [] ->
-                    WasRepTask.throw Exit.MakePkgNeedsExposing
+                    TE.throw Exit.MakePkgNeedsExposing
 
                 m :: ms ->
-                    WasRepTask.pure (NE.Nonempty m ms)
+                    TE.pure (NE.Nonempty m ms)
 
 
 
@@ -203,7 +203,7 @@ buildExposed style root details maybeDocs exposed =
         docsGoal =
             Maybe.unwrap Build.ignoreDocs Build.writeDocs maybeDocs
     in
-    WasRepTask.eio Exit.MakeCannotBuild <|
+    TE.eio Exit.MakeCannotBuild <|
         Build.fromExposed BD.unit
             BE.unit
             style
@@ -215,7 +215,7 @@ buildExposed style root details maybeDocs exposed =
 
 buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
-    WasRepTask.eio Exit.MakeCannotBuild <|
+    TE.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths
 
 
@@ -261,10 +261,10 @@ hasOneMain : Build.Artifacts -> Task Exit.Make ModuleName.Raw
 hasOneMain (Build.Artifacts _ _ roots modules) =
     case roots of
         NE.Nonempty root [] ->
-            WasRepTask.mio Exit.MakeNoMain (IO.pure <| getMain modules root)
+            TE.mio Exit.MakeNoMain (TE.pure <| getMain modules root)
 
         NE.Nonempty _ (_ :: _) ->
-            WasRepTask.throw Exit.MakeMultipleFilesIntoHtml
+            TE.throw Exit.MakeMultipleFilesIntoHtml
 
 
 
@@ -301,10 +301,10 @@ getNoMain modules root =
 
 generate : Reporting.Style -> FilePath -> String -> NE.Nonempty ModuleName.Raw -> Task Exit.Make ()
 generate style target builder names =
-    WasRepTask.io
+    TE.io
         (Utils.dirCreateDirectoryIfMissing True (Utils.fpTakeDirectory target)
-            |> IO.bind (\_ -> File.writeUtf8 target builder)
-            |> IO.bind (\_ -> Reporting.reportGenerate style names target)
+            |> TE.bind (\_ -> File.writeUtf8 target builder)
+            |> TE.bind (\_ -> Reporting.reportGenerate style names target)
         )
 
 
@@ -320,7 +320,7 @@ type DesiredMode
 
 toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
 toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
-    WasRepTask.mapError Exit.MakeBadGenerate <|
+    TE.mapError Exit.MakeBadGenerate <|
         case desiredMode of
             Debug ->
                 Generate.debug withSourceMaps leadingLines root details artifacts
@@ -341,8 +341,8 @@ reportType =
     Parser
         { singular = "report type"
         , plural = "report types"
-        , suggest = \_ -> IO.pure [ "json" ]
-        , examples = \_ -> IO.pure [ "json" ]
+        , suggest = \_ -> TE.pure [ "json" ]
+        , examples = \_ -> TE.pure [ "json" ]
         }
 
 
@@ -360,8 +360,8 @@ output =
     Parser
         { singular = "output file"
         , plural = "output files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "elm.js", "index.html", "/dev/null" ]
+        , suggest = \_ -> TE.pure []
+        , examples = \_ -> TE.pure [ "elm.js", "index.html", "/dev/null" ]
         }
 
 
@@ -385,8 +385,8 @@ docsFile =
     Parser
         { singular = "json file"
         , plural = "json files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "docs.json", "documentation.json" ]
+        , suggest = \_ -> TE.pure []
+        , examples = \_ -> TE.pure [ "docs.json", "documentation.json" ]
         }
 
 

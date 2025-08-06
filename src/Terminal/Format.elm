@@ -15,6 +15,7 @@ import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
@@ -28,21 +29,21 @@ type Flags
 run : List String -> Flags -> Task Never ()
 run paths ((Flags _ autoYes _ _) as flags) =
     resolveElmFiles paths
-        |> IO.bind
+        |> TE.bind
             (\resolvedInputFiles ->
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
                     Err err ->
                         IO.hPutStrLn IO.stderr (toConsoleErrorMessage err)
-                            |> IO.bind (\_ -> Exit.exitFailure)
+                            |> TE.bind (\_ -> Exit.exitFailure)
 
                     Ok a ->
-                        IO.pure a
+                        TE.pure a
             )
-        |> IO.bind (\whatToDo -> doIt autoYes whatToDo)
-        |> IO.bind
+        |> TE.bind (\whatToDo -> doIt autoYes whatToDo)
+        |> TE.bind
             (\result ->
                 if result then
-                    IO.pure ()
+                    TE.pure ()
 
                 else
                     Exit.exitFailure
@@ -326,16 +327,16 @@ type FileType
 readUtf8FileWithPath : FilePath -> Task Never ( FilePath, String )
 readUtf8FileWithPath filePath =
     File.readUtf8 filePath
-        |> IO.fmap (Tuple.pair filePath)
+        |> TE.fmap (Tuple.pair filePath)
 
 
 stat : FilePath -> Task Never FileType
 stat path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> TE.bind
             (\isFile ->
                 Utils.dirDoesDirectoryExist path
-                    |> IO.fmap
+                    |> TE.fmap
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
                                 ( True, _ ) ->
@@ -353,21 +354,21 @@ stat path =
 getYesOrNo : Task Never Bool
 getYesOrNo =
     IO.hFlush IO.stdout
-        |> IO.bind
+        |> TE.bind
             (\_ ->
                 IO.getLine
-                    |> IO.bind
+                    |> TE.bind
                         (\input ->
                             case input of
                                 "y" ->
-                                    IO.pure True
+                                    TE.pure True
 
                                 "n" ->
-                                    IO.pure False
+                                    TE.pure False
 
                                 _ ->
                                     IO.putStr "Must type 'y' for yes or 'n' for no: "
-                                        |> IO.bind (\_ -> getYesOrNo)
+                                        |> TE.bind (\_ -> getYesOrNo)
                         )
             )
 
@@ -384,11 +385,11 @@ type ValidateMode
 approve : Bool -> PromptMessage -> Task Never Bool
 approve autoYes prompt =
     if autoYes then
-        IO.pure True
+        TE.pure True
 
     else
         putStrLn False (toConsolePromptMessage prompt)
-            |> IO.bind (\_ -> getYesOrNo)
+            |> TE.bind (\_ -> getYesOrNo)
 
 
 putStrLn : Bool -> String -> Task Never ()
@@ -446,15 +447,15 @@ toConsoleError error =
 resolveFile : FilePath -> Task Never (Result Error (List FilePath))
 resolveFile path =
     stat path
-        |> IO.bind
+        |> TE.bind
             (\fileType ->
                 case fileType of
                     IsFile ->
-                        IO.pure (Ok [ path ])
+                        TE.pure (Ok [ path ])
 
                     IsDirectory ->
                         findAllElmFiles path
-                            |> IO.fmap
+                            |> TE.fmap
                                 (\elmFiles ->
                                     case elmFiles of
                                         [] ->
@@ -465,15 +466,15 @@ resolveFile path =
                                 )
 
                     DoesNotExist ->
-                        IO.pure (Err (FileDoesNotExist path))
+                        TE.pure (Err (FileDoesNotExist path))
             )
 
 
 resolveElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
 resolveElmFiles inputFiles =
-    IO.mapM resolveFile inputFiles
-        |> IO.fmap collectErrors
-        |> IO.fmap
+    TE.mapM resolveFile inputFiles
+        |> TE.fmap collectErrors
+        |> TE.fmap
             (\result ->
                 case result of
                     Err ls ->
@@ -517,7 +518,7 @@ updateFile : TranformFilesResult String -> Task Never ()
 updateFile result =
     case result of
         NoChange _ _ ->
-            IO.pure ()
+            TE.pure ()
 
         Changed outputFile outputText ->
             File.writeUtf8 outputFile outputText
@@ -526,7 +527,7 @@ updateFile result =
 readStdin : Task Never ( FilePath, String )
 readStdin =
     File.readStdin
-        |> IO.fmap (Tuple.pair "<STDIN>")
+        |> TE.fmap (Tuple.pair "<STDIN>")
 
 
 checkChange : ( FilePath, a ) -> a -> TranformFilesResult a
@@ -541,7 +542,7 @@ checkChange ( inputFile, inputText ) outputText =
 readFromFile : (FilePath -> Task Never ()) -> FilePath -> Task Never ( FilePath, String )
 readFromFile onProcessingFile filePath =
     onProcessingFile filePath
-        |> IO.bind (\_ -> readUtf8FileWithPath filePath)
+        |> TE.bind (\_ -> readUtf8FileWithPath filePath)
 
 
 type TransformMode
@@ -584,36 +585,36 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
     case mode of
         StdinToStdout ->
             readStdin
-                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
+                |> TE.bind (logErrorOr onInfo IO.putStr << transform)
 
         StdinToFile outputFile ->
             readStdin
-                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
+                |> TE.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FileToStdout inputFile ->
             readUtf8FileWithPath inputFile
-                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
+                |> TE.bind (logErrorOr onInfo IO.putStr << transform)
 
         FileToFile inputFile outputFile ->
             readFromFile (onInfo << processingFile) inputFile
-                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
+                |> TE.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FilesInPlace first rest ->
             let
                 formatFile : FilePath -> Task Never Bool
                 formatFile file =
                     readFromFile (onInfo << processingFile) file
-                        |> IO.bind (\i -> logErrorOr onInfo updateFile <| Result.map (checkChange i) (transform i))
+                        |> TE.bind (\i -> logErrorOr onInfo updateFile <| Result.map (checkChange i) (transform i))
             in
             approve autoYes (confirmPrompt (first :: rest))
-                |> IO.bind
+                |> TE.bind
                     (\canOverwrite ->
                         if canOverwrite then
-                            IO.mapM formatFile (first :: rest)
-                                |> IO.fmap (List.all identity)
+                            TE.mapM formatFile (first :: rest)
+                                |> TE.fmap (List.all identity)
 
                         else
-                            IO.pure True
+                            TE.pure True
                     )
 
 
@@ -632,7 +633,7 @@ validateNoChanges mode =
     case mode of
         ValidateStdin ->
             readStdin
-                |> IO.bind
+                |> TE.bind
                     (\( filePath, content ) ->
                         let
                             result : Result (Maybe String) ()
@@ -640,7 +641,7 @@ validateNoChanges mode =
                                 newValidate filePath content
                         in
                         IO.putStrLn (resultsToJsonString [ result ])
-                            |> IO.fmap (\_ -> Result.isOk result)
+                            |> TE.fmap (\_ -> Result.isOk result)
                     )
 
         ValidateFiles first rest ->
@@ -648,13 +649,13 @@ validateNoChanges mode =
                 validateFile : FilePath -> Task Never (Result (Maybe String) ())
                 validateFile filePath =
                     File.readUtf8 filePath
-                        |> IO.fmap (newValidate filePath)
+                        |> TE.fmap (newValidate filePath)
             in
-            IO.mapM validateFile (first :: rest)
-                |> IO.bind
+            TE.mapM validateFile (first :: rest)
+                |> TE.bind
                     (\results ->
                         IO.putStrLn (resultsToJsonString results)
-                            |> IO.fmap (\_ -> List.all Result.isOk results)
+                            |> TE.fmap (\_ -> List.all Result.isOk results)
                     )
 
 
@@ -663,11 +664,11 @@ logErrorOr onInfo fn result =
     case result of
         Err message ->
             onInfo message
-                |> IO.fmap (\_ -> False)
+                |> TE.fmap (\_ -> False)
 
         Ok value ->
             fn value
-                |> IO.fmap (\_ -> True)
+                |> TE.fmap (\_ -> True)
 
 
 
@@ -687,14 +688,14 @@ render modul =
 collectFiles : (a -> Task Never (List a)) -> a -> Task Never (List a)
 collectFiles children root =
     children root
-        |> IO.bind (\xs -> IO.mapM (collectFiles children) xs)
-        |> IO.fmap (\subChildren -> root :: List.concat subChildren)
+        |> TE.bind (\xs -> TE.mapM (collectFiles children) xs)
+        |> TE.fmap (\subChildren -> root :: List.concat subChildren)
 
 
 listDir : FilePath -> Task Never (List FilePath)
 listDir path =
     Utils.dirListDirectory path
-        |> IO.fmap (List.map (\file -> path ++ "/" ++ file))
+        |> TE.fmap (List.map (\file -> path ++ "/" ++ file))
 
 
 fileList : FilePath -> Task Never (List FilePath)
@@ -703,17 +704,17 @@ fileList =
         children : FilePath -> Task Never (List FilePath)
         children path =
             if isSkippable path then
-                IO.pure []
+                TE.pure []
 
             else
                 Utils.dirDoesDirectoryExist path
-                    |> IO.bind
+                    |> TE.bind
                         (\directory ->
                             if directory then
                                 listDir path
 
                             else
-                                IO.pure []
+                                TE.pure []
                         )
     in
     collectFiles children
@@ -736,7 +737,7 @@ hasExtension ext path =
 findAllElmFiles : FilePath -> Task Never (List FilePath)
 findAllElmFiles inputFile =
     fileList inputFile
-        |> IO.fmap (List.filter (hasExtension ".elm"))
+        |> TE.fmap (List.filter (hasExtension ".elm"))
 
 
 hasFilename : String -> FilePath -> Bool

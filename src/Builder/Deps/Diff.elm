@@ -25,7 +25,7 @@ import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import List
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Utils.Main as Utils
 
@@ -408,34 +408,34 @@ getDocs cache manager name version =
             home ++ "/docs.json"
     in
     File.exists path
-        |> IO.bind
+        |> TE.bind
             (\exists ->
                 if exists then
                     File.readUtf8 path
-                        |> IO.bind
+                        |> TE.bind
                             (\bytes ->
                                 case D.fromByteString Docs.decoder bytes of
                                     Ok docs ->
-                                        IO.pure (Ok docs)
+                                        TE.pure (Ok docs)
 
                                     Err _ ->
                                         File.remove path
-                                            |> IO.fmap (\_ -> Err DP_Cache)
+                                            |> TE.fmap (\_ -> Err DP_Cache)
                             )
 
                 else
                     Website.metadata name version "docs.json"
-                        |> IO.bind
+                        |> TE.bind
                             (\url ->
                                 Http.get manager url [] Exit.DP_Http <|
                                     \body ->
                                         case D.fromByteString Docs.decoder body of
                                             Ok docs ->
                                                 Utils.dirCreateDirectoryIfMissing True home
-                                                    |> IO.bind (\_ -> File.writeUtf8 path body)
-                                                    |> IO.fmap (\_ -> Ok docs)
+                                                    |> TE.bind (\_ -> File.writeUtf8 path body)
+                                                    |> TE.fmap (\_ -> Ok docs)
 
                                             Err _ ->
-                                                IO.pure (Err (DP_Data url body))
+                                                TE.pure (Err (DP_Data url body))
                             )
             )

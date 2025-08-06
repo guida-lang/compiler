@@ -15,7 +15,6 @@ import Builder.Elm.Outline as Outline
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as WasRepTask
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as N
@@ -49,6 +48,7 @@ import System.Process as Process
 import Task exposing (Task)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
@@ -62,11 +62,11 @@ type Flags
 run : () -> Flags -> Task Never ()
 run () flags =
     printWelcomeMessage
-        |> IO.bind (\_ -> initSettings)
-        |> IO.bind
+        |> TE.bind (\_ -> initSettings)
+        |> TE.bind
             (\settings ->
                 initEnv flags
-                    |> IO.bind
+                    |> TE.bind
                         (\env ->
                             let
                                 looper : M Exit.ExitCode
@@ -74,7 +74,7 @@ run () flags =
                                     Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
                             State.evalStateT looper IO.initialReplState
-                                |> IO.bind (\exitCode -> Exit.exitWith exitCode)
+                                |> TE.bind (\exitCode -> Exit.exitWith exitCode)
                         )
             )
 
@@ -122,10 +122,10 @@ type Env
 initEnv : Flags -> Task Never Env
 initEnv (Flags maybeAlternateInterpreter noColors) =
     getRoot
-        |> IO.bind
+        |> TE.bind
             (\root ->
                 getInterpreter maybeAlternateInterpreter
-                    |> IO.fmap
+                    |> TE.fmap
                         (\interpreter ->
                             Env root interpreter (not noColors)
                         )
@@ -148,18 +148,18 @@ type alias M a =
 loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
 loop env state =
     read
-        |> IO.bind
+        |> TE.bind
             (\input ->
                 Utils.liftIOInputT (eval env state input)
-                    |> IO.bind
+                    |> TE.bind
                         (\outcome ->
                             case outcome of
                                 Loop loopState ->
                                     Utils.liftInputT (State.put loopState)
-                                        |> IO.bind (\_ -> loop env loopState)
+                                        |> TE.bind (\_ -> loop env loopState)
 
                                 End exitCode ->
-                                    IO.pure exitCode
+                                    TE.pure exitCode
                         )
             )
 
@@ -184,11 +184,11 @@ type Input
 read : Utils.ReplInputT Input
 read =
     Utils.replGetInputLine "> "
-        |> IO.bind
+        |> TE.bind
             (\maybeLine ->
                 case maybeLine of
                     Nothing ->
-                        IO.pure Exit
+                        TE.pure Exit
 
                     Just chars ->
                         let
@@ -198,7 +198,7 @@ read =
                         in
                         case categorize lines of
                             Done input ->
-                                IO.pure input
+                                TE.pure input
 
                             Continue p ->
                                 readMore lines p
@@ -208,11 +208,11 @@ read =
 readMore : Lines -> Prefill -> Utils.ReplInputT Input
 readMore previousLines prefill =
     Utils.replGetInputLineWithInitial "| " ( renderPrefill prefill, "" )
-        |> IO.bind
+        |> TE.bind
             (\input ->
                 case input of
                     Nothing ->
-                        IO.pure Skip
+                        TE.pure Skip
 
                     Just chars ->
                         let
@@ -222,7 +222,7 @@ readMore previousLines prefill =
                         in
                         case categorize lines of
                             Done doneInput ->
-                                IO.pure doneInput
+                                TE.pure doneInput
 
                             Continue p ->
                                 readMore lines p
@@ -530,18 +530,18 @@ eval : Env -> IO.ReplState -> Input -> Task Never Outcome
 eval env ((IO.ReplState imports types decls) as state) input =
     case input of
         Skip ->
-            IO.pure (Loop state)
+            TE.pure (Loop state)
 
         Exit ->
-            IO.pure (End Exit.ExitSuccess)
+            TE.pure (End Exit.ExitSuccess)
 
         Reset ->
             IO.putStrLn "<reset>"
-                |> IO.fmap (\_ -> Loop IO.initialReplState)
+                |> TE.fmap (\_ -> Loop IO.initialReplState)
 
         Help maybeUnknownCommand ->
             IO.putStrLn (toHelpMessage maybeUnknownCommand)
-                |> IO.fmap (\_ -> Loop state)
+                |> TE.fmap (\_ -> Loop state)
 
         Import name src ->
             let
@@ -549,7 +549,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState (Dict.insert name src imports) types decls
             in
-            IO.fmap Loop (attemptEval env state newState OutputNothing)
+            TE.fmap Loop (attemptEval env state newState OutputNothing)
 
         Type name src ->
             let
@@ -557,11 +557,11 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState imports (Dict.insert name src types) decls
             in
-            IO.fmap Loop (attemptEval env state newState OutputNothing)
+            TE.fmap Loop (attemptEval env state newState OutputNothing)
 
         Port ->
             IO.putStrLn "I cannot handle port declarations."
-                |> IO.fmap (\_ -> Loop state)
+                |> TE.fmap (\_ -> Loop state)
 
         Decl name src ->
             let
@@ -569,10 +569,10 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState imports types (Dict.insert name src decls)
             in
-            IO.fmap Loop (attemptEval env state newState (OutputDecl name))
+            TE.fmap Loop (attemptEval env state newState (OutputDecl name))
 
         Expr src ->
-            IO.fmap Loop (attemptEval env state state (OutputExpr src))
+            TE.fmap Loop (attemptEval env state state (OutputExpr src))
 
 
 
@@ -590,34 +590,34 @@ attemptEval (Env root interpreter ansi) oldState newState output =
     BW.withScope
         (\scope ->
             Stuff.withRootLock root
-                (WasRepTask.run
-                    (WasRepTask.eio Exit.ReplBadDetails
+                (TE.toResult
+                    (TE.eio Exit.ReplBadDetails
                         (Details.load Reporting.silent scope root)
-                        |> WasRepTask.bind
+                        |> TE.bind
                             (\details ->
-                                WasRepTask.eio identity
+                                TE.eio identity
                                     (Build.fromRepl root details (toByteString newState output))
-                                    |> WasRepTask.bind
+                                    |> TE.bind
                                         (\artifacts ->
-                                            Utils.maybeTraverseTask (WasRepTask.mapError Exit.ReplBadGenerate << Generate.repl root details ansi artifacts) (toPrintName output)
+                                            Utils.maybeTraverseTask (TE.mapError Exit.ReplBadGenerate << Generate.repl root details ansi artifacts) (toPrintName output)
                                         )
                             )
                     )
                 )
         )
-        |> IO.bind
+        |> TE.bind
             (\result ->
                 case result of
                     Err exit ->
                         Exit.toStderr (Exit.replToReport exit)
-                            |> IO.fmap (\_ -> oldState)
+                            |> TE.fmap (\_ -> oldState)
 
                     Ok Nothing ->
-                        IO.pure newState
+                        TE.pure newState
 
                     Ok (Just javascript) ->
                         interpret interpreter javascript
-                            |> IO.fmap
+                            |> TE.fmap
                                 (\exitCode ->
                                     case exitCode of
                                         Exit.ExitSuccess ->
@@ -642,8 +642,8 @@ interpret interpreter javascript =
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
-                        |> IO.bind (\_ -> IO.hClose stdin)
-                        |> IO.bind (\_ -> Process.waitForProcess handle)
+                        |> TE.bind (\_ -> IO.hClose stdin)
+                        |> TE.bind (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -725,15 +725,15 @@ genericHelpMessage =
 getRoot : Task Never FilePath
 getRoot =
     Stuff.findRoot
-        |> IO.bind
+        |> TE.bind
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
-                        IO.pure root
+                        TE.pure root
 
                     Nothing ->
                         Stuff.getReplCache
-                            |> IO.bind
+                            |> TE.bind
                                 (\cache ->
                                     let
                                         root : String
@@ -741,7 +741,7 @@ getRoot =
                                             cache ++ "/tmp"
                                     in
                                     Utils.dirCreateDirectoryIfMissing True (root ++ "/src")
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\_ ->
                                                 Outline.write root <|
                                                     Outline.Pkg <|
@@ -755,7 +755,7 @@ getRoot =
                                                             Map.empty
                                                             C.defaultElm
                                             )
-                                        |> IO.fmap (\_ -> root)
+                                        |> TE.fmap (\_ -> root)
                                 )
             )
 
@@ -782,10 +782,10 @@ getInterpreter maybeName =
         Nothing ->
             getInterpreterHelp "node` or `nodejs" <|
                 (Utils.dirFindExecutable "node"
-                    |> IO.bind
+                    |> TE.bind
                         (\exe1 ->
                             Utils.dirFindExecutable "nodejs"
-                                |> IO.fmap (\exe2 -> Maybe.or exe1 exe2)
+                                |> TE.fmap (\exe2 -> Maybe.or exe1 exe2)
                         )
                 )
 
@@ -793,15 +793,15 @@ getInterpreter maybeName =
 getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
 getInterpreterHelp name findExe =
     findExe
-        |> IO.bind
+        |> TE.bind
             (\maybePath ->
                 case maybePath of
                     Just path ->
-                        IO.pure path
+                        TE.pure path
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> IO.bind (\_ -> Exit.exitFailure)
+                            |> TE.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -822,7 +822,7 @@ exeNotFound name =
 initSettings : Task Never Utils.ReplSettings
 initSettings =
     Stuff.getReplCache
-        |> IO.fmap
+        |> TE.fmap
             (\cache ->
                 Utils.ReplSettings
                     { historyFile = Just (cache ++ "/history")

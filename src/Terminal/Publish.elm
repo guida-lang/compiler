@@ -13,7 +13,6 @@ import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
-import Builder.Reporting.Task as WasRepTask
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Docs as Docs
@@ -29,6 +28,7 @@ import System.IO as IO
 import System.Process as Process
 import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
@@ -41,7 +41,7 @@ optimization to skip builds in Elm.Details always valid
 run : () -> () -> Task Never ()
 run () () =
     Reporting.attempt Exit.publishToReport <|
-        WasRepTask.run (WasRepTask.bind publish getEnv)
+        TE.toResult (TE.bind publish getEnv)
 
 
 
@@ -54,20 +54,20 @@ type Env
 
 getEnv : Task Exit.Publish Env
 getEnv =
-    WasRepTask.mio Exit.PublishNoOutline Stuff.findRoot
-        |> WasRepTask.bind
+    TE.mio Exit.PublishNoOutline Stuff.findRoot
+        |> TE.bind
             (\root ->
-                WasRepTask.io Stuff.getPackageCache
-                    |> WasRepTask.bind
+                TE.io Stuff.getPackageCache
+                    |> TE.bind
                         (\cache ->
-                            WasRepTask.io Http.getManager
-                                |> WasRepTask.bind
+                            TE.io Http.getManager
+                                |> TE.bind
                                     (\manager ->
-                                        WasRepTask.eio Exit.PublishMustHaveLatestRegistry (Registry.latest manager cache)
-                                            |> WasRepTask.bind
+                                        TE.eio Exit.PublishMustHaveLatestRegistry (Registry.latest manager cache)
+                                            |> TE.bind
                                                 (\registry ->
-                                                    WasRepTask.eio Exit.PublishBadOutline (Outline.read root)
-                                                        |> WasRepTask.fmap
+                                                    TE.eio Exit.PublishBadOutline (Outline.read root)
+                                                        |> TE.fmap
                                                             (\outline ->
                                                                 Env root cache manager registry outline
                                                             )
@@ -85,7 +85,7 @@ publish : Env -> Task Exit.Publish ()
 publish ((Env root _ manager registry outline) as env) =
     case outline of
         Outline.App _ ->
-            WasRepTask.throw Exit.PublishApplication
+            TE.throw Exit.PublishApplication
 
         Outline.Pkg (Outline.PkgOutline pkg summary _ vsn exposed _ _ _) ->
             let
@@ -94,43 +94,43 @@ publish ((Env root _ manager registry outline) as env) =
                     Registry.getVersions pkg registry
             in
             reportPublishStart pkg vsn maybeKnownVersions
-                |> WasRepTask.bind
+                |> TE.bind
                     (\_ ->
                         if noExposed exposed then
-                            WasRepTask.throw Exit.PublishNoExposed
+                            TE.throw Exit.PublishNoExposed
 
                         else
-                            WasRepTask.pure ()
+                            TE.pure ()
                     )
-                |> WasRepTask.bind
+                |> TE.bind
                     (\_ ->
                         if badSummary summary then
-                            WasRepTask.throw Exit.PublishNoSummary
+                            TE.throw Exit.PublishNoSummary
 
                         else
-                            WasRepTask.pure ()
+                            TE.pure ()
                     )
-                |> WasRepTask.bind (\_ -> verifyReadme root)
-                |> WasRepTask.bind (\_ -> verifyLicense root)
-                |> WasRepTask.bind (\_ -> verifyBuild root)
-                |> WasRepTask.bind
+                |> TE.bind (\_ -> verifyReadme root)
+                |> TE.bind (\_ -> verifyLicense root)
+                |> TE.bind (\_ -> verifyBuild root)
+                |> TE.bind
                     (\docs ->
                         verifyVersion env pkg vsn docs maybeKnownVersions
-                            |> WasRepTask.bind (\_ -> getGit)
-                            |> WasRepTask.bind
+                            |> TE.bind (\_ -> getGit)
+                            |> TE.bind
                                 (\git ->
                                     verifyTag git manager pkg vsn
-                                        |> WasRepTask.bind
+                                        |> TE.bind
                                             (\commitHash ->
                                                 verifyNoChanges git commitHash vsn
-                                                    |> WasRepTask.bind
+                                                    |> TE.bind
                                                         (\_ ->
                                                             verifyZip env pkg vsn
-                                                                |> WasRepTask.bind
+                                                                |> TE.bind
                                                                     (\zipHash ->
-                                                                        WasRepTask.io (IO.putStrLn "")
-                                                                            |> WasRepTask.bind (\_ -> register manager pkg vsn docs commitHash zipHash)
-                                                                            |> WasRepTask.bind (\_ -> WasRepTask.io (IO.putStrLn "Success!"))
+                                                                        TE.io (IO.putStrLn "")
+                                                                            |> TE.bind (\_ -> register manager pkg vsn docs commitHash zipHash)
+                                                                            |> TE.bind (\_ -> TE.io (IO.putStrLn "Success!"))
                                                                     )
                                                         )
                                             )
@@ -170,11 +170,11 @@ verifyReadme root =
     in
     reportReadmeCheck <|
         (File.exists readmePath
-            |> IO.bind
+            |> TE.bind
                 (\exists ->
                     if exists then
                         IO.withFile readmePath IO.ReadMode IO.hFileSize
-                            |> IO.fmap
+                            |> TE.fmap
                                 (\size ->
                                     if size < 300 then
                                         Err Exit.PublishShortReadme
@@ -184,7 +184,7 @@ verifyReadme root =
                                 )
 
                     else
-                        IO.pure (Err Exit.PublishNoReadme)
+                        TE.pure (Err Exit.PublishNoReadme)
                 )
         )
 
@@ -202,7 +202,7 @@ verifyLicense root =
     in
     reportLicenseCheck <|
         (File.exists licensePath
-            |> IO.fmap
+            |> TE.fmap
                 (\exists ->
                     if exists then
                         Ok ()
@@ -222,24 +222,24 @@ verifyBuild root =
     reportBuildCheck <|
         BW.withScope <|
             \scope ->
-                WasRepTask.run
-                    (WasRepTask.eio Exit.PublishBadDetails
+                TE.toResult
+                    (TE.eio Exit.PublishBadDetails
                         (Details.load Reporting.silent scope root)
-                        |> WasRepTask.bind
+                        |> TE.bind
                             (\((Details.Details _ outline _ _ _ _) as details) ->
                                 (case outline of
                                     Details.ValidApp _ ->
-                                        WasRepTask.throw Exit.PublishApplication
+                                        TE.throw Exit.PublishApplication
 
                                     Details.ValidPkg _ [] _ ->
-                                        WasRepTask.throw Exit.PublishNoExposed
+                                        TE.throw Exit.PublishNoExposed
 
                                     Details.ValidPkg _ (e :: es) _ ->
-                                        WasRepTask.pure (NE.Nonempty e es)
+                                        TE.pure (NE.Nonempty e es)
                                 )
-                                    |> WasRepTask.bind
+                                    |> TE.bind
                                         (\exposed ->
-                                            WasRepTask.eio Exit.PublishBuildProblem <|
+                                            TE.eio Exit.PublishBuildProblem <|
                                                 Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed
                                         )
                             )
@@ -256,15 +256,15 @@ type Git
 
 getGit : Task Exit.Publish Git
 getGit =
-    WasRepTask.io (Utils.dirFindExecutable "git")
-        |> WasRepTask.bind
+    TE.io (Utils.dirFindExecutable "git")
+        |> TE.bind
             (\maybeGit ->
                 case maybeGit of
                     Nothing ->
-                        WasRepTask.throw Exit.PublishNoGit
+                        TE.throw Exit.PublishNoGit
 
                     Just git ->
-                        WasRepTask.pure <|
+                        TE.pure <|
                             Git
                                 (\args ->
                                     let
@@ -296,11 +296,11 @@ verifyTag (Git run_) manager pkg vsn =
     reportTagCheck vsn
         -- https://stackoverflow.com/questions/1064499/how-to-list-all-git-tags
         (run_ [ "show", "--name-only", V.toChars vsn, "--" ]
-            |> IO.bind
+            |> TE.bind
                 (\exitCode ->
                     case exitCode of
                         Exit.ExitFailure _ ->
-                            IO.pure (Err (Exit.PublishMissingTag vsn))
+                            TE.pure (Err (Exit.PublishMissingTag vsn))
 
                         Exit.ExitSuccess ->
                             let
@@ -312,10 +312,10 @@ verifyTag (Git run_) manager pkg vsn =
                                 \body ->
                                     case D.fromByteString commitHashDecoder body of
                                         Ok hash ->
-                                            IO.pure <| Ok hash
+                                            TE.pure <| Ok hash
 
                                         Err _ ->
-                                            IO.pure <| Err (Exit.PublishCannotGetTagData vsn url body)
+                                            TE.pure <| Err (Exit.PublishCannotGetTagData vsn url body)
                 )
         )
 
@@ -339,7 +339,7 @@ verifyNoChanges (Git run_) commitHash vsn =
     reportLocalChangesCheck <|
         -- https://stackoverflow.com/questions/3878624/how-do-i-programmatically-determine-if-there-are-uncommited-changes
         (run_ [ "diff-index", "--quiet", commitHash, "--" ]
-            |> IO.fmap
+            |> TE.fmap
                 (\exitCode ->
                     case exitCode of
                         Exit.ExitSuccess ->
@@ -369,18 +369,18 @@ verifyZip (Env root _ manager _ _) pkg vsn =
                     url
                     Exit.PublishCannotGetZip
                     (Exit.PublishCannotDecodeZip url)
-                    (IO.pure << Ok)
+                    (TE.pure << Ok)
                 )
-                |> WasRepTask.bind
+                |> TE.bind
                     (\( sha, archive ) ->
-                        WasRepTask.io (File.writePackage prepublishDir archive)
-                            |> WasRepTask.bind
+                        TE.io (File.writePackage prepublishDir archive)
+                            |> TE.bind
                                 (\_ ->
                                     reportZipBuildCheck <|
                                         Utils.dirWithCurrentDirectory prepublishDir <|
                                             verifyZipBuild prepublishDir
                                 )
-                            |> WasRepTask.fmap (\_ -> sha)
+                            |> TE.fmap (\_ -> sha)
                     )
 
 
@@ -396,37 +396,37 @@ withPrepublishDir root callback =
         dir =
             Stuff.prepublishDir root
     in
-    WasRepTask.eio identity <|
+    TE.eio identity <|
         Utils.bracket_
             (Utils.dirCreateDirectoryIfMissing True dir)
             (Utils.dirRemoveDirectoryRecursive dir)
-            (WasRepTask.run (callback dir))
+            (TE.toResult (callback dir))
 
 
 verifyZipBuild : FilePath -> Task Never (Result Exit.Publish ())
 verifyZipBuild root =
     BW.withScope
         (\scope ->
-            WasRepTask.run
-                (WasRepTask.eio Exit.PublishZipBadDetails
+            TE.toResult
+                (TE.eio Exit.PublishZipBadDetails
                     (Details.load Reporting.silent scope root)
-                    |> WasRepTask.bind
+                    |> TE.bind
                         (\((Details.Details _ outline _ _ _ _) as details) ->
                             (case outline of
                                 Details.ValidApp _ ->
-                                    WasRepTask.throw Exit.PublishZipApplication
+                                    TE.throw Exit.PublishZipApplication
 
                                 Details.ValidPkg _ [] _ ->
-                                    WasRepTask.throw Exit.PublishZipNoExposed
+                                    TE.throw Exit.PublishZipNoExposed
 
                                 Details.ValidPkg _ (e :: es) _ ->
-                                    WasRepTask.pure (NE.Nonempty e es)
+                                    TE.pure (NE.Nonempty e es)
                             )
-                                |> WasRepTask.bind
+                                |> TE.bind
                                     (\exposed ->
-                                        WasRepTask.eio Exit.PublishZipBuildProblem
+                                        TE.eio Exit.PublishZipBuildProblem
                                             (Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed)
-                                            |> WasRepTask.fmap (\_ -> ())
+                                            |> TE.fmap (\_ -> ())
                                     )
                         )
                 )
@@ -448,14 +448,14 @@ verifyVersion env pkg vsn newDocs publishedVersions =
         case publishedVersions of
             Nothing ->
                 if vsn == V.one then
-                    IO.pure <| Ok GoodStart
+                    TE.pure <| Ok GoodStart
 
                 else
-                    IO.pure <| Err <| Exit.PublishNotInitialVersion vsn
+                    TE.pure <| Err <| Exit.PublishNotInitialVersion vsn
 
             Just ((Registry.KnownVersions latest previous) as knownVersions) ->
                 if vsn == latest || List.member vsn previous then
-                    IO.pure <| Err <| Exit.PublishAlreadyPublished vsn
+                    TE.pure <| Err <| Exit.PublishAlreadyPublished vsn
 
                 else
                     verifyBump env pkg vsn newDocs knownVersions
@@ -465,13 +465,13 @@ verifyBump : Env -> Pkg.Name -> V.Version -> Docs.Documentation -> Registry.Know
 verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
-            IO.pure <|
+            TE.pure <|
                 Err <|
                     Exit.PublishInvalidBump vsn latest
 
         Just ( old, new, magnitude ) ->
             Diff.getDocs cache manager pkg old
-                |> IO.fmap
+                |> TE.fmap
                     (\result ->
                         case result of
                             Err dp ->
@@ -507,7 +507,7 @@ register manager pkg vsn docs commitHash sha =
         , ( "version", V.toChars vsn )
         , ( "commit-hash", commitHash )
         ]
-        |> IO.bind
+        |> TE.bind
             (\url ->
                 Http.upload manager
                     url
@@ -517,7 +517,7 @@ register manager pkg vsn docs commitHash sha =
                     , Http.stringPart "github-hash" (Http.shaToChars sha)
                     ]
             )
-        |> WasRepTask.eio Exit.PublishCannotRegister
+        |> TE.eio Exit.PublishCannotRegister
 
 
 
@@ -526,7 +526,7 @@ register manager pkg vsn docs commitHash sha =
 
 reportPublishStart : Pkg.Name -> V.Version -> Maybe Registry.KnownVersions -> Task x ()
 reportPublishStart pkg vsn maybeKnownVersions =
-    WasRepTask.io <|
+    TE.io <|
         case maybeKnownVersions of
             Nothing ->
                 IO.putStrLn <| Exit.newPackageOverview ++ "\nI will now verify that everything is in order...\n"
@@ -595,7 +595,7 @@ reportSemverCheck version work =
                         ++ vsn
                         ++ ")"
     in
-    WasRepTask.void <| reportCustomCheck waiting success failure work
+    TE.void <| reportCustomCheck waiting success failure work
 
 
 reportTagCheck : V.Version -> Task Never (Result x a) -> Task x a
@@ -640,18 +640,18 @@ reportCustomCheck waiting success failure work =
     let
         putFlush : D.Doc -> Task Never ()
         putFlush doc =
-            Help.toStdout doc |> IO.bind (\_ -> IO.hFlush IO.stdout)
+            Help.toStdout doc |> TE.bind (\_ -> IO.hFlush IO.stdout)
 
         padded : String -> String
         padded message =
             message ++ String.repeat (String.length waiting - String.length message) " "
     in
-    WasRepTask.eio identity
+    TE.eio identity
         (putFlush (D.append (D.fromChars "  ") waitingMark |> D.plus (D.fromChars waiting))
-            |> IO.bind
+            |> TE.bind
                 (\_ ->
                     work
-                        |> IO.bind
+                        |> TE.bind
                             (\result ->
                                 putFlush
                                     (case result of
@@ -661,7 +661,7 @@ reportCustomCheck waiting success failure work =
                                         Err _ ->
                                             D.append (D.fromChars "\u{000D}  ") badMark |> D.plus (D.fromChars (padded failure ++ "\n\n"))
                                     )
-                                    |> IO.fmap (\_ -> result)
+                                    |> TE.fmap (\_ -> result)
                             )
                 )
         )

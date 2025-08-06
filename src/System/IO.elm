@@ -1,7 +1,5 @@
 module System.IO exposing
     ( Program, Model, Msg, run
-    , pure, apply, fmap, bind, mapM
-    , eio, io, mapError, mio, throw, void
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -13,6 +11,8 @@ module System.IO exposing
     , putStr, putStrLn, getLine
     , ReplState(..), initialReplState
     , writeString
+    --, pure, apply, fmap, bind, mapM
+    --, eio, io, mapError, mio, throw, void
     )
 
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>

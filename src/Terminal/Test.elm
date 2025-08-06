@@ -16,7 +16,6 @@ import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as WasRepTask
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
@@ -38,6 +37,7 @@ import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
@@ -51,7 +51,7 @@ type Flags
 run : List String -> Flags -> Task Never ()
 run paths flags =
     Stuff.findRoot
-        |> IO.bind
+        |> TE.bind
             (\maybeRoot ->
                 Reporting.attemptWithStyle style Exit.testToReport <|
                     case maybeRoot of
@@ -59,27 +59,27 @@ run paths flags =
                             runHelp root paths flags
 
                         Nothing ->
-                            IO.pure (Err Exit.TestNoOutline)
+                            TE.pure (Err Exit.TestNoOutline)
             )
 
 
 runHelp : String -> List String -> Flags -> Task Never (Result Exit.Test ())
 runHelp root testFileGlobs flags =
     Stuff.withRootLock root <|
-        WasRepTask.run <|
+        TE.toResult <|
             (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
-                |> IO.bind (\_ -> Utils.nodeGetDirname)
-                |> WasRepTask.io
-                |> WasRepTask.bind
+                |> TE.bind (\_ -> Utils.nodeGetDirname)
+                |> TE.io
+                |> TE.bind
                     (\nodeDirname ->
-                        WasRepTask.eio Exit.TestBadOutline (Outline.read root)
-                            |> WasRepTask.bind
+                        TE.eio Exit.TestBadOutline (Outline.read root)
+                            |> TE.bind
                                 (\baseOutline ->
-                                    WasRepTask.io (Utils.dirDoesDirectoryExist "tests")
-                                        |> WasRepTask.bind
+                                    TE.io (Utils.dirDoesDirectoryExist "tests")
+                                        |> TE.bind
                                             (\testsDirExists ->
-                                                WasRepTask.eio Exit.TestBadRegistry Solver.initEnv
-                                                    |> WasRepTask.bind
+                                                TE.eio Exit.TestBadRegistry Solver.initEnv
+                                                    |> TE.bind
                                                         (\env ->
                                                             let
                                                                 addOptionalTests : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
@@ -110,25 +110,25 @@ runHelp root testFileGlobs flags =
                                                                 Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
                                                                     Outline.AppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
                                                                         |> makeAppPlan env Pkg.core
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.json)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.time)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.random)
+                                                                        |> TE.bind (makeAppPlan env Pkg.json)
+                                                                        |> TE.bind (makeAppPlan env Pkg.time)
+                                                                        |> TE.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> WasRepTask.bind (attemptChanges root env)
+                                                                        |> TE.bind (attemptChanges root env)
 
                                                                 Outline.Pkg (Outline.PkgOutline _ _ _ _ _ deps test _) ->
                                                                     Outline.AppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
                                                                         |> makePkgPlan env (Dict.union deps test)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.core)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.json)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.time)
-                                                                        |> WasRepTask.bind (makeAppPlan env Pkg.random)
+                                                                        |> TE.bind (makeAppPlan env Pkg.core)
+                                                                        |> TE.bind (makeAppPlan env Pkg.json)
+                                                                        |> TE.bind (makeAppPlan env Pkg.time)
+                                                                        |> TE.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> WasRepTask.bind (attemptChanges root env)
+                                                                        |> TE.bind (attemptChanges root env)
                                                         )
                                             )
                                 )
-                            |> WasRepTask.bind
+                            |> TE.bind
                                 (\_ ->
                                     let
                                         paths : List String
@@ -141,7 +141,7 @@ runHelp root testFileGlobs flags =
                                                     testFileGlobs
                                     in
                                     resolveElmFiles paths
-                                        |> IO.bind
+                                        |> TE.bind
                                             (\resolvedInputFiles ->
                                                 case resolvedInputFiles of
                                                     Ok inputFiles ->
@@ -151,20 +151,20 @@ runHelp root testFileGlobs flags =
                                                                     case List.filter (\path -> String.startsWith path inputFile) paths of
                                                                         _ :: [] ->
                                                                             extractExposedPossiblyTests inputFile
-                                                                                |> IO.fmap (Maybe.map (Tuple.pair inputFile))
+                                                                                |> TE.fmap (Maybe.map (Tuple.pair inputFile))
 
                                                                         _ ->
-                                                                            IO.pure Nothing
+                                                                            TE.pure Nothing
                                                                 )
 
                                                     Err _ ->
-                                                        IO.pure []
+                                                        TE.pure []
                                             )
-                                        |> IO.fmap (List.filterMap identity)
-                                        |> IO.bind
+                                        |> TE.fmap (List.filterMap identity)
+                                        |> TE.bind
                                             (\exposedList ->
                                                 Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
-                                                    |> IO.bind
+                                                    |> TE.bind
                                                         (\_ ->
                                                             let
                                                                 testModules : List { moduleName : String, possiblyTests : List String }
@@ -179,21 +179,21 @@ runHelp root testFileGlobs flags =
                                                             in
                                                             testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
                                                         )
-                                                    |> IO.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
-                                                    |> IO.bind (\_ -> Reporting.terminal)
-                                                    |> IO.bind
+                                                    |> TE.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
+                                                    |> TE.bind (\_ -> Reporting.terminal)
+                                                    |> TE.bind
                                                         (\terminalStyle ->
                                                             Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
                                                                 Utils.dirWithCurrentDirectory (Stuff.testDir root)
                                                                     (runMake (Stuff.testDir root) "src/Test/Generated/Main.elm")
                                                         )
-                                                    |> IO.bind
+                                                    |> TE.bind
                                                         (\content ->
                                                             IO.hPutStrLn IO.stdout "Starting tests"
-                                                                |> IO.bind
+                                                                |> TE.bind
                                                                     (\_ ->
                                                                         getInterpreter
-                                                                            |> IO.bind
+                                                                            |> TE.bind
                                                                                 (\interpreter ->
                                                                                     let
                                                                                         finalContent : String
@@ -209,9 +209,9 @@ runHelp root testFileGlobs flags =
                                                                     )
                                                         )
                                             )
-                                        |> WasRepTask.io
+                                        |> TE.io
                                 )
-                            |> WasRepTask.fmap (\_ -> ())
+                            |> TE.fmap (\_ -> ())
                     )
             )
 
@@ -229,8 +229,8 @@ interpret interpreter javascript =
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
-                        |> IO.bind (\_ -> IO.hClose stdin)
-                        |> IO.bind (\_ -> Process.waitForProcess handle)
+                        |> TE.bind (\_ -> IO.hClose stdin)
+                        |> TE.bind (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -598,11 +598,11 @@ testGeneratedMain testModules testFileGlobs testFilePaths (Flags maybeSeed maybe
         seedIO =
             case maybeSeed of
                 Just seedValue ->
-                    IO.pure seedValue
+                    TE.pure seedValue
 
                 Nothing ->
                     Utils.nodeMathRandom
-                        |> IO.fmap (\seedRandom -> floor (seedRandom * 407199254740991) + 1000)
+                        |> TE.fmap (\seedRandom -> floor (seedRandom * 407199254740991) + 1000)
 
         imports : List String
         imports =
@@ -613,7 +613,7 @@ testGeneratedMain testModules testFileGlobs testFilePaths (Flags maybeSeed maybe
             List.map makeModuleTuple testModules
     in
     seedIO
-        |> IO.fmap
+        |> TE.fmap
             (\seedValue ->
                 """module Test.Generated.Main exposing (main)
 
@@ -699,7 +699,7 @@ style =
 extractExposedPossiblyTests : String -> Task Never (Maybe ( String, List String ))
 extractExposedPossiblyTests path =
     File.readUtf8 path
-        |> IO.bind
+        |> TE.bind
             (\bytes ->
                 case Parse.fromByteString (SV.fileSyntaxVersion path) Parse.Application bytes of
                     Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
@@ -725,10 +725,10 @@ extractExposedPossiblyTests path =
                                             )
                                             exposedList
                         in
-                        IO.pure (Just ( name, exposed ))
+                        TE.pure (Just ( name, exposed ))
 
                     _ ->
-                        IO.pure Nothing
+                        TE.pure Nothing
             )
 
 
@@ -745,10 +745,10 @@ type FileType
 stat : FilePath -> Task Never FileType
 stat path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> TE.bind
             (\isFile ->
                 Utils.dirDoesDirectoryExist path
-                    |> IO.fmap
+                    |> TE.fmap
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
                                 ( True, _ ) ->
@@ -775,15 +775,15 @@ type Error
 resolveFile : FilePath -> Task Never (Result Error (List FilePath))
 resolveFile path =
     stat path
-        |> IO.bind
+        |> TE.bind
             (\fileType ->
                 case fileType of
                     IsFile ->
-                        IO.pure (Ok [ path ])
+                        TE.pure (Ok [ path ])
 
                     IsDirectory ->
                         findAllGuidaAndElmFiles path
-                            |> IO.fmap
+                            |> TE.fmap
                                 (\elmFiles ->
                                     case elmFiles of
                                         [] ->
@@ -794,15 +794,15 @@ resolveFile path =
                                 )
 
                     DoesNotExist ->
-                        IO.pure (Err (FileDoesNotExist path))
+                        TE.pure (Err (FileDoesNotExist path))
             )
 
 
 resolveElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
 resolveElmFiles inputFiles =
-    IO.mapM resolveFile inputFiles
-        |> IO.fmap collectErrors
-        |> IO.fmap
+    TE.mapM resolveFile inputFiles
+        |> TE.fmap collectErrors
+        |> TE.fmap
             (\result ->
                 case result of
                     Err ls ->
@@ -840,14 +840,14 @@ collectErrors =
 collectFiles : (a -> Task Never (List a)) -> a -> Task Never (List a)
 collectFiles children root =
     children root
-        |> IO.bind (\xs -> IO.mapM (collectFiles children) xs)
-        |> IO.fmap (\subChildren -> root :: List.concat subChildren)
+        |> TE.bind (\xs -> TE.mapM (collectFiles children) xs)
+        |> TE.fmap (\subChildren -> root :: List.concat subChildren)
 
 
 listDir : FilePath -> Task Never (List FilePath)
 listDir path =
     Utils.dirListDirectory path
-        |> IO.fmap (List.map (\file -> path ++ "/" ++ file))
+        |> TE.fmap (List.map (\file -> path ++ "/" ++ file))
 
 
 fileList : FilePath -> Task Never (List FilePath)
@@ -856,17 +856,17 @@ fileList =
         children : FilePath -> Task Never (List FilePath)
         children path =
             if isSkippable path then
-                IO.pure []
+                TE.pure []
 
             else
                 Utils.dirDoesDirectoryExist path
-                    |> IO.bind
+                    |> TE.bind
                         (\directory ->
                             if directory then
                                 listDir path
 
                             else
-                                IO.pure []
+                                TE.pure []
                         )
     in
     collectFiles children
@@ -889,7 +889,7 @@ hasExtension ext path =
 findAllGuidaAndElmFiles : FilePath -> Task Never (List FilePath)
 findAllGuidaAndElmFiles inputFile =
     fileList inputFile
-        |> IO.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
+        |> TE.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
 
 
 hasFilename : String -> FilePath -> Bool
@@ -907,7 +907,7 @@ hasFilename name path =
 
 attemptChanges : FilePath -> Solver.Env -> Outline.AppOutline -> Task Exit.Test ()
 attemptChanges root env appOutline =
-    WasRepTask.eio Exit.TestBadDetails <|
+    TE.eio Exit.TestBadDetails <|
         BW.withScope
             (\scope ->
                 let
@@ -916,7 +916,7 @@ attemptChanges root env appOutline =
                         Outline.App appOutline
                 in
                 Outline.write (Stuff.testDir root) newOutline
-                    |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> TE.bind (\_ -> Details.verifyInstall scope root env newOutline)
             )
 
 
@@ -927,13 +927,13 @@ attemptChanges root env appOutline =
 makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Test Outline.AppOutline
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
-        WasRepTask.pure outline
+        TE.pure outline
 
     else
         -- is it already indirect?
         case Dict.get identity pkg indirect of
             Just vsn ->
-                WasRepTask.pure <|
+                TE.pure <|
                     Outline.AppOutline elmVersion
                         sourceDirs
                         (Dict.insert identity pkg vsn direct)
@@ -945,7 +945,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                 -- is it already a test dependency?
                 case Dict.get identity pkg testDirect of
                     Just vsn ->
-                        WasRepTask.pure <|
+                        TE.pure <|
                             Outline.AppOutline elmVersion
                                 sourceDirs
                                 (Dict.insert identity pkg vsn direct)
@@ -957,7 +957,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                         -- is it already an indirect test dependency?
                         case Dict.get identity pkg testIndirect of
                             Just vsn ->
-                                WasRepTask.pure <|
+                                TE.pure <|
                                     Outline.AppOutline elmVersion
                                         sourceDirs
                                         (Dict.insert identity pkg vsn direct)
@@ -971,27 +971,27 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                                     Err suggestions ->
                                         case connection of
                                             Solver.Online _ ->
-                                                WasRepTask.throw (Exit.TestUnknownPackageOnline pkg suggestions)
+                                                TE.throw (Exit.TestUnknownPackageOnline pkg suggestions)
 
                                             Solver.Offline ->
-                                                WasRepTask.throw (Exit.TestUnknownPackageOffline pkg suggestions)
+                                                TE.throw (Exit.TestUnknownPackageOffline pkg suggestions)
 
                                     Ok _ ->
-                                        WasRepTask.io (Solver.addToApp cache connection registry pkg outline False)
-                                            |> WasRepTask.bind
+                                        TE.io (Solver.addToApp cache connection registry pkg outline False)
+                                            |> TE.bind
                                                 (\result ->
                                                     case result of
                                                         Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                            WasRepTask.pure app
+                                                            TE.pure app
 
                                                         Solver.NoSolution ->
-                                                            WasRepTask.throw (Exit.TestNoOnlineAppSolution pkg)
+                                                            TE.throw (Exit.TestNoOnlineAppSolution pkg)
 
                                                         Solver.NoOfflineSolution ->
-                                                            WasRepTask.throw (Exit.TestNoOfflineAppSolution pkg)
+                                                            TE.throw (Exit.TestNoOfflineAppSolution pkg)
 
                                                         Solver.SolverErr exit ->
-                                                            WasRepTask.throw (Exit.TestHadSolverTrouble exit)
+                                                            TE.throw (Exit.TestHadSolverTrouble exit)
                                                 )
 
 
@@ -1008,24 +1008,24 @@ makePkgPlanHelp : Solver.Env -> List ( Pkg.Name, C.Constraint ) -> Outline.AppOu
 makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
     case cons of
         [] ->
-            WasRepTask.pure outline
+            TE.pure outline
 
         ( pkg, con ) :: remainingCons ->
-            WasRepTask.io (Solver.addToTestApp cache connection registry pkg con outline)
-                |> WasRepTask.bind
+            TE.io (Solver.addToTestApp cache connection registry pkg con outline)
+                |> TE.bind
                     (\result ->
                         case result of
                             Solver.SolverOk (Solver.AppSolution _ _ app) ->
                                 makePkgPlanHelp env remainingCons app
 
                             Solver.NoSolution ->
-                                WasRepTask.throw (Exit.TestNoOnlinePkgSolution pkg)
+                                TE.throw (Exit.TestNoOnlinePkgSolution pkg)
 
                             Solver.NoOfflineSolution ->
-                                WasRepTask.throw (Exit.TestNoOfflinePkgSolution pkg)
+                                TE.throw (Exit.TestNoOfflinePkgSolution pkg)
 
                             Solver.SolverErr exit ->
-                                WasRepTask.throw (Exit.TestHadSolverTrouble exit)
+                                TE.throw (Exit.TestHadSolverTrouble exit)
                     )
 
 
@@ -1037,10 +1037,10 @@ getInterpreter : Task Never FilePath
 getInterpreter =
     getInterpreterHelp "node` or `nodejs" <|
         (Utils.dirFindExecutable "node"
-            |> IO.bind
+            |> TE.bind
                 (\exe1 ->
                     Utils.dirFindExecutable "nodejs"
-                        |> IO.fmap (\exe2 -> Maybe.or exe1 exe2)
+                        |> TE.fmap (\exe2 -> Maybe.or exe1 exe2)
                 )
         )
 
@@ -1048,15 +1048,15 @@ getInterpreter =
 getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
 getInterpreterHelp name findExe =
     findExe
-        |> IO.bind
+        |> TE.bind
             (\maybePath ->
                 case maybePath of
                     Just path ->
-                        IO.pure path
+                        TE.pure path
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> IO.bind (\_ -> Exit.exitFailure)
+                            |> TE.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -1076,12 +1076,12 @@ runMake : String -> String -> Task Never (Result Exit.Test String)
 runMake root path =
     BW.withScope
         (\scope ->
-            WasRepTask.run <|
-                (WasRepTask.eio Exit.TestBadDetails (Details.load style scope root)
-                    |> WasRepTask.bind
+            TE.toResult <|
+                (TE.eio Exit.TestBadDetails (Details.load style scope root)
+                    |> TE.bind
                         (\details ->
                             buildPaths root details (NE.Nonempty path [])
-                                |> WasRepTask.bind
+                                |> TE.bind
                                     (\artifacts ->
                                         toBuilder 0 root details artifacts
                                     )
@@ -1092,7 +1092,7 @@ runMake root path =
 
 buildPaths : FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Test Build.Artifacts
 buildPaths root details paths =
-    WasRepTask.eio Exit.TestCannotBuild <|
+    TE.eio Exit.TestCannotBuild <|
         Build.fromPaths style root details paths
 
 
@@ -1102,7 +1102,7 @@ buildPaths root details paths =
 
 toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Test String
 toBuilder leadingLines root details artifacts =
-    WasRepTask.mapError Exit.TestBadGenerate <|
+    TE.mapError Exit.TestBadGenerate <|
         Generate.dev False leadingLines root details artifacts
 
 
@@ -1121,8 +1121,8 @@ format =
     Parser
         { singular = "format"
         , plural = "formats"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "json", "junit", "console" ]
+        , suggest = \_ -> TE.pure []
+        , examples = \_ -> TE.pure [ "json", "junit", "console" ]
         }
 
 

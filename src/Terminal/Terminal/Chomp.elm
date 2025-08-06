@@ -17,7 +17,7 @@ module Terminal.Terminal.Chomp exposing
 
 import Basics.Extra exposing (flip)
 import Maybe.Extra as Maybe
-import System.IO as IO
+import Utils.Task.Extra as TE
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (ArgError(..), Error(..), Expectation(..), Flag(..), FlagError(..), Flags(..), Parser(..))
 
@@ -38,7 +38,7 @@ chomp maybeIndex strings args (Chomper flagChomper) =
             Tuple.mapSecond (Result.map (\a -> ( a, flagValue ))) (chompArgs suggest chunks args)
 
         ChomperErr suggest flagError ->
-            ( addSuggest (IO.pure []) suggest, Err (BadFlag flagError) )
+            ( addSuggest (TE.pure []) suggest, Err (BadFlag flagError) )
 
 
 toChunks : List String -> List Chunk
@@ -115,7 +115,7 @@ chompArgsHelp :
 chompArgsHelp suggest chunks completeArgsList revSuggest revArgErrors =
     case completeArgsList of
         [] ->
-            ( List.foldl (flip addSuggest) (IO.pure []) revSuggest
+            ( List.foldl (flip addSuggest) (TE.pure []) revSuggest
             , Err (BadArgs (List.reverse revArgErrors))
             )
 
@@ -125,7 +125,7 @@ chompArgsHelp suggest chunks completeArgsList revSuggest revArgErrors =
                     chompArgsHelp suggest chunks others (s1 :: revSuggest) (argError :: revArgErrors)
 
                 ( s1, Ok value ) ->
-                    ( addSuggest (IO.pure []) s1
+                    ( addSuggest (TE.pure []) s1
                     , Ok value
                     )
 
@@ -140,9 +140,9 @@ addSuggest everything suggest =
             everything
 
         Suggestions newStuff ->
-            IO.pure (++)
-                |> IO.apply newStuff
-                |> IO.apply everything
+            TE.pure (++)
+                |> TE.apply newStuff
+                |> TE.apply everything
 
 
 
@@ -391,7 +391,7 @@ suggestFlag unknownFlags flags targetIndex =
 
         (Chunk index string) :: otherUnknownFlags ->
             if index == targetIndex then
-                Just (IO.pure (List.filter (String.startsWith string) (getFlagNames flags [])))
+                Just (TE.pure (List.filter (String.startsWith string) (getFlagNames flags [])))
 
             else
                 suggestFlag otherUnknownFlags flags targetIndex
