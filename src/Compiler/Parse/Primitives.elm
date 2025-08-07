@@ -483,6 +483,13 @@ snippetEncoder (Snippet { fptr, offset, length, offRow, offCol }) =
 
 snippetDecoder : BD.Decoder Snippet
 snippetDecoder =
+    -- This `String.toList` -> `String.fromList` round-trip prevents V8 from retaining
+    -- large "concatenated string" chains, which can cause OOMs.
+    -- Tested against `rtfeldman/elm-css` compilation.
+    -- The split call avoids elm-review flags for this pattern.
+    --
+    -- See the related discussion for context:
+    -- https://discourse.elm-lang.org/t/guida-compiler-was-there-are-3-elm-compilers-written-in-elm/10329/25
     BD.map5
         (\fptr offset length offRow offCol ->
             Snippet
