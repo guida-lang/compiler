@@ -14,7 +14,6 @@ import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
@@ -28,7 +27,8 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
-import System.IO exposing (IO)
+import Task exposing (Task)
+import Utils.Task.Extra as TE
 
 
 
@@ -42,12 +42,12 @@ type Args
     | GlobalInquiry Pkg.Name V.Version V.Version
 
 
-run : Args -> () -> IO ()
+run : Args -> () -> Task Never ()
 run args () =
     Reporting.attempt Exit.diffToReport
-        (Task.run
+        (TE.toResult
             (getEnv
-                |> Task.bind (\env -> diff env args)
+                |> TE.bind (\env -> diff env args)
             )
         )
 
@@ -60,19 +60,19 @@ type Env
     = Env (Maybe String) Stuff.PackageCache Http.Manager Registry.Registry
 
 
-getEnv : Task Env
+getEnv : Task Exit.Diff Env
 getEnv =
-    Task.io Stuff.findRoot
-        |> Task.bind
+    TE.io Stuff.findRoot
+        |> TE.bind
             (\maybeRoot ->
-                Task.io Stuff.getPackageCache
-                    |> Task.bind
+                TE.io Stuff.getPackageCache
+                    |> TE.bind
                         (\cache ->
-                            Task.io Http.getManager
-                                |> Task.bind
+                            TE.io Http.getManager
+                                |> TE.bind
                                     (\manager ->
-                                        Task.eio Exit.DiffMustHaveLatestRegistry (Registry.latest manager cache)
-                                            |> Task.fmap (\registry -> Env maybeRoot cache manager registry)
+                                        TE.eio Exit.DiffMustHaveLatestRegistry (Registry.latest manager cache)
+                                            |> TE.fmap (\registry -> Env maybeRoot cache manager registry)
                                     )
                         )
             )
@@ -82,59 +82,55 @@ getEnv =
 -- DIFF
 
 
-type alias Task a =
-    Task.Task Exit.Diff a
-
-
-diff : Env -> Args -> Task ()
+diff : Env -> Args -> Task Exit.Diff ()
 diff ((Env _ _ _ registry) as env) args =
     case args of
         GlobalInquiry name v1 v2 ->
             case Registry.getVersions_ name registry of
                 Ok vsns ->
                     getDocs env name vsns (V.min v1 v2)
-                        |> Task.bind
+                        |> TE.bind
                             (\oldDocs ->
                                 getDocs env name vsns (V.max v1 v2)
-                                    |> Task.bind (\newDocs -> writeDiff oldDocs newDocs)
+                                    |> TE.bind (\newDocs -> writeDiff oldDocs newDocs)
                             )
 
                 Err suggestions ->
-                    Task.throw <| Exit.DiffUnknownPackage name suggestions
+                    TE.throw <| Exit.DiffUnknownPackage name suggestions
 
         LocalInquiry v1 v2 ->
             readOutline env
-                |> Task.bind
+                |> TE.bind
                     (\( name, vsns ) ->
                         getDocs env name vsns (V.min v1 v2)
-                            |> Task.bind
+                            |> TE.bind
                                 (\oldDocs ->
                                     getDocs env name vsns (V.max v1 v2)
-                                        |> Task.bind (\newDocs -> writeDiff oldDocs newDocs)
+                                        |> TE.bind (\newDocs -> writeDiff oldDocs newDocs)
                                 )
                     )
 
         CodeVsLatest ->
             readOutline env
-                |> Task.bind
+                |> TE.bind
                     (\( name, vsns ) ->
                         getLatestDocs env name vsns
-                            |> Task.bind
+                            |> TE.bind
                                 (\oldDocs ->
                                     generateDocs env
-                                        |> Task.bind (\newDocs -> writeDiff oldDocs newDocs)
+                                        |> TE.bind (\newDocs -> writeDiff oldDocs newDocs)
                                 )
                     )
 
         CodeVsExactly version ->
             readOutline env
-                |> Task.bind
+                |> TE.bind
                     (\( name, vsns ) ->
                         getDocs env name vsns version
-                            |> Task.bind
+                            |> TE.bind
                                 (\oldDocs ->
                                     generateDocs env
-                                        |> Task.bind (\newDocs -> writeDiff oldDocs newDocs)
+                                        |> TE.bind (\newDocs -> writeDiff oldDocs newDocs)
                                 )
                     )
 
@@ -143,50 +139,50 @@ diff ((Env _ _ _ registry) as env) args =
 -- GET DOCS
 
 
-getDocs : Env -> Pkg.Name -> Registry.KnownVersions -> V.Version -> Task Docs.Documentation
+getDocs : Env -> Pkg.Name -> Registry.KnownVersions -> V.Version -> Task Exit.Diff Docs.Documentation
 getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) version =
     if latest == version || List.member version previous then
-        Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
+        TE.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
 
     else
-        Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
+        TE.throw <| Exit.DiffUnknownVersion version (latest :: previous)
 
 
-getLatestDocs : Env -> Pkg.Name -> Registry.KnownVersions -> Task Docs.Documentation
+getLatestDocs : Env -> Pkg.Name -> Registry.KnownVersions -> Task Exit.Diff Docs.Documentation
 getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
-    Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
+    TE.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
 
 
 -- READ OUTLINE
 
 
-readOutline : Env -> Task ( Pkg.Name, Registry.KnownVersions )
+readOutline : Env -> Task Exit.Diff ( Pkg.Name, Registry.KnownVersions )
 readOutline (Env maybeRoot _ _ registry) =
     case maybeRoot of
         Nothing ->
-            Task.throw <| Exit.DiffNoOutline
+            TE.throw <| Exit.DiffNoOutline
 
         Just root ->
-            Task.io (Outline.read root)
-                |> Task.bind
+            TE.io (Outline.read root)
+                |> TE.bind
                     (\result ->
                         case result of
                             Err err ->
-                                Task.throw <| Exit.DiffBadOutline err
+                                TE.throw <| Exit.DiffBadOutline err
 
                             Ok outline ->
                                 case outline of
                                     Outline.App _ ->
-                                        Task.throw <| Exit.DiffApplication
+                                        TE.throw <| Exit.DiffApplication
 
                                     Outline.Pkg (Outline.PkgOutline pkg _ _ _ _ _ _ _) ->
                                         case Registry.getVersions pkg registry of
                                             Just vsns ->
-                                                Task.pure ( pkg, vsns )
+                                                TE.pure ( pkg, vsns )
 
                                             Nothing ->
-                                                Task.throw Exit.DiffUnpublished
+                                                TE.throw Exit.DiffUnpublished
                     )
 
 
@@ -194,28 +190,28 @@ readOutline (Env maybeRoot _ _ registry) =
 -- GENERATE DOCS
 
 
-generateDocs : Env -> Task Docs.Documentation
+generateDocs : Env -> Task Exit.Diff Docs.Documentation
 generateDocs (Env maybeRoot _ _ _) =
     case maybeRoot of
         Nothing ->
-            Task.throw <| Exit.DiffNoOutline
+            TE.throw <| Exit.DiffNoOutline
 
         Just root ->
-            Task.eio Exit.DiffBadDetails
+            TE.eio Exit.DiffBadDetails
                 (BW.withScope (\scope -> Details.load Reporting.silent scope root))
-                |> Task.bind
+                |> TE.bind
                     (\((Details _ outline _ _ _ _) as details) ->
                         case outline of
                             Details.ValidApp _ ->
-                                Task.throw Exit.DiffApplication
+                                TE.throw Exit.DiffApplication
 
                             Details.ValidPkg _ exposed _ ->
                                 case exposed of
                                     [] ->
-                                        Task.throw Exit.DiffNoExposed
+                                        TE.throw Exit.DiffNoExposed
 
                                     e :: es ->
-                                        Task.eio Exit.DiffBadBuild <|
+                                        TE.eio Exit.DiffBadBuild <|
                                             Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
                     )
 
@@ -224,7 +220,7 @@ generateDocs (Env maybeRoot _ _ _) =
 -- WRITE DIFF
 
 
-writeDiff : Docs.Documentation -> Docs.Documentation -> Task ()
+writeDiff : Docs.Documentation -> Docs.Documentation -> Task Exit.Diff ()
 writeDiff oldDocs newDocs =
     let
         changes : PackageChanges
@@ -235,7 +231,7 @@ writeDiff oldDocs newDocs =
         localizer =
             L.fromNames (Dict.union oldDocs newDocs)
     in
-    Task.io (Help.toStdout (toDoc localizer changes |> D.a (D.fromChars "\n")))
+    TE.io (Help.toStdout (toDoc localizer changes |> D.a (D.fromChars "\n")))
 
 
 

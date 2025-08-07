@@ -7,46 +7,47 @@ import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as TE
 
 
 
 -- RUN
 
 
-run : Pkg.Name -> IO ()
+run : Pkg.Name -> Task Never ()
 run pkg =
     Reporting.attempt Exit.installToReport
         (Stuff.findRoot
-            |> IO.bind
+            |> TE.bind
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            IO.pure (Err Exit.InstallNoOutline)
+                            TE.pure (Err Exit.InstallNoOutline)
 
                         Just root ->
-                            Task.run
-                                (Task.eio Exit.InstallBadRegistry Solver.initEnv
-                                    |> Task.bind
+                            TE.toResult
+                                (TE.eio Exit.InstallBadRegistry Solver.initEnv
+                                    |> TE.bind
                                         (\env ->
-                                            Task.eio Exit.InstallBadOutline (Outline.read root)
-                                                |> Task.bind
+                                            TE.eio Exit.InstallBadOutline (Outline.read root)
+                                                |> TE.bind
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
                                                                 makeAppPlan env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes)
+                                                                    |> TE.bind (\changes -> attemptChanges root env oldOutline V.toChars changes)
 
                                                             Outline.Pkg outline ->
                                                                 makePkgPlan env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes)
+                                                                    |> TE.bind (\changes -> attemptChanges root env oldOutline C.toChars changes)
                                                     )
                                         )
                                 )
@@ -65,15 +66,11 @@ type Changes vsn
     | Changes Outline.Outline
 
 
-type alias Task a =
-    Task.Task Exit.Install a
-
-
-attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task ()
+attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task Exit.Install ()
 attemptChanges root env oldOutline _ changes =
     case changes of
         AlreadyInstalled ->
-            Task.io (IO.putStrLn "It is already installed!")
+            TE.io (IO.putStrLn "It is already installed!")
 
         PromoteIndirect newOutline ->
             attemptChangesHelp root env oldOutline newOutline
@@ -85,23 +82,23 @@ attemptChanges root env oldOutline _ changes =
             attemptChangesHelp root env oldOutline newOutline
 
 
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task ()
+attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task Exit.Install ()
 attemptChangesHelp root env oldOutline newOutline =
-    Task.eio Exit.InstallBadDetails <|
+    TE.eio Exit.InstallBadDetails <|
         BW.withScope
             (\scope ->
                 Outline.write root newOutline
-                    |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                    |> IO.bind
+                    |> TE.bind (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> TE.bind
                         (\result ->
                             case result of
                                 Err exit ->
                                     Outline.write root oldOutline
-                                        |> IO.fmap (\_ -> Err exit)
+                                        |> TE.fmap (\_ -> Err exit)
 
                                 Ok () ->
                                     IO.putStrLn "Success!"
-                                        |> IO.fmap (\_ -> Ok ())
+                                        |> TE.fmap (\_ -> Ok ())
                         )
             )
 
@@ -110,16 +107,16 @@ attemptChangesHelp root env oldOutline newOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task (Changes V.Version)
+makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Install (Changes V.Version)
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
-        Task.pure AlreadyInstalled
+        TE.pure AlreadyInstalled
 
     else
         -- is it already indirect?
         case Dict.get identity pkg indirect of
             Just vsn ->
-                Task.pure <|
+                TE.pure <|
                     PromoteIndirect <|
                         Outline.App <|
                             Outline.AppOutline elmVersion
@@ -133,7 +130,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                 -- is it already a test dependency?
                 case Dict.get identity pkg testDirect of
                     Just vsn ->
-                        Task.pure <|
+                        TE.pure <|
                             PromoteTest <|
                                 Outline.App <|
                                     Outline.AppOutline elmVersion
@@ -147,7 +144,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                         -- is it already an indirect test dependency?
                         case Dict.get identity pkg testIndirect of
                             Just vsn ->
-                                Task.pure <|
+                                TE.pure <|
                                     PromoteTest <|
                                         Outline.App <|
                                             Outline.AppOutline elmVersion
@@ -163,27 +160,27 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
                                     Err suggestions ->
                                         case connection of
                                             Solver.Online _ ->
-                                                Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                                TE.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
 
                                             Solver.Offline ->
-                                                Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                                TE.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
 
                                     Ok _ ->
-                                        Task.io (Solver.addToApp cache connection registry pkg outline False)
-                                            |> Task.bind
+                                        TE.io (Solver.addToApp cache connection registry pkg outline False)
+                                            |> TE.bind
                                                 (\result ->
                                                     case result of
                                                         Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                            Task.pure (Changes (Outline.App app))
+                                                            TE.pure (Changes (Outline.App app))
 
                                                         Solver.NoSolution ->
-                                                            Task.throw (Exit.InstallNoOnlineAppSolution pkg)
+                                                            TE.throw (Exit.InstallNoOnlineAppSolution pkg)
 
                                                         Solver.NoOfflineSolution ->
-                                                            Task.throw (Exit.InstallNoOfflineAppSolution pkg)
+                                                            TE.throw (Exit.InstallNoOfflineAppSolution pkg)
 
                                                         Solver.SolverErr exit ->
-                                                            Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                            TE.throw (Exit.InstallHadSolverTrouble exit)
                                                 )
 
 
@@ -191,16 +188,16 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
+makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Exit.Install (Changes C.Constraint)
 makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
     if Dict.member identity pkg deps then
-        Task.pure AlreadyInstalled
+        TE.pure AlreadyInstalled
 
     else
         -- is already in test dependencies?
         case Dict.get identity pkg test of
             Just con ->
-                Task.pure <|
+                TE.pure <|
                     PromoteTest <|
                         Outline.Pkg <|
                             Outline.PkgOutline name
@@ -218,10 +215,10 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                     Err suggestions ->
                         case connection of
                             Solver.Online _ ->
-                                Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                TE.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
 
                             Solver.Offline ->
-                                Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                TE.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
 
                     Ok (Registry.KnownVersions _ _) ->
                         let
@@ -233,8 +230,8 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                             cons =
                                 Dict.insert identity pkg C.anything old
                         in
-                        Task.io (Solver.verify cache connection registry cons)
-                            |> Task.bind
+                        TE.io (Solver.verify cache connection registry cons)
+                            |> TE.bind
                                 (\result ->
                                     case result of
                                         Solver.SolverOk solution ->
@@ -258,7 +255,7 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                                 news =
                                                     Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                             in
-                                            Task.pure <|
+                                            TE.pure <|
                                                 Changes <|
                                                     Outline.Pkg <|
                                                         Outline.PkgOutline name
@@ -271,13 +268,13 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline nam
                                                             elmVersion
 
                                         Solver.NoSolution ->
-                                            Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
+                                            TE.throw (Exit.InstallNoOnlinePkgSolution pkg)
 
                                         Solver.NoOfflineSolution ->
-                                            Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
+                                            TE.throw (Exit.InstallNoOfflinePkgSolution pkg)
 
                                         Solver.SolverErr exit ->
-                                            Task.throw (Exit.InstallHadSolverTrouble exit)
+                                            TE.throw (Exit.InstallHadSolverTrouble exit)
                                 )
 
 
