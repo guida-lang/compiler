@@ -2374,7 +2374,13 @@ formatExpression importInfo (A.At region aexpr) =
 
                 fields_ : List (Src.C2Eol (Src.Pair Name Src.Expr))
                 fields_ =
-                    List.map (Src.c2EolMap (\( ( nameComments, A.At _ name_ ), expr ) -> Src.Pair ( nameComments, name_ ) expr multiline)) fields
+                    List.map
+                        (Src.c2EolMap
+                            (\( ( nameComments, A.At nameRegion name_ ), ( _, A.At exprRegion _ ) as expr ) ->
+                                Src.Pair ( nameComments, name_ ) expr (Src.ForceMultiline (A.isMultiline (A.mergeRegions nameRegion exprRegion)))
+                            )
+                        )
+                        fields
             in
             ( SyntaxSeparated
             , formatRecordLike Nothing
@@ -2761,41 +2767,41 @@ formatString style s =
             Box.line <|
                 Box.row
                     [ Box.punc quotes
-                    , Box.literal <| escaper <| String.concat <| List.map fix <| String.toList <| String.replace "\\n" "\n" s
+                    , Box.literal <| escaper fixedString
                     , Box.punc quotes
                     ]
 
-        fix : Char -> String
-        fix c =
-            if (style == SString TripleQuotedString) && c == '\n' then
-                String.fromChar c
+        styleBasedFix : String -> String
+        styleBasedFix =
+            case style of
+                SChar ->
+                    String.replace "\\\"" "\""
+                        >> String.replace "\t" "\\t"
 
-            else if c == '\n' then
-                "\\n"
+                SString TripleQuotedString ->
+                    String.replace "\\n" "\n"
+                        >> String.replace "\\\"" "\""
+                        >> String.replace "\\'" "'"
+                        >> String.replace "\t" "\\t"
 
-            else if c == '\t' then
-                "\\t"
+                SString SingleQuotedString ->
+                    String.replace "\\'" "'"
 
-            else if c == '\\' then
-                "\\\\"
+        fixedString : String
+        fixedString =
+            s
+                |> styleBasedFix
+                |> String.replace "\t" "\\t"
+                |> String.toList
+                |> List.map
+                    (\c ->
+                        if not (charIsPrint c) then
+                            hex c
 
-            else if (style == SString SingleQuotedString) && c == '"' then
-                "\\\""
-
-            else if (style == SChar) && c == '\'' then
-                "\\'"
-
-            else if not (charIsPrint c) then
-                hex c
-
-            else if c == ' ' then
-                String.fromChar c
-
-            else if charIsSpace c then
-                hex c
-
-            else
-                String.fromChar c
+                        else
+                            String.fromChar c
+                    )
+                |> String.concat
 
         hex char =
             "\\u{" ++ String.padLeft 4 '0' (Hex.toString (Char.toCode char)) ++ "}"
@@ -2848,6 +2854,10 @@ type TypeParensInner
 
 typeParens : TypeParensRequired -> ( TypeParensInner, Box ) -> Box
 typeParens outer ( inner, box ) =
+    let
+        _ =
+            Debug.log "typeParens" ( outer, inner, typeParensNeeded outer inner )
+    in
     if typeParensNeeded outer inner then
         parens box
 
@@ -2878,11 +2888,14 @@ formatTypeConstructor name =
 formatType : Src.Type -> ( TypeParensInner, Box )
 formatType (A.At region atype) =
     case Debug.log "atype" atype of
-        Src.TLambda arg result ->
+        Src.TLambda ( ( preArgComments, postArgComments, argEol ), arg ) result ->
             let
+                _ =
+                    Debug.log "arg" ( preArgComments, postArgComments, arg )
+
                 first : Src.C0Eol Src.Type
                 first =
-                    Debug.log "first" arg
+                    Debug.log "first" ( argEol, arg )
 
                 rest : List (Src.C2Eol Src.Type)
                 rest =
@@ -2909,12 +2922,24 @@ formatType (A.At region atype) =
                                     )
                               ]
                             ]
+
+                formatFirstType : Src.Type -> ( TypeParensInner, Box )
+                formatFirstType firstType =
+                    case firstType of
+                        A.At _ (Src.TLambda _ _) ->
+                            ( NotNeeded
+                            , parens <| formatCommented <| Src.c2map (typeParens NotRequired << formatType) ( ( preArgComments, postArgComments ), firstType )
+                            )
+
+                        _ ->
+                            formatType firstType
             in
-            Tuple.pair ForFunctionType <|
-                ElmStructure.forceableSpaceSepOrStack
-                    forceMultiline
-                    (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatType) first))
-                    (List.map formatRight rest)
+            ( ForFunctionType
+            , ElmStructure.forceableSpaceSepOrStack
+                forceMultiline
+                (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatFirstType) first))
+                (List.map formatRight rest)
+            )
 
         Src.TVar name ->
             ( NotNeeded

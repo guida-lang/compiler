@@ -594,7 +594,6 @@ expression syntaxVersion =
                     , if_ syntaxVersion start
                     , case_ syntaxVersion start
                     , function syntaxVersion start
-                        |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                     , possiblyNegativeTerm syntaxVersion start
                         |> P.bind
                             (\expr ->
@@ -757,10 +756,9 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                                         , case_ syntaxVersion newStart
                                                         , if_ syntaxVersion newStart
                                                         , function syntaxVersion newStart
-                                                            |> P.fmap (Tuple.mapFirst (Tuple.pair []))
                                                         ]
                                                         |> P.fmap
-                                                            (\( ( _, newLast ), newEnd ) ->
+                                                            (\( ( trailingComments, newLast ), newEnd ) ->
                                                                 let
                                                                     newOps : List ( Src.Expr, Src.C2 (A.Located Name.Name) )
                                                                     newOps =
@@ -770,7 +768,7 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                                                                     finalExpr =
                                                                         Src.Binops (List.reverse newOps) newLast
                                                                 in
-                                                                ( ( comments, A.at start newEnd finalExpr ), newEnd )
+                                                                ( ( trailingComments, A.at start newEnd finalExpr ), newEnd )
                                                             )
                                                     ]
                                         )
@@ -778,18 +776,16 @@ chompExprEnd syntaxVersion start (State { ops, expr, args, end }) comments =
                 )
         ]
         -- done
-        (case Debug.log "ops!" ops of
+        (case ops of
             [] ->
-                Debug.log "result.ops!"
-                    ( ( comments, toCall expr args )
-                    , end
-                    )
+                ( ( comments, toCall expr args )
+                , end
+                )
 
             _ ->
-                Debug.log "result.ops!2"
-                    ( ( comments, A.at start end (Src.Binops (List.reverse ops) (toCall expr args)) )
-                    , end
-                    )
+                ( ( comments, A.at start end (Src.Binops (List.reverse ops) (toCall expr args)) )
+                , end
+                )
         )
 
 
@@ -891,7 +887,7 @@ chompIfEnd syntaxVersion start comments branches =
 -- LAMBDA EXPRESSION
 
 
-function : SyntaxVersion -> A.Position -> Space.Parser E.Expr Src.Expr
+function : SyntaxVersion -> A.Position -> Space.Parser E.Expr (Src.C1 Src.Expr)
 function syntaxVersion start =
     P.inContext E.Func (P.word1 '\\' E.Start) <|
         (Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArg
@@ -923,16 +919,16 @@ function syntaxVersion start =
                                                                 Debug.log "c45" preComments
                                                         in
                                                         P.specialize E.FuncBody (expression syntaxVersion)
-                                                            |> P.fmap (Tuple.mapFirst (\( _, body ) -> ( preComments, body )))
+                                                            |> P.fmap (Tuple.mapFirst (\( afterBodyComments, body ) -> ( afterBodyComments, ( preComments, body ) )))
                                                     )
                                                 |> P.fmap
-                                                    (\( body, end ) ->
+                                                    (\( ( afterBodyComments, body ), end ) ->
                                                         let
                                                             funcExpr : Src.Expr_
                                                             funcExpr =
                                                                 Src.Lambda ( trailingComments, List.reverse revArgs ) body
                                                         in
-                                                        ( A.at start end funcExpr, end )
+                                                        ( ( afterBodyComments, A.at start end funcExpr ), end )
                                                     )
                                         )
                             )

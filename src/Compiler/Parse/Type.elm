@@ -56,12 +56,12 @@ term =
                                 |> P.bind (\_ -> P.addEnd start Src.TUnit)
                             , Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentType1
                                 |> P.bind
-                                    (\c94 ->
+                                    (\trailingComments ->
                                         let
                                             _ =
-                                                Debug.log "c94" c94
+                                                Debug.log "c94" trailingComments
                                         in
-                                        P.specialize E.TTupleType (expression c94)
+                                        P.specialize E.TTupleType (expression trailingComments)
                                             |> P.bind
                                                 (\( tipe, end ) ->
                                                     Space.checkIndent end E.TTupleIndentEnd
@@ -165,22 +165,18 @@ expression trailingComments =
                                         (\end ->
                                             Space.chomp E.TSpace
                                                 |> P.fmap
-                                                    (\c122 ->
+                                                    (\postTermComments ->
                                                         let
                                                             _ =
-                                                                Debug.log "c122" c122
+                                                                Debug.log "c122" postTermComments
                                                         in
-                                                        ( ( c122, eterm ), end )
+                                                        ( ( postTermComments, eterm ), end )
                                                     )
                                         )
                             )
                     ]
                     |> P.bind
                         (\( ( postTipe1comments, tipe1 ), end1 ) ->
-                            let
-                                _ =
-                                    Debug.log "postTipe1comments" postTipe1comments
-                            in
                             P.oneOfWithFallback
                                 [ -- should never trigger
                                   Space.checkIndent end1 E.TIndentStart
@@ -192,18 +188,18 @@ expression trailingComments =
                                                     (\_ ->
                                                         Space.chompAndCheckIndent E.TSpace E.TIndentStart
                                                             |> P.bind
-                                                                (\c99 ->
+                                                                (\postArrowComments ->
                                                                     let
                                                                         _ =
-                                                                            Debug.log "c99" ( c99, ( postTipe1comments, tipe1 ) )
+                                                                            Debug.log "c99" postArrowComments
                                                                     in
-                                                                    expression c99
+                                                                    expression postArrowComments
                                                                         |> P.fmap
                                                                             (\( ( ( preTipe2Comments, postTipe2Comments, tipe2Eol ), tipe2 ), end2 ) ->
                                                                                 let
                                                                                     tipe : A.Located Src.Type_
                                                                                     tipe =
-                                                                                        A.at start end2 (Debug.log "expressionTipe" (Src.TLambda ( Nothing, tipe1 ) ( ( postTipe1comments, preTipe2Comments, tipe2Eol ), tipe2 )))
+                                                                                        A.at start end2 (Src.TLambda ( ( [ Src.BlockComment [ "TODO1" ] ], [ Src.BlockComment [ "TODO2" ] ], Nothing ), tipe1 ) ( ( postTipe1comments, preTipe2Comments, tipe2Eol ), tipe2 ))
                                                                                 in
                                                                                 ( ( ( trailingComments, postTipe2Comments, Nothing ), tipe ), end2 )
                                                                             )

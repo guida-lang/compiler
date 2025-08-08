@@ -234,14 +234,13 @@ const examples = [
                     "decimalFloat = 3.14",
                     "exponentFloat = 6.022e23",
                     // TODO/FIXME "smallExponentFloat = 1e3",
-                    "char = 'a'",
-                    `singleQuotedString = "hello world!"`,
-                    `stringWithSingleQuotes = "string with 'single quotes'"`,
-                    `stringWithDoubleQuotes = "string with \\"double quotes\\""`,
-                    `tripleQuotedString = """multiline\n strings\n with 'single quotes' and \\"double quotes\\""""`,
+                    `chars = ['a', '\\n', '\\t', '\t', '\\\\', '\\"', '\\'', '\u{2028}', '\u{2029}', 'ͷ']`,
+                    `singleQuotedString = "hello world! Characters: \\n \\t \t \\\\ \\" \\' ' \u{2028} \u{2029} ͷ"`,
+                    `tripleQuotedString = """multiline\nstrings\nwith 'single quotes' and \\"double quotes\\"\nCharacters: \\n \\t \t \\\\ \\" \\' ' \u{2028} \u{2029} ͷ"""`,
                 ]
             }
         },
+        { title: "multi-line record", filename: "MultiLineRecordDeclarations", module: { ...defaultModule, declarations: [`recordFn =\n { age = 23\n , name =\n "John"\n }`] } },
     ]],
     // UNION DECLARATIONS
     ["Union", [
@@ -270,6 +269,15 @@ const examples = [
             title: "top-level after lambda", filename: "TopLevelAfterLambdaComments", module: {
                 ...defaultModule, declarations: [
                     "lambdaFn = \\_ -> ()",
+                    "-- COMMENT",
+                    "anotherFn = 2"
+                ]
+            }
+        },
+        {
+            title: "top-level after nested lambda", filename: "TopLevelAfterNestedLambdaComments", module: {
+                ...defaultModule, declarations: [
+                    "pipeFn = fn <| \\_ -> ()",
                     "-- COMMENT",
                     "anotherFn = 2"
                 ]

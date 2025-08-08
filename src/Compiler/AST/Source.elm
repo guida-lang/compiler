@@ -290,7 +290,7 @@ type alias Type =
 
 
 type Type_
-    = TLambda (C0Eol Type) (C2Eol Type)
+    = TLambda (C2Eol Type) (C2Eol Type)
     | TVar Name
     | TType A.Region Name (List (C1 Type))
     | TTypeQual A.Region Name Name (List (C1 Type))
@@ -589,7 +589,7 @@ internalTypeEncoder type_ =
         TLambda arg result ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , c0EolEncoder typeEncoder arg
+                , c2EolEncoder typeEncoder arg
                 , c2EolEncoder typeEncoder result
                 ]
 
@@ -644,7 +644,7 @@ internalTypeDecoder =
                 case idx of
                     0 ->
                         BD.map2 TLambda
-                            (c0EolDecoder typeDecoder)
+                            (c2EolDecoder typeDecoder)
                             (c2EolDecoder typeDecoder)
 
                     1 ->

@@ -181,7 +181,11 @@ eat eatType comments src pos end row col =
 
         EatLineComment startPos ->
             if pos >= end then
-                ( ( Good, comments, pos ), ( row, col ) )
+                let
+                    newComment =
+                        Src.LineComment (String.slice startPos pos src)
+                in
+                ( ( Good, newComment :: comments, pos ), ( row, col ) )
 
             else
                 let
