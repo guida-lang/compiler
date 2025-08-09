@@ -2896,8 +2896,8 @@ formatType (A.At region atype) =
                         go : Src.C2Eol Src.Type -> List (Src.C2Eol Src.Type) -> List (Src.C2Eol Src.Type)
                         go ( comments, type_ ) acc =
                             case type_ of
-                                A.At _ (Src.TLambda ( subFirstEol, subFirst ) subRest) ->
-                                    go subRest (acc ++ [ ( ( [], [], subFirstEol ), subFirst ) ])
+                                A.At _ (Src.TLambda ( _, subFirst ) subRest) ->
+                                    go subRest (acc ++ [ ( comments, subFirst ) ])
 
                                 _ ->
                                     acc ++ [ ( comments, type_ ) ]
