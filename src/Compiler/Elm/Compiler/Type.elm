@@ -163,6 +163,9 @@ fromRawType (A.At _ astType) =
                 (List.map fromField fields)
                 (Maybe.map (\( _, A.At _ ext ) -> ext) maybeExt)
 
+        Src.TParens ( _, astType_ ) ->
+            fromRawType astType_
+
 
 
 -- JSON for PROGRAM

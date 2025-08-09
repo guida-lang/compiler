@@ -87,6 +87,9 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                                     R.traverse (canonicalize syntaxVersion env) (List.map Src.c2EolValue cs)
                     )
 
+        Src.TParens ( _, tipe_ ) ->
+            canonicalize syntaxVersion env tipe_
+
 
 canonicalizeFields : SyntaxVersion -> Env.Env -> List (Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type )) -> List ( A.Located Name.Name, CResult i w Can.FieldType )
 canonicalizeFields syntaxVersion env fields =

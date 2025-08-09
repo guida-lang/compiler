@@ -197,9 +197,9 @@ expression trailingComments =
                                                                         |> P.fmap
                                                                             (\( ( ( preTipe2Comments, postTipe2Comments, tipe2Eol ), tipe2 ), end2 ) ->
                                                                                 let
-                                                                                    tipe : A.Located Src.Type_
+                                                                                    tipe : Src.Type
                                                                                     tipe =
-                                                                                        A.at start end2 (Src.TLambda ( ( [ Src.BlockComment [ "TODO1" ] ], [ Src.BlockComment [ "TODO2" ] ], Nothing ), tipe1 ) ( ( postTipe1comments, preTipe2Comments, tipe2Eol ), tipe2 ))
+                                                                                        A.at start end2 (Src.TLambda ( Nothing, tipe1 ) ( ( postTipe1comments, preTipe2Comments, tipe2Eol ), tipe2 ))
                                                                                 in
                                                                                 ( ( ( trailingComments, postTipe2Comments, Nothing ), tipe ), end2 )
                                                                             )
@@ -227,17 +227,10 @@ app start =
                             Space.chomp E.TSpace
                                 |> P.bind
                                     (\postUpperComments ->
-                                        let
-                                            _ =
-                                                Debug.log "c123" postUpperComments
-                                        in
                                         chompArgs postUpperComments [] upperEnd
                                             |> P.fmap
                                                 (\( ( comments, args ), end ) ->
                                                     let
-                                                        _ =
-                                                            Debug.log "comments.c123" comments
-
                                                         region : A.Region
                                                         region =
                                                             A.Region start upperEnd
@@ -315,11 +308,17 @@ chompTupleEnd start ( firstTimeComments, firstType ) revTypes =
                             )
                 )
         , P.word1 ')' E.TTupleEnd
+            |> P.bind (\_ -> P.getPosition)
             |> P.bind
-                (\_ ->
+                (\end ->
                     case List.reverse revTypes of
                         [] ->
-                            P.pure firstType
+                            case firstTimeComments of
+                                ( [], [], _ ) ->
+                                    P.pure firstType
+
+                                ( startParensComments, endParensComments, _ ) ->
+                                    P.pure (A.at start end (Src.TParens ( ( startParensComments, endParensComments ), firstType )))
 
                         secondType :: otherTypes ->
                             P.addEnd start (Src.TTuple ( firstTimeComments, firstType ) secondType otherTypes)
@@ -391,13 +390,9 @@ chompField =
                                                     in
                                                     P.specialize E.TRecordType (expression [])
                                                         |> P.bind
-                                                            (\( ( ( postTypeComments, x1, _ ), tipe ) as x, end ) ->
-                                                                let
-                                                                    _ =
-                                                                        Debug.log "X2" x
-                                                                in
+                                                            (\( ( ( _, x1, _ ), tipe ), end ) ->
                                                                 Space.checkIndent end E.TRecordIndentEnd
-                                                                    |> P.fmap (\_ -> Debug.log "X2!" ( x1, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ))
+                                                                    |> P.fmap (\_ -> ( x1, ( ( postNameComments, name ), ( preTypeComments, tipe ) ) ))
                                                             )
                                                 )
                                     )
@@ -409,22 +404,22 @@ chompField =
 -- VARIANT
 
 
-variant : Space.Parser E.CustomType ( A.Located Name, List Src.Type )
+variant : Space.Parser E.CustomType (Src.C1 ( A.Located Name, List Src.Type ))
 variant =
     P.addLocation (Var.upper E.CT_Variant)
         |> P.bind
             (\((A.At (A.Region _ nameEnd) _) as name) ->
                 Space.chomp E.CT_Space
                     |> P.bind
-                        (\c125 ->
+                        (\preArgComments ->
                             let
                                 _ =
-                                    Debug.log "c125" c125
+                                    Debug.log "c125" preArgComments
                             in
-                            P.specialize E.CT_VariantArg (chompArgs [] [] nameEnd)
+                            P.specialize E.CT_VariantArg (chompArgs preArgComments [] nameEnd)
                                 |> P.fmap
-                                    (\( ( _, args ), end ) ->
-                                        ( ( name, List.map Tuple.second args ), end )
+                                    (\( ( postArgsComments, args ), end ) ->
+                                        ( ( postArgsComments, ( name, List.map Tuple.second args ) ), end )
                                     )
                         )
             )

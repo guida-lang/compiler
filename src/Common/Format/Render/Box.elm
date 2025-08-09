@@ -795,16 +795,16 @@ formatModule addDefaultHeader spacing modu =
                                     let
                                         tags : Src.OpenCommentedList (NameWithArgs Name Src.Type)
                                         tags =
-                                            case constructors of
-                                                ( A.At _ firstName, firstArgs ) :: restConstructors ->
+                                            case List.reverse constructors of
+                                                ( A.At _ lastName, lastArgs ) :: restConstructors ->
                                                     Src.OpenCommentedList
                                                         (List.map
                                                             (\( A.At _ constructorName, constructorArgs ) ->
                                                                 ( ( [], [], Nothing ), NameWithArgs constructorName (List.map (Tuple.pair []) constructorArgs) )
                                                             )
-                                                            restConstructors
+                                                            (List.reverse restConstructors)
                                                         )
-                                                        ( [], Nothing, NameWithArgs firstName (List.map (Tuple.pair []) firstArgs) )
+                                                        ( [], Nothing, NameWithArgs lastName (List.map (Tuple.pair []) lastArgs) )
 
                                                 _ ->
                                                     Debug.todo "tags"
@@ -2888,18 +2888,21 @@ formatTypeConstructor name =
 formatType : Src.Type -> ( TypeParensInner, Box )
 formatType (A.At region atype) =
     case Debug.log "atype" atype of
-        Src.TLambda ( ( preArgComments, postArgComments, argEol ), arg ) result ->
+        Src.TLambda first result ->
             let
-                _ =
-                    Debug.log "arg" ( preArgComments, postArgComments, arg )
-
-                first : Src.C0Eol Src.Type
-                first =
-                    Debug.log "first" ( argEol, arg )
-
                 rest : List (Src.C2Eol Src.Type)
                 rest =
-                    Debug.log "result" [ result ]
+                    let
+                        go : Src.C2Eol Src.Type -> List (Src.C2Eol Src.Type) -> List (Src.C2Eol Src.Type)
+                        go ( comments, type_ ) acc =
+                            case type_ of
+                                A.At _ (Src.TLambda ( subFirstEol, subFirst ) subRest) ->
+                                    go subRest (acc ++ [ ( ( [], [], subFirstEol ), subFirst ) ])
+
+                                _ ->
+                                    acc ++ [ ( comments, type_ ) ]
+                    in
+                    go result []
 
                 forceMultiline =
                     -- TODO
@@ -2907,37 +2910,21 @@ formatType (A.At region atype) =
 
                 formatRight : Src.C2Eol Src.Type -> Box
                 formatRight ( ( preOp, postOp, eol ), term ) =
-                    let
-                        _ =
-                            Debug.log "formatRight" ( preOp, postOp, eol )
-                    in
                     ElmStructure.forceableSpaceSepOrStack1 False <|
-                        List.concat
-                            [ Maybe.toList <| formatComments preOp
-                            , [ ElmStructure.prefixOrIndented
+                        ((Maybe.toList <| formatComments preOp)
+                            ++ [ ElmStructure.prefixOrIndented
                                     (Box.line <| Box.punc "->")
                                     (formatC2Eol <|
                                         (Src.c2EolMap <| typeParens ForLambda << formatType)
                                             ( ( postOp, [], eol ), term )
                                     )
-                              ]
-                            ]
-
-                formatFirstType : Src.Type -> ( TypeParensInner, Box )
-                formatFirstType firstType =
-                    case firstType of
-                        A.At _ (Src.TLambda _ _) ->
-                            ( NotNeeded
-                            , parens <| formatCommented <| Src.c2map (typeParens NotRequired << formatType) ( ( preArgComments, postArgComments ), firstType )
-                            )
-
-                        _ ->
-                            formatType firstType
+                               ]
+                        )
             in
             ( ForFunctionType
             , ElmStructure.forceableSpaceSepOrStack
                 forceMultiline
-                (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatFirstType) first))
+                (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatType) first))
                 (List.map formatRight rest)
             )
 
@@ -3025,13 +3012,8 @@ formatType (A.At region atype) =
             )
 
         Src.TUnit ->
-            let
-                comments =
-                    -- TODO
-                    []
-            in
             ( NotNeeded
-            , formatUnit '(' ')' comments
+            , formatUnit '(' ')' []
             )
 
         Src.TTuple a b cs ->
@@ -3045,6 +3027,11 @@ formatType (A.At region atype) =
             in
             ( NotNeeded
             , ElmStructure.group True "(" "," ")" forceMultiline (List.map (formatC2Eol << Src.c2EolMap (typeParens NotRequired << formatType)) types)
+            )
+
+        Src.TParens type_ ->
+            ( NotNeeded
+            , parens <| formatCommented <| Src.c2map (typeParens NotRequired << formatType) type_
             )
 
 

@@ -229,6 +229,9 @@ getEdges (A.At _ tipe) edges =
         Src.TTuple ( _, a ) ( _, b ) cs ->
             List.foldl getEdges (getEdges b (getEdges a edges)) (List.map Src.c2EolValue cs)
 
+        Src.TParens ( _, tipe_ ) ->
+            getEdges tipe_ edges
+
 
 
 -- CHECK FREE VARIABLES
@@ -328,6 +331,9 @@ addFreeVars (A.At region tipe) freeVars =
 
         Src.TTuple ( _, a ) ( _, b ) cs ->
             List.foldl addFreeVars (addFreeVars b (addFreeVars a freeVars)) (List.map Src.c2EolValue cs)
+
+        Src.TParens ( _, tipe_ ) ->
+            addFreeVars tipe_ freeVars
 
 
 

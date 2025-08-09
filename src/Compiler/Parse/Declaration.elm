@@ -42,7 +42,6 @@ declaration syntaxVersion =
                         (\start ->
                             P.oneOf E.DeclStart
                                 [ typeDecl maybeDocs start
-                                    |> P.fmap (\( typeDecl_, position ) -> ( ( ( [], [] ), typeDecl_ ), position ))
                                 , portDecl maybeDocs
                                 , valueDecl syntaxVersion maybeDocs docComments start
                                 ]
@@ -104,9 +103,9 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                 _ =
                                                                     Debug.log "c2" preTypeComments
                                                             in
-                                                            P.specialize E.DeclDefType (Type.expression [])
+                                                            P.specialize E.DeclDefType (Type.expression preTypeComments)
                                                                 |> P.bind
-                                                                    (\( ( ( _, postTipeComments, _ ), tipe ), _ ) ->
+                                                                    (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), _ ) ->
                                                                         Space.checkFreshLine E.DeclDefNameRepeat
                                                                             |> P.bind (\_ -> chompMatchingName name)
                                                                             |> P.bind
@@ -114,7 +113,7 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                                                                     Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                                                                                         |> P.bind
                                                                                             (\preArgComments ->
-                                                                                                chompDefArgsAndBody syntaxVersion maybeDocs docComments start defName (Just ( postTipeComments, ( ( postNameComments, preTypeComments ), tipe ) )) preArgComments []
+                                                                                                chompDefArgsAndBody syntaxVersion maybeDocs docComments start defName (Just ( postTipeComments, ( ( postNameComments, preTipeComments ), tipe ) )) preArgComments []
                                                                                             )
                                                                                 )
                                                                     )
@@ -203,7 +202,7 @@ chompMatchingName expectedName =
 -- TYPE DECLARATIONS
 
 
-typeDecl : Maybe Src.Comment -> A.Position -> Space.Parser E.Decl Decl
+typeDecl : Maybe Src.Comment -> A.Position -> Space.Parser E.Decl (Src.C2 Decl)
 typeDecl maybeDocs start =
     P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
@@ -233,7 +232,7 @@ typeDecl maybeDocs start =
                                                                     alias_ =
                                                                         A.at start end (Src.Alias preAlias ( ( preComments, postComments ), name ) args ( preTypeComments, tipe ))
                                                                 in
-                                                                ( Alias maybeDocs alias_, end )
+                                                                ( ( ( [], [] ), Alias maybeDocs alias_ ), end )
                                                             )
                                                 )
                                     )
@@ -244,16 +243,16 @@ typeDecl maybeDocs start =
                                     (\( name, args ) ->
                                         Type.variant
                                             |> P.bind
-                                                (\( firstVariant, firstEnd ) ->
-                                                    chompVariants [ firstVariant ] firstEnd
+                                                (\( ( postFirstVariantComments, firstVariant ), firstEnd ) ->
+                                                    chompVariants postFirstVariantComments [ firstVariant ] firstEnd
                                                         |> P.fmap
-                                                            (\( variants, end ) ->
+                                                            (\( ( postVariantsComments, variants ), end ) ->
                                                                 let
                                                                     union : A.Located Src.Union
                                                                     union =
                                                                         A.at start end (Src.Union name args variants)
                                                                 in
-                                                                ( Union maybeDocs union, end )
+                                                                ( ( ( [], postVariantsComments ), Union maybeDocs union ), end )
                                                             )
                                                 )
                                     )
@@ -363,8 +362,8 @@ chompCustomNameToEqualsHelp name args =
         ]
 
 
-chompVariants : List ( A.Located Name, List Src.Type ) -> A.Position -> Space.Parser E.CustomType (List ( A.Located Name, List Src.Type ))
-chompVariants variants end =
+chompVariants : Src.FComments -> List ( A.Located Name, List Src.Type ) -> A.Position -> Space.Parser E.CustomType (Src.C1 (List ( A.Located Name, List Src.Type )))
+chompVariants trailingComments variants end =
     P.oneOfWithFallback
         [ Space.checkIndent end E.CT_IndentBar
             |> P.bind (\_ -> P.word1 '|' E.CT_Bar)
@@ -377,9 +376,9 @@ chompVariants variants end =
                     in
                     Type.variant
                 )
-            |> P.bind (\( variant, newEnd ) -> chompVariants (variant :: variants) newEnd)
+            |> P.bind (\( ( postVariantComments, variant ), newEnd ) -> chompVariants postVariantComments (variant :: variants) newEnd)
         ]
-        ( List.reverse variants, end )
+        ( ( trailingComments, List.reverse variants ), end )
 
 
 

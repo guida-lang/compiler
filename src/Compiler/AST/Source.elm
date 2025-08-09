@@ -290,13 +290,14 @@ type alias Type =
 
 
 type Type_
-    = TLambda (C2Eol Type) (C2Eol Type)
+    = TLambda (C0Eol Type) (C2Eol Type)
     | TVar Name
     | TType A.Region Name (List (C1 Type))
     | TTypeQual A.Region Name Name (List (C1 Type))
     | TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
     | TUnit
     | TTuple (C2Eol Type) (C2Eol Type) (List (C2Eol Type))
+    | TParens (C2 Type)
 
 
 
@@ -589,7 +590,7 @@ internalTypeEncoder type_ =
         TLambda arg result ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , c2EolEncoder typeEncoder arg
+                , c0EolEncoder typeEncoder arg
                 , c2EolEncoder typeEncoder result
                 ]
 
@@ -635,6 +636,12 @@ internalTypeEncoder type_ =
                 , BE.list (c2EolEncoder typeEncoder) cs
                 ]
 
+        TParens type__ ->
+            BE.sequence
+                [ BE.unsignedInt8 7
+                , c2Encoder typeEncoder type__
+                ]
+
 
 internalTypeDecoder : BD.Decoder Type_
 internalTypeDecoder =
@@ -644,7 +651,7 @@ internalTypeDecoder =
                 case idx of
                     0 ->
                         BD.map2 TLambda
-                            (c2EolDecoder typeDecoder)
+                            (c0EolDecoder typeDecoder)
                             (c2EolDecoder typeDecoder)
 
                     1 ->
@@ -677,6 +684,10 @@ internalTypeDecoder =
                             (c2EolDecoder typeDecoder)
                             (c2EolDecoder typeDecoder)
                             (BD.list (c2EolDecoder typeDecoder))
+
+                    7 ->
+                        BD.map TParens
+                            (c2Decoder typeDecoder)
 
                     _ ->
                         BD.fail

@@ -245,6 +245,7 @@ const examples = [
     // UNION DECLARATIONS
     ["Union", [
         { title: "single variant", filename: "SingleTypeUnionDeclarations", module: { ...defaultModule, declarations: ["type A = A"] } },
+        { title: "keep original order", filename: "KeepOriginalOrderUnionDeclarations", module: { ...defaultModule, declarations: ["type A = A | B | C"] } },
     ]],
     // ALIAS DECLARATIONS
     ["Alias", [
@@ -280,6 +281,15 @@ const examples = [
                     "pipeFn = fn <| \\_ -> ()",
                     "-- COMMENT",
                     "anotherFn = 2"
+                ]
+            }
+        },
+        {
+            title: "top-level after union type", filename: "TopLevelAfterUnionTypeComments", module: {
+                ...defaultModule, declarations: [
+                    "type A = A",
+                    "-- COMMENT",
+                    "fn = 1"
                 ]
             }
         },

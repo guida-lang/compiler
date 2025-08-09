@@ -186,6 +186,9 @@ srcToDoc context (A.At _ tipe) =
         Src.TTuple ( _, a ) ( _, b ) cs ->
             tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) (List.map Src.c2EolValue cs))
 
+        Src.TParens ( _, tipe_ ) ->
+            srcToDoc context tipe_
+
 
 srcFieldToDocs : Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type ) -> ( D.Doc, D.Doc )
 srcFieldToDocs ( _, ( ( _, A.At _ fieldName ), ( _, fieldType ) ) ) =
