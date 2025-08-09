@@ -204,7 +204,7 @@ checkEffects projectType ports effects =
                         _ :: _ ->
                             Ok (Src.Ports ports)
 
-        Manager region manager ->
+        Manager region _ manager ->
             if isKernel projectType then
                 case ports of
                     [] ->
@@ -391,7 +391,7 @@ defaultHeader =
 type Effects
     = NoEffects A.Region
     | Ports A.Region Src.FComments
-    | Manager A.Region Src.Manager
+    | Manager A.Region Src.FComments Src.Manager
 
 
 chompHeader : P.Parser E.Module (Src.C2 (Maybe Header))
@@ -516,74 +516,74 @@ chompHeader =
                                   Keyword.effect_ E.Effect
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
                                     |> P.bind
-                                        (\c66 ->
+                                        (\postEffectComments ->
                                             let
                                                 _ =
-                                                    Debug.log "c66" c66
+                                                    Debug.log "c66" postEffectComments
                                             in
                                             Keyword.module_ E.Effect
-                                        )
-                                    |> P.bind (\_ -> P.getPosition)
-                                    |> P.bind
-                                        (\effectEnd ->
-                                            Space.chompAndCheckIndent E.ModuleSpace E.Effect
+                                                |> P.bind (\_ -> P.getPosition)
                                                 |> P.bind
-                                                    (\beforeNameComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c67" beforeNameComments
-                                                        in
-                                                        P.addLocation (Var.moduleName E.ModuleName)
+                                                    (\effectEnd ->
+                                                        Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                             |> P.bind
-                                                                (\name ->
-                                                                    Space.chompAndCheckIndent E.ModuleSpace E.Effect
+                                                                (\beforeNameComments ->
+                                                                    let
+                                                                        _ =
+                                                                            Debug.log "c67" beforeNameComments
+                                                                    in
+                                                                    P.addLocation (Var.moduleName E.ModuleName)
                                                                         |> P.bind
-                                                                            (\afterNameComments ->
-                                                                                let
-                                                                                    _ =
-                                                                                        Debug.log "c68" afterNameComments
-                                                                                in
-                                                                                Keyword.where_ E.Effect
-                                                                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
+                                                                            (\name ->
+                                                                                Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                                                     |> P.bind
-                                                                                        (\c69 ->
+                                                                                        (\afterNameComments ->
                                                                                             let
                                                                                                 _ =
-                                                                                                    Debug.log "c69" c69
+                                                                                                    Debug.log "c68" afterNameComments
                                                                                             in
-                                                                                            chompManager
-                                                                                        )
-                                                                                    |> P.bind
-                                                                                        (\manager ->
-                                                                                            Space.chompAndCheckIndent E.ModuleSpace E.Effect
-                                                                                                |> P.bind
-                                                                                                    (\c70 ->
-                                                                                                        let
-                                                                                                            _ =
-                                                                                                                Debug.log "c70" c70
-                                                                                                        in
-                                                                                                        Keyword.exposing_ E.Effect
-                                                                                                    )
+                                                                                            Keyword.where_ E.Effect
                                                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
                                                                                                 |> P.bind
-                                                                                                    (\beforeExportsComments ->
+                                                                                                    (\c69 ->
                                                                                                         let
                                                                                                             _ =
-                                                                                                                Debug.log "c71" beforeExportsComments
+                                                                                                                Debug.log "c69" c69
                                                                                                         in
-                                                                                                        P.addLocation (P.specialize (\_ -> E.Effect) exposing_)
+                                                                                                        chompManager
+                                                                                                    )
+                                                                                                |> P.bind
+                                                                                                    (\manager ->
+                                                                                                        Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                                                                             |> P.bind
-                                                                                                                (\exports ->
-                                                                                                                    chompModuleDocCommentSpace
-                                                                                                                        |> P.fmap
-                                                                                                                            (\( headerComments, docComment ) ->
-                                                                                                                                ( ( initialComments, headerComments )
-                                                                                                                                , Just <|
-                                                                                                                                    Header ( ( beforeNameComments, afterNameComments ), name )
-                                                                                                                                        (Manager (A.Region start effectEnd) manager)
-                                                                                                                                        ( ( beforeExportsComments, [] ), exports )
-                                                                                                                                        docComment
-                                                                                                                                )
+                                                                                                                (\c70 ->
+                                                                                                                    let
+                                                                                                                        _ =
+                                                                                                                            Debug.log "c70" c70
+                                                                                                                    in
+                                                                                                                    Keyword.exposing_ E.Effect
+                                                                                                                )
+                                                                                                            |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
+                                                                                                            |> P.bind
+                                                                                                                (\beforeExportsComments ->
+                                                                                                                    let
+                                                                                                                        _ =
+                                                                                                                            Debug.log "c71" beforeExportsComments
+                                                                                                                    in
+                                                                                                                    P.addLocation (P.specialize (\_ -> E.Effect) exposing_)
+                                                                                                                        |> P.bind
+                                                                                                                            (\exports ->
+                                                                                                                                chompModuleDocCommentSpace
+                                                                                                                                    |> P.fmap
+                                                                                                                                        (\( headerComments, docComment ) ->
+                                                                                                                                            ( ( initialComments, headerComments )
+                                                                                                                                            , Just <|
+                                                                                                                                                Header ( ( beforeNameComments, afterNameComments ), name )
+                                                                                                                                                    (Manager (A.Region start effectEnd) postEffectComments manager)
+                                                                                                                                                    ( ( beforeExportsComments, [] ), exports )
+                                                                                                                                                    docComment
+                                                                                                                                            )
+                                                                                                                                        )
                                                                                                                             )
                                                                                                                 )
                                                                                                     )

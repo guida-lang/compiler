@@ -965,9 +965,8 @@ formatModule addDefaultHeader spacing modu =
                                     M.Ports _ comments ->
                                         ( Port comments, Nothing )
 
-                                    M.Manager _ manager ->
-                                        -- TODO comments
-                                        ( Effect []
+                                    M.Manager _ comments manager ->
+                                        ( Effect comments
                                         , Just
                                             ( ( [], [] )
                                             , case manager of
