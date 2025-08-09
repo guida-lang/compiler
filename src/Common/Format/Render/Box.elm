@@ -1234,35 +1234,18 @@ type ElmCodeBlock
 --             ModuleCode (fmap (I.convert f) mod)
 
 
-{-| TODO: there must be an existing haskell function that does this, right?
--}
-firstOf : List (a -> Maybe b) -> a -> Maybe b
-firstOf options value =
-    case options of
-        [] ->
-            Nothing
-
-        next :: rest ->
-            case next value of
-                Just result ->
-                    Just result
-
-                Nothing ->
-                    firstOf rest value
-
-
 formatDocComment : ImportInfo -> Blocks -> Box
 formatDocComment importInfo blocks =
     let
         parse : String -> Maybe ElmCodeBlock
         parse source =
+            -- TODO
             -- source
-            --     |> firstOf
+            --     |> Maybe.oneOf
             --         [ Maybe.map DeclarationsCode << Result.toMaybe << Parse.parseDeclarations
             --         , Maybe.map ExpressionsCode << Result.toMaybe << Parse.parseExpressions
             --         , Maybe.map ModuleCode << Result.toMaybe << Parse.parseModule
             --         ]
-            -- TODO
             Nothing
 
         format : ElmCodeBlock -> String
@@ -1548,30 +1531,29 @@ formatListing format listing =
 formatDetailedListing : DetailedListing -> List Box
 formatDetailedListing listing =
     List.concat
-        [ formatCommentedMap
+        [ formatCommentedMap compare
             (\name () -> OpValue name)
             formatVarValue
             listing.operators
-        , formatCommentedMap
+        , formatCommentedMap compare
             (\name ( inner, listing_ ) -> Union ( inner, name ) listing_)
             formatVarValue
             listing.types
-        , formatCommentedMap
+        , formatCommentedMap compare
             (\name () -> Value name)
             formatVarValue
             listing.values
         ]
 
 
-formatCommentedMap : (k -> v -> a) -> (a -> Box) -> CommentedMap k v -> List Box
-formatCommentedMap construct format values =
+formatCommentedMap : (k -> k -> Order) -> (k -> v -> a) -> (a -> Box) -> CommentedMap k v -> List Box
+formatCommentedMap keyComparison construct format values =
     let
         format_ ( k, ( c, v ) ) =
             formatCommented ( c, format (construct k v) )
     in
     values
-        -- TODO
-        |> Map.toList (\_ _ -> EQ)
+        |> Map.toList keyComparison
         |> List.map format_
 
 
@@ -1587,7 +1569,7 @@ formatVarValue aval =
         Union name listing ->
             case
                 ( formatListing
-                    (formatCommentedMap
+                    (formatCommentedMap compare
                         (\name_ () -> name_)
                         (Box.line << formatUppercaseIdentifier)
                     )
@@ -2058,12 +2040,15 @@ formatExpression importInfo (A.At region aexpr) =
             , formatBinops importInfo left clauses multiline
             )
 
-        Src.Lambda ( trailingComments, srcArgs ) ( bodyComments, expr ) ->
-            -- TODO trailingComments (should go before `->`)
+        Src.Lambda ( trailingComments, srcArgs ) ( exprComments, expr ) ->
             let
                 multiline : Bool
                 multiline =
                     A.isMultiline region
+
+                bodyComments : Src.FComments
+                bodyComments =
+                    trailingComments ++ exprComments
             in
             ( AmbiguousEnd
             , case
@@ -2143,11 +2128,7 @@ formatExpression importInfo (A.At region aexpr) =
                 (List.map (formatPreCommentedExpression importInfo SpaceSeparated) args)
             )
 
-        Src.If [] _ ->
-            -- TODO
-            Debug.todo "needs review, this should not happen"
-
-        Src.If (( _, if_ ) :: elseifs) ( elsComments, els ) ->
+        Src.If ( _, if_ ) elseifs ( elsComments, els ) ->
             let
                 opening : Box -> Box -> Box
                 opening key cond =
@@ -2407,7 +2388,6 @@ formatExpression importInfo (A.At region aexpr) =
                     List.map (formatCommentedExpression importInfo) exprs
 
         Src.Shader (Shader.Source src) _ ->
-            -- TODO/FIXME
             ( SyntaxSeparated
             , Box.line <|
                 Box.row
@@ -2887,7 +2867,7 @@ formatTypeConstructor name =
 
 formatType : Src.Type -> ( TypeParensInner, Box )
 formatType (A.At region atype) =
-    case Debug.log "atype" atype of
+    case atype of
         Src.TLambda first result ->
             let
                 rest : List (Src.C2Eol Src.Type)
@@ -2905,8 +2885,7 @@ formatType (A.At region atype) =
                     go result []
 
                 forceMultiline =
-                    -- TODO
-                    False
+                    A.isMultiline region
 
                 formatRight : Src.C2Eol Src.Type -> Box
                 formatRight ( ( preOp, postOp, eol ), term ) =
@@ -2938,8 +2917,7 @@ formatType (A.At region atype) =
         Src.TType _ ctor args ->
             let
                 forceMultiline =
-                    -- TODO
-                    Src.ForceMultiline False
+                    Src.ForceMultiline (A.isMultiline region)
 
                 join =
                     case forceMultiline of
@@ -2963,8 +2941,7 @@ formatType (A.At region atype) =
         Src.TTypeQual _ home name args ->
             let
                 forceMultiline =
-                    -- TODO
-                    Src.ForceMultiline False
+                    Src.ForceMultiline (A.isMultiline region)
 
                 join =
                     case forceMultiline of
@@ -3022,8 +2999,7 @@ formatType (A.At region atype) =
                     a :: b :: cs
 
                 forceMultiline =
-                    -- TODO
-                    False
+                    A.isMultiline region
             in
             ( NotNeeded
             , ElmStructure.group True "(" "," ")" forceMultiline (List.map (formatC2Eol << Src.c2EolMap (typeParens NotRequired << formatType)) types)

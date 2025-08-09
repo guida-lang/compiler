@@ -858,9 +858,13 @@ chompIfEnd syntaxVersion start comments branches =
                                                                     _ =
                                                                         Debug.log "c42" trailingComments
 
+                                                                    newBranch : Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr )
+                                                                    newBranch =
+                                                                        ( comments, ( ( ( preConditionComments, postConditionComments ), condition ), ( ( preThenBranchComments, postThenBranchComments ), thenBranch ) ) )
+
                                                                     newBranches : List (Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ))
                                                                     newBranches =
-                                                                        ( comments, ( ( ( preConditionComments, postConditionComments ), condition ), ( ( preThenBranchComments, postThenBranchComments ), thenBranch ) ) ) :: branches
+                                                                        newBranch :: branches
                                                                 in
                                                                 P.oneOf E.IfElseBranchStart
                                                                     [ Keyword.if_ E.IfElseBranchStart
@@ -869,9 +873,12 @@ chompIfEnd syntaxVersion start comments branches =
                                                                         |> P.fmap
                                                                             (\( ( postElseBranch, elseBranch ), elseEnd ) ->
                                                                                 let
+                                                                                    reversedBranches =
+                                                                                        List.reverse newBranches
+
                                                                                     ifExpr : Src.Expr_
                                                                                     ifExpr =
-                                                                                        Src.If (List.reverse newBranches) ( trailingComments, elseBranch )
+                                                                                        Src.If (Maybe.withDefault newBranch (List.head reversedBranches)) (Maybe.withDefault [] (List.tail reversedBranches)) ( trailingComments, elseBranch )
                                                                                 in
                                                                                 ( ( postElseBranch, A.at start elseEnd ifExpr ), elseEnd )
                                                                             )

@@ -125,10 +125,10 @@ canonicalize syntaxVersion env (A.At region expression) =
                 R.fmap Can.Call (canonicalize syntaxVersion env func)
                     |> R.apply (R.traverse (canonicalize syntaxVersion env) (List.map Src.c1Value args))
 
-            Src.If branches finally ->
+            Src.If firstBranch branches finally ->
                 R.fmap Can.If
                     (R.traverse (canonicalizeIfBranch syntaxVersion env)
-                        (List.map (Src.c1Value >> Tuple.mapBoth Src.c2Value Src.c2Value) branches)
+                        (List.map (Src.c1Value >> Tuple.mapBoth Src.c2Value Src.c2Value) (firstBranch :: branches))
                     )
                     |> R.apply (canonicalize syntaxVersion env (Src.c1Value finally))
 

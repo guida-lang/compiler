@@ -169,7 +169,10 @@ things.
         "tupleFn {- tuple8 -} = {- tuple9 -} ( {- tuple10 -} 1 {- tuple11 -}, {- tuple12 -} 2 {- tuple13 -} ) {- tuple14 -}",
         "{-| shader comment -}",
         "shaderFn {- shader1 -} : {- shader2 -} WebGL.Shader {- shader3 -} Vertex {- shader4 -} Uniforms {- shader5 -} { {- shader6 -} vcolor {- shader7 -} : {- shader8 -} Vec3 {- shader9 -} } {- shader10 -}",
-        "shaderFn {- shader11 -} = {- shader12 -} [glsl|\n        attribute vec3 position;\n        attribute vec3 color;\n        uniform mat4 perspective;\n        varying vec3 vcolor;\n\n        void main () {\n            gl_Position = perspective * vec4(position, 1.0);\n            vcolor = color;\n        }\n    |] {- shader13 -}"
+        "shaderFn {- shader11 -} = {- shader12 -} [glsl|\n        attribute vec3 position;\n        attribute vec3 color;\n        uniform mat4 perspective;\n        varying vec3 vcolor;\n\n        void main () {\n            gl_Position = perspective * vec4(position, 1.0);\n            vcolor = color;\n        }\n    |] {- shader13 -}",
+        "{-| lambdaFn comment -}",
+        "lambdaFn {- lambdaFn1 -} : {- lambdaFn2 -} Int {- lambdaFn3 -} -> {- lambdaFn4 -} () {- lambdaFn5 -}",
+        "lambdaFn {- lambdaFn6 -} = {- lambdaFn7 -} \\_ {- lambdaFn8 -} -> {- lambdaFn9 -} () {- lambdaFn10 -}",
     ]
 }
 
@@ -225,6 +228,11 @@ const examples = [
         { title: "pipe operator", filename: "PipeOperatorDeclarations", module: { ...defaultModule, declarations: ["fn = \"\"\n |> String.trim"] } },
         { title: "list", filename: "ListDeclarations", module: { ...defaultModule, declarations: ["fn = [1,2,3]"] } },
         { title: "multi-line list", filename: "MultiLineListDeclarations", module: { ...defaultModule, declarations: ["fn = [\n 1,\n 2,3]"] } },
+        { title: "multi-line signature", filename: "MultiLineSignatureDeclarations", module: { ...defaultModule, declarations: ["fn : a\n -> a", "fn = ()"] } },
+        { title: "multi-line type signature", filename: "MultiLineTypeSignatureDeclarations", module: { ...defaultModule, declarations: ["fn : List\n a", "fn = ()"] } },
+        { title: "multi-line qualified type signature", filename: "MultiLineQualifiedTypeSignatureDeclarations", module: { ...defaultModule, declarations: ["fn : Map.Dict\n k\n v", "fn = ()"] } },
+        { title: "multi-line tuple signature", filename: "MultiLineTupleSignatureDeclarations", module: { ...defaultModule, declarations: ["fn : (a\n , b)", "fn = ()"] } },
+        { title: "remove unnecessary parentheses", filename: "RemoveUnnecessaryParenthesesDeclarations", module: { ...defaultModule, declarations: ["fn = ((add) 1) 2"] } },
         { title: "argument w/ parentheses", filename: "ArgumentWithParenthesesDeclarations", module: { ...defaultModule, declarations: ["fn input = String.toInt (String.trim input)"] } },
         {
             title: "literals", filename: "LiteralDeclarations", module: {
@@ -264,6 +272,7 @@ const examples = [
         { title: "multi-line header", filename: "MultiLineHeaderComments", module: { ...defaultModule, header: ["module {- C1 -} Main {- C2 -} exposing {- C3 -} ({- C4 -}..{- C5 -})"] } },
         { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
         { title: "port header", filename: "PortHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\nport {- C2 -} module {- C3 -} Main {- C4 -} exposing {- C5 -} (..)"] } },
+        { title: "manager header", filename: "ManagerHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\neffect {- C2 -} module {- C3 -} Main {- C4 -} where {- C5 -} { {- C6 -} command {- C7 -} = {- C8 -} MyCmd {- C9 -} , {- C10 -} subscription {- C11 -} = {- C12 -} MySub {- C13 -} } {- C14 -} exposing {- C15 -} (..)"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
         { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } },
         {

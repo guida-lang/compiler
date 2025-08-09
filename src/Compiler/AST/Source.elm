@@ -231,7 +231,7 @@ type Expr_
     | Binops (List ( Expr, C2 (A.Located Name) )) Expr
     | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
     | Call Expr (List (C1 Expr))
-    | If (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
+    | If (C1 ( C2 Expr, C2 Expr )) (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
     | Let (List (C2 (A.Located Def))) FComments Expr
     | Case (C2 Expr) (List ( C2 Pattern, C1 Expr ))
     | Accessor Name
@@ -392,16 +392,6 @@ type Privacy
 -- ENCODERS and DECODERS
 
 
-forceMultilineEncoder : ForceMultiline -> BE.Encoder
-forceMultilineEncoder (ForceMultiline bool) =
-    BE.bool bool
-
-
-forceMultilineDecoder : BD.Decoder ForceMultiline
-forceMultilineDecoder =
-    BD.map ForceMultiline BD.bool
-
-
 fCommentEncoder : FComment -> BE.Encoder
 fCommentEncoder formatComment =
     case formatComment of
@@ -524,26 +514,6 @@ c2EolEncoder encoder ( ( preComments, postComments, eol ), a ) =
         ]
 
 
-c1EolDecoder : BD.Decoder a -> BD.Decoder (C1Eol a)
-c1EolDecoder decoder =
-    BD.map3
-        (\comments eol a ->
-            ( comments, eol, a )
-        )
-        fCommentsDecoder
-        (BD.maybe BD.string)
-        decoder
-
-
-c1EolEncoder : (a -> BE.Encoder) -> C1Eol a -> BE.Encoder
-c1EolEncoder encoder ( comments, eol, a ) =
-    BE.sequence
-        [ fCommentsEncoder comments
-        , BE.maybe BE.string eol
-        , encoder a
-        ]
-
-
 c2EolDecoder : BD.Decoder a -> BD.Decoder (C2Eol a)
 c2EolDecoder decoder =
     BD.map4
@@ -554,24 +524,6 @@ c2EolDecoder decoder =
         fCommentsDecoder
         (BD.maybe BD.string)
         decoder
-
-
-openCommentedListEncoder : (a -> BE.Encoder) -> OpenCommentedList a -> BE.Encoder
-openCommentedListEncoder encoder (OpenCommentedList c2Eols c1Eol) =
-    BE.sequence
-        [ BE.list (c2EolEncoder encoder) c2Eols
-        , c1EolEncoder encoder c1Eol
-        ]
-
-
-openCommentedListDecoder : BD.Decoder a -> BD.Decoder (OpenCommentedList a)
-openCommentedListDecoder decoder =
-    BD.map2
-        (\c2Eols c1Eol ->
-            OpenCommentedList c2Eols c1Eol
-        )
-        (BD.list (c2EolDecoder decoder))
-        (c1EolDecoder decoder)
 
 
 typeEncoder : Type -> BE.Encoder
@@ -1349,9 +1301,10 @@ expr_Encoder expr_ =
                 , BE.list (c1Encoder exprEncoder) args
                 ]
 
-        If branches finally ->
+        If firstBranch branches finally ->
             BE.sequence
                 [ BE.unsignedInt8 12
+                , c1Encoder (BE.jsonPair (c2Encoder exprEncoder) (c2Encoder exprEncoder)) firstBranch
                 , BE.list (c1Encoder (BE.jsonPair (c2Encoder exprEncoder) (c2Encoder exprEncoder))) branches
                 , c1Encoder exprEncoder finally
                 ]
@@ -1478,7 +1431,8 @@ expr_Decoder =
                             (BD.list (c1Decoder exprDecoder))
 
                     12 ->
-                        BD.map2 If
+                        BD.map3 If
+                            (c1Decoder (BD.jsonPair (c2Decoder exprDecoder) (c2Decoder exprDecoder)))
                             (BD.list (c1Decoder (BD.jsonPair (c2Decoder exprDecoder) (c2Decoder exprDecoder))))
                             (c1Decoder exprDecoder)
 
