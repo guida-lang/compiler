@@ -95,7 +95,7 @@ canonicalize syntaxVersion env values unions effects =
 
 
 canonicalizePort : SyntaxVersion -> Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
-canonicalizePort syntaxVersion env (Src.Port (A.At region portName) tipe) =
+canonicalizePort syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe) =
     Type.toAnnotation syntaxVersion env tipe
         |> R.bind
             (\(Can.Forall freeVars ctipe) ->
@@ -180,7 +180,7 @@ verifyEffectType (A.At region name) unions =
 
 
 toNameRegion : A.Located Src.Value -> ( Name.Name, A.Region )
-toNameRegion (A.At _ (Src.Value (A.At region name) _ _ _)) =
+toNameRegion (A.At _ (Src.Value _ ( _, A.At region name ) _ _ _)) =
     ( name, region )
 
 

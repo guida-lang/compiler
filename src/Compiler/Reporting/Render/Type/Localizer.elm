@@ -97,20 +97,20 @@ fromModule ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) =
 
 
 toPair : Src.Import -> ( Name, Import )
-toPair (Src.Import (A.At _ name) alias_ exposing_) =
+toPair (Src.Import ( _, A.At _ name ) alias_ ( _, exposing_ )) =
     ( name
-    , Import alias_ (toExposing exposing_)
+    , Import (Maybe.map Src.c2Value alias_) (toExposing exposing_)
     )
 
 
 toExposing : Src.Exposing -> Exposing
 toExposing exposing_ =
     case exposing_ of
-        Src.Open ->
+        Src.Open _ _ ->
             All
 
-        Src.Explicit exposedList ->
-            Only (List.foldr addType EverySet.empty exposedList)
+        Src.Explicit (A.At _ exposedList) ->
+            Only (List.foldr addType EverySet.empty (List.map Src.c2Value exposedList))
 
 
 addType : Src.Exposed -> EverySet String Name -> EverySet String Name

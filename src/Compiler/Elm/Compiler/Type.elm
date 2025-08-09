@@ -126,13 +126,13 @@ decoder =
 
 parser : P.Parser () Type
 parser =
-    P.specialize (\_ _ _ -> ()) (P.fmap fromRawType (P.fmap Tuple.first Type.expression))
+    P.specialize (\_ _ _ -> ()) (P.fmap fromRawType (P.fmap (Tuple.first >> Tuple.second) (Type.expression [])))
 
 
 fromRawType : Src.Type -> Type
 fromRawType (A.At _ astType) =
     case astType of
-        Src.TLambda t1 t2 ->
+        Src.TLambda ( _, t1 ) ( _, t2 ) ->
             Lambda (fromRawType t1) (fromRawType t2)
 
         Src.TVar x ->
@@ -141,27 +141,30 @@ fromRawType (A.At _ astType) =
         Src.TUnit ->
             Unit
 
-        Src.TTuple a b cs ->
+        Src.TTuple ( _, a ) ( _, b ) cs ->
             Tuple
                 (fromRawType a)
                 (fromRawType b)
-                (List.map fromRawType cs)
+                (List.map (Src.c2EolValue >> fromRawType) cs)
 
         Src.TType _ name args ->
-            Type name (List.map fromRawType args)
+            Type name (List.map fromRawType (List.map Tuple.second args))
 
         Src.TTypeQual _ _ name args ->
-            Type name (List.map fromRawType args)
+            Type name (List.map fromRawType (List.map Tuple.second args))
 
-        Src.TRecord fields ext ->
+        Src.TRecord fields maybeExt _ ->
             let
-                fromField : ( A.Located a, Src.Type ) -> ( a, Type )
-                fromField ( A.At _ field, tipe ) =
+                fromField : Src.C2 ( Src.C1 (A.Located a), Src.C1 Src.Type ) -> ( a, Type )
+                fromField ( _, ( ( _, A.At _ field ), ( _, tipe ) ) ) =
                     ( field, fromRawType tipe )
             in
             Record
                 (List.map fromField fields)
-                (Maybe.map A.toValue ext)
+                (Maybe.map (\( _, A.At _ ext ) -> ext) maybeExt)
+
+        Src.TParens ( _, astType_ ) ->
+            fromRawType astType_
 
 
 

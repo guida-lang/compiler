@@ -4,8 +4,12 @@ module Terminal.Format exposing
     )
 
 import Builder.File as File
+import Common.Format
+import Compiler.Elm.Package as Pkg
+import Compiler.Parse.Module as M
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
-import Compiler.Reporting.Error.Syntax as Syntax
+import Compiler.Reporting.Error.Syntax as E
 import Elm.Syntax.File
 import ElmSyntaxParserLenient
 import ElmSyntaxPrint
@@ -173,8 +177,17 @@ parseModule ( inputFile, inputText ) =
 
 
 format : ( FilePath, String ) -> Result InfoMessage String
-format input =
-    Result.map render (parseModule input)
+format ( inputFile, inputText ) =
+    -- FIXME fix hardcoded syntaxVersion and projectType
+    Common.Format.format SV.Elm (M.Package Pkg.core) inputText
+        |> Result.mapError
+            (\err ->
+                let
+                    _ =
+                        Debug.log "err" err
+                in
+                ParseError inputFile []
+            )
 
 
 doIt : Bool -> WhatToDo -> IO Bool
@@ -199,7 +212,7 @@ doIt autoYes whatToDo =
 type InfoMessage
     = ProcessingFile FilePath
     | FileWouldChange FilePath
-    | ParseError FilePath (List (A.Located Syntax.Error))
+    | ParseError FilePath (List (A.Located E.Error))
     | JsonParseError FilePath String
 
 

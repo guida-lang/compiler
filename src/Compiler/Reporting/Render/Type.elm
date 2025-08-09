@@ -161,7 +161,7 @@ vrecord entries maybeExt =
 srcToDoc : Context -> Src.Type -> D.Doc
 srcToDoc context (A.At _ tipe) =
     case tipe of
-        Src.TLambda arg1 result ->
+        Src.TLambda ( _, arg1 ) ( _, result ) ->
             let
                 ( arg2, rest ) =
                     collectSrcArgs result
@@ -172,30 +172,33 @@ srcToDoc context (A.At _ tipe) =
             D.fromName name
 
         Src.TType _ name args ->
-            apply context (D.fromName name) (List.map (srcToDoc App) args)
+            apply context (D.fromName name) (List.map (Tuple.second >> srcToDoc App) args)
 
         Src.TTypeQual _ home name args ->
-            apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (srcToDoc App) args)
+            apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (Tuple.second >> srcToDoc App) args)
 
-        Src.TRecord fields ext ->
-            record (List.map srcFieldToDocs fields) (Maybe.map (D.fromName << A.toValue) ext)
+        Src.TRecord fields maybeExt trailing ->
+            record (List.map srcFieldToDocs fields) (Maybe.map (\( _, A.At _ ext ) -> D.fromName ext) maybeExt)
 
         Src.TUnit ->
             D.fromChars "()"
 
-        Src.TTuple a b cs ->
-            tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) cs)
+        Src.TTuple ( _, a ) ( _, b ) cs ->
+            tuple (srcToDoc None a) (srcToDoc None b) (List.map (srcToDoc None) (List.map Src.c2EolValue cs))
+
+        Src.TParens ( _, tipe_ ) ->
+            srcToDoc context tipe_
 
 
-srcFieldToDocs : ( A.Located Name.Name, Src.Type ) -> ( D.Doc, D.Doc )
-srcFieldToDocs ( A.At _ fieldName, fieldType ) =
+srcFieldToDocs : Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type ) -> ( D.Doc, D.Doc )
+srcFieldToDocs ( _, ( ( _, A.At _ fieldName ), ( _, fieldType ) ) ) =
     ( D.fromName fieldName, srcToDoc None fieldType )
 
 
 collectSrcArgs : Src.Type -> ( Src.Type, List Src.Type )
 collectSrcArgs tipe =
     case tipe of
-        A.At _ (Src.TLambda a result) ->
+        A.At _ (Src.TLambda ( _, a ) ( _, result )) ->
             let
                 ( b, cs ) =
                     collectSrcArgs result

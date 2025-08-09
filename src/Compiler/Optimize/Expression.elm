@@ -430,7 +430,7 @@ destructHelp path (A.At region pattern) revDs =
         Can.PChr _ ->
             Names.pure revDs
 
-        Can.PStr _ ->
+        Can.PStr _ _ ->
             Names.pure revDs
 
         Can.PInt _ ->

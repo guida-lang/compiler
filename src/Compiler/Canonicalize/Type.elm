@@ -48,25 +48,25 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
 
         Src.TType region name args ->
             Env.findType region env name
-                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name (List.map Tuple.second args))
 
         Src.TTypeQual region home name args ->
             Env.findTypeQual region env home name
-                |> R.bind (canonicalizeType syntaxVersion env typeRegion name args)
+                |> R.bind (canonicalizeType syntaxVersion env typeRegion name (List.map Tuple.second args))
 
-        Src.TLambda a b ->
+        Src.TLambda ( _, a ) ( _, b ) ->
             R.fmap Can.TLambda (canonicalize syntaxVersion env a)
                 |> R.apply (canonicalize syntaxVersion env b)
 
-        Src.TRecord fields ext ->
+        Src.TRecord fields maybeExt _ ->
             Dups.checkFields (canonicalizeFields syntaxVersion env fields)
                 |> R.bind (Utils.sequenceADict identity compare)
-                |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map A.toValue ext))
+                |> R.fmap (\cfields -> Can.TRecord cfields (Maybe.map (\( _, A.At _ ext ) -> ext) maybeExt))
 
         Src.TUnit ->
             R.ok Can.TUnit
 
-        Src.TTuple a b cs ->
+        Src.TTuple ( _, a ) ( _, b ) cs ->
             R.fmap Can.TTuple (canonicalize syntaxVersion env a)
                 |> R.apply (canonicalize syntaxVersion env b)
                 |> R.apply
@@ -74,7 +74,7 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                         [] ->
                             R.ok []
 
-                        [ c ] ->
+                        [ ( _, c ) ] ->
                             canonicalize syntaxVersion env c
                                 |> R.fmap List.singleton
 
@@ -84,15 +84,18 @@ canonicalize syntaxVersion env (A.At typeRegion tipe) =
                                     R.throw (Error.TupleLargerThanThree typeRegion)
 
                                 SV.Guida ->
-                                    R.traverse (canonicalize syntaxVersion env) cs
+                                    R.traverse (canonicalize syntaxVersion env) (List.map Src.c2EolValue cs)
                     )
 
+        Src.TParens ( _, tipe_ ) ->
+            canonicalize syntaxVersion env tipe_
 
-canonicalizeFields : SyntaxVersion -> Env.Env -> List ( A.Located Name.Name, Src.Type ) -> List ( A.Located Name.Name, CResult i w Can.FieldType )
+
+canonicalizeFields : SyntaxVersion -> Env.Env -> List (Src.C2 ( Src.C1 (A.Located Name.Name), Src.C1 Src.Type )) -> List ( A.Located Name.Name, CResult i w Can.FieldType )
 canonicalizeFields syntaxVersion env fields =
     let
-        canonicalizeField : Int -> ( a, Src.Type ) -> ( a, R.RResult i w Error.Error Can.FieldType )
-        canonicalizeField index ( name, srcType ) =
+        canonicalizeField : Int -> Src.C2 ( Src.C1 a, Src.C1 Src.Type ) -> ( a, R.RResult i w Error.Error Can.FieldType )
+        canonicalizeField index ( _, ( ( _, name ), ( _, srcType ) ) ) =
             ( name, R.fmap (Can.FieldType index) (canonicalize syntaxVersion env srcType) )
     in
     List.indexedMap canonicalizeField fields

@@ -8,10 +8,12 @@ module Compiler.AST.Utils.Shader exposing
     , toJsStringBuilder
     , typesDecoder
     , typesEncoder
+    , unescape
     )
 
 import Compiler.Data.Name exposing (Name)
 import Data.Map exposing (Dict)
+import Regex
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 
@@ -92,6 +94,31 @@ escape =
                     String.cons char acc
         )
         ""
+
+
+unescape : String -> String
+unescape =
+    Regex.replace
+        (Regex.fromString "\\\\n|\\\\\"|\\\\'|\\\\\\\\"
+            |> Maybe.withDefault Regex.never
+        )
+        (\{ match } ->
+            case Debug.log "match" match of
+                "\\n" ->
+                    "\n"
+
+                "\\\"" ->
+                    "\""
+
+                "\\'" ->
+                    "'"
+
+                "\\\\" ->
+                    "\\"
+
+                _ ->
+                    match
+        )
 
 
 
