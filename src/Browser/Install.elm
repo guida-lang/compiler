@@ -7,29 +7,30 @@ import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
 -- RUN
 
 
-run : Pkg.Name -> IO ()
+run : Pkg.Name -> Task Never ()
 run pkg =
     Reporting.attempt Exit.installToReport
         (Stuff.findRoot
-            |> IO.bind
+            |> Task.bind
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            IO.pure (Err Exit.InstallNoOutline)
+                            Task.pure (Err Exit.InstallNoOutline)
 
                         Just root ->
                             Task.run
@@ -65,11 +66,7 @@ type Changes vsn
     | Changes Outline.Outline
 
 
-type alias Task a =
-    Task.Task Exit.Install a
-
-
-attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task ()
+attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task Exit.Install ()
 attemptChanges root env oldOutline _ changes =
     case changes of
         AlreadyInstalled ->
@@ -85,23 +82,23 @@ attemptChanges root env oldOutline _ changes =
             attemptChangesHelp root env oldOutline newOutline
 
 
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task ()
+attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task Exit.Install ()
 attemptChangesHelp root env oldOutline newOutline =
     Task.eio Exit.InstallBadDetails <|
         BW.withScope
             (\scope ->
                 Outline.write root newOutline
-                    |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                    |> IO.bind
+                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> Task.bind
                         (\result ->
                             case result of
                                 Err exit ->
                                     Outline.write root oldOutline
-                                        |> IO.fmap (\_ -> Err exit)
+                                        |> Task.fmap (\_ -> Err exit)
 
                                 Ok () ->
                                     IO.putStrLn "Success!"
-                                        |> IO.fmap (\_ -> Ok ())
+                                        |> Task.fmap (\_ -> Ok ())
                         )
             )
 
@@ -110,7 +107,7 @@ attemptChangesHelp root env oldOutline newOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task (Changes V.Version)
+makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Install (Changes V.Version)
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
         Task.pure AlreadyInstalled
@@ -191,7 +188,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task (Changes C.Constraint)
+makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Exit.Install (Changes C.Constraint)
 makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
     if Dict.member identity pkg deps then
         Task.pure AlreadyInstalled

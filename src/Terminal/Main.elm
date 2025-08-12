@@ -2,7 +2,8 @@ module Terminal.Main exposing (main)
 
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Terminal.Bump as Bump
 import Terminal.Diff as Diff
 import Terminal.Format as Format
@@ -18,13 +19,14 @@ import Terminal.Terminal.Internal as Terminal
 import Terminal.Test as Test
 import Terminal.Uninstall as Uninstall
 import Utils.Impure as Impure
+import Utils.Task.Extra as Task
 
 
 main : IO.Program
 main =
     IO.run
         (app
-            |> IO.bind
+            |> Task.bind
                 (\() ->
                     Impure.task "exitWith"
                         []
@@ -34,7 +36,7 @@ main =
         )
 
 
-app : IO ()
+app : Task Never ()
 app =
     Terminal.app intro
         outro
@@ -178,8 +180,8 @@ interpreter =
     Terminal.Parser
         { singular = "interpreter"
         , plural = "interpreters"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "node", "nodejs" ]
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure [ "node", "nodejs" ]
         }
 
 
@@ -582,8 +584,8 @@ output =
     Terminal.Parser
         { singular = "output"
         , plural = "outputs"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure []
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure []
         }
 
 
@@ -644,8 +646,8 @@ int =
     Terminal.Parser
         { singular = "int"
         , plural = "ints"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure []
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure []
         }
 
 

@@ -19,8 +19,10 @@ import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils
+import Utils.Task.Extra as Task
 
 
 
@@ -31,22 +33,22 @@ type Flags
     = Flags Bool Bool
 
 
-run : () -> Flags -> IO ()
+run : () -> Flags -> Task Never ()
 run () (Flags package autoYes) =
     Reporting.attempt Exit.initToReport <|
         (Utils.dirDoesFileExist "elm.json"
-            |> IO.bind
+            |> Task.bind
                 (\exists ->
                     if exists then
-                        IO.pure (Err Exit.InitAlreadyExists)
+                        Task.pure (Err Exit.InitAlreadyExists)
 
                     else
                         let
-                            askQuestion : IO Bool
+                            askQuestion : Task Never Bool
                             askQuestion =
                                 if autoYes then
                                     Help.toStdout (information [ D.fromChars "" ])
-                                        |> IO.fmap (\_ -> True)
+                                        |> Task.fmap (\_ -> True)
 
                                 else
                                     Reporting.ask
@@ -56,14 +58,14 @@ run () (Flags package autoYes) =
                                         )
                         in
                         askQuestion
-                            |> IO.bind
+                            |> Task.bind
                                 (\approved ->
                                     if approved then
                                         init package
 
                                     else
                                         IO.putStrLn "Okay, I did not make any changes!"
-                                            |> IO.fmap (\_ -> Ok ())
+                                            |> Task.fmap (\_ -> Ok ())
                                 )
                 )
         )
@@ -105,14 +107,14 @@ information question =
 -- INIT
 
 
-init : Bool -> IO (Result Exit.Init ())
+init : Bool -> Task Never (Result Exit.Init ())
 init package =
     Solver.initEnv
-        |> IO.bind
+        |> Task.bind
             (\eitherEnv ->
                 case eitherEnv of
                     Err problem ->
-                        IO.pure (Err (Exit.InitRegistryProblem problem))
+                        Task.pure (Err (Exit.InitRegistryProblem problem))
 
                     Ok (Solver.Env cache _ connection registry) ->
                         verify cache connection registry defaults <|
@@ -120,9 +122,9 @@ init package =
                                 verify cache connection registry testDefaults <|
                                     \testDetails ->
                                         Utils.dirCreateDirectoryIfMissing True "src"
-                                            |> IO.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
-                                            |> IO.bind (\_ -> File.writeUtf8 "tests/Example.elm" testExample)
-                                            |> IO.bind
+                                            |> Task.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
+                                            |> Task.bind (\_ -> File.writeUtf8 "tests/Example.elm" testExample)
+                                            |> Task.bind
                                                 (\_ ->
                                                     let
                                                         outline : Outline.Outline
@@ -202,25 +204,25 @@ init package =
                                                     in
                                                     Outline.write "." outline
                                                 )
-                                            |> IO.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
-                                            |> IO.fmap (\_ -> Ok ())
+                                            |> Task.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
+                                            |> Task.fmap (\_ -> Ok ())
             )
 
 
-verify : Stuff.PackageCache -> Solver.Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name Con.Constraint -> (Dict ( String, String ) Pkg.Name Solver.Details -> IO (Result Exit.Init ())) -> IO (Result Exit.Init ())
+verify : Stuff.PackageCache -> Solver.Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name Con.Constraint -> (Dict ( String, String ) Pkg.Name Solver.Details -> Task Never (Result Exit.Init ())) -> Task Never (Result Exit.Init ())
 verify cache connection registry constraints callback =
     Solver.verify cache connection registry constraints
-        |> IO.bind
+        |> Task.bind
             (\result ->
                 case result of
                     Solver.SolverErr exit ->
-                        IO.pure (Err (Exit.InitSolverProblem exit))
+                        Task.pure (Err (Exit.InitSolverProblem exit))
 
                     Solver.NoSolution ->
-                        IO.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
+                        Task.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
 
                     Solver.NoOfflineSolution ->
-                        IO.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare constraints)))
+                        Task.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare constraints)))
 
                     Solver.SolverOk details ->
                         callback details

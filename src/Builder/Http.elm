@@ -27,13 +27,13 @@ import Compiler.Elm.Version as V
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
-import Task
+import Task exposing (Task)
 import Url.Builder
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
 import Utils.Main as Utils exposing (SomeException)
+import Utils.Task.Extra as Task
 
 
 
@@ -63,10 +63,10 @@ managerDecoder =
             )
 
 
-getManager : IO Manager
+getManager : Task Never Manager
 getManager =
     -- TODO newManager tlsManagerSettings
-    IO.pure Manager
+    Task.pure Manager
 
 
 
@@ -97,17 +97,17 @@ type alias Header =
     ( String, String )
 
 
-get : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
+get : Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 get =
     fetch "GET"
 
 
-post : Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
+post : Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 post =
     fetch "POST"
 
 
-fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> IO (Result e a)) -> IO (Result e a)
+fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 fetch method _ url headers _ onSuccess =
     Impure.customTask method
         url
@@ -159,7 +159,7 @@ shaToChars =
 -- FETCH ARCHIVE
 
 
-getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> IO (Result e a)) -> IO (Result e a)
+getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> Task Never (Result e a)) -> Task Never (Result e a)
 getArchive _ url _ _ onSuccess =
     Impure.task "getArchive"
         []
@@ -190,7 +190,7 @@ type MultiPart
     | StringPart String String
 
 
-upload : Manager -> String -> List MultiPart -> IO (Result Error ())
+upload : Manager -> String -> List MultiPart -> Task Never (Result Error ())
 upload _ url parts =
     Impure.task "httpUpload"
         []

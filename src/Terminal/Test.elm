@@ -16,7 +16,6 @@ import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
@@ -32,29 +31,27 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Regex exposing (Regex)
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
 import System.Process as Process
+import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
 -- RUN
 
 
-type alias Task a =
-    Task.Task Exit.Test a
-
-
 type Flags
     = Flags (Maybe Int) (Maybe Int) (Maybe Report)
 
 
-run : List String -> Flags -> IO ()
+run : List String -> Flags -> Task Never ()
 run paths flags =
     Stuff.findRoot
-        |> IO.bind
+        |> Task.bind
             (\maybeRoot ->
                 Reporting.attemptWithStyle style Exit.testToReport <|
                     case maybeRoot of
@@ -62,16 +59,16 @@ run paths flags =
                             runHelp root paths flags
 
                         Nothing ->
-                            IO.pure (Err Exit.TestNoOutline)
+                            Task.pure (Err Exit.TestNoOutline)
             )
 
 
-runHelp : String -> List String -> Flags -> IO (Result Exit.Test ())
+runHelp : String -> List String -> Flags -> Task Never (Result Exit.Test ())
 runHelp root testFileGlobs flags =
     Stuff.withRootLock root <|
         Task.run <|
             (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
-                |> IO.bind (\_ -> Utils.nodeGetDirname)
+                |> Task.bind (\_ -> Utils.nodeGetDirname)
                 |> Task.io
                 |> Task.bind
                     (\nodeDirname ->
@@ -144,7 +141,7 @@ runHelp root testFileGlobs flags =
                                                     testFileGlobs
                                     in
                                     resolveElmFiles paths
-                                        |> IO.bind
+                                        |> Task.bind
                                             (\resolvedInputFiles ->
                                                 case resolvedInputFiles of
                                                     Ok inputFiles ->
@@ -154,20 +151,20 @@ runHelp root testFileGlobs flags =
                                                                     case List.filter (\path -> String.startsWith path inputFile) paths of
                                                                         _ :: [] ->
                                                                             extractExposedPossiblyTests inputFile
-                                                                                |> IO.fmap (Maybe.map (Tuple.pair inputFile))
+                                                                                |> Task.fmap (Maybe.map (Tuple.pair inputFile))
 
                                                                         _ ->
-                                                                            IO.pure Nothing
+                                                                            Task.pure Nothing
                                                                 )
 
                                                     Err _ ->
-                                                        IO.pure []
+                                                        Task.pure []
                                             )
-                                        |> IO.fmap (List.filterMap identity)
-                                        |> IO.bind
+                                        |> Task.fmap (List.filterMap identity)
+                                        |> Task.bind
                                             (\exposedList ->
                                                 Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
-                                                    |> IO.bind
+                                                    |> Task.bind
                                                         (\_ ->
                                                             let
                                                                 testModules : List { moduleName : String, possiblyTests : List String }
@@ -182,21 +179,21 @@ runHelp root testFileGlobs flags =
                                                             in
                                                             testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
                                                         )
-                                                    |> IO.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
-                                                    |> IO.bind (\_ -> Reporting.terminal)
-                                                    |> IO.bind
+                                                    |> Task.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
+                                                    |> Task.bind (\_ -> Reporting.terminal)
+                                                    |> Task.bind
                                                         (\terminalStyle ->
                                                             Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
                                                                 Utils.dirWithCurrentDirectory (Stuff.testDir root)
                                                                     (runMake (Stuff.testDir root) "src/Test/Generated/Main.elm")
                                                         )
-                                                    |> IO.bind
+                                                    |> Task.bind
                                                         (\content ->
                                                             IO.hPutStrLn IO.stdout "Starting tests"
-                                                                |> IO.bind
+                                                                |> Task.bind
                                                                     (\_ ->
                                                                         getInterpreter
-                                                                            |> IO.bind
+                                                                            |> Task.bind
                                                                                 (\interpreter ->
                                                                                     let
                                                                                         finalContent : String
@@ -219,7 +216,7 @@ runHelp root testFileGlobs flags =
             )
 
 
-interpret : FilePath -> String -> IO Exit.ExitCode
+interpret : FilePath -> String -> Task Never Exit.ExitCode
 interpret interpreter javascript =
     let
         createProcess : { cmdspec : Process.CmdSpec, std_out : Process.StdStream, std_err : Process.StdStream, std_in : Process.StdStream }
@@ -232,8 +229,8 @@ interpret interpreter javascript =
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
-                        |> IO.bind (\_ -> IO.hClose stdin)
-                        |> IO.bind (\_ -> Process.waitForProcess handle)
+                        |> Task.bind (\_ -> IO.hClose stdin)
+                        |> Task.bind (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -594,18 +591,18 @@ testGeneratedMain :
     -> List String
     -> List String
     -> Flags
-    -> IO String
+    -> Task Never String
 testGeneratedMain testModules testFileGlobs testFilePaths (Flags maybeSeed maybeRuns report) =
     let
-        seedIO : IO Int
+        seedIO : Task Never Int
         seedIO =
             case maybeSeed of
                 Just seedValue ->
-                    IO.pure seedValue
+                    Task.pure seedValue
 
                 Nothing ->
                     Utils.nodeMathRandom
-                        |> IO.fmap (\seedRandom -> floor (seedRandom * 407199254740991) + 1000)
+                        |> Task.fmap (\seedRandom -> floor (seedRandom * 407199254740991) + 1000)
 
         imports : List String
         imports =
@@ -616,7 +613,7 @@ testGeneratedMain testModules testFileGlobs testFilePaths (Flags maybeSeed maybe
             List.map makeModuleTuple testModules
     in
     seedIO
-        |> IO.fmap
+        |> Task.fmap
             (\seedValue ->
                 """module Test.Generated.Main exposing (main)
 
@@ -699,10 +696,10 @@ style =
     Reporting.silent
 
 
-extractExposedPossiblyTests : String -> IO (Maybe ( String, List String ))
+extractExposedPossiblyTests : String -> Task Never (Maybe ( String, List String ))
 extractExposedPossiblyTests path =
     File.readUtf8 path
-        |> IO.bind
+        |> Task.bind
             (\bytes ->
                 case Parse.fromByteString (SV.fileSyntaxVersion path) Parse.Application bytes of
                     Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
@@ -728,10 +725,10 @@ extractExposedPossiblyTests path =
                                             )
                                             exposedList
                         in
-                        IO.pure (Just ( name, exposed ))
+                        Task.pure (Just ( name, exposed ))
 
                     _ ->
-                        IO.pure Nothing
+                        Task.pure Nothing
             )
 
 
@@ -745,13 +742,13 @@ type FileType
     | DoesNotExist
 
 
-stat : FilePath -> IO FileType
+stat : FilePath -> Task Never FileType
 stat path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> Task.bind
             (\isFile ->
                 Utils.dirDoesDirectoryExist path
-                    |> IO.fmap
+                    |> Task.fmap
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
                                 ( True, _ ) ->
@@ -775,18 +772,18 @@ type Error
     | NoElmFiles FilePath
 
 
-resolveFile : FilePath -> IO (Result Error (List FilePath))
+resolveFile : FilePath -> Task Never (Result Error (List FilePath))
 resolveFile path =
     stat path
-        |> IO.bind
+        |> Task.bind
             (\fileType ->
                 case fileType of
                     IsFile ->
-                        IO.pure (Ok [ path ])
+                        Task.pure (Ok [ path ])
 
                     IsDirectory ->
                         findAllGuidaAndElmFiles path
-                            |> IO.fmap
+                            |> Task.fmap
                                 (\elmFiles ->
                                     case elmFiles of
                                         [] ->
@@ -797,15 +794,15 @@ resolveFile path =
                                 )
 
                     DoesNotExist ->
-                        IO.pure (Err (FileDoesNotExist path))
+                        Task.pure (Err (FileDoesNotExist path))
             )
 
 
-resolveElmFiles : List FilePath -> IO (Result (List Error) (List FilePath))
+resolveElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
 resolveElmFiles inputFiles =
-    IO.mapM resolveFile inputFiles
-        |> IO.fmap collectErrors
-        |> IO.fmap
+    Task.mapM resolveFile inputFiles
+        |> Task.fmap collectErrors
+        |> Task.fmap
             (\result ->
                 case result of
                     Err ls ->
@@ -840,36 +837,36 @@ collectErrors =
 -- FILESYSTEM
 
 
-collectFiles : (a -> IO (List a)) -> a -> IO (List a)
+collectFiles : (a -> Task Never (List a)) -> a -> Task Never (List a)
 collectFiles children root =
     children root
-        |> IO.bind (\xs -> IO.mapM (collectFiles children) xs)
-        |> IO.fmap (\subChildren -> root :: List.concat subChildren)
+        |> Task.bind (\xs -> Task.mapM (collectFiles children) xs)
+        |> Task.fmap (\subChildren -> root :: List.concat subChildren)
 
 
-listDir : FilePath -> IO (List FilePath)
+listDir : FilePath -> Task Never (List FilePath)
 listDir path =
     Utils.dirListDirectory path
-        |> IO.fmap (List.map (\file -> path ++ "/" ++ file))
+        |> Task.fmap (List.map (\file -> path ++ "/" ++ file))
 
 
-fileList : FilePath -> IO (List FilePath)
+fileList : FilePath -> Task Never (List FilePath)
 fileList =
     let
-        children : FilePath -> IO (List FilePath)
+        children : FilePath -> Task Never (List FilePath)
         children path =
             if isSkippable path then
-                IO.pure []
+                Task.pure []
 
             else
                 Utils.dirDoesDirectoryExist path
-                    |> IO.bind
+                    |> Task.bind
                         (\directory ->
                             if directory then
                                 listDir path
 
                             else
-                                IO.pure []
+                                Task.pure []
                         )
     in
     collectFiles children
@@ -889,10 +886,10 @@ hasExtension ext path =
     ext == Utils.fpTakeExtension path
 
 
-findAllGuidaAndElmFiles : FilePath -> IO (List FilePath)
+findAllGuidaAndElmFiles : FilePath -> Task Never (List FilePath)
 findAllGuidaAndElmFiles inputFile =
     fileList inputFile
-        |> IO.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
+        |> Task.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
 
 
 hasFilename : String -> FilePath -> Bool
@@ -908,7 +905,7 @@ hasFilename name path =
 -- ATTEMPT CHANGES
 
 
-attemptChanges : FilePath -> Solver.Env -> Outline.AppOutline -> Task ()
+attemptChanges : FilePath -> Solver.Env -> Outline.AppOutline -> Task Exit.Test ()
 attemptChanges root env appOutline =
     Task.eio Exit.TestBadDetails <|
         BW.withScope
@@ -919,7 +916,7 @@ attemptChanges root env appOutline =
                         Outline.App appOutline
                 in
                 Outline.write (Stuff.testDir root) newOutline
-                    |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
             )
 
 
@@ -927,7 +924,7 @@ attemptChanges root env appOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Outline.AppOutline
+makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Test Outline.AppOutline
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
     if Dict.member identity pkg direct then
         Task.pure outline
@@ -1002,12 +999,12 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Dict ( String, String ) Pkg.Name C.Constraint -> Outline.AppOutline -> Task Outline.AppOutline
+makePkgPlan : Solver.Env -> Dict ( String, String ) Pkg.Name C.Constraint -> Outline.AppOutline -> Task Exit.Test Outline.AppOutline
 makePkgPlan env cons outline =
     makePkgPlanHelp env (Dict.toList Pkg.compareName cons) outline
 
 
-makePkgPlanHelp : Solver.Env -> List ( Pkg.Name, C.Constraint ) -> Outline.AppOutline -> Task Outline.AppOutline
+makePkgPlanHelp : Solver.Env -> List ( Pkg.Name, C.Constraint ) -> Outline.AppOutline -> Task Exit.Test Outline.AppOutline
 makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
     case cons of
         [] ->
@@ -1036,30 +1033,30 @@ makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
 -- GET INTERPRETER
 
 
-getInterpreter : IO FilePath
+getInterpreter : Task Never FilePath
 getInterpreter =
     getInterpreterHelp "node` or `nodejs" <|
         (Utils.dirFindExecutable "node"
-            |> IO.bind
+            |> Task.bind
                 (\exe1 ->
                     Utils.dirFindExecutable "nodejs"
-                        |> IO.fmap (\exe2 -> Maybe.or exe1 exe2)
+                        |> Task.fmap (\exe2 -> Maybe.or exe1 exe2)
                 )
         )
 
 
-getInterpreterHelp : String -> IO (Maybe FilePath) -> IO FilePath
+getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
 getInterpreterHelp name findExe =
     findExe
-        |> IO.bind
+        |> Task.bind
             (\maybePath ->
                 case maybePath of
                     Just path ->
-                        IO.pure path
+                        Task.pure path
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> IO.bind (\_ -> Exit.exitFailure)
+                            |> Task.bind (\_ -> Exit.exitFailure)
             )
 
 
@@ -1075,7 +1072,7 @@ exeNotFound name =
 
 {-| FROM MAKE
 -}
-runMake : String -> String -> IO (Result Exit.Test String)
+runMake : String -> String -> Task Never (Result Exit.Test String)
 runMake root path =
     BW.withScope
         (\scope ->
@@ -1093,7 +1090,7 @@ runMake root path =
         )
 
 
-buildPaths : FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts
+buildPaths : FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Test Build.Artifacts
 buildPaths root details paths =
     Task.eio Exit.TestCannotBuild <|
         Build.fromPaths style root details paths
@@ -1103,7 +1100,7 @@ buildPaths root details paths =
 -- TO BUILDER
 
 
-toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task String
+toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Test String
 toBuilder leadingLines root details artifacts =
     Task.mapError Exit.TestBadGenerate <|
         Generate.dev False leadingLines root details artifacts
@@ -1124,8 +1121,8 @@ format =
     Parser
         { singular = "format"
         , plural = "formats"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "json", "junit", "console" ]
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure [ "json", "junit", "console" ]
         }
 
 

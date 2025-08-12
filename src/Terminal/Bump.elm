@@ -11,7 +11,6 @@ import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.Docs as Docs
@@ -19,15 +18,17 @@ import Compiler.Elm.Magnitude as M
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Prelude
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
 -- RUN
 
 
-run : () -> () -> IO ()
+run : () -> () -> Task Never ()
 run () () =
     Reporting.attempt Exit.bumpToReport <|
         Task.run (Task.bind bump getEnv)
@@ -41,7 +42,7 @@ type Env
     = Env FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.PkgOutline
 
 
-getEnv : Task.Task Exit.Bump Env
+getEnv : Task Exit.Bump Env
 getEnv =
     Task.io Stuff.findRoot
         |> Task.bind
@@ -80,7 +81,7 @@ getEnv =
 -- BUMP
 
 
-bump : Env -> Task.Task Exit.Bump ()
+bump : Env -> Task Exit.Bump ()
 bump ((Env root _ _ registry ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outline)) as env) =
     case Registry.getVersions pkg registry of
         Just knownVersions ->
@@ -105,10 +106,10 @@ bump ((Env root _ _ registry ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outlin
 -- CHECK NEW PACKAGE
 
 
-checkNewPackage : FilePath -> Outline.PkgOutline -> IO ()
+checkNewPackage : FilePath -> Outline.PkgOutline -> Task Never ()
 checkNewPackage root ((Outline.PkgOutline _ _ _ version _ _ _ _) as outline) =
     IO.putStrLn Exit.newPackageOverview
-        |> IO.bind
+        |> Task.bind
             (\_ ->
                 if version == V.one then
                     IO.putStrLn "The version number in elm.json is correct so you are all set!"
@@ -126,7 +127,7 @@ checkNewPackage root ((Outline.PkgOutline _ _ _ version _ _ _ _) as outline) =
 -- SUGGEST VERSION
 
 
-suggestVersion : Env -> Task.Task Exit.Bump ()
+suggestVersion : Env -> Task Exit.Bump ()
 suggestVersion (Env root cache manager _ ((Outline.PkgOutline pkg _ _ vsn _ _ _ _) as outline)) =
     Task.eio (Exit.BumpCannotFindDocs vsn) (Diff.getDocs cache manager pkg vsn)
         |> Task.bind
@@ -176,7 +177,7 @@ suggestVersion (Env root cache manager _ ((Outline.PkgOutline pkg _ _ vsn _ _ _ 
             )
 
 
-generateDocs : FilePath -> Outline.PkgOutline -> Task.Task Exit.Bump Docs.Documentation
+generateDocs : FilePath -> Outline.PkgOutline -> Task Exit.Bump Docs.Documentation
 generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
     Task.eio Exit.BumpBadDetails
         (BW.withScope (\scope -> Details.load Reporting.silent scope root))
@@ -196,10 +197,10 @@ generateDocs root (Outline.PkgOutline _ _ _ _ exposed _ _ _) =
 -- CHANGE VERSION
 
 
-changeVersion : FilePath -> Outline.PkgOutline -> V.Version -> D.Doc -> IO ()
+changeVersion : FilePath -> Outline.PkgOutline -> V.Version -> D.Doc -> Task Never ()
 changeVersion root (Outline.PkgOutline name summary license _ exposed deps testDeps elmVersion) targetVersion question =
     Reporting.ask question
-        |> IO.bind
+        |> Task.bind
             (\approved ->
                 if not approved then
                     IO.putStrLn "Okay, I did not change anything!"
@@ -209,7 +210,7 @@ changeVersion root (Outline.PkgOutline name summary license _ exposed deps testD
                         (Outline.Pkg
                             (Outline.PkgOutline name summary license targetVersion exposed deps testDeps elmVersion)
                         )
-                        |> IO.bind
+                        |> Task.bind
                             (\_ ->
                                 Help.toStdout
                                     (D.fromChars "Version changed to "

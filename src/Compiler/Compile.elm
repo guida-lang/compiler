@@ -19,8 +19,9 @@ import Compiler.Reporting.Result as R
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
-import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Task exposing (Task)
+import Utils.Task.Extra as Task
 
 
 
@@ -31,10 +32,10 @@ type Artifacts
     = Artifacts Can.Module (Dict String Name Can.Annotation) Opt.LocalGraph
 
 
-compile : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> IO (Result E.Error Artifacts)
+compile : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
 compile pkg ifaces modul =
-    IO.pure (canonicalize pkg ifaces modul)
-        |> IO.fmap
+    Task.pure (canonicalize pkg ifaces modul)
+        |> Task.fmap
             (\canonicalResult ->
                 case canonicalResult of
                     Ok canonical ->

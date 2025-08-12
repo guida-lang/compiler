@@ -5,10 +5,11 @@ module Builder.BackgroundWriter exposing
     )
 
 import Builder.File as File
-import System.IO as IO exposing (IO)
+import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Main as Utils
+import Utils.Task.Extra as Task
 
 
 
@@ -19,37 +20,37 @@ type Scope
     = Scope (Utils.MVar (List (Utils.MVar ())))
 
 
-withScope : (Scope -> IO a) -> IO a
+withScope : (Scope -> Task Never a) -> Task Never a
 withScope callback =
     Utils.newMVar (BE.list (\_ -> BE.unit ())) []
-        |> IO.bind
+        |> Task.bind
             (\workList ->
                 callback (Scope workList)
-                    |> IO.bind
+                    |> Task.bind
                         (\result ->
                             Utils.takeMVar (BD.list Utils.mVarDecoder) workList
-                                |> IO.bind
+                                |> Task.bind
                                     (\mvars ->
                                         Utils.listTraverse_ (Utils.takeMVar (BD.succeed ())) mvars
-                                            |> IO.fmap (\_ -> result)
+                                            |> Task.fmap (\_ -> result)
                                     )
                         )
             )
 
 
-writeBinary : (a -> BE.Encoder) -> Scope -> String -> a -> IO ()
+writeBinary : (a -> BE.Encoder) -> Scope -> String -> a -> Task Never ()
 writeBinary toEncoder (Scope workList) path value =
     Utils.newEmptyMVar
-        |> IO.bind
+        |> Task.bind
             (\mvar ->
                 Utils.forkIO
                     (File.writeBinary toEncoder path value
-                        |> IO.bind (\_ -> Utils.putMVar BE.unit mvar ())
+                        |> Task.bind (\_ -> Utils.putMVar BE.unit mvar ())
                     )
-                    |> IO.bind
+                    |> Task.bind
                         (\_ ->
                             Utils.takeMVar (BD.list Utils.mVarDecoder) workList
-                                |> IO.bind
+                                |> Task.bind
                                     (\oldWork ->
                                         let
                                             newWork : List (Utils.MVar ())

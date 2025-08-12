@@ -22,9 +22,10 @@ import Compiler.Elm.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
+import Utils.Task.Extra as Task
 
 
 
@@ -43,7 +44,7 @@ type KnownVersions
 -- READ
 
 
-read : Stuff.PackageCache -> IO (Maybe Registry)
+read : Stuff.PackageCache -> Task Never (Maybe Registry)
 read cache =
     File.readBinary registryDecoder (Stuff.registry cache)
 
@@ -52,7 +53,7 @@ read cache =
 -- FETCH
 
 
-fetch : Http.Manager -> Stuff.PackageCache -> IO (Result Exit.RegistryProblem Registry)
+fetch : Http.Manager -> Stuff.PackageCache -> Task Never (Result Exit.RegistryProblem Registry)
 fetch manager cache =
     post manager "/all-packages" allPkgsDecoder <|
         \versions ->
@@ -70,7 +71,7 @@ fetch manager cache =
                     Stuff.registry cache
             in
             File.writeBinary registryEncoder path registry
-                |> IO.fmap (\_ -> registry)
+                |> Task.fmap (\_ -> registry)
 
 
 addEntry : KnownVersions -> Int -> Int
@@ -105,13 +106,13 @@ allPkgsDecoder =
 -- UPDATE
 
 
-update : Http.Manager -> Stuff.PackageCache -> Registry -> IO (Result Exit.RegistryProblem Registry)
+update : Http.Manager -> Stuff.PackageCache -> Registry -> Task Never (Result Exit.RegistryProblem Registry)
 update manager cache ((Registry size packages) as oldRegistry) =
     post manager ("/all-packages/since/" ++ String.fromInt size) (D.list newPkgDecoder) <|
         \news ->
             case news of
                 [] ->
-                    IO.pure oldRegistry
+                    Task.pure oldRegistry
 
                 _ :: _ ->
                     let
@@ -128,7 +129,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                             Registry newSize newPkgs
                     in
                     File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
-                        |> IO.fmap (\_ -> newRegistry)
+                        |> Task.fmap (\_ -> newRegistry)
 
 
 addNew : ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
@@ -175,10 +176,10 @@ bail _ _ =
 -- LATEST
 
 
-latest : Http.Manager -> Stuff.PackageCache -> IO (Result Exit.RegistryProblem Registry)
+latest : Http.Manager -> Stuff.PackageCache -> Task Never (Result Exit.RegistryProblem Registry)
 latest manager cache =
     read cache
-        |> IO.bind
+        |> Task.bind
             (\maybeOldRegistry ->
                 case maybeOldRegistry of
                     Just oldRegistry ->
@@ -212,19 +213,19 @@ getVersions_ name (Registry _ versions) =
 -- POST
 
 
-post : Http.Manager -> String -> D.Decoder x a -> (a -> IO b) -> IO (Result Exit.RegistryProblem b)
+post : Http.Manager -> String -> D.Decoder x a -> (a -> Task Never b) -> Task Never (Result Exit.RegistryProblem b)
 post manager path decoder callback =
     Website.route path []
-        |> IO.bind
+        |> Task.bind
             (\url ->
                 Http.post manager url [] Exit.RP_Http <|
                     \body ->
                         case D.fromByteString decoder body of
                             Ok a ->
-                                IO.fmap Ok (callback a)
+                                Task.fmap Ok (callback a)
 
                             Err _ ->
-                                IO.pure <| Err <| Exit.RP_Data url body
+                                Task.pure <| Err <| Exit.RP_Data url body
             )
 
 

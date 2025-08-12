@@ -14,7 +14,7 @@ module Terminal.Terminal.Internal exposing
     , toName
     )
 
-import System.IO exposing (IO)
+import Task exposing (Task)
 import Text.PrettyPrint.ANSI.Leijen exposing (Doc)
 
 
@@ -23,7 +23,7 @@ import Text.PrettyPrint.ANSI.Leijen exposing (Doc)
 
 
 type Command
-    = Command String Summary String Doc Args Flags (List String -> Result Error (IO ()))
+    = Command String Summary String Doc Args Flags (List String -> Result Error (Task Never ()))
 
 
 toName : Command -> String
@@ -65,8 +65,8 @@ type Parser
         , plural : String
 
         -- ,parser : String -> Maybe a
-        , suggest : String -> IO (List String)
-        , examples : String -> IO (List String)
+        , suggest : String -> Task Never (List String)
+        , examples : String -> Task Never (List String)
         }
 
 
@@ -111,4 +111,4 @@ type FlagError
 
 
 type Expectation
-    = Expectation String (IO (List String))
+    = Expectation String (Task Never (List String))

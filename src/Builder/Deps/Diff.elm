@@ -25,8 +25,9 @@ import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import List
-import System.IO as IO exposing (IO)
+import Task exposing (Task)
 import Utils.Main as Utils
+import Utils.Task.Extra as Task
 
 
 type PackageChanges
@@ -395,7 +396,7 @@ changeMagnitude (Changes added changed removed) =
 -- GET DOCS
 
 
-getDocs : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> IO (Result Exit.DocsProblem Docs.Documentation)
+getDocs : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> Task Never (Result Exit.DocsProblem Docs.Documentation)
 getDocs cache manager name version =
     let
         home : String
@@ -407,34 +408,34 @@ getDocs cache manager name version =
             home ++ "/docs.json"
     in
     File.exists path
-        |> IO.bind
+        |> Task.bind
             (\exists ->
                 if exists then
                     File.readUtf8 path
-                        |> IO.bind
+                        |> Task.bind
                             (\bytes ->
                                 case D.fromByteString Docs.decoder bytes of
                                     Ok docs ->
-                                        IO.pure (Ok docs)
+                                        Task.pure (Ok docs)
 
                                     Err _ ->
                                         File.remove path
-                                            |> IO.fmap (\_ -> Err DP_Cache)
+                                            |> Task.fmap (\_ -> Err DP_Cache)
                             )
 
                 else
                     Website.metadata name version "docs.json"
-                        |> IO.bind
+                        |> Task.bind
                             (\url ->
                                 Http.get manager url [] Exit.DP_Http <|
                                     \body ->
                                         case D.fromByteString Docs.decoder body of
                                             Ok docs ->
                                                 Utils.dirCreateDirectoryIfMissing True home
-                                                    |> IO.bind (\_ -> File.writeUtf8 path body)
-                                                    |> IO.fmap (\_ -> Ok docs)
+                                                    |> Task.bind (\_ -> File.writeUtf8 path body)
+                                                    |> Task.fmap (\_ -> Ok docs)
 
                                             Err _ ->
-                                                IO.pure (Err (DP_Data url body))
+                                                Task.pure (Err (DP_Data url body))
                             )
             )

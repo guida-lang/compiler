@@ -25,7 +25,6 @@ import Builder.File as File
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
@@ -48,12 +47,13 @@ import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
-import System.IO as IO exposing (IO)
 import System.TypeCheck.IO as TypeCheck
+import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath, MVar)
+import Utils.Task.Extra as Task
 
 
 
@@ -110,7 +110,7 @@ type alias Interfaces =
 -- LOAD ARTIFACTS
 
 
-loadObjects : FilePath -> Details -> IO (MVar (Maybe Opt.GlobalGraph))
+loadObjects : FilePath -> Details -> Task Never (MVar (Maybe Opt.GlobalGraph))
 loadObjects root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh _ o ->
@@ -120,7 +120,7 @@ loadObjects root (Details _ _ _ _ _ extras) =
             fork (Utils.maybeEncoder Opt.globalGraphEncoder) (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
 
 
-loadInterfaces : FilePath -> Details -> IO (MVar (Maybe Interfaces))
+loadInterfaces : FilePath -> Details -> Task Never (MVar (Maybe Interfaces))
 loadInterfaces root (Details _ _ _ _ _ extras) =
     case extras of
         ArtifactsFresh i _ ->
@@ -134,10 +134,10 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 -- VERIFY INSTALL -- used by Install
 
 
-verifyInstall : BW.Scope -> FilePath -> Solver.Env -> Outline.Outline -> IO (Result Exit.Details ())
+verifyInstall : BW.Scope -> FilePath -> Solver.Env -> Outline.Outline -> Task Never (Result Exit.Details ())
 verifyInstall scope root (Solver.Env cache manager connection registry) outline =
     File.getTime (root ++ "/elm.json")
-        |> IO.bind
+        |> Task.bind
             (\time ->
                 let
                     key : Reporting.Key msg
@@ -161,13 +161,13 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 -- LOAD -- used by Make, Repl, Reactor, Test
 
 
-load : Reporting.Style -> BW.Scope -> FilePath -> IO (Result Exit.Details Details)
+load : Reporting.Style -> BW.Scope -> FilePath -> Task Never (Result Exit.Details Details)
 load style scope root =
     File.getTime (root ++ "/elm.json")
-        |> IO.bind
+        |> Task.bind
             (\newTime ->
                 File.readBinary detailsDecoder (Stuff.details root)
-                    |> IO.bind
+                    |> Task.bind
                         (\maybeDetails ->
                             case maybeDetails of
                                 Nothing ->
@@ -175,7 +175,7 @@ load style scope root =
 
                                 Just (Details oldTime outline buildID locals foreigns extras) ->
                                     if oldTime == newTime then
-                                        IO.pure (Ok (Details oldTime outline (buildID + 1) locals foreigns extras))
+                                        Task.pure (Ok (Details oldTime outline (buildID + 1) locals foreigns extras))
 
                                     else
                                         generate style scope root newTime
@@ -187,16 +187,16 @@ load style scope root =
 -- GENERATE
 
 
-generate : Reporting.Style -> BW.Scope -> FilePath -> File.Time -> IO (Result Exit.Details Details)
+generate : Reporting.Style -> BW.Scope -> FilePath -> File.Time -> Task Never (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
         (\key ->
             initEnv key scope root
-                |> IO.bind
+                |> Task.bind
                     (\result ->
                         case result of
                             Err exit ->
-                                IO.pure (Err exit)
+                                Task.pure (Err exit)
 
                             Ok ( env, outline ) ->
                                 case outline of
@@ -217,21 +217,21 @@ type Env
     = Env Reporting.DKey BW.Scope FilePath Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
 
 
-initEnv : Reporting.DKey -> BW.Scope -> FilePath -> IO (Result Exit.Details ( Env, Outline.Outline ))
+initEnv : Reporting.DKey -> BW.Scope -> FilePath -> Task Never (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork resultRegistryProblemEnvEncoder Solver.initEnv
-        |> IO.bind
+        |> Task.bind
             (\mvar ->
                 Outline.read root
-                    |> IO.bind
+                    |> Task.bind
                         (\eitherOutline ->
                             case eitherOutline of
                                 Err problem ->
-                                    IO.pure (Err (Exit.DetailsBadOutline problem))
+                                    Task.pure (Err (Exit.DetailsBadOutline problem))
 
                                 Ok outline ->
                                     Utils.readMVar resultRegistryProblemEnvDecoder mvar
-                                        |> IO.fmap
+                                        |> Task.fmap
                                             (\maybeEnv ->
                                                 case maybeEnv of
                                                     Err problem ->
@@ -248,11 +248,7 @@ initEnv key scope root =
 -- VERIFY PROJECT
 
 
-type alias Task a =
-    Task.Task Exit.Details a
-
-
-verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Details
+verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Exit.Details Details
 verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
     if Con.goodElm elm then
         union identity Pkg.compareName noDups direct testDirect
@@ -277,7 +273,7 @@ verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) 
         Task.throw (Exit.DetailsBadElmInPkg elm)
 
 
-verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Details
+verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Exit.Details Details
 verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outline) =
     if elmVersion == V.elmCompiler then
         checkAppDeps outline
@@ -298,7 +294,7 @@ verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outl
         Task.throw (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
-checkAppDeps : Outline.AppOutline -> Task (Dict ( String, String ) Pkg.Name V.Version)
+checkAppDeps : Outline.AppOutline -> Task Exit.Details (Dict ( String, String ) Pkg.Name V.Version)
 checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
     union identity Pkg.compareName allowEqualDups indirect testDirect
         |> Task.bind
@@ -312,7 +308,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 -- VERIFY CONSTRAINTS
 
 
-verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task (Dict ( String, String ) Pkg.Name Solver.Details)
+verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Exit.Details (Dict ( String, String ) Pkg.Name Solver.Details)
 verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
     Task.io (Solver.verify cache connection registry constraints)
         |> Task.bind
@@ -336,7 +332,7 @@ verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
 -- UNION
 
 
-union : (k -> comparable) -> (k -> k -> Order) -> (k -> v -> v -> Task v) -> Dict comparable k v -> Dict comparable k v -> Task (Dict comparable k v)
+union : (k -> comparable) -> (k -> k -> Order) -> (k -> v -> v -> Task Exit.Details v) -> Dict comparable k v -> Dict comparable k v -> Task Exit.Details (Dict comparable k v)
 union toComparable keyComparison tieBreaker deps1 deps2 =
     Dict.merge keyComparison
         (\k dep -> Task.fmap (Dict.insert toComparable k dep))
@@ -350,12 +346,12 @@ union toComparable keyComparison tieBreaker deps1 deps2 =
         (Task.pure Dict.empty)
 
 
-noDups : k -> v -> v -> Task v
+noDups : k -> v -> v -> Task Exit.Details v
 noDups _ _ _ =
     Task.throw Exit.DetailsHandEditedDependencies
 
 
-allowEqualDups : k -> v -> v -> Task v
+allowEqualDups : k -> v -> v -> Task Exit.Details v
 allowEqualDups _ v1 v2 =
     if v1 == v2 then
         Task.pure v1
@@ -368,13 +364,13 @@ allowEqualDups _ v1 v2 =
 -- FORK
 
 
-fork : (a -> BE.Encoder) -> IO a -> IO (MVar a)
+fork : (a -> BE.Encoder) -> Task Never a -> Task Never (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
-        |> IO.bind
+        |> Task.bind
             (\mvar ->
-                Utils.forkIO (IO.bind (Utils.putMVar encoder mvar) work)
-                    |> IO.fmap (\_ -> mvar)
+                Utils.forkIO (Task.bind (Utils.putMVar encoder mvar) work)
+                    |> Task.fmap (\_ -> mvar)
             )
 
 
@@ -382,27 +378,27 @@ fork encoder work =
 -- VERIFY DEPENDENCIES
 
 
-verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.Name Solver.Details -> Dict ( String, String ) Pkg.Name a -> Task Details
+verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.Name Solver.Details -> Dict ( String, String ) Pkg.Name a -> Task Exit.Details Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
         (Reporting.report key (Reporting.DStart (Dict.size solution))
-            |> IO.bind (\_ -> Utils.newEmptyMVar)
-            |> IO.bind
+            |> Task.bind (\_ -> Utils.newEmptyMVar)
+            |> Task.bind
                 (\mvar ->
                     Stuff.withRegistryLock cache
                         (Utils.mapTraverseWithKey identity Pkg.compareName (\k v -> fork depEncoder (verifyDep env mvar solution k v)) solution)
-                        |> IO.bind
+                        |> Task.bind
                             (\mvars ->
                                 Utils.putMVar dictNameMVarDepEncoder mvar mvars
-                                    |> IO.bind
+                                    |> Task.bind
                                         (\_ ->
                                             Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) mvars
-                                                |> IO.bind
+                                                |> Task.bind
                                                     (\deps ->
                                                         case Utils.sequenceDictResult identity Pkg.compareName deps of
                                                             Err _ ->
                                                                 Stuff.getElmHome
-                                                                    |> IO.fmap
+                                                                    |> Task.fmap
                                                                         (\home ->
                                                                             Err
                                                                                 (Exit.DetailsBadDeps home
@@ -429,9 +425,9 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                         Details time outline 0 Dict.empty foreigns (ArtifactsFresh ifaces objs)
                                                                 in
                                                                 BW.writeBinary Opt.globalGraphEncoder scope (Stuff.objects root) objs
-                                                                    |> IO.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
-                                                                    |> IO.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
-                                                                    |> IO.fmap (\_ -> Ok details)
+                                                                    |> Task.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
+                                                                    |> Task.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
+                                                                    |> Task.fmap (\_ -> Ok details)
                                                     )
                                         )
                             )
@@ -489,7 +485,7 @@ type alias Dep =
     Result (Maybe Exit.DetailsBadDep) Artifacts
 
 
-verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> IO Dep
+verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> Task Never Dep
 verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
         fingerprint : Dict ( String, String ) Pkg.Name V.Version
@@ -497,14 +493,14 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
             Utils.mapIntersectionWith identity Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
     in
     Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
-        |> IO.bind
+        |> Task.bind
             (\exists ->
                 if exists then
                     Reporting.report key Reporting.DCached
-                        |> IO.bind
+                        |> Task.bind
                             (\_ ->
                                 File.readBinary artifactCacheDecoder (Stuff.package cache pkg vsn ++ "/artifacts.dat")
-                                    |> IO.bind
+                                    |> Task.bind
                                         (\maybeCache ->
                                             case maybeCache of
                                                 Nothing ->
@@ -512,7 +508,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
                                                     if EverySet.member toComparableFingerprint fingerprint fingerprints then
-                                                        IO.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
+                                                        Task.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
 
                                                     else
                                                         build key cache depsMVar pkg details fingerprint fingerprints
@@ -521,19 +517,19 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                 else
                     Reporting.report key Reporting.DRequested
-                        |> IO.bind
+                        |> Task.bind
                             (\_ ->
                                 downloadPackage cache manager pkg vsn
-                                    |> IO.bind
+                                    |> Task.bind
                                         (\result ->
                                             case result of
                                                 Err problem ->
                                                     Reporting.report key (Reporting.DFailed pkg vsn)
-                                                        |> IO.fmap (\_ -> Err (Just (Exit.BD_BadDownload pkg vsn problem)))
+                                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadDownload pkg vsn problem)))
 
                                                 Ok () ->
                                                     Reporting.report key (Reporting.DReceived pkg vsn)
-                                                        |> IO.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
+                                                        |> Task.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
                                         )
                             )
             )
@@ -561,31 +557,31 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
-build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> IO Dep
+build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Outline.read (Stuff.package cache pkg vsn)
-        |> IO.bind
+        |> Task.bind
             (\eitherOutline ->
                 case eitherOutline of
                     Err _ ->
                         Reporting.report key Reporting.DBroken
-                            |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.App _) ->
                         Reporting.report key Reporting.DBroken
-                            |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                     Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
                         Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
-                            |> IO.bind
+                            |> Task.bind
                                 (\allDeps ->
                                     Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps deps)
-                                        |> IO.bind
+                                        |> Task.bind
                                             (\directDeps ->
                                                 case Utils.sequenceDictResult identity Pkg.compareName directDeps of
                                                     Err _ ->
                                                         Reporting.report key Reporting.DBroken
-                                                            |> IO.fmap (\_ -> Err Nothing)
+                                                            |> Task.fmap (\_ -> Err Nothing)
 
                                                     Ok directArtifacts ->
                                                         let
@@ -602,39 +598,39 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                 Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
                                                         in
                                                         getDocsStatus cache pkg vsn
-                                                            |> IO.bind
+                                                            |> Task.bind
                                                                 (\docsStatus ->
                                                                     Utils.newEmptyMVar
-                                                                        |> IO.bind
+                                                                        |> Task.bind
                                                                             (\mvar ->
                                                                                 Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
-                                                                                    |> IO.bind
+                                                                                    |> Task.bind
                                                                                         (\mvars ->
                                                                                             Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
-                                                                                                |> IO.bind (\_ -> IO.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
-                                                                                                |> IO.bind
+                                                                                                |> Task.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                                                                                |> Task.bind (\_ -> Task.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                |> Task.bind
                                                                                                     (\maybeStatuses ->
                                                                                                         case Utils.sequenceDictMaybe identity compare maybeStatuses of
                                                                                                             Nothing ->
                                                                                                                 Reporting.report key Reporting.DBroken
-                                                                                                                    |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                                    |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                                                                                                             Just statuses ->
                                                                                                                 Utils.newEmptyMVar
-                                                                                                                    |> IO.bind
+                                                                                                                    |> Task.bind
                                                                                                                         (\rmvar ->
                                                                                                                             Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
-                                                                                                                                |> IO.bind
+                                                                                                                                |> Task.bind
                                                                                                                                     (\rmvars ->
                                                                                                                                         Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
-                                                                                                                                            |> IO.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
-                                                                                                                                            |> IO.bind
+                                                                                                                                            |> Task.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
+                                                                                                                                            |> Task.bind
                                                                                                                                                 (\maybeResults ->
                                                                                                                                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                                                                                                                                         Nothing ->
                                                                                                                                                             Reporting.report key Reporting.DBroken
-                                                                                                                                                                |> IO.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                                                                                |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
 
                                                                                                                                                         Just results ->
                                                                                                                                                             let
@@ -659,9 +655,9 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                     EverySet.insert toComparableFingerprint f fs
                                                                                                                                                             in
                                                                                                                                                             writeDocs cache pkg vsn docsStatus results
-                                                                                                                                                                |> IO.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
-                                                                                                                                                                |> IO.bind (\_ -> Reporting.report key Reporting.DBuilt)
-                                                                                                                                                                |> IO.fmap (\_ -> Ok artifacts)
+                                                                                                                                                                |> Task.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
+                                                                                                                                                                |> Task.bind (\_ -> Reporting.report key Reporting.DBuilt)
+                                                                                                                                                                |> Task.fmap (\_ -> Ok artifacts)
                                                                                                                                                 )
                                                                                                                                     )
                                                                                                                         )
@@ -790,7 +786,7 @@ type Status
     | SKernelForeign
 
 
-crawlModule : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> IO (Maybe Status)
+crawlModule : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
 crawlModule foreignDeps mvar pkg src docsStatus name =
     let
         path : String -> FilePath
@@ -806,21 +802,21 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             path "elm"
     in
     File.exists guidaPath
-        |> IO.bind
+        |> Task.bind
             (\guidaExists ->
                 File.exists elmPath
-                    |> IO.bind
+                    |> Task.bind
                         (\elmExists ->
                             case Dict.get identity name foreignDeps of
                                 Just ForeignAmbiguous ->
-                                    IO.pure Nothing
+                                    Task.pure Nothing
 
                                 Just (ForeignSpecific iface) ->
                                     if guidaExists || elmExists then
-                                        IO.pure Nothing
+                                        Task.pure Nothing
 
                                     else
-                                        IO.pure (Just (SForeign iface))
+                                        Task.pure (Just (SForeign iface))
 
                                 Nothing ->
                                     if guidaExists then
@@ -833,34 +829,34 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
                                         crawlKernel foreignDeps mvar pkg src name
 
                                     else
-                                        IO.pure Nothing
+                                        Task.pure Nothing
                         )
             )
 
 
-crawlFile : SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> IO (Maybe Status)
+crawlFile : SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
 crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
-        |> IO.bind
+        |> Task.bind
             (\bytes ->
                 case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports foreignDeps mvar pkg src imports
-                                |> IO.fmap (\deps -> Just (SLocal docsStatus deps modul))
+                                |> Task.fmap (\deps -> Just (SLocal docsStatus deps modul))
 
                         else
-                            IO.pure Nothing
+                            Task.pure Nothing
 
                     _ ->
-                        IO.pure Nothing
+                        Task.pure Nothing
             )
 
 
-crawlImports : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> IO (Dict String ModuleName.Raw ())
+crawlImports : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
 crawlImports foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
-        |> IO.bind
+        |> Task.bind
             (\statusDict ->
                 let
                     deps : Dict String Name.Name ()
@@ -872,16 +868,16 @@ crawlImports foreignDeps mvar pkg src imports =
                         Dict.diff deps statusDict
                 in
                 Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
-                    |> IO.bind
+                    |> Task.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
-                                |> IO.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
-                                |> IO.fmap (\_ -> deps)
+                                |> Task.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                |> Task.fmap (\_ -> deps)
                         )
             )
 
 
-crawlKernel : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> IO (Maybe Status)
+crawlKernel : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
 crawlKernel foreignDeps mvar pkg src name =
     let
         path : FilePath
@@ -889,23 +885,23 @@ crawlKernel foreignDeps mvar pkg src name =
             Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
     in
     File.exists path
-        |> IO.bind
+        |> Task.bind
             (\exists ->
                 if exists then
                     File.readUtf8 path
-                        |> IO.bind
+                        |> Task.bind
                             (\bytes ->
                                 case Kernel.fromByteString pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
-                                        IO.pure Nothing
+                                        Task.pure Nothing
 
                                     Just (Kernel.Content imports chunks) ->
                                         crawlImports foreignDeps mvar pkg src (List.map Src.c1Value imports)
-                                            |> IO.fmap (\_ -> Just (SKernelLocal chunks))
+                                            |> Task.fmap (\_ -> Just (SKernelLocal chunks))
                             )
 
                 else
-                    IO.pure (Just SKernelForeign)
+                    Task.pure (Just SKernelForeign)
             )
 
 
@@ -930,20 +926,20 @@ type DResult
     | RKernelForeign
 
 
-compile : Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> IO (Maybe DResult)
+compile : Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
 compile pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
-                |> IO.bind
+                |> Task.bind
                     (\resultsDict ->
                         Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) (Dict.intersection compare resultsDict deps)
-                            |> IO.bind
+                            |> Task.bind
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                         Just results ->
                                             Compile.compile pkg (Utils.mapMapMaybe identity compare getInterface results) modul
-                                                |> IO.fmap
+                                                |> Task.fmap
                                                     (\result ->
                                                         case result of
                                                             Err _ ->
@@ -963,18 +959,18 @@ compile pkg mvar status =
                                                     )
 
                                         Nothing ->
-                                            IO.pure Nothing
+                                            Task.pure Nothing
                                 )
                     )
 
         SForeign iface ->
-            IO.pure (Just (RForeign iface))
+            Task.pure (Just (RForeign iface))
 
         SKernelLocal chunks ->
-            IO.pure (Just (RKernelLocal chunks))
+            Task.pure (Just (RKernelLocal chunks))
 
         SKernelForeign ->
-            IO.pure (Just RKernelForeign)
+            Task.pure (Just RKernelForeign)
 
 
 getInterface : DResult -> Maybe I.Interface
@@ -1002,10 +998,10 @@ type DocsStatus
     | DocsNotNeeded
 
 
-getDocsStatus : Stuff.PackageCache -> Pkg.Name -> V.Version -> IO DocsStatus
+getDocsStatus : Stuff.PackageCache -> Pkg.Name -> V.Version -> Task Never DocsStatus
 getDocsStatus cache pkg vsn =
     File.exists (Stuff.package cache pkg vsn ++ "/docs.json")
-        |> IO.fmap
+        |> Task.fmap
             (\exists ->
                 if exists then
                     DocsNotNeeded
@@ -1030,7 +1026,7 @@ makeDocs status modul =
             Nothing
 
 
-writeDocs : Stuff.PackageCache -> Pkg.Name -> V.Version -> DocsStatus -> Dict String ModuleName.Raw DResult -> IO ()
+writeDocs : Stuff.PackageCache -> Pkg.Name -> V.Version -> DocsStatus -> Dict String ModuleName.Raw DResult -> Task Never ()
 writeDocs cache pkg vsn status results =
     case status of
         DocsNeeded ->
@@ -1038,7 +1034,7 @@ writeDocs cache pkg vsn status results =
                 (Docs.encode (Utils.mapMapMaybe identity compare toDocs results))
 
         DocsNotNeeded ->
-            IO.pure ()
+            Task.pure ()
 
 
 toDocs : DResult -> Maybe Docs.Module
@@ -1061,31 +1057,31 @@ toDocs result =
 -- DOWNLOAD PACKAGE
 
 
-downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> IO (Result Exit.PackageProblem ())
+downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> Task Never (Result Exit.PackageProblem ())
 downloadPackage cache manager pkg vsn =
     Website.metadata pkg vsn "endpoint.json"
-        |> IO.bind
+        |> Task.bind
             (\url ->
-                Http.get manager url [] identity (IO.pure << Ok)
-                    |> IO.bind
+                Http.get manager url [] identity (Task.pure << Ok)
+                    |> Task.bind
                         (\eitherByteString ->
                             case eitherByteString of
                                 Err err ->
-                                    IO.pure (Err (Exit.PP_BadEndpointRequest err))
+                                    Task.pure (Err (Exit.PP_BadEndpointRequest err))
 
                                 Ok byteString ->
                                     case D.fromByteString endpointDecoder byteString of
                                         Err _ ->
-                                            IO.pure (Err (Exit.PP_BadEndpointContent url))
+                                            Task.pure (Err (Exit.PP_BadEndpointContent url))
 
                                         Ok ( endpoint, expectedHash ) ->
                                             Http.getArchive manager endpoint Exit.PP_BadArchiveRequest (Exit.PP_BadArchiveContent endpoint) <|
                                                 \( sha, archive ) ->
                                                     if expectedHash == Http.shaToChars sha then
-                                                        IO.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
+                                                        Task.fmap Ok (File.writePackage (Stuff.package cache pkg vsn) archive)
 
                                                     else
-                                                        IO.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
+                                                        Task.pure (Err (Exit.PP_BadArchiveHash endpoint expectedHash (Http.shaToChars sha)))
                         )
             )
 

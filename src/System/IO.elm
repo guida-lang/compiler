@@ -1,6 +1,5 @@
 module System.IO exposing
     ( Program, Model, Msg, run
-    , IO, pure, apply, fmap, bind, mapM
     , FilePath, Handle(..)
     , stdout, stderr
     , withFile, IOMode(..)
@@ -17,11 +16,6 @@ module System.IO exposing
 {-| Ref.: <https://hackage.haskell.org/package/base-4.20.0.1/docs/System-IO.html>
 
 @docs Program, Model, Msg, run
-
-
-# The IO monad
-
-@docs IO, pure, apply, fmap, bind, mapM
 
 
 # Files and handles
@@ -91,7 +85,7 @@ type alias Program =
     Platform.Program () Model Msg
 
 
-run : IO () -> Program
+run : Task Never () -> Program
 run app =
     Platform.worker
         { init = update app
@@ -105,7 +99,7 @@ type alias Model =
 
 
 type alias Msg =
-    IO ()
+    Task Never ()
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -117,7 +111,7 @@ update msg () =
 -- Interal helpers
 
 
-writeString : FilePath -> String -> IO ()
+writeString : FilePath -> String -> Task Never ()
 writeString path content =
     Impure.task "writeString"
         [ Http.header "path" path ]
@@ -126,36 +120,12 @@ writeString path content =
 
 
 
--- The IO monad
+-- Task extra
 
 
-type alias IO a =
-    Task Never a
-
-
-pure : a -> IO a
+pure : a -> Task x a
 pure =
     Task.succeed
-
-
-apply : IO a -> IO (a -> b) -> IO b
-apply ma mf =
-    bind (\f -> bind (pure << f) ma) mf
-
-
-fmap : (a -> b) -> IO a -> IO b
-fmap =
-    Task.map
-
-
-bind : (a -> IO b) -> IO a -> IO b
-bind =
-    Task.andThen
-
-
-mapM : (a -> IO b) -> List a -> IO (List b)
-mapM f =
-    List.map f >> Task.sequence
 
 
 
@@ -188,7 +158,7 @@ stderr =
 -- Opening files
 
 
-withFile : String -> IOMode -> (Handle -> IO a) -> IO a
+withFile : String -> IOMode -> (Handle -> Task Never a) -> Task Never a
 withFile path mode callback =
     Impure.task "withFile"
         [ Http.header "mode"
@@ -222,7 +192,7 @@ type IOMode
 -- Closing files
 
 
-hClose : Handle -> IO ()
+hClose : Handle -> Task Never ()
 hClose (Handle handle) =
     Impure.task "hClose" [] (Impure.StringBody (String.fromInt handle)) (Impure.Always ())
 
@@ -231,7 +201,7 @@ hClose (Handle handle) =
 -- File locking
 
 
-hFileSize : Handle -> IO Int
+hFileSize : Handle -> Task Never Int
 hFileSize (Handle handle) =
     Impure.task "hFileSize"
         []
@@ -243,7 +213,7 @@ hFileSize (Handle handle) =
 -- Buffering operations
 
 
-hFlush : Handle -> IO ()
+hFlush : Handle -> Task Never ()
 hFlush _ =
     pure ()
 
@@ -252,7 +222,7 @@ hFlush _ =
 -- Terminal operations (not portable: GHC only)
 
 
-hIsTerminalDevice : Handle -> IO Bool
+hIsTerminalDevice : Handle -> Task Never Bool
 hIsTerminalDevice _ =
     pure True
 
@@ -261,7 +231,7 @@ hIsTerminalDevice _ =
 -- Text output
 
 
-hPutStr : Handle -> String -> IO ()
+hPutStr : Handle -> String -> Task Never ()
 hPutStr (Handle fd) content =
     Impure.task "hPutStr"
         [ Http.header "fd" (String.fromInt fd) ]
@@ -269,7 +239,7 @@ hPutStr (Handle fd) content =
         (Impure.Always ())
 
 
-hPutStrLn : Handle -> String -> IO ()
+hPutStrLn : Handle -> String -> Task Never ()
 hPutStrLn handle content =
     hPutStr handle (content ++ "\n")
 
@@ -278,17 +248,17 @@ hPutStrLn handle content =
 -- Special cases for standard input and output
 
 
-putStr : String -> IO ()
+putStr : String -> Task Never ()
 putStr =
     hPutStr stdout
 
 
-putStrLn : String -> IO ()
+putStrLn : String -> Task Never ()
 putStrLn s =
     putStr (s ++ "\n")
 
 
-getLine : IO String
+getLine : Task Never String
 getLine =
     Impure.task "getLine" [] Impure.EmptyBody (Impure.StringResolver identity)
 

@@ -14,7 +14,9 @@ import Compiler.Json.Encode as E
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
+import Utils.Task.Extra as Task
 
 
 
@@ -115,20 +117,20 @@ toString =
     D.toString
 
 
-toStdout : D.Doc -> IO ()
+toStdout : D.Doc -> Task Never ()
 toStdout doc =
     toHandle IO.stdout doc
 
 
-toStderr : D.Doc -> IO ()
+toStderr : D.Doc -> Task Never ()
 toStderr doc =
     toHandle IO.stderr doc
 
 
-toHandle : IO.Handle -> D.Doc -> IO ()
+toHandle : IO.Handle -> D.Doc -> Task Never ()
 toHandle handle doc =
     IO.hIsTerminalDevice handle
-        |> IO.bind
+        |> Task.bind
             (\isTerminal ->
                 if isTerminal then
                     D.toAnsi handle doc

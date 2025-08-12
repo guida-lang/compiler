@@ -12,8 +12,10 @@ module Control.Monad.State.Strict exposing
 
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Impure as Impure
+import Utils.Task.Extra as Task
 
 
 {-| newtype StateT s m a
@@ -29,17 +31,17 @@ Ref.: <https://hackage.haskell.org/package/transformers-0.6.1.2/docs/Control-Mon
 
 -}
 type StateT s a
-    = StateT (s -> IO ( a, s ))
+    = StateT (s -> Task Never ( a, s ))
 
 
-evalStateT : StateT s a -> s -> IO a
+evalStateT : StateT s a -> s -> Task Never a
 evalStateT (StateT f) =
-    f >> IO.fmap Tuple.first
+    f >> Task.fmap Tuple.first
 
 
-liftIO : IO a -> StateT s a
+liftIO : Task Never a -> StateT s a
 liftIO io =
-    StateT (\s -> IO.fmap (\a -> ( a, s )) io)
+    StateT (\s -> Task.fmap (\a -> ( a, s )) io)
 
 
 apply : StateT s a -> StateT s (a -> b) -> StateT s b
@@ -47,10 +49,10 @@ apply (StateT arg) (StateT func) =
     StateT
         (\s ->
             arg s
-                |> IO.bind
+                |> Task.bind
                     (\( a, sa ) ->
                         func sa
-                            |> IO.fmap (\( fb, sb ) -> ( fb a, sb ))
+                            |> Task.fmap (\( fb, sb ) -> ( fb a, sb ))
                     )
         )
 
@@ -62,7 +64,7 @@ fmap func argStateT =
 
 pure : a -> StateT s a
 pure value =
-    StateT (\s -> IO.pure ( value, s ))
+    StateT (\s -> Task.pure ( value, s ))
 
 
 get : StateT s IO.ReplState
@@ -81,7 +83,7 @@ get =
         )
 
 
-put : IO.ReplState -> IO ()
+put : IO.ReplState -> Task Never ()
 put (IO.ReplState imports types decls) =
     Impure.task "putStateT"
         []

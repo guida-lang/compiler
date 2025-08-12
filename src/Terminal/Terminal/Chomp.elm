@@ -17,8 +17,9 @@ module Terminal.Terminal.Chomp exposing
 
 import Basics.Extra exposing (flip)
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (ArgError(..), Error(..), Expectation(..), Flag(..), FlagError(..), Flags(..), Parser(..))
+import Utils.Task.Extra as Task
 
 
 
@@ -30,14 +31,14 @@ chomp :
     -> List String
     -> List (Suggest -> List Chunk -> ( Suggest, Result ArgError args ))
     -> Chomper FlagError flags
-    -> ( IO (List String), Result Error ( args, flags ) )
+    -> ( Task Never (List String), Result Error ( args, flags ) )
 chomp maybeIndex strings args (Chomper flagChomper) =
     case flagChomper (toSuggest maybeIndex) (toChunks strings) of
         ChomperOk suggest chunks flagValue ->
             Tuple.mapSecond (Result.map (\a -> ( a, flagValue ))) (chompArgs suggest chunks args)
 
         ChomperErr suggest flagError ->
-            ( addSuggest (IO.pure []) suggest, Err (BadFlag flagError) )
+            ( addSuggest (Task.pure []) suggest, Err (BadFlag flagError) )
 
 
 toChunks : List String -> List Chunk
@@ -79,10 +80,10 @@ type Chunk
 type Suggest
     = NoSuggestion
     | Suggest Int
-    | Suggestions (IO (List String))
+    | Suggestions (Task Never (List String))
 
 
-makeSuggestion : Suggest -> (Int -> Maybe (IO (List String))) -> Suggest
+makeSuggestion : Suggest -> (Int -> Maybe (Task Never (List String))) -> Suggest
 makeSuggestion suggest maybeUpdate =
     case suggest of
         NoSuggestion ->
@@ -99,7 +100,7 @@ makeSuggestion suggest maybeUpdate =
 -- ARGS
 
 
-chompArgs : Suggest -> List Chunk -> List (Suggest -> List Chunk -> ( Suggest, Result ArgError a )) -> ( IO (List String), Result Error a )
+chompArgs : Suggest -> List Chunk -> List (Suggest -> List Chunk -> ( Suggest, Result ArgError a )) -> ( Task Never (List String), Result Error a )
 chompArgs suggest chunks completeArgsList =
     chompArgsHelp suggest chunks completeArgsList [] []
 
@@ -110,11 +111,11 @@ chompArgsHelp :
     -> List (Suggest -> List Chunk -> ( Suggest, Result ArgError a ))
     -> List Suggest
     -> List ArgError
-    -> ( IO (List String), Result Error a )
+    -> ( Task Never (List String), Result Error a )
 chompArgsHelp suggest chunks completeArgsList revSuggest revArgErrors =
     case completeArgsList of
         [] ->
-            ( List.foldl (flip addSuggest) (IO.pure []) revSuggest
+            ( List.foldl (flip addSuggest) (Task.pure []) revSuggest
             , Err (BadArgs (List.reverse revArgErrors))
             )
 
@@ -124,12 +125,12 @@ chompArgsHelp suggest chunks completeArgsList revSuggest revArgErrors =
                     chompArgsHelp suggest chunks others (s1 :: revSuggest) (argError :: revArgErrors)
 
                 ( s1, Ok value ) ->
-                    ( addSuggest (IO.pure []) s1
+                    ( addSuggest (Task.pure []) s1
                     , Ok value
                     )
 
 
-addSuggest : IO (List String) -> Suggest -> IO (List String)
+addSuggest : Task Never (List String) -> Suggest -> Task Never (List String)
 addSuggest everything suggest =
     case suggest of
         NoSuggestion ->
@@ -139,9 +140,9 @@ addSuggest everything suggest =
             everything
 
         Suggestions newStuff ->
-            IO.pure (++)
-                |> IO.apply newStuff
-                |> IO.apply everything
+            Task.pure (++)
+                |> Task.apply newStuff
+                |> Task.apply everything
 
 
 
@@ -218,7 +219,7 @@ chompArg numChunks ((Parser { singular, examples }) as parser) parserFn =
                             ChomperOk newSuggest otherChunks arg
 
 
-suggestArg : Parser -> Int -> Int -> Maybe (IO (List String))
+suggestArg : Parser -> Int -> Int -> Maybe (Task Never (List String))
 suggestArg (Parser { suggest }) numChunks targetIndex =
     if numChunks <= targetIndex then
         Just (suggest "")
@@ -382,7 +383,7 @@ checkForUnknownFlags flags =
                         (FlagUnknown unknownFlag flags)
 
 
-suggestFlag : List Chunk -> Flags -> Int -> Maybe (IO (List String))
+suggestFlag : List Chunk -> Flags -> Int -> Maybe (Task Never (List String))
 suggestFlag unknownFlags flags targetIndex =
     case unknownFlags of
         [] ->
@@ -390,7 +391,7 @@ suggestFlag unknownFlags flags targetIndex =
 
         (Chunk index string) :: otherUnknownFlags ->
             if index == targetIndex then
-                Just (IO.pure (List.filter (String.startsWith string) (getFlagNames flags [])))
+                Just (Task.pure (List.filter (String.startsWith string) (getFlagNames flags [])))
 
             else
                 suggestFlag otherUnknownFlags flags targetIndex

@@ -11,15 +11,16 @@ import Builder.Elm.Details as Details
 import Builder.Elm.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.Elm.Constraint as C
 import Compiler.Elm.Package as Pkg
 import Compiler.Elm.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
@@ -35,21 +36,21 @@ type Flags
     = Flags Bool Bool
 
 
-run : Args -> Flags -> IO ()
+run : Args -> Flags -> Task Never ()
 run args (Flags forTest autoYes) =
     Reporting.attempt Exit.installToReport
         (Stuff.findRoot
-            |> IO.bind
+            |> Task.bind
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            IO.pure (Err Exit.InstallNoOutline)
+                            Task.pure (Err Exit.InstallNoOutline)
 
                         Just root ->
                             case args of
                                 NoArgs ->
                                     Stuff.getElmHome
-                                        |> IO.fmap (\elmHome -> Err (Exit.InstallNoArgs elmHome))
+                                        |> Task.fmap (\elmHome -> Err (Exit.InstallNoArgs elmHome))
 
                                 Install pkg ->
                                     Task.run
@@ -85,11 +86,7 @@ type Changes vsn
     | Changes (Dict ( String, String ) Pkg.Name (Change vsn)) Outline.Outline
 
 
-type alias Task a =
-    Task.Task Exit.Install a
-
-
-attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Bool -> Task ()
+attemptChanges : String -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Bool -> Task Exit.Install ()
 attemptChanges root env oldOutline toChars changes autoYes =
     case changes of
         AlreadyInstalled ->
@@ -179,41 +176,41 @@ attemptChanges root env oldOutline toChars changes autoYes =
                     ]
 
 
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Bool -> D.Doc -> Task ()
+attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Bool -> D.Doc -> Task Exit.Install ()
 attemptChangesHelp root env oldOutline newOutline autoYes question =
     Task.eio Exit.InstallBadDetails <|
         BW.withScope
             (\scope ->
                 let
-                    askQuestion : IO Bool
+                    askQuestion : Task Never Bool
                     askQuestion =
                         if autoYes then
-                            IO.pure True
+                            Task.pure True
 
                         else
                             Reporting.ask question
                 in
                 askQuestion
-                    |> IO.bind
+                    |> Task.bind
                         (\approved ->
                             if approved then
                                 Outline.write root newOutline
-                                    |> IO.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                                    |> IO.bind
+                                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
+                                    |> Task.bind
                                         (\result ->
                                             case result of
                                                 Err exit ->
                                                     Outline.write root oldOutline
-                                                        |> IO.fmap (\_ -> Err exit)
+                                                        |> Task.fmap (\_ -> Err exit)
 
                                                 Ok () ->
                                                     IO.putStrLn "Success!"
-                                                        |> IO.fmap (\_ -> Ok ())
+                                                        |> Task.fmap (\_ -> Ok ())
                                         )
 
                             else
                                 IO.putStrLn "Okay, I did not change anything!"
-                                    |> IO.fmap (\_ -> Ok ())
+                                    |> Task.fmap (\_ -> Ok ())
                         )
             )
 
@@ -222,7 +219,7 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Bool -> Task (Changes V.Version)
+makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Bool -> Task Exit.Install (Changes V.Version)
 makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) forTest =
     if forTest then
         if Dict.member identity pkg testDirect then
@@ -351,7 +348,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline el
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Bool -> Task (Changes C.Constraint)
+makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Bool -> Task Exit.Install (Changes C.Constraint)
 makePkgPlan (Solver.Env cache _ connection registry) pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) forTest =
     if forTest then
         if Dict.member identity pkg test then

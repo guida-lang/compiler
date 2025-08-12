@@ -11,8 +11,10 @@ module System.Process exposing
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Impure as Impure
+import Utils.Task.Extra as Task
 
 
 type CmdSpec
@@ -47,7 +49,7 @@ proc cmd args =
     }
 
 
-withCreateProcess : CreateProcess -> (Maybe IO.Handle -> Maybe IO.Handle -> Maybe IO.Handle -> ProcessHandle -> IO Exit.ExitCode) -> IO Exit.ExitCode
+withCreateProcess : CreateProcess -> (Maybe IO.Handle -> Maybe IO.Handle -> Maybe IO.Handle -> ProcessHandle -> Task Never Exit.ExitCode) -> Task Never Exit.ExitCode
 withCreateProcess createProcess f =
     Impure.task "withCreateProcess"
         []
@@ -113,13 +115,13 @@ withCreateProcess createProcess f =
                 (Decode.field "ph" Decode.int)
             )
         )
-        |> IO.bind
+        |> Task.bind
             (\( stdinHandle, ph ) ->
                 f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
             )
 
 
-waitForProcess : ProcessHandle -> IO Exit.ExitCode
+waitForProcess : ProcessHandle -> Task Never Exit.ExitCode
 waitForProcess (ProcessHandle ph) =
     Impure.task "waitForProcess"
         []

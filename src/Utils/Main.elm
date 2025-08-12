@@ -130,7 +130,6 @@ module Utils.Main exposing
     )
 
 import Basics.Extra exposing (flip)
-import Builder.Reporting.Task as Task exposing (Task)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Reporting.Result as R
@@ -144,20 +143,22 @@ import Maybe.Extra as Maybe
 import Prelude
 import Process
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Time
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
+import Utils.Task.Extra as Task
 
 
-liftInputT : IO () -> ReplInputT ()
+liftInputT : Task Never () -> ReplInputT ()
 liftInputT =
     identity
 
 
-liftIOInputT : IO a -> ReplInputT a
+liftIOInputT : Task Never a -> ReplInputT a
 liftIOInputT =
     identity
 
@@ -232,12 +233,12 @@ mapFromKeys toComparable f =
         >> Map.fromList toComparable
 
 
-filterM : (a -> IO Bool) -> List a -> IO (List a)
+filterM : (a -> Task Never Bool) -> List a -> Task Never (List a)
 filterM p =
     List.foldr
         (\x acc ->
-            IO.apply acc
-                (IO.fmap
+            Task.apply acc
+                (Task.fmap
                     (\flg ->
                         if flg then
                             (::) x
@@ -248,7 +249,7 @@ filterM p =
                     (p x)
                 )
         )
-        (IO.pure [])
+        (Task.pure [])
 
 
 find : (k -> comparable) -> k -> Dict comparable k a -> a
@@ -387,24 +388,24 @@ unzip3 pairs =
     List.foldr step ( [], [], [] ) pairs
 
 
-mapM_ : (a -> IO b) -> List a -> IO ()
+mapM_ : (a -> Task Never b) -> List a -> Task Never ()
 mapM_ f =
     let
-        c : a -> IO () -> IO ()
+        c : a -> Task Never () -> Task Never ()
         c x k =
-            IO.bind (\_ -> k) (f x)
+            Task.bind (\_ -> k) (f x)
     in
-    List.foldr c (IO.pure ())
+    List.foldr c (Task.pure ())
 
 
-dictMapM_ : (k -> k -> Order) -> (a -> IO b) -> Dict c k a -> IO ()
+dictMapM_ : (k -> k -> Order) -> (a -> Task Never b) -> Dict c k a -> Task Never ()
 dictMapM_ keyComparison f =
     let
-        c : k -> a -> IO () -> IO ()
+        c : k -> a -> Task Never () -> Task Never ()
         c _ x k =
-            IO.bind (\_ -> k) (f x)
+            Task.bind (\_ -> k) (f x)
     in
-    Map.foldl keyComparison c (IO.pure ())
+    Map.foldl keyComparison c (Task.pure ())
 
 
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -434,16 +435,16 @@ mapMapMaybe toComparable keyComparison func =
         >> Map.fromList toComparable
 
 
-mapTraverse : (k -> comparable) -> (k -> k -> Order) -> (a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
+mapTraverse : (k -> comparable) -> (k -> k -> Order) -> (a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k b)
 mapTraverse toComparable keyComparison f =
     mapTraverseWithKey toComparable keyComparison (\_ -> f)
 
 
-mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> IO b) -> Dict comparable k a -> IO (Dict comparable k b)
+mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k b)
 mapTraverseWithKey toComparable keyComparison f =
     Map.foldl keyComparison
-        (\k a -> IO.bind (\c -> IO.fmap (\va -> Map.insert toComparable k va c) (f k a)))
-        (IO.pure Map.empty)
+        (\k a -> Task.bind (\c -> Task.fmap (\va -> Map.insert toComparable k va c) (f k a)))
+        (Task.pure Map.empty)
 
 
 mapTraverseResult : (k -> comparable) -> (k -> k -> Order) -> (a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
@@ -458,9 +459,9 @@ mapTraverseWithKeyResult toComparable keyComparison f =
         (Ok Map.empty)
 
 
-listTraverse : (a -> IO b) -> List a -> IO (List b)
+listTraverse : (a -> Task Never b) -> List a -> Task Never (List b)
 listTraverse =
-    IO.mapM
+    Task.mapM
 
 
 listMaybeTraverse : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -469,17 +470,17 @@ listMaybeTraverse f =
         (Just [])
 
 
-nonEmptyListTraverse : (a -> IO b) -> NE.Nonempty a -> IO (NE.Nonempty b)
+nonEmptyListTraverse : (a -> Task Never b) -> NE.Nonempty a -> Task Never (NE.Nonempty b)
 nonEmptyListTraverse f (NE.Nonempty x list) =
-    List.foldl (\a -> IO.bind (\c -> IO.fmap (\va -> NE.cons va c) (f a)))
-        (IO.fmap NE.singleton (f x))
+    List.foldl (\a -> Task.bind (\c -> Task.fmap (\va -> NE.cons va c) (f a)))
+        (Task.fmap NE.singleton (f x))
         list
 
 
-listTraverse_ : (a -> IO b) -> List a -> IO ()
+listTraverse_ : (a -> Task Never b) -> List a -> Task Never ()
 listTraverse_ f =
     listTraverse f
-        >> IO.fmap (\_ -> ())
+        >> Task.fmap (\_ -> ())
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
@@ -738,20 +739,20 @@ type LockSharedExclusive
     = LockExclusive
 
 
-lockWithFileLock : String -> LockSharedExclusive -> (() -> IO a) -> IO a
+lockWithFileLock : String -> LockSharedExclusive -> (() -> Task Never a) -> Task Never a
 lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
             lockFile path
-                |> IO.bind ioFunc
-                |> IO.bind
+                |> Task.bind ioFunc
+                |> Task.bind
                     (\a ->
                         unlockFile path
-                            |> IO.fmap (\_ -> a)
+                            |> Task.fmap (\_ -> a)
                     )
 
 
-lockFile : FilePath -> IO ()
+lockFile : FilePath -> Task Never ()
 lockFile path =
     Impure.task "lockFile"
         []
@@ -759,7 +760,7 @@ lockFile path =
         (Impure.Always ())
 
 
-unlockFile : FilePath -> IO ()
+unlockFile : FilePath -> Task Never ()
 unlockFile path =
     Impure.task "unlockFile"
         []
@@ -771,7 +772,7 @@ unlockFile path =
 -- System.Directory
 
 
-dirDoesFileExist : FilePath -> IO Bool
+dirDoesFileExist : FilePath -> Task Never Bool
 dirDoesFileExist filename =
     Impure.task "dirDoesFileExist"
         []
@@ -779,7 +780,7 @@ dirDoesFileExist filename =
         (Impure.DecoderResolver Decode.bool)
 
 
-dirFindExecutable : FilePath -> IO (Maybe FilePath)
+dirFindExecutable : FilePath -> Task Never (Maybe FilePath)
 dirFindExecutable filename =
     Impure.task "dirFindExecutable"
         []
@@ -787,7 +788,7 @@ dirFindExecutable filename =
         (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
-dirCreateDirectoryIfMissing : Bool -> FilePath -> IO ()
+dirCreateDirectoryIfMissing : Bool -> FilePath -> Task Never ()
 dirCreateDirectoryIfMissing createParents filename =
     Impure.task "dirCreateDirectoryIfMissing"
         []
@@ -801,7 +802,7 @@ dirCreateDirectoryIfMissing createParents filename =
         (Impure.Always ())
 
 
-dirGetCurrentDirectory : IO String
+dirGetCurrentDirectory : Task Never String
 dirGetCurrentDirectory =
     Impure.task "dirGetCurrentDirectory"
         []
@@ -809,7 +810,7 @@ dirGetCurrentDirectory =
         (Impure.StringResolver identity)
 
 
-dirGetAppUserDataDirectory : FilePath -> IO FilePath
+dirGetAppUserDataDirectory : FilePath -> Task Never FilePath
 dirGetAppUserDataDirectory filename =
     Impure.task "dirGetAppUserDataDirectory"
         []
@@ -817,7 +818,7 @@ dirGetAppUserDataDirectory filename =
         (Impure.StringResolver identity)
 
 
-dirGetModificationTime : FilePath -> IO Time.Posix
+dirGetModificationTime : FilePath -> Task Never Time.Posix
 dirGetModificationTime filename =
     Impure.task "dirGetModificationTime"
         []
@@ -825,7 +826,7 @@ dirGetModificationTime filename =
         (Impure.DecoderResolver (Decode.map Time.millisToPosix Decode.int))
 
 
-dirRemoveFile : FilePath -> IO ()
+dirRemoveFile : FilePath -> Task Never ()
 dirRemoveFile path =
     Impure.task "dirRemoveFile"
         []
@@ -833,7 +834,7 @@ dirRemoveFile path =
         (Impure.Always ())
 
 
-dirRemoveDirectoryRecursive : FilePath -> IO ()
+dirRemoveDirectoryRecursive : FilePath -> Task Never ()
 dirRemoveDirectoryRecursive path =
     Impure.task "dirRemoveDirectoryRecursive"
         []
@@ -841,7 +842,7 @@ dirRemoveDirectoryRecursive path =
         (Impure.Always ())
 
 
-dirDoesDirectoryExist : FilePath -> IO Bool
+dirDoesDirectoryExist : FilePath -> Task Never Bool
 dirDoesDirectoryExist path =
     Impure.task "dirDoesDirectoryExist"
         []
@@ -849,7 +850,7 @@ dirDoesDirectoryExist path =
         (Impure.DecoderResolver Decode.bool)
 
 
-dirCanonicalizePath : FilePath -> IO FilePath
+dirCanonicalizePath : FilePath -> Task Never FilePath
 dirCanonicalizePath path =
     Impure.task "dirCanonicalizePath"
         []
@@ -857,10 +858,10 @@ dirCanonicalizePath path =
         (Impure.StringResolver identity)
 
 
-dirWithCurrentDirectory : FilePath -> IO a -> IO a
+dirWithCurrentDirectory : FilePath -> Task Never a -> Task Never a
 dirWithCurrentDirectory dir action =
     dirGetCurrentDirectory
-        |> IO.bind
+        |> Task.bind
             (\currentDir ->
                 bracket_
                     (Impure.task "dirWithCurrentDirectory"
@@ -877,7 +878,7 @@ dirWithCurrentDirectory dir action =
             )
 
 
-dirListDirectory : FilePath -> IO (List FilePath)
+dirListDirectory : FilePath -> Task Never (List FilePath)
 dirListDirectory path =
     Impure.task "dirListDirectory"
         []
@@ -889,7 +890,7 @@ dirListDirectory path =
 -- System.Environment
 
 
-envLookupEnv : String -> IO (Maybe String)
+envLookupEnv : String -> Task Never (Maybe String)
 envLookupEnv name =
     Impure.task "envLookupEnv"
         []
@@ -897,12 +898,12 @@ envLookupEnv name =
         (Impure.DecoderResolver (Decode.maybe Decode.string))
 
 
-envGetProgName : IO String
+envGetProgName : Task Never String
 envGetProgName =
-    IO.pure "guida"
+    Task.pure "guida"
 
 
-envGetArgs : IO (List String)
+envGetArgs : Task Never (List String)
 envGetArgs =
     Impure.task "envGetArgs"
         []
@@ -982,21 +983,21 @@ type AsyncException
     = UserInterrupt
 
 
-bracket : IO a -> (a -> IO b) -> (a -> IO c) -> IO c
+bracket : Task Never a -> (a -> Task Never b) -> (a -> Task Never c) -> Task Never c
 bracket before after thing =
     before
-        |> IO.bind
+        |> Task.bind
             (\a ->
                 thing a
-                    |> IO.bind
+                    |> Task.bind
                         (\r ->
                             after a
-                                |> IO.fmap (\_ -> r)
+                                |> Task.fmap (\_ -> r)
                         )
             )
 
 
-bracket_ : IO a -> IO b -> IO c -> IO c
+bracket_ : Task Never a -> Task Never b -> Task Never c -> Task Never c
 bracket_ before after thing =
     bracket before (always after) (always thing)
 
@@ -1009,7 +1010,7 @@ type alias ThreadId =
     Process.Id
 
 
-forkIO : IO () -> IO ThreadId
+forkIO : Task Never () -> Task Never ThreadId
 forkIO =
     Process.spawn
 
@@ -1022,17 +1023,17 @@ type MVar a
     = MVar Int
 
 
-newMVar : (a -> BE.Encoder) -> a -> IO (MVar a)
+newMVar : (a -> BE.Encoder) -> a -> Task Never (MVar a)
 newMVar toEncoder value =
     newEmptyMVar
-        |> IO.bind
+        |> Task.bind
             (\mvar ->
                 putMVar toEncoder mvar value
-                    |> IO.fmap (\_ -> mvar)
+                    |> Task.fmap (\_ -> mvar)
             )
 
 
-readMVar : BD.Decoder a -> MVar a -> IO a
+readMVar : BD.Decoder a -> MVar a -> Task Never a
 readMVar decoder (MVar ref) =
     Impure.task "readMVar"
         []
@@ -1040,18 +1041,18 @@ readMVar decoder (MVar ref) =
         (Impure.BytesResolver decoder)
 
 
-modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> IO ( a, b )) -> IO b
+modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> Task Never ( a, b )) -> Task Never b
 modifyMVar decoder toEncoder m io =
     takeMVar decoder m
-        |> IO.bind io
-        |> IO.bind
+        |> Task.bind io
+        |> Task.bind
             (\( a, b ) ->
                 putMVar toEncoder m a
-                    |> IO.fmap (\_ -> b)
+                    |> Task.fmap (\_ -> b)
             )
 
 
-takeMVar : BD.Decoder a -> MVar a -> IO a
+takeMVar : BD.Decoder a -> MVar a -> Task Never a
 takeMVar decoder (MVar ref) =
     Impure.task "takeMVar"
         []
@@ -1059,7 +1060,7 @@ takeMVar decoder (MVar ref) =
         (Impure.BytesResolver decoder)
 
 
-putMVar : (a -> BE.Encoder) -> MVar a -> a -> IO ()
+putMVar : (a -> BE.Encoder) -> MVar a -> a -> Task Never ()
 putMVar encoder (MVar ref) value =
     Impure.task "putMVar"
         [ Http.header "id" (String.fromInt ref) ]
@@ -1067,7 +1068,7 @@ putMVar encoder (MVar ref) value =
         (Impure.Always ())
 
 
-newEmptyMVar : IO (MVar a)
+newEmptyMVar : Task Never (MVar a)
 newEmptyMVar =
     Impure.task "newEmptyMVar"
         []
@@ -1091,16 +1092,16 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> BE.Encoder) -> IO (Chan a)
+newChan : (MVar (ChItem a) -> BE.Encoder) -> Task Never (Chan a)
 newChan toEncoder =
     newEmptyMVar
-        |> IO.bind
+        |> Task.bind
             (\hole ->
                 newMVar toEncoder hole
-                    |> IO.bind
+                    |> Task.bind
                         (\readVar ->
                             newMVar toEncoder hole
-                                |> IO.fmap
+                                |> Task.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
                                     )
@@ -1108,12 +1109,12 @@ newChan toEncoder =
             )
 
 
-readChan : BD.Decoder a -> Chan a -> IO a
+readChan : BD.Decoder a -> Chan a -> Task Never a
 readChan decoder (Chan readVar _) =
     modifyMVar mVarDecoder mVarEncoder readVar <|
         \read_end ->
             readMVar (chItemDecoder decoder) read_end
-                |> IO.fmap
+                |> Task.fmap
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
                         -- else dupChan doesn't work
@@ -1121,16 +1122,16 @@ readChan decoder (Chan readVar _) =
                     )
 
 
-writeChan : (a -> BE.Encoder) -> Chan a -> a -> IO ()
+writeChan : (a -> BE.Encoder) -> Chan a -> a -> Task Never ()
 writeChan toEncoder (Chan _ writeVar) val =
     newEmptyMVar
-        |> IO.bind
+        |> Task.bind
             (\new_hole ->
                 takeMVar mVarDecoder writeVar
-                    |> IO.bind
+                    |> Task.bind
                         (\old_hole ->
                             putMVar (chItemEncoder toEncoder) old_hole (ChItem val new_hole)
-                                |> IO.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                                |> Task.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
                         )
             )
 
@@ -1139,7 +1140,7 @@ writeChan toEncoder (Chan _ writeVar) val =
 -- Data.ByteString.Builder
 
 
-builderHPutBuilder : IO.Handle -> String -> IO ()
+builderHPutBuilder : IO.Handle -> String -> Task Never ()
 builderHPutBuilder =
     IO.hPutStr
 
@@ -1148,7 +1149,7 @@ builderHPutBuilder =
 -- Data.Binary
 
 
-binaryDecodeFileOrFail : BD.Decoder a -> FilePath -> IO (Result ( Int, String ) a)
+binaryDecodeFileOrFail : BD.Decoder a -> FilePath -> Task Never (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
     Impure.task "binaryDecodeFileOrFail"
         []
@@ -1156,7 +1157,7 @@ binaryDecodeFileOrFail decoder filename =
         (Impure.BytesResolver (BD.map Ok decoder))
 
 
-binaryEncodeFile : (a -> BE.Encoder) -> FilePath -> a -> IO ()
+binaryEncodeFile : (a -> BE.Encoder) -> FilePath -> a -> Task Never ()
 binaryEncodeFile toEncoder path value =
     Impure.task "write"
         [ Http.header "path" path ]
@@ -1177,7 +1178,7 @@ type ReplSettings
 
 
 type alias ReplInputT a =
-    IO a
+    Task Never a
 
 
 type ReplCompletion
@@ -1221,7 +1222,7 @@ replGetInputLineWithInitial prompt ( left, right ) =
 -- NODE
 
 
-nodeGetDirname : IO String
+nodeGetDirname : Task Never String
 nodeGetDirname =
     Impure.task "nodeGetDirname"
         []
@@ -1229,7 +1230,7 @@ nodeGetDirname =
         (Impure.StringResolver identity)
 
 
-nodeMathRandom : IO Float
+nodeMathRandom : Task Never Float
 nodeMathRandom =
     Impure.task "nodeMathRandom"
         []

@@ -10,8 +10,10 @@ import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Impure as Impure
+import Utils.Task.Extra as Task
 
 
 main : IO.Program
@@ -19,15 +21,15 @@ main =
     IO.run app
 
 
-app : IO ()
+app : Task Never ()
 app =
     getArgs
-        |> IO.bind
+        |> Task.bind
             (\args ->
                 case args of
                     MakeArgs path debug optimize withSourceMaps ->
                         Make.run path (Make.Flags debug optimize withSourceMaps)
-                            |> IO.bind
+                            |> Task.bind
                                 (\result ->
                                     case result of
                                         Ok output ->
@@ -49,7 +51,7 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Install.run pkg
-                                    |> IO.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
@@ -58,19 +60,19 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Uninstall.run pkg
-                                    |> IO.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
             )
 
 
-getArgs : IO Args
+getArgs : Task Never Args
 getArgs =
     Impure.task "getArgs" [] Impure.EmptyBody (Impure.DecoderResolver argsDecoder)
 
 
-exitWithResponse : Encode.Value -> IO a
+exitWithResponse : Encode.Value -> Task Never a
 exitWithResponse value =
     Impure.task "exitWithResponse" [] (Impure.JsonBody value) Impure.Crash
 

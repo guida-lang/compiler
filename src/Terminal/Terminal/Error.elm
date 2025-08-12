@@ -9,7 +9,8 @@ import Compiler.Reporting.Suggest as Suggest
 import List.Extra as List
 import Prelude
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Terminal.Terminal.Internal
     exposing
         ( ArgError(..)
@@ -28,26 +29,27 @@ import Terminal.Terminal.Internal
         )
 import Text.PrettyPrint.ANSI.Leijen as P
 import Utils.Main as Utils
+import Utils.Task.Extra as Task
 
 
 
 -- EXIT
 
 
-exitSuccess : List P.Doc -> IO a
+exitSuccess : List P.Doc -> Task Never a
 exitSuccess =
     exitWith Exit.ExitSuccess
 
 
-exitFailure : List P.Doc -> IO a
+exitFailure : List P.Doc -> Task Never a
 exitFailure =
     exitWith (Exit.ExitFailure 1)
 
 
-exitWith : Exit.ExitCode -> List P.Doc -> IO a
+exitWith : Exit.ExitCode -> List P.Doc -> Task Never a
 exitWith code docs =
     IO.hIsTerminalDevice IO.stderr
-        |> IO.bind
+        |> Task.bind
             (\isTerminal ->
                 let
                     adjust : P.Doc -> P.Doc
@@ -63,14 +65,14 @@ exitWith code docs =
                         80
                         (adjust (P.vcat (List.concatMap (\d -> [ d, P.text "" ]) docs)))
                     )
-                    |> IO.bind (\_ -> IO.hPutStrLn IO.stderr "")
-                    |> IO.bind (\_ -> Exit.exitWith code)
+                    |> Task.bind (\_ -> IO.hPutStrLn IO.stderr "")
+                    |> Task.bind (\_ -> Exit.exitWith code)
             )
 
 
-getExeName : IO String
+getExeName : Task Never String
 getExeName =
-    IO.fmap Utils.fpTakeFileName Utils.envGetProgName
+    Task.fmap Utils.fpTakeFileName Utils.envGetProgName
 
 
 stack : List P.Doc -> P.Doc
@@ -87,10 +89,10 @@ reflow string =
 -- HELP
 
 
-exitWithHelp : Maybe String -> String -> P.Doc -> Args -> Flags -> IO a
+exitWithHelp : Maybe String -> String -> P.Doc -> Args -> Flags -> Task Never a
 exitWithHelp maybeCommand details example (Args args) flags =
     toCommand maybeCommand
-        |> IO.bind
+        |> Task.bind
             (\command ->
                 exitSuccess <|
                     [ reflow details
@@ -109,10 +111,10 @@ exitWithHelp maybeCommand details example (Args args) flags =
             )
 
 
-toCommand : Maybe String -> IO String
+toCommand : Maybe String -> Task Never String
 toCommand maybeCommand =
     getExeName
-        |> IO.fmap
+        |> Task.fmap
             (\exeName ->
                 case maybeCommand of
                     Nothing ->
@@ -190,10 +192,10 @@ flagsToDocs flags docs =
 -- OVERVIEW
 
 
-exitWithOverview : P.Doc -> P.Doc -> List Command -> IO a
+exitWithOverview : P.Doc -> P.Doc -> List Command -> Task Never a
 exitWithOverview intro outro commands =
     getExeName
-        |> IO.bind
+        |> Task.bind
             (\exeName ->
                 exitSuccess
                     [ intro
@@ -249,7 +251,7 @@ toCommandList exeName commands =
 -- UNKNOWN
 
 
-exitWithUnknown : String -> List String -> IO a
+exitWithUnknown : String -> List String -> Task Never a
 exitWithUnknown unknown knowns =
     let
         nearbyKnowns : List ( Int, String )
@@ -274,7 +276,7 @@ exitWithUnknown unknown knowns =
                         ++ [ P.text "or", Prelude.last abcs, P.text "instead?" ]
     in
     getExeName
-        |> IO.bind
+        |> Task.bind
             (\exeName ->
                 exitFailure
                     [ P.fillSep <|
@@ -294,9 +296,9 @@ exitWithUnknown unknown knowns =
 -- ERROR TO DOC
 
 
-exitWithError : Error -> IO a
+exitWithError : Error -> Task Never a
 exitWithError err =
-    IO.bind exitFailure
+    Task.bind exitFailure
         (case err of
             BadFlag flagError ->
                 flagErrorToDocs flagError
@@ -304,7 +306,7 @@ exitWithError err =
             BadArgs argErrors ->
                 case argErrors of
                     [] ->
-                        IO.pure
+                        Task.pure
                             [ reflow <| "I was not expecting any arguments for this command."
                             , reflow <| "Try removing them?"
                             ]
@@ -351,12 +353,12 @@ toRed str =
 -- ARG ERROR TO DOC
 
 
-argErrorToDocs : ArgError -> IO (List P.Doc)
+argErrorToDocs : ArgError -> Task Never (List P.Doc)
 argErrorToDocs argError =
     case argError of
         ArgMissing (Expectation tipe makeExamples) ->
             makeExamples
-                |> IO.fmap
+                |> Task.fmap
                     (\examples ->
                         [ P.fillSep
                             [ P.text "The"
@@ -383,7 +385,7 @@ argErrorToDocs argError =
 
         ArgBad string (Expectation tipe makeExamples) ->
             makeExamples
-                |> IO.fmap
+                |> Task.fmap
                     (\examples ->
                         [ P.text "I am having trouble with this argument:"
                         , P.indent 4 <| toRed string
@@ -421,7 +423,7 @@ argErrorToDocs argError =
                         _ ->
                             ( "these arguments", "them" )
             in
-            IO.pure
+            Task.pure
                 [ reflow <| "I was not expecting " ++ these ++ ":"
                 , P.indent 4 <| P.red <| P.vcat <| List.map P.text extras
                 , reflow <| "Try removing " ++ them ++ "?"
@@ -432,16 +434,16 @@ argErrorToDocs argError =
 -- FLAG ERROR TO DOC
 
 
-flagErrorHelp : String -> String -> List P.Doc -> IO (List P.Doc)
+flagErrorHelp : String -> String -> List P.Doc -> Task Never (List P.Doc)
 flagErrorHelp summary original explanation =
-    IO.pure <|
+    Task.pure <|
         [ reflow summary
         , P.indent 4 (toRed original)
         ]
             ++ explanation
 
 
-flagErrorToDocs : FlagError -> IO (List P.Doc)
+flagErrorToDocs : FlagError -> Task Never (List P.Doc)
 flagErrorToDocs flagError =
     case flagError of
         FlagWithValue flagName value ->
@@ -454,7 +456,7 @@ flagErrorToDocs flagError =
 
         FlagWithNoValue flagName (Expectation tipe makeExamples) ->
             makeExamples
-                |> IO.bind
+                |> Task.bind
                     (\examples ->
                         flagErrorHelp
                             "This flag needs more information:"
@@ -481,7 +483,7 @@ flagErrorToDocs flagError =
 
         FlagWithBadValue flagName badValue (Expectation tipe makeExamples) ->
             makeExamples
-                |> IO.bind
+                |> Task.bind
                     (\examples ->
                         flagErrorHelp
                             "This flag was given a bad value:"

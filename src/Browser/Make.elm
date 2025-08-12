@@ -17,17 +17,17 @@ import Builder.Elm.Details as Details
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
 import Maybe.Extra as Maybe
-import System.IO as IO exposing (IO)
+import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
@@ -52,25 +52,21 @@ type ReportType
 -- RUN
 
 
-type alias Task a =
-    Task.Task Exit.Make a
-
-
-run : String -> Flags -> IO (Result Exit.Make String)
+run : String -> Flags -> Task Never (Result Exit.Make String)
 run path flags =
     Stuff.findRoot
-        |> IO.bind
+        |> Task.bind
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
                         runHelp root path flags
 
                     Nothing ->
-                        IO.pure (Err Exit.MakeNoOutline)
+                        Task.pure (Err Exit.MakeNoOutline)
             )
 
 
-runHelp : String -> String -> Flags -> IO (Result Exit.Make String)
+runHelp : String -> String -> Flags -> Task Never (Result Exit.Make String)
 runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
@@ -112,7 +108,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
 -- GET INFORMATION
 
 
-getMode : Bool -> Bool -> Task DesiredMode
+getMode : Bool -> Bool -> Task Exit.Make DesiredMode
 getMode debug optimize =
     case ( debug, optimize ) of
         ( True, True ) ->
@@ -132,7 +128,7 @@ getMode debug optimize =
 -- BUILD PROJECTS
 
 
-buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Build.Artifacts
+buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths
@@ -182,7 +178,7 @@ type DesiredMode
     | Prod
 
 
-toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task String
+toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
 toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of
@@ -205,8 +201,8 @@ reportType =
     Parser
         { singular = "report type"
         , plural = "report types"
-        , suggest = \_ -> IO.pure [ "json" ]
-        , examples = \_ -> IO.pure [ "json" ]
+        , suggest = \_ -> Task.pure [ "json" ]
+        , examples = \_ -> Task.pure [ "json" ]
         }
 
 
@@ -224,8 +220,8 @@ output =
     Parser
         { singular = "output file"
         , plural = "output files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "elm.js", "index.html", "/dev/null" ]
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure [ "elm.js", "index.html", "/dev/null" ]
         }
 
 
@@ -249,8 +245,8 @@ docsFile =
     Parser
         { singular = "json file"
         , plural = "json files"
-        , suggest = \_ -> IO.pure []
-        , examples = \_ -> IO.pure [ "docs.json", "documentation.json" ]
+        , suggest = \_ -> Task.pure []
+        , examples = \_ -> Task.pure [ "docs.json", "documentation.json" ]
         }
 
 

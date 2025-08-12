@@ -14,7 +14,6 @@ import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
-import Builder.Reporting.Task as Task
 import Builder.Stuff as Stuff
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
@@ -28,7 +27,8 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
-import System.IO exposing (IO)
+import Task exposing (Task)
+import Utils.Task.Extra as Task
 
 
 
@@ -42,7 +42,7 @@ type Args
     | GlobalInquiry Pkg.Name V.Version V.Version
 
 
-run : Args -> () -> IO ()
+run : Args -> () -> Task Never ()
 run args () =
     Reporting.attempt Exit.diffToReport
         (Task.run
@@ -60,7 +60,7 @@ type Env
     = Env (Maybe String) Stuff.PackageCache Http.Manager Registry.Registry
 
 
-getEnv : Task Env
+getEnv : Task Exit.Diff Env
 getEnv =
     Task.io Stuff.findRoot
         |> Task.bind
@@ -82,11 +82,7 @@ getEnv =
 -- DIFF
 
 
-type alias Task a =
-    Task.Task Exit.Diff a
-
-
-diff : Env -> Args -> Task ()
+diff : Env -> Args -> Task Exit.Diff ()
 diff ((Env _ _ _ registry) as env) args =
     case args of
         GlobalInquiry name v1 v2 ->
@@ -143,7 +139,7 @@ diff ((Env _ _ _ registry) as env) args =
 -- GET DOCS
 
 
-getDocs : Env -> Pkg.Name -> Registry.KnownVersions -> V.Version -> Task Docs.Documentation
+getDocs : Env -> Pkg.Name -> Registry.KnownVersions -> V.Version -> Task Exit.Diff Docs.Documentation
 getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) version =
     if latest == version || List.member version previous then
         Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
@@ -152,7 +148,7 @@ getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) ve
         Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
 
 
-getLatestDocs : Env -> Pkg.Name -> Registry.KnownVersions -> Task Docs.Documentation
+getLatestDocs : Env -> Pkg.Name -> Registry.KnownVersions -> Task Exit.Diff Docs.Documentation
 getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
     Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
@@ -161,7 +157,7 @@ getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
 -- READ OUTLINE
 
 
-readOutline : Env -> Task ( Pkg.Name, Registry.KnownVersions )
+readOutline : Env -> Task Exit.Diff ( Pkg.Name, Registry.KnownVersions )
 readOutline (Env maybeRoot _ _ registry) =
     case maybeRoot of
         Nothing ->
@@ -194,7 +190,7 @@ readOutline (Env maybeRoot _ _ registry) =
 -- GENERATE DOCS
 
 
-generateDocs : Env -> Task Docs.Documentation
+generateDocs : Env -> Task Exit.Diff Docs.Documentation
 generateDocs (Env maybeRoot _ _ _) =
     case maybeRoot of
         Nothing ->
@@ -224,7 +220,7 @@ generateDocs (Env maybeRoot _ _ _) =
 -- WRITE DIFF
 
 
-writeDiff : Docs.Documentation -> Docs.Documentation -> Task ()
+writeDiff : Docs.Documentation -> Docs.Documentation -> Task Exit.Diff ()
 writeDiff oldDocs newDocs =
     let
         changes : PackageChanges

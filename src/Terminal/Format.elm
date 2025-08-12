@@ -16,8 +16,10 @@ import ElmSyntaxPrint
 import Json.Encode as Encode
 import Result.Extra as Result
 import System.Exit as Exit
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.Task.Extra as Task
 
 
 
@@ -28,24 +30,24 @@ type Flags
     = Flags (Maybe FilePath) Bool Bool Bool
 
 
-run : List String -> Flags -> IO ()
+run : List String -> Flags -> Task Never ()
 run paths ((Flags _ autoYes _ _) as flags) =
     resolveElmFiles paths
-        |> IO.bind
+        |> Task.bind
             (\resolvedInputFiles ->
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
                     Err err ->
                         IO.hPutStrLn IO.stderr (toConsoleErrorMessage err)
-                            |> IO.bind (\_ -> Exit.exitFailure)
+                            |> Task.bind (\_ -> Exit.exitFailure)
 
                     Ok a ->
-                        IO.pure a
+                        Task.pure a
             )
-        |> IO.bind (\whatToDo -> doIt autoYes whatToDo)
-        |> IO.bind
+        |> Task.bind (\whatToDo -> doIt autoYes whatToDo)
+        |> Task.bind
             (\result ->
                 if result then
-                    IO.pure ()
+                    Task.pure ()
 
                 else
                     Exit.exitFailure
@@ -190,7 +192,7 @@ format ( inputFile, inputText ) =
             )
 
 
-doIt : Bool -> WhatToDo -> IO Bool
+doIt : Bool -> WhatToDo -> Task Never Bool
 doIt autoYes whatToDo =
     case whatToDo of
         Validate validateMode ->
@@ -335,19 +337,19 @@ type FileType
     | DoesNotExist
 
 
-readUtf8FileWithPath : FilePath -> IO ( FilePath, String )
+readUtf8FileWithPath : FilePath -> Task Never ( FilePath, String )
 readUtf8FileWithPath filePath =
     File.readUtf8 filePath
-        |> IO.fmap (Tuple.pair filePath)
+        |> Task.fmap (Tuple.pair filePath)
 
 
-stat : FilePath -> IO FileType
+stat : FilePath -> Task Never FileType
 stat path =
     Utils.dirDoesFileExist path
-        |> IO.bind
+        |> Task.bind
             (\isFile ->
                 Utils.dirDoesDirectoryExist path
-                    |> IO.fmap
+                    |> Task.fmap
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
                                 ( True, _ ) ->
@@ -362,24 +364,24 @@ stat path =
             )
 
 
-getYesOrNo : IO Bool
+getYesOrNo : Task Never Bool
 getYesOrNo =
     IO.hFlush IO.stdout
-        |> IO.bind
+        |> Task.bind
             (\_ ->
                 IO.getLine
-                    |> IO.bind
+                    |> Task.bind
                         (\input ->
                             case input of
                                 "y" ->
-                                    IO.pure True
+                                    Task.pure True
 
                                 "n" ->
-                                    IO.pure False
+                                    Task.pure False
 
                                 _ ->
                                     IO.putStr "Must type 'y' for yes or 'n' for no: "
-                                        |> IO.bind (\_ -> getYesOrNo)
+                                        |> Task.bind (\_ -> getYesOrNo)
                         )
             )
 
@@ -393,17 +395,17 @@ type ValidateMode
 -- INFO FORMATTER
 
 
-approve : Bool -> PromptMessage -> IO Bool
+approve : Bool -> PromptMessage -> Task Never Bool
 approve autoYes prompt =
     if autoYes then
-        IO.pure True
+        Task.pure True
 
     else
         putStrLn False (toConsolePromptMessage prompt)
-            |> IO.bind (\_ -> getYesOrNo)
+            |> Task.bind (\_ -> getYesOrNo)
 
 
-putStrLn : Bool -> String -> IO ()
+putStrLn : Bool -> String -> Task Never ()
 putStrLn usingStdout =
     -- we log to stdout unless it is being used for file output (in that case, we log to stderr)
     if usingStdout then
@@ -455,18 +457,18 @@ toConsoleError error =
             path ++ ": Directory does not contain any *.elm files"
 
 
-resolveFile : FilePath -> IO (Result Error (List FilePath))
+resolveFile : FilePath -> Task Never (Result Error (List FilePath))
 resolveFile path =
     stat path
-        |> IO.bind
+        |> Task.bind
             (\fileType ->
                 case fileType of
                     IsFile ->
-                        IO.pure (Ok [ path ])
+                        Task.pure (Ok [ path ])
 
                     IsDirectory ->
                         findAllElmFiles path
-                            |> IO.fmap
+                            |> Task.fmap
                                 (\elmFiles ->
                                     case elmFiles of
                                         [] ->
@@ -477,15 +479,15 @@ resolveFile path =
                                 )
 
                     DoesNotExist ->
-                        IO.pure (Err (FileDoesNotExist path))
+                        Task.pure (Err (FileDoesNotExist path))
             )
 
 
-resolveElmFiles : List FilePath -> IO (Result (List Error) (List FilePath))
+resolveElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
 resolveElmFiles inputFiles =
-    IO.mapM resolveFile inputFiles
-        |> IO.fmap collectErrors
-        |> IO.fmap
+    Task.mapM resolveFile inputFiles
+        |> Task.fmap collectErrors
+        |> Task.fmap
             (\result ->
                 case result of
                     Err ls ->
@@ -525,20 +527,20 @@ type TranformFilesResult a
     | Changed FilePath a
 
 
-updateFile : TranformFilesResult String -> IO ()
+updateFile : TranformFilesResult String -> Task Never ()
 updateFile result =
     case result of
         NoChange _ _ ->
-            IO.pure ()
+            Task.pure ()
 
         Changed outputFile outputText ->
             File.writeUtf8 outputFile outputText
 
 
-readStdin : IO ( FilePath, String )
+readStdin : Task Never ( FilePath, String )
 readStdin =
     File.readStdin
-        |> IO.fmap (Tuple.pair "<STDIN>")
+        |> Task.fmap (Tuple.pair "<STDIN>")
 
 
 checkChange : ( FilePath, a ) -> a -> TranformFilesResult a
@@ -550,10 +552,10 @@ checkChange ( inputFile, inputText ) outputText =
         Changed inputFile outputText
 
 
-readFromFile : (FilePath -> IO ()) -> FilePath -> IO ( FilePath, String )
+readFromFile : (FilePath -> Task Never ()) -> FilePath -> Task Never ( FilePath, String )
 readFromFile onProcessingFile filePath =
     onProcessingFile filePath
-        |> IO.bind (\_ -> readUtf8FileWithPath filePath)
+        |> Task.bind (\_ -> readUtf8FileWithPath filePath)
 
 
 type TransformMode
@@ -564,7 +566,7 @@ type TransformMode
     | FilesInPlace FilePath (List FilePath)
 
 
-applyTransformation : (FilePath -> InfoMessage) -> Bool -> (List FilePath -> PromptMessage) -> (( FilePath, String ) -> Result InfoMessage String) -> TransformMode -> IO Bool
+applyTransformation : (FilePath -> InfoMessage) -> Bool -> (List FilePath -> PromptMessage) -> (( FilePath, String ) -> Result InfoMessage String) -> TransformMode -> Task Never Bool
 applyTransformation processingFile autoYes confirmPrompt transform mode =
     let
         usesStdout : Bool
@@ -585,7 +587,7 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
                 FilesInPlace _ _ ->
                     False
 
-        onInfo : InfoMessage -> IO ()
+        onInfo : InfoMessage -> Task Never ()
         onInfo info =
             if usesStdout then
                 IO.hPutStrLn IO.stderr (toConsoleInfoMessage info)
@@ -596,40 +598,40 @@ applyTransformation processingFile autoYes confirmPrompt transform mode =
     case mode of
         StdinToStdout ->
             readStdin
-                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
+                |> Task.bind (logErrorOr onInfo IO.putStr << transform)
 
         StdinToFile outputFile ->
             readStdin
-                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
+                |> Task.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FileToStdout inputFile ->
             readUtf8FileWithPath inputFile
-                |> IO.bind (logErrorOr onInfo IO.putStr << transform)
+                |> Task.bind (logErrorOr onInfo IO.putStr << transform)
 
         FileToFile inputFile outputFile ->
             readFromFile (onInfo << processingFile) inputFile
-                |> IO.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
+                |> Task.bind (logErrorOr onInfo (File.writeUtf8 outputFile) << transform)
 
         FilesInPlace first rest ->
             let
-                formatFile : FilePath -> IO Bool
+                formatFile : FilePath -> Task Never Bool
                 formatFile file =
                     readFromFile (onInfo << processingFile) file
-                        |> IO.bind (\i -> logErrorOr onInfo updateFile <| Result.map (checkChange i) (transform i))
+                        |> Task.bind (\i -> logErrorOr onInfo updateFile <| Result.map (checkChange i) (transform i))
             in
             approve autoYes (confirmPrompt (first :: rest))
-                |> IO.bind
+                |> Task.bind
                     (\canOverwrite ->
                         if canOverwrite then
-                            IO.mapM formatFile (first :: rest)
-                                |> IO.fmap (List.all identity)
+                            Task.mapM formatFile (first :: rest)
+                                |> Task.fmap (List.all identity)
 
                         else
-                            IO.pure True
+                            Task.pure True
                     )
 
 
-validateNoChanges : ValidateMode -> IO Bool
+validateNoChanges : ValidateMode -> Task Never Bool
 validateNoChanges mode =
     let
         newValidate : FilePath -> String -> Result (Maybe String) ()
@@ -644,7 +646,7 @@ validateNoChanges mode =
     case mode of
         ValidateStdin ->
             readStdin
-                |> IO.bind
+                |> Task.bind
                     (\( filePath, content ) ->
                         let
                             result : Result (Maybe String) ()
@@ -652,34 +654,34 @@ validateNoChanges mode =
                                 newValidate filePath content
                         in
                         IO.putStrLn (resultsToJsonString [ result ])
-                            |> IO.fmap (\_ -> Result.isOk result)
+                            |> Task.fmap (\_ -> Result.isOk result)
                     )
 
         ValidateFiles first rest ->
             let
-                validateFile : FilePath -> IO (Result (Maybe String) ())
+                validateFile : FilePath -> Task Never (Result (Maybe String) ())
                 validateFile filePath =
                     File.readUtf8 filePath
-                        |> IO.fmap (newValidate filePath)
+                        |> Task.fmap (newValidate filePath)
             in
-            IO.mapM validateFile (first :: rest)
-                |> IO.bind
+            Task.mapM validateFile (first :: rest)
+                |> Task.bind
                     (\results ->
                         IO.putStrLn (resultsToJsonString results)
-                            |> IO.fmap (\_ -> List.all Result.isOk results)
+                            |> Task.fmap (\_ -> List.all Result.isOk results)
                     )
 
 
-logErrorOr : (error -> IO ()) -> (a -> IO ()) -> Result error a -> IO Bool
+logErrorOr : (error -> Task Never ()) -> (a -> Task Never ()) -> Result error a -> Task Never Bool
 logErrorOr onInfo fn result =
     case result of
         Err message ->
             onInfo message
-                |> IO.fmap (\_ -> False)
+                |> Task.fmap (\_ -> False)
 
         Ok value ->
             fn value
-                |> IO.fmap (\_ -> True)
+                |> Task.fmap (\_ -> True)
 
 
 
@@ -696,36 +698,36 @@ render modul =
 -- FILESYSTEM
 
 
-collectFiles : (a -> IO (List a)) -> a -> IO (List a)
+collectFiles : (a -> Task Never (List a)) -> a -> Task Never (List a)
 collectFiles children root =
     children root
-        |> IO.bind (\xs -> IO.mapM (collectFiles children) xs)
-        |> IO.fmap (\subChildren -> root :: List.concat subChildren)
+        |> Task.bind (\xs -> Task.mapM (collectFiles children) xs)
+        |> Task.fmap (\subChildren -> root :: List.concat subChildren)
 
 
-listDir : FilePath -> IO (List FilePath)
+listDir : FilePath -> Task Never (List FilePath)
 listDir path =
     Utils.dirListDirectory path
-        |> IO.fmap (List.map (\file -> path ++ "/" ++ file))
+        |> Task.fmap (List.map (\file -> path ++ "/" ++ file))
 
 
-fileList : FilePath -> IO (List FilePath)
+fileList : FilePath -> Task Never (List FilePath)
 fileList =
     let
-        children : FilePath -> IO (List FilePath)
+        children : FilePath -> Task Never (List FilePath)
         children path =
             if isSkippable path then
-                IO.pure []
+                Task.pure []
 
             else
                 Utils.dirDoesDirectoryExist path
-                    |> IO.bind
+                    |> Task.bind
                         (\directory ->
                             if directory then
                                 listDir path
 
                             else
-                                IO.pure []
+                                Task.pure []
                         )
     in
     collectFiles children
@@ -745,10 +747,10 @@ hasExtension ext path =
     ext == Utils.fpTakeExtension path
 
 
-findAllElmFiles : FilePath -> IO (List FilePath)
+findAllElmFiles : FilePath -> Task Never (List FilePath)
 findAllElmFiles inputFile =
     fileList inputFile
-        |> IO.fmap (List.filter (hasExtension ".elm"))
+        |> Task.fmap (List.filter (hasExtension ".elm"))
 
 
 hasFilename : String -> FilePath -> Bool

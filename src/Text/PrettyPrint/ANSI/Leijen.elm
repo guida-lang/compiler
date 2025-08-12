@@ -38,7 +38,8 @@ module Text.PrettyPrint.ANSI.Leijen exposing
 import Pretty as P
 import Pretty.Renderer as PR
 import System.Console.Ansi as Ansi
-import System.IO as IO exposing (IO)
+import System.IO as IO
+import Task exposing (Task)
 
 
 type alias Doc =
@@ -52,7 +53,7 @@ type SimpleDoc
     | SSGR (List Ansi.SGR) SimpleDoc
 
 
-displayIO : IO.Handle -> SimpleDoc -> IO ()
+displayIO : IO.Handle -> SimpleDoc -> Task Never ()
 displayIO handle simpleDoc =
     IO.hPutStr handle (displayS simpleDoc "")
 
