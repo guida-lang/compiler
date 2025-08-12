@@ -354,9 +354,9 @@ type Effects
 
 
 type Manager
-    = Cmd (A.Located Name)
-    | Sub (A.Located Name)
-    | Fx (A.Located Name) (A.Located Name)
+    = Cmd (C2 (C2 (A.Located Name)))
+    | Sub (C2 (C2 (A.Located Name)))
+    | Fx (C2 (C2 (A.Located Name))) (C2 (C2 (A.Located Name)))
 
 
 type Docs
@@ -918,20 +918,20 @@ managerEncoder manager =
         Cmd cmdType ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , A.locatedEncoder BE.string cmdType
+                , c2Encoder (c2Encoder (A.locatedEncoder BE.string)) cmdType
                 ]
 
         Sub subType ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , A.locatedEncoder BE.string subType
+                , c2Encoder (c2Encoder (A.locatedEncoder BE.string)) subType
                 ]
 
         Fx cmdType subType ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , A.locatedEncoder BE.string cmdType
-                , A.locatedEncoder BE.string subType
+                , c2Encoder (c2Encoder (A.locatedEncoder BE.string)) cmdType
+                , c2Encoder (c2Encoder (A.locatedEncoder BE.string)) subType
                 ]
 
 
@@ -942,15 +942,15 @@ managerDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map Cmd (A.locatedDecoder BD.string)
+                        BD.map Cmd (c2Decoder (c2Decoder (A.locatedDecoder BD.string)))
 
                     1 ->
-                        BD.map Sub (A.locatedDecoder BD.string)
+                        BD.map Sub (c2Decoder (c2Decoder (A.locatedDecoder BD.string)))
 
                     2 ->
                         BD.map2 Fx
-                            (A.locatedDecoder BD.string)
-                            (A.locatedDecoder BD.string)
+                            (c2Decoder (c2Decoder (A.locatedDecoder BD.string)))
+                            (c2Decoder (c2Decoder (A.locatedDecoder BD.string)))
 
                     _ ->
                         BD.fail

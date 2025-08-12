@@ -86,13 +86,13 @@ toEffectDups effects =
 
         Src.Manager _ manager ->
             case manager of
-                Src.Cmd (A.At region _) ->
+                Src.Cmd ( _, ( _, A.At region _ ) ) ->
                     Dups.one "command" region (Env.TopLevel region)
 
-                Src.Sub (A.At region _) ->
+                Src.Sub ( _, ( _, A.At region _ ) ) ->
                     Dups.one "subscription" region (Env.TopLevel region)
 
-                Src.Fx (A.At regionCmd _) (A.At regionSub _) ->
+                Src.Fx ( _, ( _, A.At regionCmd _ ) ) ( _, ( _, A.At regionSub _ ) ) ->
                     Dups.union
                         (Dups.one "command" regionCmd (Env.TopLevel regionCmd))
                         (Dups.one "subscription" regionSub (Env.TopLevel regionSub))

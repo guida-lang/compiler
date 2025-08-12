@@ -11,8 +11,8 @@ import Compiler.Parse.SyntaxVersion as SV
 
 
 run : String -> Result String String
-run inputText =
-    Common.Format.format SV.Guida (M.Package Pkg.core) inputText
+run src =
+    Common.Format.format SV.Guida (M.Package Pkg.core) src
         |> Result.mapError
             (\_ ->
                 -- FIXME missings errs

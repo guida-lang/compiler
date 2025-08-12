@@ -174,7 +174,7 @@ intersperseMap spacer fn list =
 pleaseReport__ : String -> String -> String
 pleaseReport__ what details =
     -- TODO: include version in the message
-    "<elm-format: " ++ what ++ ": " ++ details ++ " -- please report this at https://github.com/avh4/elm-format/issues >"
+    "<elm-format: " ++ what ++ ": " ++ details ++ " -- please report this at https://github.com/guida-lang/compiler/issues>"
 
 
 pleaseReport_ : String -> String -> Box.Line
@@ -965,23 +965,25 @@ formatModule addDefaultHeader spacing modu =
                                     M.Ports _ comments ->
                                         ( Port comments, Nothing )
 
-                                    M.Manager _ comments manager ->
+                                    M.Manager _ comments ( postWhereComments, manager ) ->
                                         ( Effect comments
                                         , Just
-                                            ( ( [], [] )
+                                            ( ( [], postWhereComments )
                                             , case manager of
-                                                Src.Cmd (A.At _ cmdType) ->
-                                                    [ ( ( ( [], [] ), "command" ), ( ( [], [] ), cmdType ) )
+                                                Src.Cmd ( ( preCmdComments, postCmdComments ), ( ( preEqualComments, postEqualComments ), A.At _ cmdType ) ) ->
+                                                    [ ( ( ( preCmdComments, preEqualComments ), "command" ), ( ( postEqualComments, postCmdComments ), cmdType ) )
                                                     ]
 
-                                                Src.Sub (A.At _ subType) ->
-                                                    [ ( ( ( [], [] ), "subscription" ), ( ( [], [] ), subType ) )
+                                                Src.Sub ( ( preSubComments, postSubComments ), ( ( preEqualComments, postEqualComments ), A.At _ subType ) ) ->
+                                                    [ ( ( ( preSubComments, preEqualComments ), "subscription" ), ( ( postEqualComments, postSubComments ), subType ) )
                                                     ]
 
-                                                Src.Fx (A.At _ cmdType) (A.At _ subType) ->
-                                                    [ ( ( ( [], [] ), "command" ), ( ( [], [] ), cmdType ) )
-                                                    , ( ( ( [], [] ), "subscription" ), ( ( [], [] ), subType ) )
+                                                Src.Fx ( ( preCmdComments, postCmdComments ), ( ( preEqualCmdComments, postEqualCmdComments ), A.At (A.Region (A.Position cmdTypeStart cmdTypeEnd) _) cmdType ) ) ( ( preSubComments, postSubComments ), ( ( preEqualSubComments, postEqualSubComments ), A.At (A.Region (A.Position subTypeStart subTypeEnd) _) subType ) ) ->
+                                                    [ ( ( cmdTypeStart, cmdTypeEnd ), ( ( ( preCmdComments, preEqualCmdComments ), "command" ), ( ( postEqualCmdComments, postCmdComments ), cmdType ) ) )
+                                                    , ( ( subTypeStart, subTypeEnd ), ( ( ( preSubComments, preEqualSubComments ), "subscription" ), ( ( postEqualSubComments, postSubComments ), subType ) ) )
                                                     ]
+                                                        |> List.sortBy Tuple.first
+                                                        |> List.map Tuple.second
                                             )
                                         )
 

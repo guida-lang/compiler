@@ -177,7 +177,7 @@ srcToDoc context (A.At _ tipe) =
         Src.TTypeQual _ home name args ->
             apply context (D.fromName home |> D.a (D.fromChars ".") |> D.a (D.fromName name)) (List.map (Tuple.second >> srcToDoc App) args)
 
-        Src.TRecord fields maybeExt trailing ->
+        Src.TRecord fields maybeExt _ ->
             record (List.map srcFieldToDocs fields) (Maybe.map (\( _, A.At _ ext ) -> D.fromName ext) maybeExt)
 
         Src.TUnit ->

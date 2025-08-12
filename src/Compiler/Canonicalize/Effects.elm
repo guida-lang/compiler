@@ -58,7 +58,7 @@ canonicalize syntaxVersion env values unions effects =
                 |> R.apply (verifyManager region dict "onSelfMsg")
                 |> R.apply
                     (case manager of
-                        Src.Cmd cmdType ->
+                        Src.Cmd ( _, ( _, cmdType ) ) ->
                             R.fmap Can.Cmd (verifyEffectType cmdType unions)
                                 |> R.bind
                                     (\result ->
@@ -66,7 +66,7 @@ canonicalize syntaxVersion env values unions effects =
                                             |> R.fmap (\_ -> result)
                                     )
 
-                        Src.Sub subType ->
+                        Src.Sub ( _, ( _, subType ) ) ->
                             R.fmap Can.Sub (verifyEffectType subType unions)
                                 |> R.bind
                                     (\result ->
@@ -74,7 +74,7 @@ canonicalize syntaxVersion env values unions effects =
                                             |> R.fmap (\_ -> result)
                                     )
 
-                        Src.Fx cmdType subType ->
+                        Src.Fx ( _, ( _, cmdType ) ) ( _, ( _, subType ) ) ->
                             R.fmap Can.Fx (verifyEffectType cmdType unions)
                                 |> R.apply (verifyEffectType subType unions)
                                 |> R.bind
