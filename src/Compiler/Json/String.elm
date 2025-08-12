@@ -132,7 +132,7 @@ writeChunksHelp ((P.Snippet { fptr }) as snippet) chunks acc =
                 chunks_
                 (case chunk of
                     Slice offset len ->
-                        acc ++ String.left len (String.dropLeft offset fptr)
+                        acc ++ String.slice offset (offset + len) fptr
 
                     Escape 'n' ->
                         acc ++ String.fromChar '\n'
