@@ -263,7 +263,7 @@ getComments decls comments =
                 Decl.Value c (A.At _ (Src.Value _ ( _, n ) _ _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
-                Decl.Union c (A.At _ (Src.Union n _ _)) ->
+                Decl.Union c (A.At _ (Src.Union ( _, n ) _ _)) ->
                     getComments otherDecls (addComment c n comments)
 
                 Decl.Alias c (A.At _ (Src.Alias _ ( _, n ) _ _)) ->

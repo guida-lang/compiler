@@ -207,10 +207,10 @@ typeDecl maybeDocs start =
     P.inContext E.DeclType (Keyword.type_ E.DeclStart) <|
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
             |> P.bind
-                (\preAlias ->
+                (\postTypeComments ->
                     let
                         _ =
-                            Debug.log "c6" preAlias
+                            Debug.log "c6" postTypeComments
                     in
                     P.oneOf E.DT_Name
                         [ P.inContext E.DT_Alias (Keyword.alias_ E.DT_Name) <|
@@ -230,7 +230,7 @@ typeDecl maybeDocs start =
                                                                 let
                                                                     alias_ : A.Located Src.Alias
                                                                     alias_ =
-                                                                        A.at start end (Src.Alias preAlias ( ( preComments, postComments ), name ) args ( preTypeComments, tipe ))
+                                                                        A.at start end (Src.Alias postTypeComments ( ( preComments, postComments ), name ) args ( preTypeComments, tipe ))
                                                                 in
                                                                 ( ( ( [], [] ), Alias maybeDocs alias_ ), end )
                                                             )
@@ -238,21 +238,21 @@ typeDecl maybeDocs start =
                                     )
                             )
                         , P.specialize E.DT_Union <|
-                            (chompCustomNameToEquals
+                            (chompCustomNameToEquals postTypeComments
                                 |> P.bind
-                                    (\( name, args ) ->
-                                        Type.variant
+                                    (\( preVariantsComments, ( name, args ) ) ->
+                                        Type.variant preVariantsComments
                                             |> P.bind
-                                                (\( ( postFirstVariantComments, firstVariant ), firstEnd ) ->
-                                                    chompVariants postFirstVariantComments [ firstVariant ] firstEnd
+                                                (\( firstVariant, firstEnd ) ->
+                                                    chompVariants [ firstVariant ] firstEnd
                                                         |> P.fmap
-                                                            (\( ( postVariantsComments, variants ), end ) ->
+                                                            (\( variants, end ) ->
                                                                 let
                                                                     union : A.Located Src.Union
                                                                     union =
                                                                         A.at start end (Src.Union name args variants)
                                                                 in
-                                                                ( ( ( [], postVariantsComments ), Union maybeDocs union ), end )
+                                                                ( ( ( [], [] ), Union maybeDocs union ), end )
                                                             )
                                                 )
                                     )
@@ -316,69 +316,69 @@ chompAliasNameToEqualsHelp name args comments =
 -- CUSTOM TYPES
 
 
-chompCustomNameToEquals : P.Parser E.CustomType ( A.Located Name, List (A.Located Name) )
-chompCustomNameToEquals =
+chompCustomNameToEquals : Src.FComments -> P.Parser E.CustomType (Src.C1 ( Src.C2 (A.Located Name), List (Src.C1 (A.Located Name)) ))
+chompCustomNameToEquals preNameComments =
     P.addLocation (Var.upper E.CT_Name)
         |> P.bind
             (\name ->
                 Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
                     |> P.bind
-                        (\c11 ->
+                        (\trailingComments ->
                             let
                                 _ =
-                                    Debug.log "c11" c11
+                                    Debug.log "c11" trailingComments
                             in
-                            chompCustomNameToEqualsHelp name []
+                            chompCustomNameToEqualsHelp trailingComments ( preNameComments, name ) []
                         )
             )
 
 
-chompCustomNameToEqualsHelp : A.Located Name -> List (A.Located Name) -> P.Parser E.CustomType ( A.Located Name, List (A.Located Name) )
-chompCustomNameToEqualsHelp name args =
+chompCustomNameToEqualsHelp : Src.FComments -> Src.C1 (A.Located Name) -> List (Src.C1 (A.Located Name)) -> P.Parser E.CustomType (Src.C1 ( Src.C2 (A.Located Name), List (Src.C1 (A.Located Name)) ))
+chompCustomNameToEqualsHelp trailingComments (( preNameComments, name_ ) as name) args =
     P.oneOf E.CT_Equals
         [ P.addLocation (Var.lower E.CT_Equals)
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
                         |> P.bind
-                            (\c12 ->
+                            (\postArgComments ->
                                 let
                                     _ =
-                                        Debug.log "c12" c12
+                                        Debug.log "c12" postArgComments
                                 in
-                                chompCustomNameToEqualsHelp name (arg :: args)
+                                chompCustomNameToEqualsHelp postArgComments name (( trailingComments, arg ) :: args)
                             )
                 )
         , P.word1 '=' E.CT_Equals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterEquals)
             |> P.fmap
-                (\c13 ->
+                (\postEqualComments ->
                     let
                         _ =
-                            Debug.log "c13" c13
+                            Debug.log "c13" postEqualComments
                     in
-                    ( name, List.reverse args )
+                    ( postEqualComments, ( ( ( preNameComments, trailingComments ), name_ ), List.reverse args ) )
                 )
         ]
 
 
-chompVariants : Src.FComments -> List ( A.Located Name, List Src.Type ) -> A.Position -> Space.Parser E.CustomType (Src.C1 (List ( A.Located Name, List Src.Type )))
-chompVariants trailingComments variants end =
+chompVariants : List (Src.C2Eol ( A.Located Name, List (Src.C1 Src.Type) )) -> A.Position -> Space.Parser E.CustomType (List (Src.C2Eol ( A.Located Name, List (Src.C1 Src.Type) )))
+chompVariants variants end =
     P.oneOfWithFallback
         [ Space.checkIndent end E.CT_IndentBar
             |> P.bind (\_ -> P.word1 '|' E.CT_Bar)
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterBar)
             |> P.bind
-                (\c14 ->
+                (\preTypeComments ->
                     let
                         _ =
-                            Debug.log "c14" c14
+                            Debug.log "c14" preTypeComments
                     in
-                    Type.variant
+                    Type.variant preTypeComments
                 )
-            |> P.bind (\( ( postVariantComments, variant ), newEnd ) -> chompVariants postVariantComments (variant :: variants) newEnd)
+            |> P.bind (\( variant, newEnd ) -> chompVariants (variant :: variants) newEnd)
         ]
-        ( ( trailingComments, List.reverse variants ), end )
+        ( List.reverse variants, end )
 
 
 

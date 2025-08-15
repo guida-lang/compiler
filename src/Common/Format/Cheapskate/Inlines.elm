@@ -313,7 +313,7 @@ pReference =
 
 pEscaped : Parser String
 pEscaped =
-    fmap String.fromChar (skip ((==) '\\') |> (\_ -> satisfy isEscapable))
+    fmap String.fromChar (skip ((==) '\\') |> bind (\_ -> satisfy isEscapable))
 
 
 
@@ -322,9 +322,8 @@ pEscaped =
 
 pSatisfy : (Char -> Bool) -> Parser Char
 pSatisfy p =
-    -- satisfy (\c -> c /= '\\' && p c)
-    --  <|> (char '\\' *> satisfy (\c -> isEscapable c && p c))
-    Debug.todo "pSatisfy"
+    oneOf (satisfy (\c -> c /= '\\' && p c))
+        (char '\\' |> bind (\_ -> satisfy (\c -> isEscapable c && p c)))
 
 
 
@@ -337,7 +336,7 @@ parseInlines refmap t =
     case parse (fmap List.concat (leftSequence (many (pInline refmap)) endOfInput)) t of
         Err e ->
             -- should not happen
-            crash ("parseInlines: " ++ Debug.toString e)
+            crash ("parseInlines: " ++ showParseError e)
 
         Ok r ->
             r
@@ -642,17 +641,29 @@ schemeSet =
 
 pUri : String -> Parser Inlines
 pUri scheme =
-    -- do
-    --   _ <- char ':'
-    --   x <- scan (OpenParens 0) uriScanner
-    --   guard $ not $ T.null x
-    --   let (rawuri, endingpunct) =
-    --         case T.last x of
-    --              c | c `elem` (".;?!:," :: String) ->
-    --                (scheme <> ":" <> T.init x, singleton (Str (T.singleton c)))
-    --              _ -> (scheme <> ":" <> x, mempty)
-    --   return $ autoLink rawuri <> endingpunct
-    Debug.todo "pUri"
+    char ':'
+        |> bind (\_ -> scan (OpenParens 0) uriScanner)
+        |> bind
+            (\x ->
+                guard (not (String.isEmpty x))
+                    |> bind
+                        (\_ ->
+                            let
+                                ( rawuri, endingpunct ) =
+                                    case String.uncons (String.reverse x) of
+                                        Just ( c, _ ) ->
+                                            if String.contains (String.fromChar c) ".;?!:," then
+                                                ( scheme ++ ":" ++ x, [ Str (String.fromChar c) ] )
+
+                                            else
+                                                ( scheme ++ ":" ++ x, [] )
+
+                                        _ ->
+                                            ( scheme ++ ":" ++ x, [] )
+                            in
+                            return (autoLink rawuri ++ endingpunct)
+                        )
+            )
 
 
 
@@ -670,22 +681,42 @@ type OpenParens
     = OpenParens Int
 
 
+uriScanner : OpenParens -> Char -> Maybe OpenParens
+uriScanner st c =
+    case ( st, c ) of
+        ( _, ' ' ) ->
+            Nothing
 
--- uriScanner : OpenParens -> Char -> Maybe OpenParens
--- uriScanner _ ' '  = Nothing
--- uriScanner _ '\n' = Nothing
--- uriScanner (OpenParens n) '(' = Just (OpenParens (n + 1))
--- uriScanner (OpenParens n) ')'
---   | n > 0 = Just (OpenParens (n - 1))
---   | otherwise = Nothing
--- uriScanner st '+' = Just st
--- uriScanner st '/' = Just st
--- uriScanner _ c | isSpace c = Nothing
--- uriScanner st _ = Just st
--- Parses material enclosed in *s, **s, _s, or __s.
--- Designed to avoid backtracking.
+        ( _, '\n' ) ->
+            Nothing
+
+        ( OpenParens n, '(' ) ->
+            Just (OpenParens (n + 1))
+
+        ( OpenParens n, ')' ) ->
+            if n > 0 then
+                Just (OpenParens (n - 1))
+
+            else
+                Nothing
+
+        ( _, '+' ) ->
+            Just st
+
+        ( _, '/' ) ->
+            Just st
+
+        _ ->
+            if isSpace c then
+                Nothing
+
+            else
+                Just st
 
 
+{-| Parses material enclosed in \*s, \*\*s, \_s, or \_\_s.
+Designed to avoid backtracking.
+-}
 pEnclosure : Char -> ReferenceMap -> Parser Inlines
 pEnclosure c refmap =
     takeWhile1 ((==) c)
@@ -709,10 +740,8 @@ pEnclosure c refmap =
             )
 
 
-
--- singleton sequence or empty if contents are empty
-
-
+{-| singleton sequence or empty if contents are empty
+-}
 single : (Inlines -> Inline) -> Inlines -> Inlines
 single constructor ils =
     if List.isEmpty ils then
@@ -722,51 +751,59 @@ single constructor ils =
         List.singleton (constructor ils)
 
 
-
--- parse inlines til you hit a c, and emit Emph.
--- if you never hit a c, emit '*' + inlines parsed.
-
-
+{-| parse inlines til you hit a c, and emit Emph.
+if you never hit a c, emit '\*' + inlines parsed.
+-}
 pOne : Char -> ReferenceMap -> Inlines -> Parser Inlines
 pOne c refmap prefix =
-    -- do
-    --   contents <- msum <$> many ( (nfbChar c >> pInline refmap)
-    --                              <|> (string (T.pack [c,c]) >>
-    --                                   nfbChar c >> pTwo c refmap mempty) )
-    --   (char c >> return (single Emph $ prefix <> contents))
-    --     <|> return (singleton (Str (T.singleton c)) <> (prefix <> contents))
-    Debug.todo "pOne"
+    fmap List.concat
+        (many
+            (oneOf (nfbChar c |> bind (\_ -> pInline refmap))
+                (string (String.fromList [ c, c ])
+                    |> bind (\_ -> nfbChar c)
+                    |> bind (\_ -> pTwo c refmap [])
+                )
+            )
+        )
+        |> bind
+            (\contents ->
+                oneOf (char c |> bind (\_ -> return (single Emph (prefix ++ contents))))
+                    (return (Str (String.fromChar c) :: (prefix ++ contents)))
+            )
 
 
-
--- parse inlines til you hit two c's, and emit Strong.
--- if you never do hit two c's, emit '**' plus + inlines parsed.
-
-
+{-| parse inlines til you hit two c's, and emit Strong.
+if you never do hit two c's, emit '\*\*' plus + inlines parsed.
+-}
 pTwo : Char -> ReferenceMap -> Inlines -> Parser Inlines
 pTwo c refmap prefix =
-    -- do
-    --   let ender = string $ T.pack [c,c]
-    --   contents <- msum <$> many (nfb ender >> pInline refmap)
-    --   (ender >> return (single Strong $ prefix <> contents))
-    --     <|> return (singleton (Str $ T.pack [c,c]) <> (prefix <> contents))
-    Debug.todo "pTwo"
+    let
+        ender : Parser String
+        ender =
+            string (String.fromList [ c, c ])
+    in
+    fmap List.concat (many (nfb ender |> bind (\_ -> pInline refmap)))
+        |> bind
+            (\contents ->
+                oneOf (ender |> fmap (\_ -> single Strong (prefix ++ contents)))
+                    (return (Str (String.fromList [ c, c ]) :: (prefix ++ contents)))
+            )
 
 
-
--- parse inlines til you hit one c or a sequence of two c's.
--- If one c, emit Emph and then parse pTwo.
--- if two c's, emit Strong and then parse pOne.
-
-
+{-| parse inlines til you hit one c or a sequence of two c's.
+If one c, emit Emph and then parse pTwo.
+if two c's, emit Strong and then parse pOne.
+-}
 pThree : Char -> ReferenceMap -> Parser Inlines
 pThree c refmap =
-    -- do
-    --   contents <- msum <$> (many (nfbChar c >> pInline refmap))
-    --   (string (T.pack [c,c]) >> (pOne c refmap (single Strong contents)))
-    --    <|> (char c >> (pTwo c refmap (single Emph contents)))
-    --    <|> return (singleton (Str $ T.pack [c,c,c]) <> contents)
-    Debug.todo "pThree"
+    fmap List.concat (many (nfbChar c |> bind (\_ -> pInline refmap)))
+        |> bind
+            (\contents ->
+                oneOf (string (String.fromList [ c, c ]) |> bind (\_ -> pOne c refmap (single Strong contents)))
+                    (oneOf (char c |> bind (\_ -> pTwo c refmap (single Emph contents)))
+                        (return (Str (String.fromList [ c, c, c ]) :: contents))
+                    )
+            )
 
 
 
@@ -827,14 +864,22 @@ pLink refmap =
 
 pInlineLink : Inlines -> Parser Inlines
 pInlineLink lab =
-    -- do
-    --   _ <- char '('
-    --   scanSpaces
-    --   url <- pLinkUrl
-    --   tit <- option "" $ scanSpnl *> pLinkTitle <* scanSpaces
-    --   _ <- char ')'
-    --   return $ singleton $ Link lab (Url url) tit
-    Debug.todo "pInlineLink"
+    char '('
+        |> bind
+            (\_ ->
+                scanSpaces
+                    |> bind (\_ -> pLinkUrl)
+                    |> bind
+                        (\url ->
+                            -- tit <- option "" $ scanSpnl *> pLinkTitle <* scanSpaces
+                            option "" (scanSpnl |> bind (\_ -> bind (\_ -> pLinkTitle) scanSpaces))
+                                |> bind
+                                    (\tit ->
+                                        char ')'
+                                            |> fmap (\_ -> [ Link lab (Url url) tit ])
+                                    )
+                        )
+            )
 
 
 
@@ -843,10 +888,8 @@ pInlineLink lab =
 
 pReferenceLink : ReferenceMap -> String -> Inlines -> Parser Inlines
 pReferenceLink _ rawlab lab =
-    -- do
-    --   ref <- option rawlab $ scanSpnl >> pLinkLabel
-    --   return $ singleton $ Link lab (Ref ref) ""
-    Debug.todo "pReferenceLink"
+    option rawlab (scanSpnl |> bind (\_ -> pLinkLabel))
+        |> fmap (\ref -> [ Link lab (Ref ref) "" ])
 
 
 
@@ -961,19 +1004,27 @@ pAutolink =
 
 autoLink : String -> Inlines
 autoLink t =
-    -- singleton $ Link (toInlines t) (Url t) (T.empty)
-    -- where toInlines t' = case parse pToInlines t' of
-    --                        Right r   -> r
-    --                        Left e    -> error $ "autolink: " ++ show e
-    --       pToInlines = mconcat <$> many strOrEntity
-    --       strOrEntity = ((singleton . Str) <$> takeWhile1 (/='&'))
-    --                  <|> pEntity
-    --                  <|> ((singleton . Str) <$> string "&")
-    Debug.todo "autoLink"
+    let
+        toInlines t_ =
+            case parse pToInlines t_ of
+                Ok r ->
+                    r
+
+                Err e ->
+                    crash <| "autolink: " ++ showParseError e
+
+        pToInlines : Parser Inlines
+        pToInlines =
+            fmap List.concat (many strOrEntity)
+
+        strOrEntity : Parser Inlines
+        strOrEntity =
+            oneOf (fmap (List.singleton << Str) (takeWhile1 ((/=) '&')))
+                (oneOf pEntity (fmap (List.singleton << Str) (string "&")))
+    in
+    List.singleton <| Link (toInlines t) (Url t) ""
 
 
 emailLink : String -> Inlines
 emailLink t =
-    -- singleton $ Link (singleton $ Str t)
-    --                            (Url $ "mailto:" <> t) (T.empty)
-    Debug.todo "emailLink"
+    [ Link [ Str t ] (Url ("mailto:" ++ t)) "" ]

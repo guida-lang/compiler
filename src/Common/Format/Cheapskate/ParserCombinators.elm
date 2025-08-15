@@ -32,6 +32,11 @@ type ParseError
     = ParseError Position String
 
 
+showParseError : ParseError -> String
+showParseError (ParseError (Position ln cn) msg) =
+    "ParseError (line " ++ String.fromInt ln ++ " column " ++ String.fromInt cn ++ ") " ++ msg
+
+
 type ParserState
     = ParserState
         { subject : String
@@ -46,7 +51,7 @@ advance parserState str =
         go : Char -> ParserState -> ParserState
         go c (ParserState st) =
             let
-                (Position line column) =
+                (Position line _) =
                     st.position
             in
             ParserState
@@ -57,7 +62,7 @@ advance parserState str =
                             Position (line + 1) 1
 
                         _ ->
-                            Position line (column + 1)
+                            Position line (column st.position + 1)
                 , lastChar = Just c
                 }
     in
@@ -372,6 +377,11 @@ anyChar =
 getPosition : Parser Position
 getPosition =
     Parser (\(ParserState st) -> success (ParserState st) st.position)
+
+
+column : Position -> Int
+column (Position _ cn) =
+    cn
 
 
 

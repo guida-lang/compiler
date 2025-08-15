@@ -122,11 +122,7 @@ term =
                                                                                             in
                                                                                             P.specialize E.TRecordType (expression [])
                                                                                                 |> P.bind
-                                                                                                    (\( ( ( _, postExpressionComments, _ ), tipe ) as x, end ) ->
-                                                                                                        let
-                                                                                                            _ =
-                                                                                                                Debug.log "XXX123" x
-                                                                                                        in
+                                                                                                    (\( ( ( _, postExpressionComments, _ ), tipe ), end ) ->
                                                                                                         Space.checkIndent end E.TRecordIndentEnd
                                                                                                             |> P.bind
                                                                                                                 (\_ ->
@@ -350,19 +346,12 @@ chompRecordEnd comments fields =
                                 chompField
                                     |> P.bind
                                         (\( postFieldComments, field ) ->
-                                            let
-                                                _ =
-                                                    Debug.log "postFieldComments" ( postFieldComments, field, comments )
-                                            in
                                             chompRecordEnd postFieldComments (( ( comments, preNameComments ), field ) :: fields)
                                         )
                             )
                 )
         , P.word1 '}' E.TRecordEnd
-            |> P.fmap
-                (\_ ->
-                    Debug.log "end of chompRecordEnd" ( comments, List.reverse fields )
-                )
+            |> P.fmap (\_ -> ( comments, List.reverse fields ))
         ]
 
 
@@ -404,8 +393,8 @@ chompField =
 -- VARIANT
 
 
-variant : Space.Parser E.CustomType (Src.C1 ( A.Located Name, List Src.Type ))
-variant =
+variant : Src.FComments -> Space.Parser E.CustomType (Src.C2Eol ( A.Located Name, List (Src.C1 Src.Type) ))
+variant trailingComments =
     P.addLocation (Var.upper E.CT_Variant)
         |> P.bind
             (\((A.At (A.Region _ nameEnd) _) as name) ->
@@ -419,7 +408,7 @@ variant =
                             P.specialize E.CT_VariantArg (chompArgs preArgComments [] nameEnd)
                                 |> P.fmap
                                     (\( ( postArgsComments, args ), end ) ->
-                                        ( ( postArgsComments, ( name, List.map Tuple.second args ) ), end )
+                                        ( ( ( trailingComments, postArgsComments, Nothing ), ( name, args ) ), end )
                                     )
                         )
             )

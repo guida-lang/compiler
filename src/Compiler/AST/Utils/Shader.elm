@@ -103,7 +103,7 @@ unescape =
             |> Maybe.withDefault Regex.never
         )
         (\{ match } ->
-            case Debug.log "match" match of
+            case match of
                 "\\n" ->
                     "\n"
 

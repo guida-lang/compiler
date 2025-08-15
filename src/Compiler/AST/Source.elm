@@ -332,7 +332,7 @@ type Value
 
 
 type Union
-    = Union (A.Located Name) (List (A.Located Name)) (List ( A.Located Name, List Type ))
+    = Union (C2 (A.Located Name)) (List (C1 (A.Located Name))) (List (C2Eol ( A.Located Name, List (C1 Type) )))
 
 
 type Alias
@@ -791,18 +791,18 @@ valueDecoder =
 unionEncoder : Union -> BE.Encoder
 unionEncoder (Union name args constructors) =
     BE.sequence
-        [ A.locatedEncoder BE.string name
-        , BE.list (A.locatedEncoder BE.string) args
-        , BE.list (BE.jsonPair (A.locatedEncoder BE.string) (BE.list typeEncoder)) constructors
+        [ c2Encoder (A.locatedEncoder BE.string) name
+        , BE.list (c1Encoder (A.locatedEncoder BE.string)) args
+        , BE.list (c2EolEncoder (BE.jsonPair (A.locatedEncoder BE.string) (BE.list (c1Encoder typeEncoder)))) constructors
         ]
 
 
 unionDecoder : BD.Decoder Union
 unionDecoder =
     BD.map3 Union
-        (A.locatedDecoder BD.string)
-        (BD.list (A.locatedDecoder BD.string))
-        (BD.list (BD.jsonPair (A.locatedDecoder BD.string) (BD.list typeDecoder)))
+        (c2Decoder (A.locatedDecoder BD.string))
+        (BD.list (c1Decoder (A.locatedDecoder BD.string)))
+        (BD.list (c2EolDecoder (BD.jsonPair (A.locatedDecoder BD.string) (BD.list (c1Decoder typeDecoder)))))
 
 
 aliasEncoder : Alias -> BE.Encoder

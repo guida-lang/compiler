@@ -87,26 +87,6 @@ type ContainerType
     | Reference
 
 
-nest : Int -> String -> String
-nest num =
-    String.join "\n"
-        << List.map ((++) (String.repeat num " "))
-        << String.lines
-
-
-showElt : Elt -> String
-showElt elt =
-    case elt of
-        C c ->
-            Debug.toString c
-
-        L _ (TextLine s) ->
-            s
-
-        L _ lf ->
-            Debug.toString lf
-
-
 {-| Scanners that must be satisfied if the current open container
 is to be continued on a new line (ignoring lazy continuations).
 -}
@@ -226,56 +206,59 @@ closeContainer =
     RWS.get
         |> RWS.bind
             (\(ContainerStack top rest) ->
-                -- case top of
-                --     Container Reference cs__ ->
-                --         case parse pReference (String.trim <| joinLines <| List.map extractText cs__) of
-                --             Ok ( lab, lnk, tit ) ->
-                --                 RWS.tell (Dict.singleton (normalizeReference lab) ( lnk, tit ))
-                --                     |> (\_ ->
-                --                             case rest of
-                --                                 (Container ct_ cs_) :: rs ->
-                --                                     RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
-                --                                 [] ->
-                --                                     RWS.return ()
-                --                        )
-                --             Err _ ->
-                --                 -- pass over in silence if ref doesn't parse?
-                --                 case rest of
-                --                     c :: cs ->
-                --                         RWS.put (ContainerStack c cs)
-                --                     [] ->
-                --                         RWS.return ()
-                --     Container ((ListItem _) as li) cs__ ->
-                --         case rest of
-                --             -- move final BlankLine outside of list item
-                --             (Container ct_ cs_) :: rs ->
-                --                 -- case viewr cs__ of
-                --                 --     ((L _ (BlankLine _)) :: zs) as b ->
-                --                 --         RWS.put
-                --                 --             (ContainerStack
-                --                 --                 (if List.isEmpty zs then
-                --                 --                     Container ct_ (cs_ |> C (Container li zs))
-                --                 --                  else
-                --                 --                     Container ct_
-                --                 --                         (cs_
-                --                 --                             |> C (Container li zs)
-                --                 --                             |> b
-                --                 --                         )
-                --                 --                 )
-                --                 --                 rs
-                --                 --             )
-                --                 --     _ ->
-                --                 --         RWS.put (ContainerStack (Container ct_ (cs_ |> C top)) rs)
-                --                 Debug.todo "closeContainer"
-                --             [] ->
-                --                 RWS.return ()
-                --     _ ->
-                --         case rest of
-                --             (Container ct_ cs_) :: rs ->
-                --                 RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
-                --             [] ->
-                --                 RWS.return ()
-                Debug.todo "closeContainer"
+                case top of
+                    Container Reference cs__ ->
+                        case parse pReference (String.trim <| joinLines <| List.map extractText cs__) of
+                            Ok ( lab, lnk, tit ) ->
+                                RWS.tell (Dict.singleton identity (normalizeReference lab) ( lnk, tit ))
+                                    |> (\_ ->
+                                            case rest of
+                                                (Container ct_ cs_) :: rs ->
+                                                    RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
+
+                                                [] ->
+                                                    RWS.return ()
+                                       )
+
+                            Err _ ->
+                                -- pass over in silence if ref doesn't parse?
+                                case rest of
+                                    c :: cs ->
+                                        RWS.put (ContainerStack c cs)
+
+                                    [] ->
+                                        RWS.return ()
+
+                    Container ((ListItem _) as li) cs__ ->
+                        case rest of
+                            -- move final BlankLine outside of list item
+                            (Container ct_ cs_) :: rs ->
+                                case List.reverse cs__ of
+                                    ((L _ (BlankLine _)) as b) :: zs ->
+                                        RWS.put
+                                            (ContainerStack
+                                                (if List.isEmpty zs then
+                                                    Container ct_ (cs_ ++ [ C (Container li zs) ])
+
+                                                 else
+                                                    Container ct_ (cs_ ++ [ C (Container li zs), b ])
+                                                )
+                                                rs
+                                            )
+
+                                    _ ->
+                                        RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
+
+                            [] ->
+                                RWS.return ()
+
+                    _ ->
+                        case rest of
+                            (Container ct_ cs_) :: rs ->
+                                RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
+
+                            [] ->
+                                RWS.return ()
             )
 
 
@@ -310,11 +293,10 @@ addLeaf lineNum lf =
 
 addContainer : ContainerType -> ContainerM ()
 addContainer ct =
-    -- modify
-    --     (\(ContainerStack top rest) ->
-    --         ContainerStack (Container ct []) (top :: rest)
-    --     )
-    Debug.todo "addContainer"
+    RWS.modify
+        (\(ContainerStack top rest) ->
+            ContainerStack (Container ct []) (top :: rest)
+        )
 
 
 
@@ -673,8 +655,7 @@ processLine ( lineNumber, txt ) =
                     -- Some new containers can be started only after a blank.
                     lastLineIsText : Bool
                     lastLineIsText =
-                        numUnmatched
-                            == 0
+                        (numUnmatched == 0)
                             && (case List.reverse cs of
                                     (L _ (TextLine _)) :: _ ->
                                         True
@@ -698,23 +679,15 @@ processLine ( lineNumber, txt ) =
                 in
                 -- Process the rest of the line in a way that makes sense given
                 -- the container type at the top of the stack (ct):
-                case ct of
+                case ( ct, numUnmatched == 0 ) of
                     -- If it's a verbatim line container, add the line.
-                    RawHtmlBlock ->
-                        if numUnmatched == 0 then
-                            addLeaf lineNumber (TextLine t_)
+                    ( RawHtmlBlock, True ) ->
+                        addLeaf lineNumber (TextLine t_)
 
-                        else
-                            Debug.todo "RawHtmlBlock"
+                    ( IndentedCode, True ) ->
+                        addLeaf lineNumber (TextLine t_)
 
-                    IndentedCode ->
-                        if numUnmatched == 0 then
-                            addLeaf lineNumber (TextLine t_)
-
-                        else
-                            Debug.todo "IndentedCode"
-
-                    FencedCode { fence } ->
+                    ( FencedCode { fence }, _ ) ->
                         -- here we don't check numUnmatched because we allow laziness
                         if
                             String.startsWith fence t_
@@ -725,7 +698,7 @@ processLine ( lineNumber, txt ) =
                         else
                             addLeaf lineNumber (TextLine t_)
 
-                    Reference ->
+                    ( Reference, _ ) ->
                         case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
                             ( ns, lf ) ->
                                 closeContainer
@@ -819,7 +792,7 @@ tryOpenContainers cs t =
         Err e ->
             crash <|
                 "error parsing scanners: "
-                    ++ Debug.toString e
+                    ++ showParseError e
 
 
 
@@ -858,7 +831,7 @@ tryNewContainers lastLineIsText offset t =
             ( cs, t_ )
 
         Err err ->
-            crash (Debug.toString err)
+            crash (showParseError err)
 
 
 textLineOrBlank : Parser Leaf
@@ -1231,7 +1204,9 @@ stripPrefix p t =
 
 stringBreak : (Char -> Bool) -> String -> ( String, String )
 stringBreak p t =
-    Debug.todo "stringBreak"
+    List.splitWhen p (String.toList t)
+        |> Maybe.map (Tuple.mapBoth String.fromList String.fromList)
+        |> Maybe.withDefault ( t, "" )
 
 
 stringDropWhileEnd : (Char -> Bool) -> String -> String

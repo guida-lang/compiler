@@ -387,7 +387,7 @@ attemptDeclOrExpr lines =
                 PD.Value _ (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) ->
                     ifDone lines (Decl name src)
 
-                PD.Union _ (A.At _ (Src.Union (A.At _ name) _ _)) ->
+                PD.Union _ (A.At _ (Src.Union ( _, A.At _ name ) _ _)) ->
                     ifDone lines (Type name src)
 
                 PD.Alias _ (A.At _ (Src.Alias _ ( _, A.At _ name ) _ _)) ->

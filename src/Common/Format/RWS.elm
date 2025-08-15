@@ -1,6 +1,7 @@
 module Common.Format.RWS exposing (..)
 
 import Data.Map as Dict exposing (Dict)
+import Utils.Crash exposing (crash)
 
 
 type alias RWS r s a =
@@ -61,6 +62,11 @@ put newState =
     \_ _ -> ( (), newState, Dict.empty )
 
 
+modify : (s -> s) -> RWS r s ()
+modify f =
+    \_ s -> ( (), f s, Dict.empty )
+
+
 return : a -> RWS r s a
 return a =
     \_ s -> ( a, s, Dict.empty )
@@ -86,5 +92,5 @@ replicateM n rws =
 
 
 error : String -> RWS r s a
-error _ =
-    Debug.todo "error"
+error =
+    crash

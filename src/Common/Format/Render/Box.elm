@@ -13,8 +13,10 @@ import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name exposing (Name)
 import Compiler.Parse.Declaration as Decl
+import Compiler.Parse.Expression as Expr
 import Compiler.Parse.Module as M
 import Compiler.Parse.Primitives as P
+import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -312,16 +314,28 @@ removeDuplicates input =
                 ( children_, seen_ ) ->
                     ( children_ :: acc, seen_ )
 
+        varName : Src.C2 Value -> Name
+        varName var =
+            case var of
+                ( _, Value name ) ->
+                    name
+
+                ( _, OpValue name ) ->
+                    name
+
+                ( _, Union ( _, name ) _ ) ->
+                    name
+
         stepChildren :
             Src.C2 Value
             -> ( List (Src.C2 Value), EverySet String (Src.C2 Value) )
             -> ( List (Src.C2 Value), EverySet String (Src.C2 Value) )
         stepChildren next ( acc, seen ) =
-            if EverySet.member (\( _, v ) -> Debug.todo "v") next seen then
+            if EverySet.member varName next seen then
                 ( acc, seen )
 
             else
-                ( next :: acc, EverySet.insert (\( _, v ) -> Debug.todo "v") next seen )
+                ( next :: acc, EverySet.insert varName next seen )
     in
     List.foldl step ( [], EverySet.empty ) input
         |> Tuple.first
@@ -753,141 +767,14 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
 
 formatModule : Bool -> Int -> M.Module -> Box
 formatModule addDefaultHeader spacing modu =
+    formatModule_ addDefaultHeader spacing (formatModu modu)
+
+
+formatModu : M.Module -> Module
+formatModu modu =
     let
         declarations =
-            List.concatMap
-                (\( ( preDeclComments, postDeclComments ), decl ) ->
-                    List.map BodyComment preDeclComments
-                        ++ (case decl of
-                                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments ( postNameComments, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType)) ->
-                                    (maybeDocs
-                                        |> Maybe.map
-                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                                                [ DocComment
-                                                    (String.slice offset (offset + length) fptr
-                                                        |> String.trim
-                                                        |> Parse.markdown
-                                                            (Options
-                                                                { sanitize = True
-                                                                , allowRawHtml = True
-                                                                , preserveHardBreaks = True
-                                                                , debug = False
-                                                                }
-                                                            )
-                                                        |> (\(Doc _ blocks) -> blocks)
-                                                    )
-                                                ]
-                                            )
-                                        |> Maybe.withDefault []
-                                    )
-                                        ++ List.map BodyComment preValueComments
-                                        ++ (maybeType
-                                                |> Maybe.map
-                                                    (\( postComments, ( ( preTypComments, postTypeComments ), typ ) ) ->
-                                                        Entry (CommonDeclaration (TypeAnnotation ( preTypComments, VarRef () name ) ( postTypeComments, typ )))
-                                                            :: List.map BodyComment postComments
-                                                    )
-                                                |> Maybe.withDefault []
-                                           )
-                                        ++ [ Entry (CommonDeclaration (Definition (A.At nameRegion (Src.PVar name)) srcArgs (postNameComments ++ valueBodyComments) valueBody)) ]
-
-                                Decl.Union maybeDocs (A.At _ (Src.Union (A.At _ name) args constructors)) ->
-                                    let
-                                        tags : Src.OpenCommentedList (NameWithArgs Name Src.Type)
-                                        tags =
-                                            case List.reverse constructors of
-                                                ( A.At _ lastName, lastArgs ) :: restConstructors ->
-                                                    Src.OpenCommentedList
-                                                        (List.map
-                                                            (\( A.At _ constructorName, constructorArgs ) ->
-                                                                ( ( [], [], Nothing ), NameWithArgs constructorName (List.map (Tuple.pair []) constructorArgs) )
-                                                            )
-                                                            (List.reverse restConstructors)
-                                                        )
-                                                        ( [], Nothing, NameWithArgs lastName (List.map (Tuple.pair []) lastArgs) )
-
-                                                _ ->
-                                                    Debug.todo "tags"
-                                    in
-                                    (maybeDocs
-                                        |> Maybe.map
-                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                                                [ DocComment
-                                                    (String.slice offset (offset + length) fptr
-                                                        |> String.trim
-                                                        |> Parse.markdown
-                                                            (Options
-                                                                { sanitize = True
-                                                                , allowRawHtml = True
-                                                                , preserveHardBreaks = True
-                                                                , debug = False
-                                                                }
-                                                            )
-                                                        |> (\(Doc _ blocks) -> blocks)
-                                                    )
-                                                ]
-                                            )
-                                        |> Maybe.withDefault []
-                                    )
-                                        ++ [ Entry (Datatype ( ( [], [] ), NameWithArgs name (List.map (\(A.At _ arg) -> ( [], arg )) args) ) tags) ]
-
-                                Decl.Alias maybeDocs (A.At _ (Src.Alias comments name args tipe)) ->
-                                    let
-                                        nameWithArgs =
-                                            Src.c2map
-                                                (\(A.At _ n) ->
-                                                    NameWithArgs n (List.map (Src.c1map A.toValue) args)
-                                                )
-                                                name
-                                    in
-                                    (maybeDocs
-                                        |> Maybe.map
-                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                                                [ DocComment
-                                                    (String.slice offset (offset + length) fptr
-                                                        |> String.trim
-                                                        |> Parse.markdown
-                                                            (Options
-                                                                { sanitize = True
-                                                                , allowRawHtml = True
-                                                                , preserveHardBreaks = True
-                                                                , debug = False
-                                                                }
-                                                            )
-                                                        |> (\(Doc _ blocks) -> blocks)
-                                                    )
-                                                ]
-                                            )
-                                        |> Maybe.withDefault []
-                                    )
-                                        ++ [ Entry (TypeAlias comments nameWithArgs tipe) ]
-
-                                Decl.Port maybeDocs (Src.Port comments name tipe) ->
-                                    (maybeDocs
-                                        |> Maybe.map
-                                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                                                [ DocComment
-                                                    (String.slice offset (offset + length) fptr
-                                                        |> String.trim
-                                                        |> Parse.markdown
-                                                            (Options
-                                                                { sanitize = True
-                                                                , allowRawHtml = True
-                                                                , preserveHardBreaks = True
-                                                                , debug = False
-                                                                }
-                                                            )
-                                                        |> (\(Doc _ blocks) -> blocks)
-                                                    )
-                                                ]
-                                            )
-                                        |> Maybe.withDefault []
-                                    )
-                                        ++ [ Entry (PortAnnotation (Src.c2map A.toValue name) comments tipe) ]
-                           )
-                        ++ List.map BodyComment postDeclComments
-                )
-                modu.decls
+            List.concatMap declToDeclarations modu.decls
 
         ( moduleHeaderComments, imports ) =
             List.foldl
@@ -948,105 +835,238 @@ formatModule addDefaultHeader spacing modu =
                     )
                     (List.reverse modu.infixes)
                 ++ declarations
-
-        formatModu : Module
-        formatModu =
-            { importInfo = ImportInfo.fromModule KnownContents.mempty modu
-            , initialComments = modu.initialComments
-            , header =
-                Maybe.map
-                    (\header ->
-                        let
-                            ( sourceTag, sourceSettings ) =
-                                case header.effects of
-                                    M.NoEffects _ ->
-                                        ( Normal, Nothing )
-
-                                    M.Ports _ comments ->
-                                        ( Port comments, Nothing )
-
-                                    M.Manager _ comments ( postWhereComments, manager ) ->
-                                        ( Effect comments
-                                        , Just
-                                            ( ( [], postWhereComments )
-                                            , case manager of
-                                                Src.Cmd ( ( preCmdComments, postCmdComments ), ( ( preEqualComments, postEqualComments ), A.At _ cmdType ) ) ->
-                                                    [ ( ( ( preCmdComments, preEqualComments ), "command" ), ( ( postEqualComments, postCmdComments ), cmdType ) )
-                                                    ]
-
-                                                Src.Sub ( ( preSubComments, postSubComments ), ( ( preEqualComments, postEqualComments ), A.At _ subType ) ) ->
-                                                    [ ( ( ( preSubComments, preEqualComments ), "subscription" ), ( ( postEqualComments, postSubComments ), subType ) )
-                                                    ]
-
-                                                Src.Fx ( ( preCmdComments, postCmdComments ), ( ( preEqualCmdComments, postEqualCmdComments ), A.At (A.Region (A.Position cmdTypeStart cmdTypeEnd) _) cmdType ) ) ( ( preSubComments, postSubComments ), ( ( preEqualSubComments, postEqualSubComments ), A.At (A.Region (A.Position subTypeStart subTypeEnd) _) subType ) ) ->
-                                                    [ ( ( cmdTypeStart, cmdTypeEnd ), ( ( ( preCmdComments, preEqualCmdComments ), "command" ), ( ( postEqualCmdComments, postCmdComments ), cmdType ) ) )
-                                                    , ( ( subTypeStart, subTypeEnd ), ( ( ( preSubComments, preEqualSubComments ), "subscription" ), ( ( postEqualSubComments, postSubComments ), subType ) ) )
-                                                    ]
-                                                        |> List.sortBy Tuple.first
-                                                        |> List.map Tuple.second
-                                            )
-                                        )
-
-                            exportsListing =
-                                Src.c2map
-                                    (\(A.At _ exposing_) ->
-                                        case exposing_ of
-                                            Src.Open preComments postComments ->
-                                                OpenListing ( ( preComments, postComments ), () )
-
-                                            Src.Explicit (A.At region exposed) ->
-                                                ExplicitListing
-                                                    (List.foldl
-                                                        (\( entryComments, entry ) acc ->
-                                                            case entry of
-                                                                Src.Lower (A.At _ name) ->
-                                                                    { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
-
-                                                                Src.Upper (A.At _ name) (Src.Public _) ->
-                                                                    { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
-
-                                                                Src.Upper (A.At _ name) Src.Private ->
-                                                                    { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
-
-                                                                Src.Operator _ name ->
-                                                                    { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
-                                                        )
-                                                        { values = Map.empty
-                                                        , operators = Map.empty
-                                                        , types = Map.empty
-                                                        }
-                                                        exposed
-                                                    )
-                                                    (A.isMultiline region)
-                                    )
-                                    header.exports
-                        in
-                        Header sourceTag (Src.c2map (String.split "." << A.toValue) header.name) sourceSettings (Just exportsListing)
-                    )
-                    modu.header
-            , docs =
-                modu.header
-                    |> Maybe.andThen (.docs >> Result.toMaybe)
-                    |> Maybe.map
-                        (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
-                            String.slice offset (offset + length) fptr
-                                |> String.trim
-                                |> Parse.markdown
-                                    (Options
-                                        { sanitize = True
-                                        , allowRawHtml = True
-                                        , preserveHardBreaks = True
-                                        , debug = False
-                                        }
-                                    )
-                                |> (\(Doc _ blocks) -> blocks)
-                        )
-                    |> A.At A.zero
-            , imports = imports
-            , body = body
-            }
     in
-    formatModule_ addDefaultHeader spacing formatModu
+    { importInfo = ImportInfo.fromModule KnownContents.mempty modu
+    , initialComments = modu.initialComments
+    , header =
+        Maybe.map
+            (\header ->
+                let
+                    ( sourceTag, sourceSettings ) =
+                        case header.effects of
+                            M.NoEffects _ ->
+                                ( Normal, Nothing )
+
+                            M.Ports _ comments ->
+                                ( Port comments, Nothing )
+
+                            M.Manager _ comments ( postWhereComments, manager ) ->
+                                ( Effect comments
+                                , Just
+                                    ( ( [], postWhereComments )
+                                    , case manager of
+                                        Src.Cmd ( ( preCmdComments, postCmdComments ), ( ( preEqualComments, postEqualComments ), A.At _ cmdType ) ) ->
+                                            [ ( ( ( preCmdComments, preEqualComments ), "command" ), ( ( postEqualComments, postCmdComments ), cmdType ) )
+                                            ]
+
+                                        Src.Sub ( ( preSubComments, postSubComments ), ( ( preEqualComments, postEqualComments ), A.At _ subType ) ) ->
+                                            [ ( ( ( preSubComments, preEqualComments ), "subscription" ), ( ( postEqualComments, postSubComments ), subType ) )
+                                            ]
+
+                                        Src.Fx ( ( preCmdComments, postCmdComments ), ( ( preEqualCmdComments, postEqualCmdComments ), A.At (A.Region (A.Position cmdTypeStart cmdTypeEnd) _) cmdType ) ) ( ( preSubComments, postSubComments ), ( ( preEqualSubComments, postEqualSubComments ), A.At (A.Region (A.Position subTypeStart subTypeEnd) _) subType ) ) ->
+                                            [ ( ( cmdTypeStart, cmdTypeEnd ), ( ( ( preCmdComments, preEqualCmdComments ), "command" ), ( ( postEqualCmdComments, postCmdComments ), cmdType ) ) )
+                                            , ( ( subTypeStart, subTypeEnd ), ( ( ( preSubComments, preEqualSubComments ), "subscription" ), ( ( postEqualSubComments, postSubComments ), subType ) ) )
+                                            ]
+                                                |> List.sortBy Tuple.first
+                                                |> List.map Tuple.second
+                                    )
+                                )
+
+                    exportsListing =
+                        Src.c2map
+                            (\(A.At _ exposing_) ->
+                                case exposing_ of
+                                    Src.Open preComments postComments ->
+                                        OpenListing ( ( preComments, postComments ), () )
+
+                                    Src.Explicit (A.At region exposed) ->
+                                        ExplicitListing
+                                            (List.foldl
+                                                (\( entryComments, entry ) acc ->
+                                                    case entry of
+                                                        Src.Lower (A.At _ name) ->
+                                                            { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
+
+                                                        Src.Upper (A.At _ name) (Src.Public _) ->
+                                                            { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
+
+                                                        Src.Upper (A.At _ name) Src.Private ->
+                                                            { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
+
+                                                        Src.Operator _ name ->
+                                                            { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
+                                                )
+                                                { values = Map.empty
+                                                , operators = Map.empty
+                                                , types = Map.empty
+                                                }
+                                                exposed
+                                            )
+                                            (A.isMultiline region)
+                            )
+                            header.exports
+                in
+                Header sourceTag (Src.c2map (String.split "." << A.toValue) header.name) sourceSettings (Just exportsListing)
+            )
+            modu.header
+    , docs =
+        modu.header
+            |> Maybe.andThen (.docs >> Result.toMaybe)
+            |> Maybe.map
+                (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                    String.slice offset (offset + length) fptr
+                        |> String.trim
+                        |> Parse.markdown
+                            (Options
+                                { sanitize = True
+                                , allowRawHtml = True
+                                , preserveHardBreaks = True
+                                , debug = False
+                                }
+                            )
+                        |> (\(Doc _ blocks) -> blocks)
+                )
+            |> A.At A.zero
+    , imports = imports
+    , body = body
+    }
+
+
+declToDeclarations : Src.C2 Decl.Decl -> List (TopLevelStructure Declaration)
+declToDeclarations ( ( preDeclComments, postDeclComments ), decl ) =
+    List.map BodyComment preDeclComments
+        ++ (case decl of
+                Decl.Value maybeDocs (A.At _ (Src.Value preValueComments ( postNameComments, A.At nameRegion name ) srcArgs ( valueBodyComments, valueBody ) maybeType)) ->
+                    (maybeDocs
+                        |> Maybe.map
+                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                [ DocComment
+                                    (String.slice offset (offset + length) fptr
+                                        |> String.trim
+                                        |> Parse.markdown
+                                            (Options
+                                                { sanitize = True
+                                                , allowRawHtml = True
+                                                , preserveHardBreaks = True
+                                                , debug = False
+                                                }
+                                            )
+                                        |> (\(Doc _ blocks) -> blocks)
+                                    )
+                                ]
+                            )
+                        |> Maybe.withDefault []
+                    )
+                        ++ List.map BodyComment preValueComments
+                        ++ (maybeType
+                                |> Maybe.map
+                                    (\( postComments, ( ( preTypComments, postTypeComments ), typ ) ) ->
+                                        Entry (CommonDeclaration (TypeAnnotation ( preTypComments, VarRef () name ) ( postTypeComments, typ )))
+                                            :: List.map BodyComment postComments
+                                    )
+                                |> Maybe.withDefault []
+                           )
+                        ++ [ Entry (CommonDeclaration (Definition (A.At nameRegion (Src.PVar name)) srcArgs (postNameComments ++ valueBodyComments) valueBody)) ]
+
+                Decl.Union maybeDocs (A.At _ (Src.Union ( nameComments, A.At _ name ) args constructors)) ->
+                    let
+                        ( postTagsComments, tags ) =
+                            case List.reverse constructors of
+                                ( ( preLastConstructorComments, postLastConstructorComments, _ ), ( A.At _ lastName, lastArgs ) ) :: restConstructors ->
+                                    ( postLastConstructorComments
+                                    , Src.OpenCommentedList
+                                        (List.map
+                                            (\( comments, ( A.At _ constructorName, constructorArgs ) ) ->
+                                                ( comments, NameWithArgs constructorName constructorArgs )
+                                            )
+                                            (List.reverse restConstructors)
+                                        )
+                                        ( preLastConstructorComments, Nothing, NameWithArgs lastName lastArgs )
+                                    )
+
+                                -- Note: the following case should not occur, since
+                                -- it is invalid to have a union type without constructors.
+                                _ ->
+                                    crash "union type without constructors"
+                    in
+                    (maybeDocs
+                        |> Maybe.map
+                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                [ DocComment
+                                    (String.slice offset (offset + length) fptr
+                                        |> String.trim
+                                        |> Parse.markdown
+                                            (Options
+                                                { sanitize = True
+                                                , allowRawHtml = True
+                                                , preserveHardBreaks = True
+                                                , debug = False
+                                                }
+                                            )
+                                        |> (\(Doc _ blocks) -> blocks)
+                                    )
+                                ]
+                            )
+                        |> Maybe.withDefault []
+                    )
+                        ++ Entry (Datatype ( nameComments, NameWithArgs name (List.map (Src.c1map A.toValue) args) ) tags)
+                        :: List.map BodyComment postTagsComments
+
+                Decl.Alias maybeDocs (A.At _ (Src.Alias comments name args tipe)) ->
+                    let
+                        nameWithArgs =
+                            Src.c2map
+                                (\(A.At _ n) ->
+                                    NameWithArgs n (List.map (Src.c1map A.toValue) args)
+                                )
+                                name
+                    in
+                    (maybeDocs
+                        |> Maybe.map
+                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                [ DocComment
+                                    (String.slice offset (offset + length) fptr
+                                        |> String.trim
+                                        |> Parse.markdown
+                                            (Options
+                                                { sanitize = True
+                                                , allowRawHtml = True
+                                                , preserveHardBreaks = True
+                                                , debug = False
+                                                }
+                                            )
+                                        |> (\(Doc _ blocks) -> blocks)
+                                    )
+                                ]
+                            )
+                        |> Maybe.withDefault []
+                    )
+                        ++ [ Entry (TypeAlias comments nameWithArgs tipe) ]
+
+                Decl.Port maybeDocs (Src.Port comments name tipe) ->
+                    (maybeDocs
+                        |> Maybe.map
+                            (\(Src.Comment (P.Snippet { fptr, offset, length })) ->
+                                [ DocComment
+                                    (String.slice offset (offset + length) fptr
+                                        |> String.trim
+                                        |> Parse.markdown
+                                            (Options
+                                                { sanitize = True
+                                                , allowRawHtml = True
+                                                , preserveHardBreaks = True
+                                                , debug = False
+                                                }
+                                            )
+                                        |> (\(Doc _ blocks) -> blocks)
+                                    )
+                                ]
+                            )
+                        |> Maybe.withDefault []
+                    )
+                        ++ [ Entry (PortAnnotation (Src.c2map A.toValue name) comments tipe) ]
+           )
+        ++ List.map BodyComment postDeclComments
 
 
 formatModule_ : Bool -> Int -> Module -> Box
@@ -1223,31 +1243,17 @@ type ElmCodeBlock
     | ModuleCode Module
 
 
-
--- convertElmCodeBlock : (ann -> ann_) -> ElmCodeBlock ann ns -> ElmCodeBlock ann_ ns
--- convertElmCodeBlock f elmCodeBlock =
---     case elmCodeBlock of
---         DeclarationsCode decls ->
---             DeclarationsCode (fmap (fmap (I.convert f)) decls)
---         ExpressionsCode exprs ->
---             ExpressionsCode (fmap (fmap (fmap (I.convert f))) exprs)
---         ModuleCode mod ->
---             ModuleCode (fmap (I.convert f) mod)
-
-
 formatDocComment : ImportInfo -> Blocks -> Box
 formatDocComment importInfo blocks =
     let
         parse : String -> Maybe ElmCodeBlock
         parse source =
-            -- TODO
-            -- source
-            --     |> Maybe.oneOf
-            --         [ Maybe.map DeclarationsCode << Result.toMaybe << Parse.parseDeclarations
-            --         , Maybe.map ExpressionsCode << Result.toMaybe << Parse.parseExpressions
-            --         , Maybe.map ModuleCode << Result.toMaybe << Parse.parseModule
-            --         ]
-            Nothing
+            source
+                |> Maybe.oneOf
+                    [ Maybe.map DeclarationsCode << Result.toMaybe << parseDeclarations
+                    , Maybe.map ExpressionsCode << Result.toMaybe << parseExpressions
+                    , Maybe.map ModuleCode << Result.toMaybe << parseModule
+                    ]
 
         format : ElmCodeBlock -> String
         format result =
@@ -1286,6 +1292,30 @@ formatDocComment importInfo blocks =
                     block
     in
     formatDocCommentString content
+
+
+parseDeclarations : String -> Result () (List (TopLevelStructure Declaration))
+parseDeclarations source =
+    -- TODO/FIXME SyntaxVersion
+    P.fromByteString (P.specialize (\_ -> Tuple.pair) (Decl.declaration SV.Guida)) Tuple.pair source
+        |> Result.mapError (\_ -> ())
+        |> Result.map (\( decl, _ ) -> declToDeclarations decl)
+
+
+parseExpressions : String -> Result () (List (TopLevelStructure (Src.C0Eol Src.Expr)))
+parseExpressions source =
+    -- TODO/FIXME SyntaxVersion
+    P.fromByteString (P.specialize (\_ -> Tuple.pair) (Expr.expression SV.Guida)) Tuple.pair source
+        |> Result.mapError (\_ -> ())
+        |> Result.map (\( ( _, expr ), _ ) -> [ Entry ( Nothing, expr ) ])
+
+
+parseModule : String -> Result () Module
+parseModule source =
+    -- TODO/FIXME SyntaxVersion
+    P.fromByteString (P.specialize (\_ -> Tuple.pair) (M.chompModule SV.Guida M.Application)) Tuple.pair source
+        |> Result.mapError (\_ -> ())
+        |> Result.map formatModu
 
 
 formatDocCommentString : String -> Box
@@ -1761,7 +1791,7 @@ formatPattern apattern =
 
         Src.PRecord ( _, fields ) ->
             ( SyntaxSeparated
-            , ElmStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) fields)
+            , ElmStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) (List.reverse fields))
             )
 
         Src.PAlias aliasPattern name ->
@@ -1969,7 +1999,7 @@ needsParensInContext inner outer =
 
 formatExpression : ImportInfo -> Src.Expr -> ( SyntaxContext, Box )
 formatExpression importInfo (A.At region aexpr) =
-    case Debug.log "aexpr" aexpr of
+    case aexpr of
         Src.Chr char ->
             ( SyntaxSeparated, formatString SChar char )
 
@@ -2835,10 +2865,6 @@ type TypeParensInner
 
 typeParens : TypeParensRequired -> ( TypeParensInner, Box ) -> Box
 typeParens outer ( inner, box ) =
-    let
-        _ =
-            Debug.log "typeParens" ( outer, inner, typeParensNeeded outer inner )
-    in
     if typeParensNeeded outer inner then
         parens box
 

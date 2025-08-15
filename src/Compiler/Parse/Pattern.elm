@@ -190,23 +190,23 @@ recordHelp start vars =
         [ P.word1 ',' E.PRecordEnd
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentField)
             |> P.bind
-                (\c86 ->
+                (\preVarComments ->
                     let
                         _ =
-                            Debug.log "c86" c86
+                            Debug.log "c86" preVarComments
                     in
                     P.addLocation (Var.lower E.PRecordField)
-                )
-            |> P.bind
-                (\var ->
-                    Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
                         |> P.bind
-                            (\c87 ->
-                                let
-                                    _ =
-                                        Debug.log "c87" c87
-                                in
-                                recordHelp start (( ( [], [] ), var ) :: vars)
+                            (\var ->
+                                Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
+                                    |> P.bind
+                                        (\postVarComments ->
+                                            let
+                                                _ =
+                                                    Debug.log "c87" postVarComments
+                                            in
+                                            recordHelp start (( ( preVarComments, postVarComments ), var ) :: vars)
+                                        )
                             )
                 )
         , P.word1 '}' E.PRecordEnd

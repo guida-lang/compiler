@@ -173,6 +173,12 @@ things.
         "{-| lambdaFn comment -}",
         "lambdaFn {- lambdaFn1 -} : {- lambdaFn2 -} Int {- lambdaFn3 -} -> {- lambdaFn4 -} () {- lambdaFn5 -}",
         "lambdaFn {- lambdaFn6 -} = {- lambdaFn7 -} \\_ {- lambdaFn8 -} -> {- lambdaFn9 -} () {- lambdaFn10 -}",
+        "{-| record case pattern comment -}",
+        "recordCasePatternFn {- recordCasePatternFn1 -} : {- recordCasePatternFn2 -} () {- recordCasePatternFn3 -}",
+        `recordCasePatternFn {- recordCasePatternFn4 -} = {- recordCasePatternFn5 -} case {- recordCasePatternFn6 -} () {- recordCasePatternFn7 -} of
+            {- recordCasePatternFn8 -}  { {- recordCasePatternFn9 -} a {- recordCasePatternFn10 -}, {- recordCasePatternFn11 -} b {- recordCasePatternFn12 -} } {- recordCasePatternFn13 -} -> ()`,
+        "{-| union type with arguments comment -}",
+        "type {- UnionArgs1 -} UnionTypeArgs {- UnionArgs2 -} a {- UnionArgs3 -} b {- UnionArgs4 -} c {- UnionArgs5 -} = UnionTypeArgs1 {- UnionArgs6 -} a {- UnionArgs7 -} b {- UnionArgs8 -} c {- UnionArgs9 -} d {- UnionArgs10 -} | {- UnionArgs11 -} UnionTypeArgs2 {- UnionArgs12 -} a {- UnionArgs13 -} b {- UnionArgs14 -} c {- UnionArgs15 -} d {- UnionArgs16 -}"
     ]
 }
 
@@ -189,6 +195,7 @@ const examples = [
     // DOCS
     ["Docs", [
         { title: "basic", filename: "BasicDocs", module: { ...defaultModule, docs: "{-| some documentation\n-}" } },
+        { title: "duplicate docs", filename: "ExposingDocs", module: { ...defaultModule, header: "module Main exposing (fn)", docs: "{-|\n@docs fn, fn\n-}", declarations: ["fn = ()"] } },
     ]],
     // IMPORTS
     ["Imports", [

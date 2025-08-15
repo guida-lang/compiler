@@ -110,7 +110,7 @@ addTypes (Src.Module syntaxVersion _ _ _ _ _ unions aliases _ _) env =
             Dups.insert name region ()
 
         addUnionDups : A.Located Src.Union -> Dups.Tracker () -> Dups.Tracker ()
-        addUnionDups (A.At _ (Src.Union (A.At region name) _ _)) =
+        addUnionDups (A.At _ (Src.Union ( _, A.At region name ) _ _)) =
             Dups.insert name region ()
 
         typeNameDups : Dups.Tracker ()
@@ -126,7 +126,7 @@ addTypes (Src.Module syntaxVersion _ _ _ _ _ unions aliases _ _) env =
 
 
 addUnion : IO.Canonical -> Env.Exposed Env.Type -> A.Located Src.Union -> LResult i w (Env.Exposed Env.Type)
-addUnion home types ((A.At _ (Src.Union (A.At _ name) _ _)) as union) =
+addUnion home types ((A.At _ (Src.Union ( _, A.At _ name ) _ _)) as union) =
     R.fmap
         (\arity ->
             let
@@ -238,7 +238,7 @@ getEdges (A.At _ tipe) edges =
 
 
 checkUnionFreeVars : A.Located Src.Union -> LResult i w Int
-checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
+checkUnionFreeVars (A.At unionRegion (Src.Union ( _, A.At _ name ) args ctors)) =
     let
         addArg : A.Located Name -> Dups.Tracker A.Region -> Dups.Tracker A.Region
         addArg (A.At region arg) dict =
@@ -248,13 +248,13 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
         addCtorFreeVars ( _, tipes ) freeVars =
             List.foldl addFreeVars freeVars tipes
     in
-    Dups.detect (Error.DuplicateUnionArg name) (List.foldr addArg Dups.none args)
+    Dups.detect (Error.DuplicateUnionArg name) (List.foldr addArg Dups.none (List.map Src.c1Value args))
         |> R.bind
             (\boundVars ->
                 let
                     freeVars : Dict String Name A.Region
                     freeVars =
-                        List.foldr addCtorFreeVars Dict.empty ctors
+                        List.foldr addCtorFreeVars Dict.empty (List.map (Src.c2EolValue >> Tuple.mapSecond (List.map Src.c1Value)) ctors)
                 in
                 case Dict.toList compare (Dict.diff freeVars boundVars) of
                     [] ->
@@ -262,7 +262,7 @@ checkUnionFreeVars (A.At unionRegion (Src.Union (A.At _ name) args ctors)) =
 
                     unbound :: unbounds ->
                         R.throw <|
-                            Error.TypeVarsUnboundInUnion unionRegion name (List.map A.toValue args) unbound unbounds
+                            Error.TypeVarsUnboundInUnion unionRegion name (List.map (Src.c1Value >> A.toValue) args) unbound unbounds
             )
 
 
@@ -422,14 +422,14 @@ toRecordCtor home name vars fields =
 
 
 canonicalizeUnion : SyntaxVersion -> Env.Env -> A.Located Src.Union -> LResult i w ( ( Name.Name, Can.Union ), CtorDups )
-canonicalizeUnion syntaxVersion ({ home } as env) (A.At _ (Src.Union (A.At _ name) avars ctors)) =
-    R.indexedTraverse (canonicalizeCtor syntaxVersion env) ctors
+canonicalizeUnion syntaxVersion ({ home } as env) (A.At _ (Src.Union ( _, A.At _ name ) avars ctors)) =
+    R.indexedTraverse (canonicalizeCtor syntaxVersion env) (List.map (Tuple.mapSecond (List.map Src.c1Value)) (List.map Src.c2EolValue ctors))
         |> R.bind
             (\cctors ->
                 let
                     vars : List Name
                     vars =
-                        List.map A.toValue avars
+                        List.map (Src.c1Value >> A.toValue) avars
 
                     alts : List Can.Ctor
                     alts =
@@ -454,14 +454,14 @@ canonicalizeCtor syntaxVersion env index ( A.At region ctor, tipes ) =
             )
 
 
-toOpts : List ( A.Located Name.Name, List Src.Type ) -> Can.CtorOpts
+toOpts : List (Src.C2Eol ( A.Located Name.Name, List (Src.C1 Src.Type) )) -> Can.CtorOpts
 toOpts ctors =
     case ctors of
-        [ ( _, [ _ ] ) ] ->
+        [ ( _, ( _, [ _ ] ) ) ] ->
             Can.Unbox
 
         _ ->
-            if List.all (List.isEmpty << Tuple.second) ctors then
+            if List.all (List.isEmpty << Tuple.second) (List.map Src.c2EolValue ctors) then
                 Can.Enum
 
             else

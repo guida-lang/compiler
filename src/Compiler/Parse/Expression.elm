@@ -339,10 +339,6 @@ record syntaxVersion start =
                                                                         P.specialize E.RecordExpr (expression syntaxVersion)
                                                                             |> P.bind
                                                                                 (\( ( postValueComments, value ), end ) ->
-                                                                                    let
-                                                                                        _ =
-                                                                                            Debug.log "postValueComments" postValueComments
-                                                                                    in
                                                                                     Space.checkIndent end E.RecordIndentEnd
                                                                                         |> P.bind (\_ -> chompFields syntaxVersion postValueComments [ ( ( [], preStarterNameComments, Nothing ), ( ( postStarterNameComments, starter ), ( preValueComments, value ) ) ) ])
                                                                                         |> P.bind (\fields -> P.addEnd start (Src.Record fields))
@@ -560,20 +556,21 @@ chompField syntaxVersion preCommaComents postCommaComments =
                             P.word1 '=' E.RecordEquals
                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.RecordSpace E.RecordIndentExpr)
                                 |> P.bind
-                                    (\c38 ->
+                                    (\postEqualSignComments ->
                                         let
                                             _ =
-                                                Debug.log "c38" c38
+                                                Debug.log "c38" postEqualSignComments
                                         in
                                         P.specialize E.RecordExpr (expression syntaxVersion)
                                             |> P.bind
                                                 (\( ( postFieldComments, value ), end ) ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "x" postFieldComments
-                                                    in
                                                     Space.checkIndent end E.RecordIndentEnd
-                                                        |> P.fmap (\_ -> ( postFieldComments, ( ( preCommaComents, postCommaComments, Nothing ), ( ( preEqualSignComments, key ), ( c38, value ) ) ) ))
+                                                        |> P.fmap
+                                                            (\_ ->
+                                                                ( postFieldComments
+                                                                , ( ( preCommaComents, postCommaComments, Nothing ), ( ( preEqualSignComments, key ), ( postEqualSignComments, value ) ) )
+                                                                )
+                                                            )
                                                 )
                                     )
                         )
@@ -994,7 +991,7 @@ case_ syntaxVersion start =
                                                 (chompBranch syntaxVersion comments
                                                     |> P.bind
                                                         (\( ( trailingComments, firstBranch ), firstEnd ) ->
-                                                            chompCaseEnd syntaxVersion (Debug.log "trailingCommentsaaa" trailingComments) [ firstBranch ] firstEnd
+                                                            chompCaseEnd syntaxVersion trailingComments [ firstBranch ] firstEnd
                                                                 |> P.fmap
                                                                     (\( ( branchesTrailingComments, branches ), end ) ->
                                                                         ( ( branchesTrailingComments, A.at start end (Src.Case ( ( preExprComments, postExprComments ), expr ) branches) )
@@ -1024,7 +1021,16 @@ chompBranch syntaxVersion prePatternComments =
                                     Debug.log "c49" preBranchExprComments
                             in
                             P.specialize E.CaseBranch (expression syntaxVersion)
-                                |> P.fmap (\( ( trailingComments, branchExpr ), end ) -> Debug.log "chompBranch!!!!!!1111" ( ( trailingComments, ( ( ( prePatternComments, postPatternComments ), pattern ), ( preBranchExprComments, branchExpr ) ) ), end ))
+                                |> P.fmap
+                                    (\( ( trailingComments, branchExpr ), end ) ->
+                                        ( ( trailingComments
+                                          , ( ( ( prePatternComments, postPatternComments ), pattern )
+                                            , ( preBranchExprComments, branchExpr )
+                                            )
+                                          )
+                                        , end
+                                        )
+                                    )
                         )
             )
 
@@ -1075,7 +1081,7 @@ let_ syntaxVersion start =
                                 P.specialize E.LetBody (expression syntaxVersion)
                                     |> P.fmap
                                         (\( ( trailingComments, body ), end ) ->
-                                            ( ( Debug.log "defs.trailingComments" trailingComments, A.at start end (Src.Let (Debug.log "defs" defs) bodyComments body) ), end )
+                                            ( ( trailingComments, A.at start end (Src.Let defs bodyComments body) ), end )
                                         )
                             )
                 )
@@ -1183,7 +1189,7 @@ chompDefArgsAndBody syntaxVersion start name tipe trailingComments revArgs =
                     P.specialize E.DefBody (expression syntaxVersion)
                         |> P.fmap
                             (\( ( comments, body ), end ) ->
-                                ( ( Debug.log "comments123!" comments, A.at start end (Src.Define name (List.reverse revArgs) ( trailingComments ++ preExpressionComments, body ) tipe) )
+                                ( ( comments, A.at start end (Src.Define name (List.reverse revArgs) ( trailingComments ++ preExpressionComments, body ) tipe) )
                                 , end
                                 )
                             )
