@@ -173,6 +173,9 @@ canonicalize syntaxVersion env (A.At region expression) =
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)
 
+            Src.Parens ( _, expr ) ->
+                R.fmap A.toValue (canonicalize syntaxVersion env expr)
+
 
 canonicalizeTupleExtras : SyntaxVersion -> A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
 canonicalizeTupleExtras syntaxVersion region env extras =

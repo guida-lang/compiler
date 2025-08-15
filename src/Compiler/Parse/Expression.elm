@@ -200,10 +200,10 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                                                     (\((A.At (A.Region _ end) _) as negatedExpr) ->
                                                                                         Space.chomp E.Space
                                                                                             |> P.bind
-                                                                                                (\c110 ->
+                                                                                                (\postTermComments ->
                                                                                                     let
                                                                                                         _ =
-                                                                                                            Debug.log "c110" c110
+                                                                                                            Debug.log "c110" postTermComments
 
                                                                                                         exprStart : A.Position
                                                                                                         exprStart =
@@ -222,7 +222,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
                                                                                                             , end = end
                                                                                                             }
                                                                                                         )
-                                                                                                        []
+                                                                                                        postTermComments
                                                                                                 )
                                                                                     )
                                                                             )
@@ -253,7 +253,7 @@ tuple syntaxVersion ((A.Position row col) as start) =
 
 
 chompTupleEnd : SyntaxVersion -> A.Position -> Src.C2 Src.Expr -> List (Src.C2 Src.Expr) -> P.Parser E.Tuple Src.Expr
-chompTupleEnd syntaxVersion start (( _, innerFirstExpr ) as firstExpr) revExprs =
+chompTupleEnd syntaxVersion start firstExpr revExprs =
     P.oneOf E.TupleEnd
         [ P.word1 ',' E.TupleEnd
             |> P.bind
@@ -278,7 +278,7 @@ chompTupleEnd syntaxVersion start (( _, innerFirstExpr ) as firstExpr) revExprs 
                 (\_ ->
                     case List.reverse revExprs of
                         [] ->
-                            P.pure innerFirstExpr
+                            P.addEnd start (Src.Parens firstExpr)
 
                         secondExpr :: otherExprs ->
                             P.addEnd start (Src.Tuple firstExpr secondExpr otherExprs)

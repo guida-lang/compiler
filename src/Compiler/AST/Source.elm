@@ -241,6 +241,7 @@ type Expr_
     | Unit
     | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
     | Shader Shader.Source Shader.Types
+    | Parens (C2 Expr)
 
 
 type VarType
@@ -1368,6 +1369,12 @@ expr_Encoder expr_ =
                 , Shader.typesEncoder tipe
                 ]
 
+        Parens expr ->
+            BE.sequence
+                [ BE.unsignedInt8 22
+                , c2Encoder exprEncoder expr
+                ]
+
 
 expr_Decoder : BD.Decoder Expr_
 expr_Decoder =
@@ -1477,6 +1484,9 @@ expr_Decoder =
                         BD.map2 Shader
                             Shader.sourceDecoder
                             Shader.typesDecoder
+
+                    22 ->
+                        BD.map Parens (c2Decoder exprDecoder)
 
                     _ ->
                         BD.fail

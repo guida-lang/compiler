@@ -178,7 +178,10 @@ things.
         `recordCasePatternFn {- recordCasePatternFn4 -} = {- recordCasePatternFn5 -} case {- recordCasePatternFn6 -} () {- recordCasePatternFn7 -} of
             {- recordCasePatternFn8 -}  { {- recordCasePatternFn9 -} a {- recordCasePatternFn10 -}, {- recordCasePatternFn11 -} b {- recordCasePatternFn12 -} } {- recordCasePatternFn13 -} -> ()`,
         "{-| union type with arguments comment -}",
-        "type {- UnionArgs1 -} UnionTypeArgs {- UnionArgs2 -} a {- UnionArgs3 -} b {- UnionArgs4 -} c {- UnionArgs5 -} = UnionTypeArgs1 {- UnionArgs6 -} a {- UnionArgs7 -} b {- UnionArgs8 -} c {- UnionArgs9 -} d {- UnionArgs10 -} | {- UnionArgs11 -} UnionTypeArgs2 {- UnionArgs12 -} a {- UnionArgs13 -} b {- UnionArgs14 -} c {- UnionArgs15 -} d {- UnionArgs16 -}"
+        "type {- UnionArgs1 -} UnionTypeArgs {- UnionArgs2 -} a {- UnionArgs3 -} b {- UnionArgs4 -} c {- UnionArgs5 -} = UnionTypeArgs1 {- UnionArgs6 -} a {- UnionArgs7 -} b {- UnionArgs8 -} c {- UnionArgs9 -} d {- UnionArgs10 -} | {- UnionArgs11 -} UnionTypeArgs2 {- UnionArgs12 -} a {- UnionArgs13 -} b {- UnionArgs14 -} c {- UnionArgs15 -} d {- UnionArgs16 -}",
+        "{-| parentheses comment -}",
+        "parenthesesFn {- parenthesesFn1 -} : {- parenthesesFn2 -} Int {- parenthesesFn3 -}",
+        "parenthesesFn {- parenthesesFn4 -} = {- parenthesesFn5 -} ({- parenthesesFn6 -} -1 {- parenthesesFn7 -}) {- parenthesesFn8 -} + {- parenthesesFn9 -} (-2 {- parenthesesFn10 -})",
     ]
 }
 

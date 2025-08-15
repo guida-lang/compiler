@@ -2428,6 +2428,17 @@ formatExpression importInfo (A.At region aexpr) =
                     ]
             )
 
+        Src.Parens expr ->
+            case expr of
+                ( ( [], [] ), expr_ ) ->
+                    formatExpression importInfo expr_
+
+                _ ->
+                    ( SyntaxSeparated
+                    , formatCommentedExpression importInfo expr
+                        |> parens
+                    )
+
 
 type LetDeclaration
     = LetCommonDeclaration CommonDeclaration
