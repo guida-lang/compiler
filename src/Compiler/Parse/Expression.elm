@@ -304,7 +304,7 @@ record syntaxVersion start =
                             in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
-                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( [ Src.BlockComment [ "TODO17" ] ], [] )))
+                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( preStarterNameComments, [] )))
                                 , P.addLocation (Var.lower E.RecordField)
                                     |> P.bind
                                         (\((A.At starterPosition starterName) as starter) ->
@@ -355,14 +355,14 @@ record syntaxVersion start =
             P.inContext E.Record (P.word1 '{' E.Start) <|
                 (Space.chompAndCheckIndent E.RecordSpace E.RecordIndentOpen
                     |> P.bind
-                        (\c31 ->
+                        (\preStarterNameComments ->
                             let
                                 _ =
-                                    Debug.log "c31" c31
+                                    Debug.log "c31" preStarterNameComments
                             in
                             P.oneOf E.RecordOpen
                                 [ P.word1 '}' E.RecordOpen
-                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( [ Src.BlockComment [ "TODO6" ] ], [] )))
+                                    |> P.bind (\_ -> P.addEnd start (Src.Record ( preStarterNameComments, [] )))
                                 , P.getPosition
                                     |> P.bind
                                         (\nameStart ->
@@ -948,12 +948,12 @@ chompArgs syntaxVersion trailingComments revArgs =
                 (\arg ->
                     Space.chompAndCheckIndent E.FuncSpace E.FuncIndentArrow
                         |> P.bind
-                            (\c46 ->
+                            (\postArgComments ->
                                 let
                                     _ =
-                                        Debug.log "c46" c46
+                                        Debug.log "c46" postArgComments
                                 in
-                                chompArgs syntaxVersion [] (( trailingComments, arg ) :: revArgs)
+                                chompArgs syntaxVersion postArgComments (( trailingComments, arg ) :: revArgs)
                             )
                 )
         , P.word2 '-' '>' E.FuncArrow
