@@ -2227,7 +2227,11 @@ formatExpression importInfo (A.At region aexpr) =
                             case def of
                                 Src.Define (A.At nameRegion name) srcArgs ( comments, body ) maybeType ->
                                     ( maybeType
-                                        |> Maybe.map (\typ -> [ LetCommonDeclaration (TypeAnnotation ( [], VarRef () name ) ( [], typ )) ])
+                                        |> Maybe.map
+                                            (\( postComments, ( ( preTypComments, postTypeComments ), typ ) ) ->
+                                                LetCommonDeclaration (TypeAnnotation ( preTypComments, VarRef () name ) ( postTypeComments, typ ))
+                                                    :: List.map LetComment postComments
+                                            )
                                         |> Maybe.withDefault []
                                     , Definition (A.At nameRegion (Src.PVar name)) srcArgs comments body
                                     )

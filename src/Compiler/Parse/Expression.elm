@@ -1122,47 +1122,47 @@ definition syntaxVersion =
                 P.specialize (E.LetDef name) <|
                     (Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
                         |> P.bind
-                            (\trailingComments ->
+                            (\postNameComments ->
                                 let
                                     _ =
-                                        Debug.log "c52" trailingComments
+                                        Debug.log "c52" postNameComments
                                 in
                                 P.oneOf E.DefEquals
                                     [ P.word1 ':' E.DefEquals
                                         |> P.bind (\_ -> Space.chompAndCheckIndent E.DefSpace E.DefIndentType)
                                         |> P.bind
-                                            (\c53 ->
+                                            (\preTypeComments ->
                                                 let
                                                     _ =
-                                                        Debug.log "c53" c53
+                                                        Debug.log "c53" preTypeComments
                                                 in
-                                                P.specialize E.DefType (Type.expression [])
+                                                P.specialize E.DefType (Type.expression preTypeComments)
                                             )
                                         |> P.bind
-                                            (\( ( _, tipe ), _ ) ->
+                                            (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), _ ) ->
                                                 Space.checkAligned E.DefAlignment
                                                     |> P.bind (\_ -> chompMatchingName name)
                                                     |> P.bind
                                                         (\defName ->
                                                             Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
                                                                 |> P.bind
-                                                                    (\c54 ->
+                                                                    (\trailingComments ->
                                                                         let
                                                                             _ =
-                                                                                Debug.log "c54" c54
+                                                                                Debug.log "c54" trailingComments
                                                                         in
-                                                                        chompDefArgsAndBody syntaxVersion start defName (Just tipe) trailingComments []
+                                                                        chompDefArgsAndBody syntaxVersion start defName (Just ( postTipeComments, ( ( postNameComments, preTipeComments ), tipe ) )) trailingComments []
                                                                     )
                                                         )
                                             )
-                                    , chompDefArgsAndBody syntaxVersion start aname Nothing trailingComments []
+                                    , chompDefArgsAndBody syntaxVersion start aname Nothing postNameComments []
                                     ]
                             )
                     )
             )
 
 
-chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe Src.Type -> Src.FComments -> List (Src.C1 Src.Pattern) -> Space.Parser E.Def (Src.C1 (A.Located Src.Def))
+chompDefArgsAndBody : SyntaxVersion -> A.Position -> A.Located Name.Name -> Maybe (Src.C1 (Src.C2 Src.Type)) -> Src.FComments -> List (Src.C1 Src.Pattern) -> Space.Parser E.Def (Src.C1 (A.Located Src.Def))
 chompDefArgsAndBody syntaxVersion start name tipe trailingComments revArgs =
     P.oneOf E.DefEquals
         [ P.specialize E.DefArg (Pattern.term syntaxVersion)
@@ -1170,12 +1170,12 @@ chompDefArgsAndBody syntaxVersion start name tipe trailingComments revArgs =
                 (\arg ->
                     Space.chompAndCheckIndent E.DefSpace E.DefIndentEquals
                         |> P.bind
-                            (\c55 ->
+                            (\comments ->
                                 let
                                     _ =
-                                        Debug.log "c55" c55
+                                        Debug.log "c55" comments
                                 in
-                                chompDefArgsAndBody syntaxVersion start name tipe [] (( trailingComments, arg ) :: revArgs)
+                                chompDefArgsAndBody syntaxVersion start name tipe comments (( trailingComments, arg ) :: revArgs)
                             )
                 )
         , P.word1 '=' E.DefEquals

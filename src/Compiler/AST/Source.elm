@@ -254,7 +254,7 @@ type VarType
 
 
 type Def
-    = Define (A.Located Name) (List (C1 Pattern)) (C1 Expr) (Maybe Type)
+    = Define (A.Located Name) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 (C2 Type)))
     | Destruct Pattern (C1 Expr)
 
 
@@ -1531,7 +1531,7 @@ defEncoder def =
                 , A.locatedEncoder BE.string name
                 , BE.list (c1Encoder patternEncoder) srcArgs
                 , c1Encoder exprEncoder body
-                , BE.maybe typeEncoder maybeType
+                , BE.maybe (c1Encoder (c2Encoder typeEncoder)) maybeType
                 ]
 
         Destruct pattern body ->
@@ -1553,7 +1553,7 @@ defDecoder =
                             (A.locatedDecoder BD.string)
                             (BD.list (c1Decoder patternDecoder))
                             (c1Decoder exprDecoder)
-                            (BD.maybe typeDecoder)
+                            (BD.maybe (c1Decoder (c2Decoder typeDecoder)))
 
                     1 ->
                         BD.map2 Destruct

@@ -433,7 +433,7 @@ addDefNodes syntaxVersion env nodes (A.At _ def) =
                                         )
                             )
 
-                Just tipe ->
+                Just ( _, ( _, tipe ) ) ->
                     Type.toAnnotation syntaxVersion env tipe
                         |> R.bind
                             (\(Can.Forall freeVars ctipe) ->
