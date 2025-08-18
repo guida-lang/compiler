@@ -292,10 +292,6 @@ freshLine toFreshLineError =
     Space.chomp E.ModuleSpace
         |> P.bind
             (\comments ->
-                let
-                    _ =
-                        Debug.log "c115" comments
-                in
                 Space.checkFreshLine toFreshLineError
                     |> P.fmap (\_ -> comments)
             )
@@ -349,10 +345,6 @@ chompModuleDocCommentSpace =
                                 Space.chomp E.ModuleSpace
                                     |> P.bind
                                         (\afterComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c116" afterComments
-                                            in
                                             Space.checkFreshLine E.FreshLine
                                                 |> P.fmap
                                                     (\_ ->
@@ -411,28 +403,16 @@ chompHeader =
                                             Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem
                                                 |> P.bind
                                                     (\beforeNameComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c59" beforeNameComments
-                                                        in
                                                         P.addLocation (Var.moduleName E.ModuleName)
                                                             |> P.bind
                                                                 (\name ->
                                                                     Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem
                                                                         |> P.bind
                                                                             (\afterNameComments ->
-                                                                                let
-                                                                                    _ =
-                                                                                        Debug.log "c60" afterNameComments
-                                                                                in
                                                                                 Keyword.exposing_ E.ModuleProblem
                                                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ModuleProblem)
                                                                                     |> P.bind
                                                                                         (\afterExportsComments ->
-                                                                                            let
-                                                                                                _ =
-                                                                                                    Debug.log "c61" afterExportsComments
-                                                                                            in
                                                                                             P.addLocation (P.specialize E.ModuleExposing exposing_)
                                                                                                 |> P.bind
                                                                                                     (\exports ->
@@ -458,10 +438,6 @@ chompHeader =
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
                                     |> P.bind
                                         (\postPortComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c62" postPortComments
-                                            in
                                             Keyword.module_ E.PortModuleProblem
                                                 |> P.bind (\_ -> P.getPosition)
                                                 |> P.bind
@@ -469,28 +445,16 @@ chompHeader =
                                                         Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
                                                             |> P.bind
                                                                 (\beforeNameComments ->
-                                                                    let
-                                                                        _ =
-                                                                            Debug.log "c63" beforeNameComments
-                                                                    in
                                                                     P.addLocation (Var.moduleName E.PortModuleName)
                                                                         |> P.bind
                                                                             (\name ->
                                                                                 Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
                                                                                     |> P.bind
                                                                                         (\afterNameComments ->
-                                                                                            let
-                                                                                                _ =
-                                                                                                    Debug.log "c64" afterNameComments
-                                                                                            in
                                                                                             Keyword.exposing_ E.PortModuleProblem
                                                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
                                                                                                 |> P.bind
                                                                                                     (\postExportsComments ->
-                                                                                                        let
-                                                                                                            _ =
-                                                                                                                Debug.log "c65" postExportsComments
-                                                                                                        in
                                                                                                         P.addLocation (P.specialize E.PortModuleExposing exposing_)
                                                                                                             |> P.bind
                                                                                                                 (\exports ->
@@ -517,10 +481,6 @@ chompHeader =
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
                                     |> P.bind
                                         (\postEffectComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c66" postEffectComments
-                                            in
                                             Keyword.module_ E.Effect
                                                 |> P.bind (\_ -> P.getPosition)
                                                 |> P.bind
@@ -528,46 +488,26 @@ chompHeader =
                                                         Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                             |> P.bind
                                                                 (\beforeNameComments ->
-                                                                    let
-                                                                        _ =
-                                                                            Debug.log "c67" beforeNameComments
-                                                                    in
                                                                     P.addLocation (Var.moduleName E.ModuleName)
                                                                         |> P.bind
                                                                             (\name ->
                                                                                 Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                                                     |> P.bind
                                                                                         (\afterNameComments ->
-                                                                                            let
-                                                                                                _ =
-                                                                                                    Debug.log "c68" afterNameComments
-                                                                                            in
                                                                                             Keyword.where_ E.Effect
                                                                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
                                                                                                 |> P.bind
                                                                                                     (\postWhereComments ->
-                                                                                                        let
-                                                                                                            _ =
-                                                                                                                Debug.log "c69" postWhereComments
-                                                                                                        in
                                                                                                         chompManager
                                                                                                             |> P.bind
                                                                                                                 (\( beforeExportsComments, manager ) ->
                                                                                                                     Space.chompAndCheckIndent E.ModuleSpace E.Effect
                                                                                                                         |> P.bind
                                                                                                                             (\_ ->
-                                                                                                                                let
-                                                                                                                                    _ =
-                                                                                                                                        Debug.log "c70" beforeExportsComments
-                                                                                                                                in
                                                                                                                                 Keyword.exposing_ E.Effect
                                                                                                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.Effect)
                                                                                                                                     |> P.bind
                                                                                                                                         (\afterExportsComments ->
-                                                                                                                                            let
-                                                                                                                                                _ =
-                                                                                                                                                    Debug.log "c71" afterExportsComments
-                                                                                                                                            in
                                                                                                                                             P.addLocation (P.specialize (\_ -> E.Effect) exposing_)
                                                                                                                                                 |> P.bind
                                                                                                                                                     (\exports ->
@@ -727,7 +667,6 @@ chompSubscription =
 spaces_em : P.Parser E.Module Src.FComments
 spaces_em =
     Space.chompAndCheckIndent E.ModuleSpace E.Effect
-        |> P.fmap (Debug.log "c72")
 
 
 
@@ -749,20 +688,12 @@ chompImport =
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
         |> P.bind
             (\preNameComments ->
-                let
-                    _ =
-                        Debug.log "c73" preNameComments
-                in
                 P.addLocation (Var.moduleName E.ImportName)
                     |> P.bind
                         (\((A.At (A.Region _ end) _) as name) ->
                             Space.chomp E.ModuleSpace
                                 |> P.bind
                                     (\trailingComments ->
-                                        let
-                                            _ =
-                                                Debug.log "c117" trailingComments
-                                        in
                                         P.oneOf E.ImportEnd
                                             [ Space.checkFreshLine E.ImportEnd
                                                 |> P.fmap (\_ -> ( trailingComments, Src.Import ( preNameComments, name ) Nothing ( ( [], [] ), Src.Explicit (A.At A.zero []) ) ))
@@ -786,10 +717,6 @@ chompAs name trailingComments =
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
         |> P.bind
             (\postAliasComments ->
-                let
-                    _ =
-                        Debug.log "c74" postAliasComments
-                in
                 Var.upper E.ImportAlias
                     |> P.bind
                         (\alias_ ->
@@ -799,10 +726,6 @@ chompAs name trailingComments =
                                         Space.chomp E.ModuleSpace
                                             |> P.bind
                                                 (\preExposedComments ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "c118" preExposedComments
-                                                    in
                                                     P.oneOf E.ImportEnd
                                                         [ Space.checkFreshLine E.ImportEnd
                                                             |> P.fmap (\_ -> ( preExposedComments, Src.Import name (Just ( ( trailingComments, postAliasComments ), alias_ )) ( ( [], [] ), Src.Explicit (A.At A.zero []) ) ))
@@ -821,10 +744,6 @@ chompExposing name maybeAlias trailingComments preExposedComments =
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
         |> P.bind
             (\postExposedComments ->
-                let
-                    _ =
-                        Debug.log "c75" postExposedComments
-                in
                 P.specialize E.ImportExposingList exposing_
                     |> P.bind
                         (\exposed ->
@@ -847,19 +766,11 @@ exposing_ =
                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue
                     |> P.bind
                         (\preExposedComments ->
-                            let
-                                _ =
-                                    Debug.log "c76" preExposedComments
-                            in
                             P.oneOf E.ExposingValue
                                 [ P.word2 '.' '.' E.ExposingValue
                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd)
                                     |> P.bind
                                         (\postComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c77" postComments
-                                            in
                                             P.word1 ')' E.ExposingEnd
                                                 |> P.fmap (\_ -> Src.Open preExposedComments postComments)
                                         )
@@ -869,10 +780,6 @@ exposing_ =
                                             Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
                                                 |> P.bind
                                                     (\postExposedComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c78" postExposedComments
-                                                        in
                                                         P.loop (exposingHelp start) [ ( ( preExposedComments, postExposedComments ), exposed ) ]
                                                     )
                                         )
@@ -888,20 +795,12 @@ exposingHelp start revExposed =
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentValue)
             |> P.bind
                 (\preExposedComments ->
-                    let
-                        _ =
-                            Debug.log "c79" preExposedComments
-                    in
                     chompExposed
                         |> P.bind
                             (\exposed ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
                                     |> P.fmap
                                         (\postExposedComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c80" postExposedComments
-                                            in
                                             P.Loop (( ( preExposedComments, postExposedComments ), exposed ) :: revExposed)
                                         )
                             )
@@ -941,10 +840,6 @@ chompExposed =
                                             Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
                                                 |> P.bind
                                                     (\privacyComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c81" privacyComments
-                                                        in
                                                         privacy
                                                             |> P.fmap (Src.Upper (A.at start end name) << Tuple.pair privacyComments)
                                                     )
@@ -959,14 +854,7 @@ privacy =
     P.oneOfWithFallback
         [ P.word1 '(' E.ExposingTypePrivacy
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy)
-            |> P.bind
-                (\c82NotUsed ->
-                    let
-                        _ =
-                            Debug.log "c82" c82NotUsed
-                    in
-                    P.getPosition
-                )
+            |> P.bind (\_ -> P.getPosition)
             |> P.bind
                 (\start ->
                     P.word2 '.' '.' E.ExposingTypePrivacy
@@ -974,14 +862,7 @@ privacy =
                         |> P.bind
                             (\end ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy
-                                    |> P.bind
-                                        (\c83NotUsed ->
-                                            let
-                                                _ =
-                                                    Debug.log "c83" c83NotUsed
-                                            in
-                                            P.word1 ')' E.ExposingTypePrivacy
-                                        )
+                                    |> P.bind (\_ -> P.word1 ')' E.ExposingTypePrivacy)
                                     |> P.fmap (\_ -> Src.Public (A.Region start end))
                             )
                 )

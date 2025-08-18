@@ -159,10 +159,6 @@ record start =
         (Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentOpen
             |> P.bind
                 (\preVarComments ->
-                    let
-                        _ =
-                            Debug.log "c84" preVarComments
-                    in
                     P.oneOf E.PRecordOpen
                         [ P.addLocation (Var.lower E.PRecordField)
                             |> P.bind
@@ -170,10 +166,6 @@ record start =
                                     Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
                                         |> P.bind
                                             (\postVarComments ->
-                                                let
-                                                    _ =
-                                                        Debug.log "c85" postVarComments
-                                                in
                                                 recordHelp start [ ( ( preVarComments, postVarComments ), var ) ]
                                             )
                                 )
@@ -191,20 +183,12 @@ recordHelp start vars =
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentField)
             |> P.bind
                 (\preVarComments ->
-                    let
-                        _ =
-                            Debug.log "c86" preVarComments
-                    in
                     P.addLocation (Var.lower E.PRecordField)
                         |> P.bind
                             (\var ->
                                 Space.chompAndCheckIndent E.PRecordSpace E.PRecordIndentEnd
                                     |> P.bind
                                         (\postVarComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c87" postVarComments
-                                            in
                                             recordHelp start (( ( preVarComments, postVarComments ), var ) :: vars)
                                         )
                             )
@@ -224,10 +208,6 @@ tuple syntaxVersion start =
         (Space.chompAndCheckIndent E.PTupleSpace E.PTupleIndentExpr1
             |> P.bind
                 (\prePatternComments ->
-                    let
-                        _ =
-                            Debug.log "c88" prePatternComments
-                    in
                     P.oneOf E.PTupleOpen
                         [ P.specialize E.PTupleExpr (expression syntaxVersion)
                             |> P.bind
@@ -249,10 +229,6 @@ tupleHelp syntaxVersion start firstPattern revPatterns =
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PTupleSpace E.PTupleIndentExprN)
             |> P.bind
                 (\prePatternComments ->
-                    let
-                        _ =
-                            Debug.log "c89" prePatternComments
-                    in
                     P.specialize E.PTupleExpr (expression syntaxVersion)
                         |> P.bind
                             (\( ( postPatternComments, pattern ), end ) ->
@@ -283,10 +259,6 @@ list syntaxVersion start =
         (Space.chompAndCheckIndent E.PListSpace E.PListIndentOpen
             |> P.bind
                 (\prePatternComments ->
-                    let
-                        _ =
-                            Debug.log "c90" prePatternComments
-                    in
                     P.oneOf E.PListOpen
                         [ P.specialize E.PListExpr (expression syntaxVersion)
                             |> P.bind
@@ -308,10 +280,6 @@ listHelp syntaxVersion start patterns =
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PListSpace E.PListIndentExpr)
             |> P.bind
                 (\prePatternComments ->
-                    let
-                        _ =
-                            Debug.log "c91" prePatternComments
-                    in
                     P.specialize E.PListExpr (expression syntaxVersion)
                         |> P.bind
                             (\( ( postPatternComments, pattern ), end ) ->
@@ -349,10 +317,6 @@ exprHelp syntaxVersion start revPatterns ( ( prePatternComments, pattern ), end 
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PSpace E.PIndentStart)
             |> P.bind
                 (\postPatternComments ->
-                    let
-                        _ =
-                            Debug.log "c92" postPatternComments
-                    in
                     exprPart syntaxVersion
                         |> P.bind (\ePart -> exprHelp syntaxVersion start (( ( prePatternComments, postPatternComments ), pattern ) :: revPatterns) ePart)
                 )
@@ -361,10 +325,6 @@ exprHelp syntaxVersion start revPatterns ( ( prePatternComments, pattern ), end 
             |> P.bind (\_ -> Space.chompAndCheckIndent E.PSpace E.PIndentAlias)
             |> P.bind
                 (\preAliasComments ->
-                    let
-                        _ =
-                            Debug.log "c93" preAliasComments
-                    in
                     P.getPosition
                         |> P.bind
                             (\nameStart ->
@@ -378,9 +338,6 @@ exprHelp syntaxVersion start revPatterns ( ( prePatternComments, pattern ), end 
                                                             |> P.fmap
                                                                 (\postAliasComments ->
                                                                     let
-                                                                        _ =
-                                                                            Debug.log "c119" postAliasComments
-
                                                                         alias_ : A.Located Name.Name
                                                                         alias_ =
                                                                             A.at nameStart newEnd name
@@ -425,14 +382,7 @@ exprPart syntaxVersion =
             |> P.bind
                 (\((A.At (A.Region _ end) _) as eterm) ->
                     Space.chomp E.PSpace
-                        |> P.fmap
-                            (\comments ->
-                                let
-                                    _ =
-                                        Debug.log "c120" comments
-                                in
-                                ( ( comments, eterm ), end )
-                            )
+                        |> P.fmap (\comments -> ( ( comments, eterm ), end ))
                 )
         ]
 
@@ -445,10 +395,6 @@ exprTermHelp syntaxVersion region upper start revArgs =
                 Space.chomp E.PSpace
                     |> P.bind
                         (\comments ->
-                            let
-                                _ =
-                                    Debug.log "c121" comments
-                            in
                             P.oneOfWithFallback
                                 [ Space.checkIndent end E.PIndentStart
                                     |> P.bind (\_ -> term syntaxVersion)

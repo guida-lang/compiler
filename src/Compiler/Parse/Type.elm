@@ -57,10 +57,6 @@ term =
                             , Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentType1
                                 |> P.bind
                                     (\trailingComments ->
-                                        let
-                                            _ =
-                                                Debug.log "c94" trailingComments
-                                        in
                                         P.specialize E.TTupleType (expression trailingComments)
                                             |> P.bind
                                                 (\( tipe, end ) ->
@@ -74,10 +70,6 @@ term =
                         (Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentOpen
                             |> P.bind
                                 (\initialComments ->
-                                    let
-                                        _ =
-                                            Debug.log "c95" initialComments
-                                    in
                                     P.oneOf E.TRecordOpen
                                         [ P.word1 '}' E.TRecordEnd
                                             |> P.bind (\_ -> P.addEnd start (Src.TRecord [] Nothing initialComments))
@@ -87,10 +79,6 @@ term =
                                                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                                                         |> P.bind
                                                             (\postNameComments ->
-                                                                let
-                                                                    _ =
-                                                                        Debug.log "c96" postNameComments
-                                                                in
                                                                 P.oneOf E.TRecordColon
                                                                     [ P.word1 '|' E.TRecordColon
                                                                         |> P.bind
@@ -98,10 +86,6 @@ term =
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                                                                                     |> P.bind
                                                                                         (\preFieldComments ->
-                                                                                            let
-                                                                                                _ =
-                                                                                                    Debug.log "c97" preFieldComments
-                                                                                            in
                                                                                             chompField
                                                                                                 |> P.bind
                                                                                                     (\( postFieldComments, field ) ->
@@ -116,10 +100,6 @@ term =
                                                                                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                                                                     |> P.bind
                                                                                         (\preTypeComments ->
-                                                                                            let
-                                                                                                _ =
-                                                                                                    Debug.log "c98" preTypeComments
-                                                                                            in
                                                                                             P.specialize E.TRecordType (expression [])
                                                                                                 |> P.bind
                                                                                                     (\( ( ( _, postExpressionComments, _ ), tipe ), end ) ->
@@ -160,14 +140,7 @@ expression trailingComments =
                                     |> P.bind
                                         (\end ->
                                             Space.chomp E.TSpace
-                                                |> P.fmap
-                                                    (\postTermComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c122" postTermComments
-                                                        in
-                                                        ( ( postTermComments, eterm ), end )
-                                                    )
+                                                |> P.fmap (\postTermComments -> ( ( postTermComments, eterm ), end ))
                                         )
                             )
                     ]
@@ -185,10 +158,6 @@ expression trailingComments =
                                                         Space.chompAndCheckIndent E.TSpace E.TIndentStart
                                                             |> P.bind
                                                                 (\postArrowComments ->
-                                                                    let
-                                                                        _ =
-                                                                            Debug.log "c99" postArrowComments
-                                                                    in
                                                                     expression postArrowComments
                                                                         |> P.fmap
                                                                             (\( ( ( preTipe2Comments, postTipe2Comments, tipe2Eol ), tipe2 ), end2 ) ->
@@ -262,10 +231,6 @@ chompArgs preComments args end =
                                             Space.chomp E.TSpace
                                                 |> P.bind
                                                     (\comments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c124" comments
-                                                        in
                                                         chompArgs comments (( preComments, arg ) :: args) newEnd
                                                     )
                                         )
@@ -288,10 +253,6 @@ chompTupleEnd start ( firstTimeComments, firstType ) revTypes =
                     Space.chompAndCheckIndent E.TTupleSpace E.TTupleIndentTypeN
                         |> P.bind
                             (\preExpressionComments ->
-                                let
-                                    _ =
-                                        Debug.log "c100" preExpressionComments
-                                in
                                 P.specialize E.TTupleType (expression preExpressionComments)
                                     |> P.bind
                                         (\( tipe, end ) ->
@@ -339,10 +300,6 @@ chompRecordEnd comments fields =
                     Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentField
                         |> P.bind
                             (\preNameComments ->
-                                let
-                                    _ =
-                                        Debug.log "c101" preNameComments
-                                in
                                 chompField
                                     |> P.bind
                                         (\( postFieldComments, field ) ->
@@ -363,20 +320,12 @@ chompField =
                 Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentColon
                     |> P.bind
                         (\postNameComments ->
-                            let
-                                _ =
-                                    Debug.log "c102" postNameComments
-                            in
                             P.word1 ':' E.TRecordColon
                                 |> P.bind
                                     (\_ ->
                                         Space.chompAndCheckIndent E.TRecordSpace E.TRecordIndentType
                                             |> P.bind
                                                 (\preTypeComments ->
-                                                    let
-                                                        _ =
-                                                            Debug.log "c103" preTypeComments
-                                                    in
                                                     P.specialize E.TRecordType (expression [])
                                                         |> P.bind
                                                             (\( ( ( _, x1, _ ), tipe ), end ) ->
@@ -401,10 +350,6 @@ variant trailingComments =
                 Space.chomp E.CT_Space
                     |> P.bind
                         (\preArgComments ->
-                            let
-                                _ =
-                                    Debug.log "c125" preArgComments
-                            in
                             P.specialize E.CT_VariantArg (chompArgs preArgComments [] nameEnd)
                                 |> P.fmap
                                     (\( ( postArgsComments, args ), end ) ->

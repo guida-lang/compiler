@@ -62,10 +62,6 @@ chompDocComment =
                     Space.chomp E.DeclSpace
                         |> P.bind
                             (\comments ->
-                                let
-                                    _ =
-                                        Debug.log "c108" comments
-                                in
                                 Space.checkFreshLine E.DeclFreshLineAfterDocComment
                                     |> P.fmap (\_ -> ( comments, Just docComment ))
                             )
@@ -90,19 +86,11 @@ valueDecl syntaxVersion maybeDocs docComments start =
                                 (Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                                     |> P.bind
                                         (\postNameComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c1" postNameComments
-                                            in
                                             P.oneOf E.DeclDefEquals
                                                 [ P.word1 ':' E.DeclDefEquals
                                                     |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentType)
                                                     |> P.bind
                                                         (\preTypeComments ->
-                                                            let
-                                                                _ =
-                                                                    Debug.log "c2" preTypeComments
-                                                            in
                                                             P.specialize E.DeclDefType (Type.expression preTypeComments)
                                                                 |> P.bind
                                                                     (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), _ ) ->
@@ -135,10 +123,6 @@ chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe preArgCo
                     Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentEquals
                         |> P.bind
                             (\postArgComments ->
-                                let
-                                    _ =
-                                        Debug.log "c4" postArgComments
-                                in
                                 chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe postArgComments (( preArgComments, arg ) :: revArgs)
                             )
                 )
@@ -146,10 +130,6 @@ chompDefArgsAndBody syntaxVersion maybeDocs docComments start name tipe preArgCo
             |> P.bind (\_ -> Space.chompAndCheckIndent E.DeclDefSpace E.DeclDefIndentBody)
             |> P.bind
                 (\preBodyComments ->
-                    let
-                        _ =
-                            Debug.log "c5" preBodyComments
-                    in
                     P.specialize E.DeclDefBody (Expr.expression syntaxVersion)
                         |> P.fmap
                             (\( ( trailingComments, body ), end ) ->
@@ -208,19 +188,11 @@ typeDecl maybeDocs start =
         (Space.chompAndCheckIndent E.DT_Space E.DT_IndentName
             |> P.bind
                 (\postTypeComments ->
-                    let
-                        _ =
-                            Debug.log "c6" postTypeComments
-                    in
                     P.oneOf E.DT_Name
                         [ P.inContext E.DT_Alias (Keyword.alias_ E.DT_Name) <|
                             (Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                                 |> P.bind
                                     (\preComments ->
-                                        let
-                                            _ =
-                                                Debug.log "c7" preComments
-                                        in
                                         chompAliasNameToEquals
                                             |> P.bind
                                                 (\( ( name, args, postComments ), preTypeComments ) ->
@@ -274,10 +246,6 @@ chompAliasNameToEquals =
                 Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                     |> P.bind
                         (\comments ->
-                            let
-                                _ =
-                                    Debug.log "c8" comments
-                            in
                             chompAliasNameToEqualsHelp name [] comments
                         )
             )
@@ -292,23 +260,12 @@ chompAliasNameToEqualsHelp name args comments =
                     Space.chompAndCheckIndent E.AliasSpace E.AliasIndentEquals
                         |> P.bind
                             (\postComments ->
-                                let
-                                    _ =
-                                        Debug.log "c9" postComments
-                                in
                                 chompAliasNameToEqualsHelp name (( comments, arg ) :: args) postComments
                             )
                 )
         , P.word1 '=' E.AliasEquals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.AliasSpace E.AliasIndentBody)
-            |> P.fmap
-                (\preBodyComments ->
-                    let
-                        _ =
-                            Debug.log "c10" preBodyComments
-                    in
-                    ( ( name, List.reverse args, comments ), preBodyComments )
-                )
+            |> P.fmap (\preBodyComments -> ( ( name, List.reverse args, comments ), preBodyComments ))
         ]
 
 
@@ -322,14 +279,7 @@ chompCustomNameToEquals preNameComments =
         |> P.bind
             (\name ->
                 Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
-                    |> P.bind
-                        (\trailingComments ->
-                            let
-                                _ =
-                                    Debug.log "c11" trailingComments
-                            in
-                            chompCustomNameToEqualsHelp trailingComments ( preNameComments, name ) []
-                        )
+                    |> P.bind (\trailingComments -> chompCustomNameToEqualsHelp trailingComments ( preNameComments, name ) [])
             )
 
 
@@ -340,25 +290,11 @@ chompCustomNameToEqualsHelp trailingComments (( preNameComments, name_ ) as name
             |> P.bind
                 (\arg ->
                     Space.chompAndCheckIndent E.CT_Space E.CT_IndentEquals
-                        |> P.bind
-                            (\postArgComments ->
-                                let
-                                    _ =
-                                        Debug.log "c12" postArgComments
-                                in
-                                chompCustomNameToEqualsHelp postArgComments name (( trailingComments, arg ) :: args)
-                            )
+                        |> P.bind (\postArgComments -> chompCustomNameToEqualsHelp postArgComments name (( trailingComments, arg ) :: args))
                 )
         , P.word1 '=' E.CT_Equals
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterEquals)
-            |> P.fmap
-                (\postEqualComments ->
-                    let
-                        _ =
-                            Debug.log "c13" postEqualComments
-                    in
-                    ( postEqualComments, ( ( ( preNameComments, trailingComments ), name_ ), List.reverse args ) )
-                )
+            |> P.fmap (\postEqualComments -> ( postEqualComments, ( ( ( preNameComments, trailingComments ), name_ ), List.reverse args ) ))
         ]
 
 
@@ -368,14 +304,7 @@ chompVariants variants end =
         [ Space.checkIndent end E.CT_IndentBar
             |> P.bind (\_ -> P.word1 '|' E.CT_Bar)
             |> P.bind (\_ -> Space.chompAndCheckIndent E.CT_Space E.CT_IndentAfterBar)
-            |> P.bind
-                (\preTypeComments ->
-                    let
-                        _ =
-                            Debug.log "c14" preTypeComments
-                    in
-                    Type.variant preTypeComments
-                )
+            |> P.bind (\preTypeComments -> Type.variant preTypeComments)
             |> P.bind (\( variant, newEnd ) -> chompVariants (variant :: variants) newEnd)
         ]
         ( List.reverse variants, end )
@@ -391,28 +320,16 @@ portDecl maybeDocs =
         (Space.chompAndCheckIndent E.PortSpace E.PortIndentName
             |> P.bind
                 (\preNameComments ->
-                    let
-                        _ =
-                            Debug.log "c15" preNameComments
-                    in
                     P.addLocation (Var.lower E.PortName)
                         |> P.bind
                             (\name ->
                                 Space.chompAndCheckIndent E.PortSpace E.PortIndentColon
                                     |> P.bind
                                         (\postNameComments ->
-                                            let
-                                                _ =
-                                                    Debug.log "c16" postNameComments
-                                            in
                                             P.word1 ':' E.PortColon
                                                 |> P.bind (\_ -> Space.chompAndCheckIndent E.PortSpace E.PortIndentType)
                                                 |> P.bind
                                                     (\typeComments ->
-                                                        let
-                                                            _ =
-                                                                Debug.log "c17" typeComments
-                                                        in
                                                         P.specialize E.PortType (Type.expression [])
                                                             |> P.fmap
                                                                 (\( ( ( preTipeComments, postTipeComments, _ ), tipe ), end ) ->
@@ -492,10 +409,6 @@ infix_ =
                                                                                                                 Space.chomp err_
                                                                                                                     |> P.bind
                                                                                                                         (\comments ->
-                                                                                                                            let
-                                                                                                                                _ =
-                                                                                                                                    Debug.log "c109" comments
-                                                                                                                            in
                                                                                                                             Space.checkFreshLine err
                                                                                                                                 |> P.fmap (\_ -> ( comments, A.at start end (Src.Infix ( ( preOpComments, postOpComments ), op ) associativity precedence ( preNameComments, name )) ))
                                                                                                                         )

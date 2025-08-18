@@ -368,14 +368,7 @@ chompOverviewHelp names =
             (\isDocs ->
                 if isDocs then
                     Space.chomp E.Space
-                        |> P.bind
-                            (\c104 ->
-                                let
-                                    _ =
-                                        Debug.log "c104" c104
-                                in
-                                chompDocs names
-                            )
+                        |> P.bind (\_ -> chompDocs names)
                         |> P.fmap P.Loop
 
                 else
@@ -401,11 +394,7 @@ chompDocsHelp names =
             (\name ->
                 Space.chomp E.Space
                     |> P.bind
-                        (\c105 ->
-                            let
-                                _ =
-                                    Debug.log "c105" c105
-                            in
+                        (\_ ->
                             P.oneOfWithFallback
                                 [ P.getPosition
                                     |> P.bind
@@ -417,14 +406,7 @@ chompDocsHelp names =
                                                             |> P.bind
                                                                 (\_ ->
                                                                     Space.chomp E.Space
-                                                                        |> P.fmap
-                                                                            (\c106 ->
-                                                                                let
-                                                                                    _ =
-                                                                                        Debug.log "c106" c106
-                                                                                in
-                                                                                P.Loop (name :: names)
-                                                                            )
+                                                                        |> P.fmap (\_ -> P.Loop (name :: names))
                                                                 )
                                                     )
                                         )
