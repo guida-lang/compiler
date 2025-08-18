@@ -1,11 +1,11 @@
 module Common.Format.Cheapskate.Parse exposing (markdown)
 
-import Common.Format.Cheapskate.Inlines exposing (..)
-import Common.Format.Cheapskate.ParserCombinators exposing (..)
-import Common.Format.Cheapskate.Types exposing (..)
-import Common.Format.Cheapskate.Util exposing (..)
+import Common.Format.Cheapskate.Inlines exposing (pHtmlTag, pLinkLabel, pReference, parseInlines)
+import Common.Format.Cheapskate.ParserCombinators exposing (Parser, Position(..), apply, bind, char, count, endOfInput, fmap, getPosition, guard, lookAhead, many, notFollowedBy, oneOf, option, parse, pure, return, satisfy, setPosition, showParseError, skip, skipWhile, string, takeText, takeWhile, takeWhile1, unless)
+import Common.Format.Cheapskate.Types exposing (Block(..), Blocks, CodeAttr(..), Doc(..), HtmlTagType(..), ListType(..), NumWrapper(..), Options, ReferenceMap)
+import Common.Format.Cheapskate.Util exposing (Scanner, isWhitespace, joinLines, nfb, normalizeReference, scanBlankline, scanChar, scanIndentSpace, scanNonindentSpace, scanSpaces, scanSpacesToColumn, tabFilter, upToCountChars)
 import Common.Format.RWS as RWS exposing (RWS)
-import Data.Map as Dict exposing (Dict)
+import Data.Map as Dict
 import List.Extra as List
 import Set exposing (Set)
 import Utils.Crash exposing (crash)
@@ -211,14 +211,15 @@ closeContainer =
                         case parse pReference (String.trim <| joinLines <| List.map extractText cs__) of
                             Ok ( lab, lnk, tit ) ->
                                 RWS.tell (Dict.singleton identity (normalizeReference lab) ( lnk, tit ))
-                                    |> (\_ ->
+                                    |> RWS.bind
+                                        (\_ ->
                                             case rest of
                                                 (Container ct_ cs_) :: rs ->
                                                     RWS.put (ContainerStack (Container ct_ (cs_ ++ [ C top ])) rs)
 
                                                 [] ->
                                                     RWS.return ()
-                                       )
+                                        )
 
                             Err _ ->
                                 -- pass over in silence if ref doesn't parse?
@@ -358,12 +359,13 @@ processElts refmap elts =
                                         Just stripped ->
                                             stripped
                             in
-                            List.singleton (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
-                                ++ processElts refmap rest_
+                            (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
+                                :: processElts refmap rest_
 
                         Nothing ->
                             -- Gobble text lines and make them into a Para:
                             let
+                                txt : String
                                 txt =
                                     String.trimRight <|
                                         joinLines <|
@@ -382,8 +384,8 @@ processElts refmap elts =
                                         _ ->
                                             False
                             in
-                            List.singleton (Para (parseInlines refmap txt))
-                                ++ processElts refmap rest_
+                            Para (parseInlines refmap txt)
+                                :: processElts refmap rest_
 
                 -- Blanks at outer level are ignored:
                 BlankLine _ ->
@@ -391,16 +393,16 @@ processElts refmap elts =
 
                 -- Headers:
                 ATXHeader lvl t ->
-                    List.singleton (Header lvl <| parseInlines refmap t)
-                        ++ processElts refmap rest
+                    (Header lvl <| parseInlines refmap t)
+                        :: processElts refmap rest
 
                 SetextHeader lvl t ->
-                    List.singleton (Header lvl <| parseInlines refmap t)
-                        ++ processElts refmap rest
+                    (Header lvl <| parseInlines refmap t)
+                        :: processElts refmap rest
 
                 -- Horizontal rule:
                 Rule ->
-                    List.singleton HRule ++ processElts refmap rest
+                    HRule :: processElts refmap rest
 
         (C (Container ct cs)) :: rest ->
             let
@@ -427,8 +429,8 @@ processElts refmap elts =
                     crash "Document container found inside Document"
 
                 BlockQuote ->
-                    List.singleton (Blockquote <| processElts refmap cs)
-                        ++ processElts refmap rest
+                    (Blockquote <| processElts refmap cs)
+                        :: processElts refmap rest
 
                 -- List item?  Gobble up following list items of the same type
                 -- (skipping blank lines), determine whether the list is tight or
@@ -445,6 +447,7 @@ processElts refmap elts =
 
                         -- take list items as long as list type matches and we
                         -- don't hit two blank lines:
+                        takeListItems : List Elt -> List Elt
                         takeListItems ys =
                             case ys of
                                 (C ((Container (ListItem li_) _) as c)) :: zs ->
@@ -464,6 +467,7 @@ processElts refmap elts =
                                 _ ->
                                     []
 
+                        listTypesMatch : ListType -> ListType -> Bool
                         listTypesMatch listType_ listType__ =
                             case ( listType_, listType__ ) of
                                 ( Bullet c1, Bullet c2 ) ->
@@ -500,35 +504,41 @@ processElts refmap elts =
                                 _ ->
                                     Nothing
 
+                        items_ : List Blocks
                         items_ =
                             List.map (processElts refmap) items
 
+                        isTight : Bool
                         isTight =
                             tightListItem xs && List.all tightListItem items
                     in
-                    List.singleton (List isTight listType items_) ++ processElts refmap rest_
+                    List isTight listType items_ :: processElts refmap rest_
 
                 FencedCode { info } ->
                     let
+                        txt : String
                         txt =
                             joinLines <| List.map extractText cs
 
+                        attr : CodeAttr
                         attr =
                             CodeAttr { codeLang = x, codeInfo = String.trim y }
 
                         ( x, y ) =
                             stringBreak ((==) ' ') info
                     in
-                    List.singleton (CodeBlock attr txt)
-                        ++ processElts refmap rest
+                    CodeBlock attr txt
+                        :: processElts refmap rest
 
                 IndentedCode ->
                     let
+                        txt : String
                         txt =
                             joinLines <|
                                 stripTrailingEmpties <|
                                     List.concatMap extractCode cbs
 
+                        stripTrailingEmpties : List String -> List String
                         stripTrailingEmpties =
                             List.reverse
                                 << List.dropWhile (String.all ((==) ' '))
@@ -539,6 +549,7 @@ processElts refmap elts =
                         -- but for this, code block context, we want
                         -- to have dropped 4 spaces. we simply drop
                         -- one more:
+                        extractCode : Elt -> List String
                         extractCode elt =
                             case elt of
                                 L _ (BlankLine t) ->
@@ -554,6 +565,7 @@ processElts refmap elts =
                             List.span isIndentedCodeOrBlank
                                 (C (Container ct cs) :: rest)
 
+                        isIndentedCodeOrBlank : Elt -> Bool
                         isIndentedCodeOrBlank elt =
                             case elt of
                                 L _ (BlankLine _) ->
@@ -565,23 +577,26 @@ processElts refmap elts =
                                 _ ->
                                     False
                     in
-                    List.singleton (CodeBlock (CodeAttr { codeLang = "", codeInfo = "" }) txt)
-                        ++ processElts refmap rest_
+                    CodeBlock (CodeAttr { codeLang = "", codeInfo = "" }) txt
+                        :: processElts refmap rest_
 
                 RawHtmlBlock ->
                     let
+                        txt : String
                         txt =
                             joinLines (List.map extractText cs)
                     in
-                    List.singleton (HtmlBlock txt) ++ processElts refmap rest
+                    HtmlBlock txt :: processElts refmap rest
 
                 -- References have already been taken into account in the reference map,
                 -- so we just skip.
                 Reference ->
                     let
+                        refs : List Elt -> List ( String, String, String )
                         refs cs_ =
                             List.map (extractRef << extractText) cs_
 
+                        extractRef : String -> ( String, String, String )
                         extractRef t =
                             case parse pReference (String.trim t) of
                                 Ok ( lab, lnk, tit ) ->
@@ -597,8 +612,8 @@ processElts refmap elts =
                                     processElts_ (refs cs_ :: acc) rest_
 
                                 _ ->
-                                    (List.singleton <| ReferencesBlock <| List.concat <| List.reverse acc)
-                                        ++ processElts refmap pass
+                                    (ReferencesBlock <| List.concat <| List.reverse acc)
+                                        :: processElts refmap pass
                     in
                     processElts_ [] (C (Container ct cs) :: rest)
 
@@ -620,9 +635,6 @@ extractText elt =
 processLines : String -> ( Container, ReferenceMap )
 processLines t =
     let
-        ( doc, refmap ) =
-            RWS.evalRWS (RWS.mapM_ processLine lns |> RWS.bind (\_ -> closeStack)) () startState
-
         lns : List ( LineNumber, String )
         lns =
             List.indexedMap (\i ln -> ( i + 1, ln )) (List.map tabFilter (String.lines t))
@@ -631,7 +643,7 @@ processLines t =
         startState =
             ContainerStack (Container Document []) []
     in
-    ( doc, refmap )
+    RWS.evalRWS (RWS.mapM_ processLine lns |> RWS.bind (\_ -> closeStack)) () startState
 
 
 
@@ -664,6 +676,7 @@ processLine ( lineNumber, txt ) =
                                         False
                                )
 
+                    addNew : ( List ContainerType, Leaf ) -> () -> ContainerStack -> ( (), ContainerStack, Dict.Dict String String ( String, String ) )
                     addNew ( ns, lf ) =
                         RWS.mapM_ addContainer ns
                             |> RWS.bind
@@ -699,10 +712,12 @@ processLine ( lineNumber, txt ) =
                             addLeaf lineNumber (TextLine t_)
 
                     ( Reference, _ ) ->
-                        case tryNewContainers lastLineIsText (String.length txt - String.length t_) t_ of
-                            ( ns, lf ) ->
-                                closeContainer
-                                    |> RWS.bind (\_ -> addNew ( ns, lf ))
+                        let
+                            ( ns, lf ) =
+                                tryNewContainers lastLineIsText (String.length txt - String.length t_) t_
+                        in
+                        closeContainer
+                            |> RWS.bind (\_ -> addNew ( ns, lf ))
 
                     -- otherwise, parse the remainder to see if we have new container starts:
                     _ ->
@@ -803,6 +818,7 @@ tryOpenContainers cs t =
 tryNewContainers : Bool -> Int -> String -> ( List ContainerType, Leaf )
 tryNewContainers lastLineIsText offset t =
     let
+        newContainers : Parser ( List ContainerType, Leaf )
         newContainers =
             getPosition
                 |> bind
@@ -837,6 +853,7 @@ tryNewContainers lastLineIsText offset t =
 textLineOrBlank : Parser Leaf
 textLineOrBlank =
     let
+        consolidate : String -> Leaf
         consolidate ts =
             if String.all isWhitespace ts then
                 BlankLine ts
@@ -857,6 +874,7 @@ leaf lastLineIsText =
         |> bind
             (\_ ->
                 let
+                    removeATXSuffix : String -> String
                     removeATXSuffix t =
                         case String.uncons (String.reverse (stringDropWhileEnd (\c -> String.contains (String.fromChar c) " #") t)) of
                             Nothing ->
@@ -938,6 +956,7 @@ parseSetextHeaderLine =
         |> bind
             (\d ->
                 let
+                    lev : Int
                     lev =
                         if d == '=' then
                             1
@@ -1009,6 +1028,7 @@ parseCodeFence =
 parseHtmlBlockStart : Parser ()
 parseHtmlBlockStart =
     let
+        f : HtmlTagType -> Bool
         f htmlTagType =
             case htmlTagType of
                 Opening name ->
@@ -1078,7 +1098,6 @@ blockHtmlTags =
         , "th"
         , "figure"
         , "thead"
-        , "footer"
         , "footer"
         , "tr"
         , "form"

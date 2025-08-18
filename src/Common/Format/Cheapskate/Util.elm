@@ -17,7 +17,7 @@ module Common.Format.Cheapskate.Util exposing
     , upToCountChars
     )
 
-import Common.Format.Cheapskate.ParserCombinators exposing (..)
+import Common.Format.Cheapskate.ParserCombinators exposing (Parser, bind, char, column, count, endOfInput, fmap, getPosition, notFollowedBy, option, return, scan, skip, skipWhile)
 import List.Extra as List
 import Utils.Crash exposing (crash)
 
@@ -39,6 +39,7 @@ joinLines =
 tabFilter : String -> String
 tabFilter =
     let
+        pad : List String -> List String
         pad value =
             case value of
                 [] ->
@@ -49,9 +50,11 @@ tabFilter =
 
                 t :: ts ->
                     let
+                        tl : Int
                         tl =
                             String.length t
 
+                        n : Int
                         n =
                             tl + 4 - modBy 4 tl
                     in
@@ -165,6 +168,7 @@ scanSpacesToColumn col =
         |> bind
             (\currentCol ->
                 let
+                    n : Int
                     n =
                         col - currentCol
                 in

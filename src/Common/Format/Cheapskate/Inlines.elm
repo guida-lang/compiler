@@ -5,27 +5,15 @@ module Common.Format.Cheapskate.Inlines exposing
     , parseInlines
     )
 
-import Common.Format.Cheapskate.ParserCombinators exposing (..)
-import Common.Format.Cheapskate.Types exposing (..)
-import Common.Format.Cheapskate.Util exposing (..)
+import Common.Format.Cheapskate.ParserCombinators exposing (Parser, anyChar, bind, char, endOfInput, fail, fmap, guard, lazy, leftSequence, many, manyTill, mzero, notAfter, notInClass, oneOf, option, parse, peekChar, return, satisfy, scan, showParseError, skip, string, takeTill, takeWhile, takeWhile1)
+import Common.Format.Cheapskate.Types exposing (HtmlTagType(..), Inline(..), Inlines, LinkTarget(..), ReferenceMap)
+import Common.Format.Cheapskate.Util exposing (isEscapable, isWhitespace, nfb, nfbChar, scanSpaces, scanSpnl)
 import Set exposing (Set)
 import Utils.Crash exposing (crash)
 
 
-
--- import Cheapskate.Util
--- import Data.Char hiding (Space)
--- import qualified Data.Sequence as Seq
--- import Data.Sequence (singleton, (<|), viewl, ViewL(..))
--- import Prelude hiding (takeWhile)
--- import Control.Applicative
--- import Control.Monad
--- import Data.Text (Text)
--- import qualified Data.Text as T
--- import qualified Data.Set as Set
--- Returns tag type and whole tag.
-
-
+{-| Returns tag type and whole tag.
+-}
 pHtmlTag : Parser ( HtmlTagType, String )
 pHtmlTag =
     char '<'
@@ -39,9 +27,11 @@ pHtmlTag =
                                 |> bind
                                     (\tagname ->
                                         let
+                                            tagname_ : String
                                             tagname_ =
                                                 String.toLower tagname
 
+                                            attr : Parser String
                                             attr =
                                                 takeWhile isSpace
                                                     |> bind
@@ -73,6 +63,7 @@ pHtmlTag =
                                                                     |> bind
                                                                         (\_ ->
                                                                             let
+                                                                                tagtype : HtmlTagType
                                                                                 tagtype =
                                                                                     if closing then
                                                                                         Closing tagname_
@@ -123,10 +114,8 @@ stringStripSuffix p t =
         Nothing
 
 
-
--- Parses a quoted attribute value.
-
-
+{-| Parses a quoted attribute value.
+-}
 pQuoted : Char -> Parser String
 pQuoted c =
     skip ((==) c)
@@ -138,11 +127,9 @@ pQuoted c =
             )
 
 
-
--- Parses an HTML comment. This isn't really correct to spec, but should
--- do for now.
-
-
+{-| Parses an HTML comment. This isn't really correct to spec, but should
+do for now.
+-}
 pHtmlComment : Parser String
 pHtmlComment =
     string "<!--"
@@ -187,12 +174,10 @@ pLinkLabel =
             )
 
 
-
--- A URL in a link or reference.  This may optionally be contained
--- in `<..>`; otherwise whitespace and unbalanced right parentheses
--- aren't allowed.  Newlines aren't allowed in any case.
-
-
+{-| A URL in a link or reference. This may optionally be contained
+in `<..>`; otherwise whitespace and unbalanced right parentheses
+aren't allowed. Newlines aren't allowed in any case.
+-}
 pLinkUrl : Parser String
 pLinkUrl =
     oneOf (char '<' |> bind (\_ -> return True)) (return False)
@@ -222,13 +207,11 @@ pLinkUrl =
             )
 
 
-
--- A link title, single or double quoted or in parentheses.
--- Note that Markdown.pl doesn't allow the parenthesized form in
--- inline links -- only in references -- but this restriction seems
--- arbitrary, so we remove it here.
-
-
+{-| A link title, single or double quoted or in parentheses.
+Note that Markdown.pl doesn't allow the parenthesized form in
+inline links -- only in references -- but this restriction seems
+arbitrary, so we remove it here.
+-}
 pLinkTitle : Parser String
 pLinkTitle =
     satisfy (\c -> c == '"' || c == '\'' || c == '(')
@@ -280,13 +263,11 @@ pLinkTitle =
             )
 
 
-
--- A link reference is a square-bracketed link label, a colon,
--- optional space or newline, a URL, optional space or newline,
--- and an optional link title.  (Note:  we assume the input is
--- pre-stripped, with no leading/trailing spaces.)
-
-
+{-| A link reference is a square-bracketed link label, a colon,
+optional space or newline, a URL, optional space or newline,
+and an optional link title. (Note: we assume the input is
+pre-stripped, with no leading/trailing spaces.)
+-}
 pReference : Parser ( String, String, String )
 pReference =
     pLinkLabel
@@ -307,30 +288,24 @@ pReference =
             )
 
 
-
--- Parses an escaped character and returns a Text.
-
-
+{-| Parses an escaped character and returns a Text.
+-}
 pEscaped : Parser String
 pEscaped =
     fmap String.fromChar (skip ((==) '\\') |> bind (\_ -> satisfy isEscapable))
 
 
-
--- Parses a (possibly escaped) character satisfying the predicate.
-
-
+{-| Parses a (possibly escaped) character satisfying the predicate.
+-}
 pSatisfy : (Char -> Bool) -> Parser Char
 pSatisfy p =
     oneOf (satisfy (\c -> c /= '\\' && p c))
         (char '\\' |> bind (\_ -> satisfy (\c -> isEscapable c && p c)))
 
 
-
--- Parse a text into inlines, resolving reference links
--- using the reference map.
-
-
+{-| Parse a text into inlines, resolving reference links
+using the reference map.
+-}
 parseInlines : ReferenceMap -> String -> Inlines
 parseInlines refmap t =
     case parse (fmap List.concat (leftSequence (many (pInline refmap)) endOfInput)) t of
@@ -365,13 +340,11 @@ pInline refmap =
         )
 
 
-
--- Parse spaces or newlines, and determine whether
--- we have a regular space, a line break (two spaces before
--- a newline), or a soft break (newline without two spaces
--- before).
-
-
+{-| Parse spaces or newlines, and determine whether
+we have a regular space, a line break (two spaces before
+a newline), or a soft break (newline without two spaces
+before).
+-}
 pSpace : Parser Inlines
 pSpace =
     takeWhile1 isWhitespace
@@ -422,17 +395,16 @@ pAsciiStr =
             )
 
 
-
--- Catch all -- parse an escaped character, an escaped
--- newline, or any remaining symbol character.
-
-
+{-| Catch all -- parse an escaped character, an escaped
+newline, or any remaining symbol character.
+-}
 pSym : Parser Inlines
 pSym =
     anyChar
         |> bind
             (\c ->
                 let
+                    ch : Char -> List Inline
                     ch =
                         List.singleton << Str << String.fromChar
                 in
@@ -447,11 +419,9 @@ pSym =
             )
 
 
-
--- http://www.iana.org/assignments/uri-schemes.html plus
--- the unofficial schemes coap, doi, javascript.
-
-
+{-| <http://www.iana.org/assignments/uri-schemes.html> plus
+the unofficial schemes coap, doi, javascript.
+-}
 schemes : List String
 schemes =
     [ -- unofficial
@@ -626,19 +596,15 @@ schemes =
     ]
 
 
-
--- Make them a set for more efficient lookup.
-
-
+{-| Make them a set for more efficient lookup.
+-}
 schemeSet : Set String
 schemeSet =
     Set.fromList (schemes ++ List.map String.toUpper schemes)
 
 
-
--- Parse a URI, using heuristics to avoid capturing final punctuation.
-
-
+{-| Parse a URI, using heuristics to avoid capturing final punctuation.
+-}
 pUri : String -> Parser Inlines
 pUri scheme =
     char ':'
@@ -666,17 +632,15 @@ pUri scheme =
             )
 
 
-
--- Scan non-ascii characters and ascii characters allowed in a URI.
--- We allow punctuation except when followed by a space, since
--- we don't want the trailing '.' in 'http://google.com.'
--- We want to allow
--- http://en.wikipedia.org/wiki/State_of_emergency_(disambiguation)
--- as a URL, while NOT picking up the closing paren in
--- (http://wikipedia.org)
--- So we include balanced parens in the URL.
-
-
+{-| Scan non-ascii characters and ascii characters allowed in a URI.
+We allow punctuation except when followed by a space, since
+we don't want the trailing '.' in '<http://google.com.'>
+We want to allow
+<http://en.wikipedia.org/wiki/State_of_emergency_(disambiguation)>
+as a URL, while NOT picking up the closing paren in
+(<http://wikipedia.org>)
+So we include balanced parens in the URL.
+-}
 type OpenParens
     = OpenParens Int
 
@@ -806,31 +770,30 @@ pThree c refmap =
             )
 
 
-
--- Inline code span.
-
-
+{-| Inline code span.
+-}
 pCode : Parser Inlines
 pCode =
     fmap Tuple.first pCode_
 
 
-
--- this is factored out because it needed in pLinkLabel.
-
-
+{-| this is factored out because it needed in pLinkLabel.
+-}
 pCode_ : Parser ( Inlines, String )
 pCode_ =
     takeWhile1 ((==) '`')
         |> bind
             (\ticks ->
                 let
+                    end : Parser ()
                     end =
                         string ticks |> bind (\_ -> nfb (char '`'))
 
+                    nonBacktickSpan : Parser String
                     nonBacktickSpan =
                         takeWhile1 ((/=) '`')
 
+                    backtickSpan : Parser String
                     backtickSpan =
                         takeWhile1 ((==) '`')
                 in
@@ -849,6 +812,7 @@ pLink refmap =
         |> bind
             (\lab ->
                 let
+                    lab_ : Inlines
                     lab_ =
                         parseInlines refmap lab
                 in
@@ -858,10 +822,8 @@ pLink refmap =
             )
 
 
-
--- An inline link: [label](/url "optional title")
-
-
+{-| An inline link: [label](/url "optional title")
+-}
 pInlineLink : Inlines -> Parser Inlines
 pInlineLink lab =
     char '('
@@ -882,20 +844,16 @@ pInlineLink lab =
             )
 
 
-
--- A reference link: [label], [foo][label], or [label][].
-
-
+{-| A reference link: [label], [foo][label], or [label].
+-}
 pReferenceLink : ReferenceMap -> String -> Inlines -> Parser Inlines
 pReferenceLink _ rawlab lab =
     option rawlab (scanSpnl |> bind (\_ -> pLinkLabel))
         |> fmap (\ref -> [ Link lab (Ref ref) "" ])
 
 
-
--- An image:  ! followed by a link.
-
-
+{-| An image: ! followed by a link.
+-}
 pImage : ReferenceMap -> Parser Inlines
 pImage refmap =
     char '!'
@@ -915,13 +873,11 @@ linkToImage ils =
             Str "!" :: ils
 
 
-
--- An entity.  We store these in a special inline element.
--- This ensures that entities in the input come out as
--- entities in the output. Alternatively we could simply
--- convert them to characters and store them as Str inlines.
-
-
+{-| An entity. We store these in a special inline element.
+This ensures that entities in the input come out as
+entities in the output. Alternatively we could simply
+convert them to characters and store them as Str inlines.
+-}
 pEntity : Parser Inlines
 pEntity =
     char '&'
@@ -968,11 +924,9 @@ pRawHtml =
     fmap (List.singleton << RawHtml) (oneOf (fmap Tuple.second pHtmlTag) pHtmlComment)
 
 
-
--- A link like this: <http://whatever.com> or <me@mydomain.edu>.
--- Markdown.pl does email obfuscation; we don't bother with that here.
-
-
+{-| A link like this: <http://whatever.com> or [me@mydomain.edu](mailto:me@mydomain.edu).
+Markdown.pl does email obfuscation; we don't bother with that here.
+-}
 pAutolink : Parser Inlines
 pAutolink =
     skip ((==) '<')
@@ -998,13 +952,10 @@ pAutolink =
             )
 
 
-
---
-
-
 autoLink : String -> Inlines
 autoLink t =
     let
+        toInlines : String -> Inlines
         toInlines t_ =
             case parse pToInlines t_ of
                 Ok r ->

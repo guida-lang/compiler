@@ -392,8 +392,8 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PInt _ _ ->
             bindings
 
-        Src.PParens _ ->
-            bindings
+        Src.PParens ( _, parensPattern ) ->
+            addBindingsHelp bindings parensPattern
 
 
 type alias Node =
@@ -569,8 +569,8 @@ getPatternNames names (A.At region pattern) =
         Src.PInt _ _ ->
             names
 
-        Src.PParens _ ->
-            names
+        Src.PParens ( _, parensPattern ) ->
+            getPatternNames names parensPattern
 
 
 gatherTypedArgs :

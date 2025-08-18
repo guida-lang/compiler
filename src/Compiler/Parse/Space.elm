@@ -182,6 +182,7 @@ eat eatType comments src pos end row col =
         EatLineComment startPos ->
             if pos >= end then
                 let
+                    newComment : Src.FComment
                     newComment =
                         Src.LineComment (String.slice startPos pos src)
                 in
@@ -195,6 +196,7 @@ eat eatType comments src pos end row col =
                 in
                 if word == '\n' then
                     let
+                        newComment : Src.FComment
                         newComment =
                             Src.LineComment (String.slice startPos pos src)
                     in
@@ -235,6 +237,7 @@ eat eatType comments src pos end row col =
                         case status of
                             MultiGood ->
                                 let
+                                    newComment : Src.FComment
                                     newComment =
                                         Src.BlockComment (String.lines (String.slice pos2 (newPos - 2) src))
                                 in

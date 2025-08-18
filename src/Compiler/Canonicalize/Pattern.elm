@@ -77,6 +77,7 @@ canonicalize syntaxVersion env (A.At region pattern) =
 
         Src.PRecord ( _, c2Fields ) ->
             let
+                fields : List (A.Located Name.Name)
                 fields =
                     List.map Src.c2Value c2Fields
             in

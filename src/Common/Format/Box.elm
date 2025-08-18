@@ -1,16 +1,15 @@
 module Common.Format.Box exposing
     ( Line, identifier, keyword, punc, literal, row, space
-    , blankLine, line, mustBreak, stack1, andThen
+    , Box(..), blankLine, line, mustBreak, stack_, stack1, andThen
     , isLine, allSingles, lineLength
     , indent, prefix, addSuffix
     , render
-    , Box(..), stack_
     )
 
 {-| Ref.: `elm-format-lib/src/Box.hs`
 
 @docs Line, identifier, keyword, punc, literal, row, space
-@docs Box(SingleLine, MustBreak), blankLine, line, mustBreak, stack', stack1, andThen
+@docs Box, blankLine, line, mustBreak, stack_, stack1, andThen
 @docs isLine, allSingles, lineLength
 @docs indent, prefix, addSuffix
 @docs render
@@ -93,21 +92,25 @@ type Box
     | MustBreak Line
 
 
+{-| -}
 blankLine : Box
 blankLine =
     line (literal "")
 
 
+{-| -}
 line : Line -> Box
 line l =
     SingleLine l
 
 
+{-| -}
 mustBreak : Line -> Box
 mustBreak l =
     MustBreak l
 
 
+{-| -}
 stack_ : Box -> Box -> Box
 stack_ b1 b2 =
     let
@@ -125,11 +128,13 @@ stack_ b1 b2 =
             Stack line1first first rest
 
 
+{-| -}
 andThen : List Box -> Box -> Box
 andThen rest first =
     List.foldl (flip stack_) first rest
 
 
+{-| -}
 stack1 : List Box -> Box
 stack1 children =
     case children of
@@ -213,15 +218,19 @@ xyz
 prefix : Line -> Box -> Box
 prefix pref =
     let
+        prefixLength : Int
         prefixLength =
             lineLength 0 pref
 
+        paddingSpaces : List Line
         paddingSpaces =
             List.repeat prefixLength space
 
+        padLineWithSpaces : Line -> Line
         padLineWithSpaces l =
             row [ row paddingSpaces, l ]
 
+        addPrefixToLine : Line -> Line
         addPrefixToLine l =
             row [ pref, l ]
     in
@@ -338,6 +347,7 @@ renderRow_ startColumn lines_ =
         ( result, endColumn ) =
             List.foldl addLine (initRow startColumn) lines_
 
+        resultLength : Int
         resultLength =
             endColumn - startColumn
     in
@@ -352,9 +362,11 @@ renderRow_ startColumn lines_ =
 addLine : Line -> ( String, Int ) -> ( String, Int )
 addLine line_ ( string, startColumn_ ) =
     let
+        newString : String
         newString =
             string ++ renderLine startColumn_ line_
 
+        newStartColumn : Int
         newStartColumn =
             lineLength startColumn_ line_
     in

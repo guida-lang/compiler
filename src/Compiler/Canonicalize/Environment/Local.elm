@@ -215,10 +215,10 @@ getEdges (A.At _ tipe) edges =
             edges
 
         Src.TType _ name args ->
-            List.foldl getEdges (name :: edges) (List.map Tuple.second args)
+            List.foldl getEdges (name :: edges) (List.map Src.c1Value args)
 
         Src.TTypeQual _ _ _ args ->
-            List.foldl getEdges edges (List.map Tuple.second args)
+            List.foldl getEdges edges (List.map Src.c1Value args)
 
         Src.TRecord fields _ _ ->
             List.foldl (\( _, ( _, ( _, t ) ) ) es -> getEdges t es) edges fields
@@ -286,13 +286,13 @@ checkAliasFreeVars (A.At aliasRegion (Src.Alias _ ( _, A.At _ name ) args ( _, t
                         Dict.size (Dict.intersection compare boundVars freeVars)
                 in
                 if Dict.size boundVars == overlap && Dict.size freeVars == overlap then
-                    R.ok (List.map (Tuple.second >> A.toValue) args)
+                    R.ok (List.map (Src.c1Value >> A.toValue) args)
 
                 else
                     R.throw <|
                         Error.TypeVarsMessedUpInAlias aliasRegion
                             name
-                            (List.map (Tuple.second >> A.toValue) args)
+                            (List.map (Src.c1Value >> A.toValue) args)
                             (Dict.toList compare (Dict.diff boundVars freeVars))
                             (Dict.toList compare (Dict.diff freeVars boundVars))
             )
@@ -308,10 +308,10 @@ addFreeVars (A.At region tipe) freeVars =
             Dict.insert identity name region freeVars
 
         Src.TType _ _ args ->
-            List.foldl addFreeVars freeVars (List.map Tuple.second args)
+            List.foldl addFreeVars freeVars (List.map Src.c1Value args)
 
         Src.TTypeQual _ _ _ args ->
-            List.foldl addFreeVars freeVars (List.map Tuple.second args)
+            List.foldl addFreeVars freeVars (List.map Src.c1Value args)
 
         Src.TRecord fields maybeExt _ ->
             let
@@ -383,7 +383,7 @@ canonicalizeAlias syntaxVersion ({ home } as env) (A.At _ (Src.Alias _ ( _, A.At
     let
         vars : List Name
         vars =
-            List.map (Tuple.second >> A.toValue) args
+            List.map (Src.c1Value >> A.toValue) args
     in
     Type.canonicalize syntaxVersion env tipe
         |> R.bind

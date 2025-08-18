@@ -768,6 +768,7 @@ chompIfEnd syntaxVersion start comments branches =
                                                                         |> P.fmap
                                                                             (\( ( postElseBranch, elseBranch ), elseEnd ) ->
                                                                                 let
+                                                                                    reversedBranches : List (Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ))
                                                                                     reversedBranches =
                                                                                         List.reverse newBranches
 

@@ -140,7 +140,7 @@ c0EolMap f ( eol, a ) =
 
 
 c0EolValue : C0Eol a -> a
-c0EolValue ( eol, a ) =
+c0EolValue ( _, a ) =
     a
 
 
@@ -158,7 +158,7 @@ c2EolMap f ( ( before, after, eol ), a ) =
 
 
 c2EolValue : C2Eol a -> a
-c2EolValue ( ( before, after, eol ), a ) =
+c2EolValue ( _, a ) =
     a
 
 

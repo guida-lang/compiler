@@ -1,4 +1,9 @@
-module Common.Format.ImportInfo exposing (..)
+module Common.Format.ImportInfo exposing
+    ( ImportInfo(..)
+    , fromImports
+    , fromModule
+    , importsToDict
+    )
 
 import Basics.Extra exposing (flip)
 import Common.Format.Bimap as Bimap exposing (Bimap)

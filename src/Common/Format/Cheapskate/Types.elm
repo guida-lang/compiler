@@ -1,4 +1,17 @@
-module Common.Format.Cheapskate.Types exposing (..)
+module Common.Format.Cheapskate.Types exposing
+    ( Block(..)
+    , Blocks
+    , CodeAttr(..)
+    , Doc(..)
+    , HtmlTagType(..)
+    , Inline(..)
+    , Inlines
+    , LinkTarget(..)
+    , ListType(..)
+    , NumWrapper(..)
+    , Options(..)
+    , ReferenceMap
+    )
 
 import Data.Map exposing (Dict)
 

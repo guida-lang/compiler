@@ -1,4 +1,63 @@
-module Common.Format.Cheapskate.ParserCombinators exposing (..)
+module Common.Format.Cheapskate.ParserCombinators exposing
+    ( ParseError(..)
+    , Parser(..)
+    , ParserState(..)
+    , Position(..)
+    , advance
+    , anyChar
+    , apply
+    , bind
+    , char
+    , charClass
+    , column
+    , comparePositions
+    , count
+    , empty
+    , endOfInput
+    , fail
+    , failure
+    , fmap
+    , getPosition
+    , guard
+    , inClass
+    , lazy
+    , leftSequence
+    , liftA2
+    , lookAhead
+    , many
+    , many1
+    , manyTill
+    , mzero
+    , notAfter
+    , notFollowedBy
+    , notInClass
+    , oneOf
+    , option
+    , parse
+    , peekChar
+    , peekLastChar
+    , pure
+    , return
+    , satisfy
+    , scan
+    , sequence
+    , setPosition
+    , showParseError
+    , showPosition
+    , skip
+    , skipMany
+    , skipMany1
+    , skipP
+    , skipWhile
+    , string
+    , stringTakeWhile
+    , success
+    , takeText
+    , takeTill
+    , takeWhile
+    , takeWhile1
+    , unless
+    )
 
 import Set exposing (Set)
 
@@ -224,21 +283,6 @@ mzero =
     Parser (\(ParserState st) -> Err (ParseError st.position "(mzero)"))
 
 
-
---   mplus p1 p2 = Parser $ \st ->
---     case evalParser p1 st of
---          Right res  -> Right res
---          Left _     -> evalParser p2 st
--- (<?>) :: Parser a -> String -> Parser a
--- p <?> msg = Parser $ \st ->
---   let startpos = position st in
---   case evalParser p st of
---        Left (ParseError _ _) ->
---            Left $ ParseError startpos msg
---        Right r                 -> Right r
--- infixl 5 <?>
-
-
 parse : Parser a -> String -> Result ParseError a
 parse (Parser evalParser) t =
     Result.map Tuple.second
@@ -265,6 +309,7 @@ success st x =
 satisfy : (Char -> Bool) -> Parser Char
 satisfy f =
     let
+        g : ParserState -> Result ParseError ( ParserState, Char )
         g (ParserState st) =
             case String.uncons st.subject of
                 Just ( c, _ ) ->
@@ -341,6 +386,7 @@ charClass =
 inClass : String -> Char -> Bool
 inClass s c =
     let
+        s_ : Set Char
         s_ =
             charClass s
     in
@@ -401,6 +447,7 @@ takeWhile f =
     Parser
         (\(ParserState st) ->
             let
+                t : String
                 t =
                     stringTakeWhile f st.subject
             in
@@ -418,6 +465,7 @@ takeWhile1 f =
     Parser
         (\(ParserState st) ->
             let
+                t : String
                 t =
                     stringTakeWhile f st.subject
             in
@@ -434,6 +482,7 @@ takeText =
     Parser
         (\(ParserState st) ->
             let
+                t : String
                 t =
                     st.subject
             in
@@ -463,6 +512,7 @@ skipWhile f =
     Parser
         (\(ParserState st) ->
             let
+                t_ : String
                 t_ =
                     stringTakeWhile f st.subject
             in
@@ -501,6 +551,7 @@ scan s0 f =
                         Nothing ->
                             finish (ParserState st) cs
 
+        finish : ParserState -> String -> Result ParseError ( ParserState, String )
         finish st cs =
             success st (String.reverse cs)
     in
@@ -525,7 +576,7 @@ notFollowedBy (Parser p) =
     Parser
         (\st ->
             case p st of
-                Ok ( _, _ ) ->
+                Ok _ ->
                     failure st "notFollowedBy"
 
                 Err _ ->
@@ -549,21 +600,8 @@ many1 p =
 
 manyTill : Parser a -> Parser b -> Parser (List a)
 manyTill p end =
-    -- let
-    --     accumulate : List a -> ParserState -> Result ParseError ( ParserState, List a )
-    --     accumulate acc state =
-    --         case end state of
-    --             Ok ( st_, _ ) ->
-    --                 Ok ( st_, List.reverse acc )
-    --             Err ms ->
-    --                 case p state of
-    --                     Ok ( st_, res ) ->
-    --                         accumulate (res :: acc) st_
-    --                     Err _ ->
-    --                         Err ms
-    -- in
-    -- Parser (accumulate [])
     let
+        go : () -> Parser (List a)
         go () =
             oneOf (end |> bind (\_ -> pure [])) (liftA2 (::) p (lazy go))
     in

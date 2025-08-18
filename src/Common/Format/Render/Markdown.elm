@@ -1,6 +1,20 @@
-module Common.Format.Render.Markdown exposing (..)
+module Common.Format.Render.Markdown exposing
+    ( Context(..)
+    , LongestSpanResult(..)
+    , formatListItem
+    , formatMardownBlock
+    , formatMarkdown
+    , formatMarkdownInline
+    , formatMarkdown_
+    , formatRef
+    , lines
+    , longestSpanOf
+    , mapWithPrev
+    , prefix
+    , prefix_
+    )
 
-import Common.Format.Cheapskate.Types exposing (..)
+import Common.Format.Cheapskate.Types exposing (Block(..), Blocks, CodeAttr(..), Inline(..), LinkTarget(..), ListType(..))
 import Maybe.Extra as Maybe
 import Url
 import Utils.Main as Utils
@@ -9,16 +23,13 @@ import Utils.Main as Utils
 formatMarkdown : (String -> Maybe String) -> Blocks -> String
 formatMarkdown formatCode blocks =
     let
+        needsInitialBlanks : Bool
         needsInitialBlanks =
             case blocks of
                 (Para inlines) :: _ ->
                     case inlines of
                         (Str a) :: (Str b) :: _ ->
-                            if (a == "@") && (b == "docs") then
-                                True
-
-                            else
-                                False
+                            (a == "@") && (b == "docs")
 
                         _ ->
                             False
@@ -29,6 +40,7 @@ formatMarkdown formatCode blocks =
                 _ ->
                     True
 
+        needsTrailingBlanks : Bool
         needsTrailingBlanks =
             case blocks of
                 [] ->
@@ -56,6 +68,7 @@ mapWithPrev f list =
 formatMarkdown_ : (String -> Maybe String) -> Bool -> Bool -> Bool -> List Block -> String
 formatMarkdown_ formatCode isListItem needsInitialBlanks needsTrailingBlanks blocks =
     let
+        intersperse : List String -> List String
         intersperse =
             case ( isListItem, blocks ) of
                 ( True, [ Para _, List _ _ _ ] ) ->
@@ -64,6 +77,7 @@ formatMarkdown_ formatCode isListItem needsInitialBlanks needsTrailingBlanks blo
                 _ ->
                     List.intersperse "\n"
 
+        contextFor : Maybe Block -> Context
         contextFor prev =
             case prev of
                 Just (List _ _ _) ->
@@ -96,7 +110,7 @@ formatMardownBlock : (String -> Maybe String) -> Context -> Block -> String
 formatMardownBlock formatCode context block =
     case block of
         ElmDocs terms ->
-            (String.join "\n" <| List.map ((++) "@docs " << String.join ", ") terms) ++ "\n"
+            (String.join "\n" <| List.map (\term -> "@docs " ++ String.join ", " term) terms) ++ "\n"
 
         Para inlines ->
             (String.concat <| List.map (formatMarkdownInline True) inlines) ++ "\n"
@@ -133,9 +147,11 @@ formatMardownBlock formatCode context block =
 
         CodeBlock (CodeAttr { codeLang }) code ->
             let
+                isElm : Bool
                 isElm =
                     codeLang == "elm" || codeLang == ""
 
+                formatted : String
                 formatted =
                     Maybe.withDefault (ensureNewline code) <|
                         if isElm then
@@ -144,6 +160,7 @@ formatMardownBlock formatCode context block =
                         else
                             Nothing
 
+                ensureNewline : String -> String
                 ensureNewline text =
                     if String.endsWith "\n" text then
                         text
@@ -151,6 +168,7 @@ formatMardownBlock formatCode context block =
                     else
                         text ++ "\n"
 
+                canIndent : Bool
                 canIndent =
                     case context of
                         Normal ->
@@ -160,7 +178,7 @@ formatMardownBlock formatCode context block =
                             False
             in
             if isElm && canIndent then
-                Utils.unlines <| List.map ((++) "    ") <| lines formatted
+                Utils.unlines <| List.map (\line -> "    " ++ line) <| lines formatted
 
             else
                 "```" ++ codeLang ++ "\n" ++ formatted ++ "```\n"
@@ -188,6 +206,7 @@ lines str =
 formatListItem : (String -> Maybe String) -> ( Int, Blocks ) -> String
 formatListItem formatCode ( i, item ) =
     let
+        pref : String
         pref =
             if i < 10 then
                 String.fromInt i ++ ".  "
@@ -225,12 +244,13 @@ prefix preFirst preRest list =
             []
 
         first :: rest ->
-            (preFirst ++ first) :: List.map ((++) preRest) rest
+            (preFirst ++ first) :: List.map (\next -> preRest ++ next) rest
 
 
 formatMarkdownInline : Bool -> Inline -> String
 formatMarkdownInline fixSpecialChars inline =
     let
+        fix : Char -> String
         fix c =
             case c of
                 '\\' ->
@@ -291,6 +311,7 @@ formatMarkdownInline fixSpecialChars inline =
 
                 Span n ->
                     let
+                        delimiter : String
                         delimiter =
                             String.repeat (n + 1) "`"
                     in
@@ -298,12 +319,11 @@ formatMarkdownInline fixSpecialChars inline =
 
         Link inlines (Url url) title ->
             let
-                text =
-                    String.concat <| List.map (formatMarkdownInline fixSpecialChars) inlines
-
+                textRaw : String
                 textRaw =
                     String.concat <| List.map (formatMarkdownInline False) inlines
 
+                isValidAutolink : String -> Bool
                 isValidAutolink =
                     Url.fromString >> Maybe.isJust
             in
@@ -315,6 +335,11 @@ formatMarkdownInline fixSpecialChars inline =
                     url
 
             else
+                let
+                    text : String
+                    text =
+                        String.concat <| List.map (formatMarkdownInline fixSpecialChars) inlines
+                in
                 "["
                     ++ text
                     ++ "]("
@@ -329,6 +354,7 @@ formatMarkdownInline fixSpecialChars inline =
 
         Link inlines (Ref ref) _ ->
             let
+                text : String
                 text =
                     String.concat <| List.map (formatMarkdownInline fixSpecialChars) inlines
             in
@@ -374,6 +400,7 @@ type LongestSpanResult
 longestSpanOf : Char -> String -> LongestSpanResult
 longestSpanOf char input =
     let
+        step : Char -> ( Maybe Int, Int ) -> ( Maybe Int, Int )
         step c ( currentSpan, longest ) =
             if c == char then
                 ( Just (1 + Maybe.withDefault 0 currentSpan)
@@ -387,6 +414,7 @@ longestSpanOf char input =
                   endCurrentSpan ( currentSpan, longest )
                 )
 
+        endCurrentSpan : ( Maybe Int, Int ) -> Int
         endCurrentSpan acc =
             case acc of
                 ( Nothing, longest ) ->

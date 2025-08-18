@@ -1,9 +1,9 @@
-module Common.Format.Render.Box exposing (..)
+module Common.Format.Render.Box exposing (formatModule)
 
-import Basics.Extra as Basics exposing (flip)
+import Basics.Extra exposing (flip)
 import Common.Format.Box as Box exposing (Box)
 import Common.Format.Cheapskate.Parse as Parse
-import Common.Format.Cheapskate.Types exposing (..)
+import Common.Format.Cheapskate.Types exposing (Block(..), Blocks, Doc(..), LinkTarget(..), Options(..))
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
 import Common.Format.Render.ElmStructure as ElmStructure
@@ -21,7 +21,6 @@ import Compiler.Reporting.Annotation as A
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Hex
-import Language.GLSL.Syntax exposing (Statement(..))
 import Maybe.Extra as Maybe
 import Utils.Crash exposing (crash)
 
@@ -148,6 +147,7 @@ refMap f ref =
 pairs : List a -> List ( a, a )
 pairs input =
     let
+        step : a -> ( Maybe b, List ( a, b ) ) -> ( Maybe a, List ( a, b ) )
         step next ( prev, acc ) =
             case prev of
                 Nothing ->
@@ -239,28 +239,6 @@ formatBinary multiline left ops =
                     multiline
                     (ElmStructure.forceableSpaceSepOrIndented multiline left [ formatCommentedApostrophe comments (ElmStructure.spaceSepOrPrefix op next) ])
                     rest
-
-
-splitWhere : (a -> Bool) -> List a -> List (List a)
-splitWhere predicate list =
-    let
-        merge : List a -> List (List a) -> List (List a)
-        merge acc result =
-            List.reverse acc :: result
-
-        step : a -> ( List a, List (List a) ) -> ( List a, List (List a) )
-        step next ( acc, result ) =
-            if predicate next then
-                ( [], merge (next :: acc) result )
-
-            else
-                ( next :: acc, result )
-    in
-    list
-        |> List.foldl step ( [], [] )
-        |> Basics.uncurry merge
-        |> List.reverse
-        |> List.filter List.isEmpty
 
 
 type DeclarationType
@@ -365,6 +343,7 @@ sortVars forceMultiline fromExposing fromDocs =
                 |> List.map (List.map (Tuple.pair ( [], [] )))
                 |> removeDuplicates
 
+        listedInExposing : List (Src.C2 Value)
         listedInExposing =
             fromExposing
                 |> EverySet.toList (\a b -> compare (varName a) (varName b))
@@ -409,8 +388,7 @@ sortVars forceMultiline fromExposing fromDocs =
         commentsFromReorderedVars =
             listedInExposing
                 |> List.filter inDocs
-                |> List.map (\( ( pre, post ), _ ) -> pre ++ post)
-                |> List.concat
+                |> List.concatMap (\( ( pre, post ), _ ) -> pre ++ post)
     in
     if List.isEmpty listedInDocs && forceMultiline then
         ( List.map (\x -> [ x ]) remainingFromExposing, commentsFromReorderedVars )
@@ -469,10 +447,6 @@ formatModuleHeader addDefaultHeader modu =
                 |> Maybe.withDefault []
                 |> List.concatMap extractDocs
 
-        documentedVarsSet : EverySet String String
-        documentedVarsSet =
-            EverySet.fromList identity (List.concat documentedVars)
-
         extractDocs : Block -> List (List String)
         extractDocs block =
             case block of
@@ -505,24 +479,6 @@ formatModuleHeader addDefaultHeader modu =
 
                 _ ->
                     VarRef [] text
-
-        definedVars : EverySet String (Src.C2 Value)
-        definedVars =
-            modu.body
-                |> List.concatMap extractVarName
-                |> List.map (Tuple.pair ( [], [] ))
-                |> EverySet.fromList
-                    (\( _, value ) ->
-                        case value of
-                            Value name ->
-                                name
-
-                            OpValue name ->
-                                name
-
-                            Union ( _, name ) _ ->
-                                name
-                    )
 
         exportsList : Listing DetailedListing
         exportsList =
@@ -575,10 +531,34 @@ formatModuleHeader addDefaultHeader modu =
         varsToExpose =
             case Maybe.andThen (\(Header _ _ _ exports) -> exports) maybeHeader of
                 Nothing ->
+                    let
+                        definedVars : EverySet String (Src.C2 Value)
+                        definedVars =
+                            modu.body
+                                |> List.concatMap extractVarName
+                                |> List.map (Tuple.pair ( [], [] ))
+                                |> EverySet.fromList
+                                    (\( _, value ) ->
+                                        case value of
+                                            Value name ->
+                                                name
+
+                                            OpValue name ->
+                                                name
+
+                                            Union ( _, name ) _ ->
+                                                name
+                                    )
+                    in
                     if List.all List.isEmpty documentedVars then
                         definedVars
 
                     else
+                        let
+                            documentedVarsSet : EverySet String String
+                            documentedVarsSet =
+                                EverySet.fromList identity (List.concat documentedVars)
+                        in
                         definedVars |> EverySet.filter (\v -> EverySet.member identity (varName v) documentedVarsSet)
 
                 Just ( _, e ) ->
@@ -690,6 +670,7 @@ formatModuleLine :
     -> Box
 formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preExposing postExposing =
     let
+        tag : Box
         tag =
             case srcTag of
                 Normal ->
@@ -705,6 +686,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
                         (formatTailCommented ( comments, Box.line <| Box.keyword "effect" ))
                         [ Box.line (Box.keyword "module") ]
 
+        exports : Box
         exports =
             case varsToExpose of
                 [] ->
@@ -736,6 +718,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
                 |> Maybe.map (\x -> [ x ])
                 |> Maybe.withDefault []
 
+        nameClause : Box
         nameClause =
             case
                 ( tag
@@ -773,6 +756,7 @@ formatModule addDefaultHeader spacing modu =
 formatModu : M.Module -> Module
 formatModu modu =
     let
+        declarations : List (TopLevelStructure Declaration)
         declarations =
             List.concatMap declToDeclarations modu.decls
 
@@ -780,6 +764,7 @@ formatModu modu =
             List.foldl
                 (\( comments, Src.Import ( importNameComments, A.At _ importName ) maybeAlias exposing_ ) ( importCommentsAcc, ( importComments, importsAcc ) ) ->
                     let
+                        exposedVars : Src.C2 (Listing DetailedListing)
                         exposedVars =
                             Src.c2map
                                 (\exposing__ ->
@@ -872,6 +857,7 @@ formatModu modu =
                                     )
                                 )
 
+                    exportsListing : Src.C2 (Listing DetailedListing)
                     exportsListing =
                         Src.c2map
                             (\(A.At _ exposing_) ->
@@ -1014,6 +1000,7 @@ declToDeclarations ( ( preDeclComments, postDeclComments ), decl ) =
 
                 Decl.Alias maybeDocs (A.At _ (Src.Alias comments name args tipe)) ->
                     let
+                        nameWithArgs : Src.C2 (NameWithArgs Name Name)
                         nameWithArgs =
                             Src.c2map
                                 (\(A.At _ n) ->
@@ -1072,6 +1059,7 @@ declToDeclarations ( ( preDeclComments, postDeclComments ), decl ) =
 formatModule_ : Bool -> Int -> Module -> Box
 formatModule_ addDefaultHeader spacing modu =
     let
+        initialComments_ : List Box
         initialComments_ =
             case modu.initialComments of
                 [] ->
@@ -1093,6 +1081,7 @@ formatModule_ addDefaultHeader spacing modu =
                 _ ->
                     spacing
 
+        decls : List (TopLevelStructure Declaration)
         decls =
             modu.body
     in
@@ -1349,6 +1338,7 @@ lines str =
 formatImport : UserImport -> Box
 formatImport ( ( _, rawName ) as name, (ImportMethod _ exposedVars) as method ) =
     let
+        requestedAs : Maybe (Src.C2 Name)
         requestedAs =
             case method of
                 ImportMethod ((Just ( _, aliasName )) as other) _ ->
@@ -1361,6 +1351,7 @@ formatImport ( ( _, rawName ) as name, (ImportMethod _ exposedVars) as method ) 
                 ImportMethod other _ ->
                     other
 
+        asVar : Maybe Box
         asVar =
             requestedAs
                 |> Maybe.map
@@ -1370,6 +1361,7 @@ formatImport ( ( _, rawName ) as name, (ImportMethod _ exposedVars) as method ) 
                     )
                 |> Maybe.join
 
+        exposingVar : Maybe Box
         exposingVar =
             formatImportClause
                 (formatListing formatDetailedListing)
@@ -1528,7 +1520,7 @@ formatListing format listing =
             Nothing
 
         OpenListing ( comments, () ) ->
-            Just <| parens <| formatCommented <| Tuple.pair comments <| Box.line <| Box.keyword ".."
+            Just <| parens <| formatCommented <| ( comments, Box.line <| Box.keyword ".." )
 
         ExplicitListing vars multiline ->
             case format vars of
@@ -1580,6 +1572,7 @@ formatDetailedListing listing =
 formatCommentedMap : (k -> k -> Order) -> (k -> v -> a) -> (a -> Box) -> CommentedMap k v -> List Box
 formatCommentedMap keyComparison construct format values =
     let
+        format_ : ( k, Src.C2 v ) -> Box
         format_ ( k, ( c, v ) ) =
             formatCommented ( c, format (construct k v) )
     in
@@ -1715,6 +1708,7 @@ formatDeclaration importInfo decl =
 
         Fixity assoc precedence name value ->
             let
+                formatAssoc : Binop.Associativity -> Box.Line
                 formatAssoc a =
                     case a of
                         Binop.Left ->
@@ -1751,6 +1745,7 @@ formatNameWithArgs (NameWithArgs name args) =
 formatDefinition : ImportInfo -> Src.Pattern -> List (Src.C1 Src.Pattern) -> Src.FComments -> Src.Expr -> Box
 formatDefinition importInfo (A.At _ name) args comments expr =
     let
+        body : Box
         body =
             Box.stack1
                 (List.concat
@@ -1835,6 +1830,7 @@ formatPattern apattern =
 
         Src.PCtor _ name [] ->
             let
+                ctor : List Name
                 ctor =
                     [ name ]
             in
@@ -1844,6 +1840,7 @@ formatPattern apattern =
 
         Src.PCtor _ name patterns ->
             let
+                ctor : List Name
                 ctor =
                     [ name ]
             in
@@ -1856,6 +1853,7 @@ formatPattern apattern =
 
         Src.PCtorQual _ home name [] ->
             let
+                ctor : List String
                 ctor =
                     String.split "." home ++ [ name ]
             in
@@ -1865,6 +1863,7 @@ formatPattern apattern =
 
         Src.PCtorQual _ home name patterns ->
             let
+                ctor : List String
                 ctor =
                     String.split "." home ++ [ name ]
             in
@@ -1983,6 +1982,7 @@ type SyntaxContext
 syntaxParens : SyntaxContext -> ( SyntaxContext, Box ) -> Box
 syntaxParens outer ( inner, box ) =
     let
+        parensIf : Bool -> Box -> Box
         parensIf bool =
             if bool then
                 parens
@@ -2138,7 +2138,7 @@ formatExpression importInfo (A.At region aexpr) =
                                     ++ [ expr_ ]
                         ]
 
-                ( ( _, Err [] ), ( _, _ ) ) ->
+                ( ( _, Err [] ), _ ) ->
                     pleaseReport "UNEXPECTED LAMBDA" "no patterns"
 
                 ( ( _, Err patterns_ ), ( _, expr_ ) ) ->
@@ -2160,6 +2160,7 @@ formatExpression importInfo (A.At region aexpr) =
                 (A.Region (A.Position aexprStartRow _) _) =
                     region
 
+                multiline : ElmStructure.FunctionApplicationMultiline
                 multiline =
                     if firstArgEndRow > aexprStartRow then
                         ElmStructure.FASplitFirst
@@ -2212,6 +2213,7 @@ formatExpression importInfo (A.At region aexpr) =
                 formatElseIf : Src.C1 ( Src.C2 Src.Expr, Src.C2 Src.Expr ) -> Box
                 formatElseIf ( ifComments, ( cond, body ) ) =
                     let
+                        key : Box
                         key =
                             case formatPreCommented ( ifComments, Box.line (Box.keyword "if") ) of
                                 Box.SingleLine key_ ->
@@ -2305,6 +2307,7 @@ formatExpression importInfo (A.At region aexpr) =
 
         Src.Case (( _, A.At subjectRegion _ ) as subject) clauses ->
             let
+                opening : Box
                 opening =
                     case
                         ( A.isMultiline subjectRegion
@@ -2342,7 +2345,7 @@ formatExpression importInfo (A.At region aexpr) =
                           )
                         )
                     of
-                        ( ( _, _ ), ( Box.SingleLine pat_, body_ ) ) ->
+                        ( _, ( Box.SingleLine pat_, body_ ) ) ->
                             Box.stack1
                                 [ Box.line (Box.row [ pat_, Box.space, Box.keyword "->" ])
                                 , Box.indent body_
@@ -2356,7 +2359,7 @@ formatExpression importInfo (A.At region aexpr) =
                                        ]
                                 )
 
-                        ( ( _, _ ), ( pat_, body_ ) ) ->
+                        ( _, ( pat_, body_ ) ) ->
                             Box.stack1
                                 [ pat_
                                 , Box.line (Box.keyword "->")
@@ -2389,6 +2392,7 @@ formatExpression importInfo (A.At region aexpr) =
 
         Src.Update name ( trailing, fields ) ->
             let
+                multiline : Src.ForceMultiline
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
 
@@ -2406,6 +2410,7 @@ formatExpression importInfo (A.At region aexpr) =
 
         Src.Record ( trailing, fields ) ->
             let
+                multiline : Src.ForceMultiline
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
 
@@ -2433,15 +2438,18 @@ formatExpression importInfo (A.At region aexpr) =
 
         Src.Tuple a b cs ->
             let
+                multiline : Bool
                 multiline =
                     A.isMultiline region
 
+                exprs : List (Src.C2 Src.Expr)
                 exprs =
                     a :: b :: cs
             in
-            Tuple.pair SyntaxSeparated <|
-                ElmStructure.group True "(" "," ")" multiline <|
-                    List.map (formatCommentedExpression importInfo) exprs
+            ( SyntaxSeparated
+            , ElmStructure.group True "(" "," ")" multiline <|
+                List.map (formatCommentedExpression importInfo) exprs
+            )
 
         Src.Shader (Shader.Source src) _ ->
             ( SyntaxSeparated
@@ -2473,6 +2481,7 @@ type LetDeclaration
 formatCommentedExpression : ImportInfo -> Src.C2 Src.Expr -> Box
 formatCommentedExpression importInfo ( ( pre, post ), e ) =
     let
+        commented_ : Src.C2 Src.Expr
         commented_ =
             -- TODO
             -- case e of
@@ -2570,9 +2579,11 @@ formatBinops importInfo left ops multiline =
         formatPair_ : Bool -> BinopsClause (Ref (List String)) Src.Expr -> ( ( Bool, Src.FComments, Box ), Box )
         formatPair_ isLast (BinopsClause po o pe e) =
             let
+                isLeftPipe : Bool
                 isLeftPipe =
                     o == OpRef "<|"
 
+                formatContext : SyntaxContext
                 formatContext =
                     if isLeftPipe && isLast then
                         AmbiguousEnd
@@ -2735,11 +2746,6 @@ formatComment comment =
             Box.mustBreak <| Box.row [ Box.punc "{--", Box.literal c, Box.punc "-}" ]
 
 
-type FloatRepresentation
-    = DecimalFloat
-    | ExponentFloat
-
-
 type StringRepresentation
     = SingleQuotedString
     | TripleQuotedString
@@ -2756,6 +2762,7 @@ formatLiteral lit =
     case lit of
         IntNum i ->
             let
+                number : String
                 number =
                     if String.startsWith "0x" i then
                         "0x" ++ String.toUpper (String.dropLeft 2 i)
@@ -2791,19 +2798,6 @@ charIsPrint c =
 
         _ ->
             True
-
-
-charIsSpace : Char -> Bool
-charIsSpace c =
-    let
-        uc =
-            Char.toCode c
-    in
-    if uc <= 0x0377 then
-        uc == 32 || uc - 0x09 <= 4 || uc == 0xA0
-
-    else
-        c == ' '
 
 
 formatString : StringStyle -> String -> Box
@@ -2850,31 +2844,9 @@ formatString style s =
                     )
                 |> String.concat
 
+        hex : Char -> String
         hex char =
             "\\u{" ++ String.padLeft 4 '0' (Hex.toString (Char.toCode char)) ++ "}"
-
-        escapeMultiQuote =
-            let
-                step : String -> Int -> String -> String
-                step okay quotes remaining =
-                    case String.toList remaining of
-                        [] ->
-                            String.reverse (String.concat (List.repeat quotes "\"\\") ++ okay)
-
-                        next :: rest ->
-                            if next == '"' then
-                                step okay (quotes + 1) (String.fromList rest)
-
-                            else if quotes >= 3 then
-                                step (String.cons next (String.concat <| List.repeat quotes "\"\\") ++ okay) 0 (String.fromList rest)
-
-                            else if quotes > 0 then
-                                step (String.cons next (String.fromList (List.repeat quotes '"') ++ okay)) 0 (String.fromList rest)
-
-                            else
-                                step (String.cons next okay) 0 (String.fromList rest)
-            in
-            step "" 0
     in
     case style of
         SChar ->
@@ -2884,6 +2856,31 @@ formatString style s =
             stringBox "\"" identity
 
         SString TripleQuotedString ->
+            let
+                escapeMultiQuote : String -> String
+                escapeMultiQuote =
+                    let
+                        step : String -> Int -> String -> String
+                        step okay quotes remaining =
+                            case String.toList remaining of
+                                [] ->
+                                    String.reverse (String.repeat quotes "\"\\" ++ okay)
+
+                                next :: rest ->
+                                    if next == '"' then
+                                        step okay (quotes + 1) (String.fromList rest)
+
+                                    else if quotes >= 3 then
+                                        step (String.cons next (String.repeat quotes "\"\\") ++ okay) 0 (String.fromList rest)
+
+                                    else if quotes > 0 then
+                                        step (String.cons next (String.fromList (List.repeat quotes '"') ++ okay)) 0 (String.fromList rest)
+
+                                    else
+                                        step (String.cons next okay) 0 (String.fromList rest)
+                    in
+                    step "" 0
+            in
             stringBox "\"\"\"" escapeMultiQuote
 
 
@@ -2947,6 +2944,7 @@ formatType (A.At region atype) =
                     in
                     go result []
 
+                forceMultiline : Bool
                 forceMultiline =
                     A.isMultiline region
 
@@ -2979,9 +2977,11 @@ formatType (A.At region atype) =
 
         Src.TType _ ctor args ->
             let
+                forceMultiline : Src.ForceMultiline
                 forceMultiline =
                     Src.ForceMultiline (A.isMultiline region)
 
+                join : ElmStructure.FunctionApplicationMultiline
                 join =
                     case forceMultiline of
                         Src.ForceMultiline True ->
@@ -3003,9 +3003,11 @@ formatType (A.At region atype) =
 
         Src.TTypeQual _ home name args ->
             let
+                forceMultiline : Src.ForceMultiline
                 forceMultiline =
                     Src.ForceMultiline (A.isMultiline region)
 
+                join : ElmStructure.FunctionApplicationMultiline
                 join =
                     case forceMultiline of
                         Src.ForceMultiline True ->
@@ -3027,6 +3029,7 @@ formatType (A.At region atype) =
 
         Src.TRecord fields ext trailing ->
             let
+                base : Maybe (Src.C2 Name)
                 base =
                     Maybe.map (Src.c2map A.toValue) ext
 
@@ -3040,6 +3043,7 @@ formatType (A.At region atype) =
                         )
                         fields
 
+                multiline : Src.ForceMultiline
                 multiline =
                     Src.ForceMultiline (A.isMultiline region)
             in
@@ -3058,9 +3062,11 @@ formatType (A.At region atype) =
 
         Src.TTuple a b cs ->
             let
+                types : List (Src.C2Eol Src.Type)
                 types =
                     a :: b :: cs
 
+                forceMultiline : Bool
                 forceMultiline =
                     A.isMultiline region
             in
