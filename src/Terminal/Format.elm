@@ -184,10 +184,11 @@ format ( inputFile, inputText ) =
     Common.Format.format (SV.fileSyntaxVersion inputFile) (M.Package Pkg.core) inputText
         |> Result.mapError
             (\err ->
-                let
-                    _ =
-                        Debug.log "err" err
-                in
+                -- FIXME show errors!
+                -- let
+                --     _ =
+                --         Debug.log "err" err
+                -- in
                 ParseError inputFile []
             )
 
