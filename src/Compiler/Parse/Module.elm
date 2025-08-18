@@ -940,13 +940,13 @@ chompExposed =
                                         (\end ->
                                             Space.chompAndCheckIndent E.ExposingSpace E.ExposingIndentEnd
                                                 |> P.bind
-                                                    (\c81 ->
+                                                    (\privacyComments ->
                                                         let
                                                             _ =
-                                                                Debug.log "c81" c81
+                                                                Debug.log "c81" privacyComments
                                                         in
                                                         privacy
-                                                            |> P.fmap (Src.Upper (A.at start end name))
+                                                            |> P.fmap (Src.Upper (A.at start end name) << Tuple.pair privacyComments)
                                                     )
                                         )
                             )
@@ -960,10 +960,10 @@ privacy =
         [ P.word1 '(' E.ExposingTypePrivacy
             |> P.bind (\_ -> Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy)
             |> P.bind
-                (\c82 ->
+                (\c82NotUsed ->
                     let
                         _ =
-                            Debug.log "c82" c82
+                            Debug.log "c82" c82NotUsed
                     in
                     P.getPosition
                 )
@@ -975,10 +975,10 @@ privacy =
                             (\end ->
                                 Space.chompAndCheckIndent E.ExposingSpace E.ExposingTypePrivacy
                                     |> P.bind
-                                        (\c83 ->
+                                        (\c83NotUsed ->
                                             let
                                                 _ =
-                                                    Debug.log "c83" c83
+                                                    Debug.log "c83" c83NotUsed
                                             in
                                             P.word1 ')' E.ExposingTypePrivacy
                                         )

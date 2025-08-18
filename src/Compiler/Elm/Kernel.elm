@@ -410,10 +410,10 @@ toName exposed =
         Src.Lower (A.At _ name) ->
             name
 
-        Src.Upper (A.At _ name) Src.Private ->
+        Src.Upper (A.At _ name) ( _, Src.Private ) ->
             name
 
-        Src.Upper _ (Src.Public _) ->
+        Src.Upper _ ( _, Src.Public _ ) ->
             crash "cannot have Maybe(..) syntax in kernel code header"
 
         Src.Operator _ _ ->

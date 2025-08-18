@@ -392,6 +392,9 @@ addBindingsHelp bindings (A.At region pattern) =
         Src.PInt _ _ ->
             bindings
 
+        Src.PParens _ ->
+            bindings
+
 
 type alias Node =
     ( Binding, Name.Name, List Name.Name )
@@ -564,6 +567,9 @@ getPatternNames names (A.At region pattern) =
             names
 
         Src.PInt _ _ ->
+            names
+
+        Src.PParens _ ->
             names
 
 

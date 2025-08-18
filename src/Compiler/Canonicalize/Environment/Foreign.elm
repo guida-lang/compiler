@@ -275,7 +275,7 @@ addExposedValue home vars types binops state exposed =
                 Nothing ->
                     R.throw (Error.ImportExposingNotFound region home name (Dict.keys compare vars))
 
-        Src.Upper (A.At region name) privacy ->
+        Src.Upper (A.At region name) ( _, privacy ) ->
             case privacy of
                 Src.Private ->
                     case Dict.get identity name types of

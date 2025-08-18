@@ -180,8 +180,8 @@ parseModule ( inputFile, inputText ) =
 
 format : ( FilePath, String ) -> Result InfoMessage String
 format ( inputFile, inputText ) =
-    -- FIXME fix hardcoded syntaxVersion and projectType
-    Common.Format.format SV.Elm (M.Package Pkg.core) inputText
+    -- FIXME fix hardcoded projectType
+    Common.Format.format (SV.fileSyntaxVersion inputFile) (M.Package Pkg.core) inputText
         |> Result.mapError
             (\err ->
                 let

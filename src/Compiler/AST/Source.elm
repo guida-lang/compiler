@@ -280,6 +280,7 @@ type Pattern_
     | PChr String
     | PStr String Bool
     | PInt Int String
+    | PParens (C2 Pattern)
 
 
 
@@ -380,7 +381,7 @@ type Exposing
 
 type Exposed
     = Lower (A.Located Name)
-    | Upper (A.Located Name) Privacy
+    | Upper (A.Located Name) (C1 Privacy)
     | Operator A.Region Name
 
 
@@ -971,7 +972,7 @@ exposedEncoder exposed =
             BE.sequence
                 [ BE.unsignedInt8 1
                 , A.locatedEncoder BE.string name
-                , privacyEncoder dotDotRegion
+                , c1Encoder privacyEncoder dotDotRegion
                 ]
 
         Operator region name ->
@@ -994,7 +995,7 @@ exposedDecoder =
                     1 ->
                         BD.map2 Upper
                             (A.locatedDecoder BD.string)
-                            privacyDecoder
+                            (c1Decoder privacyDecoder)
 
                     2 ->
                         BD.map2 Operator
@@ -1138,6 +1139,12 @@ pattern_Encoder pattern_ =
                 , BE.string src
                 ]
 
+        PParens pattern ->
+            BE.sequence
+                [ BE.unsignedInt8 13
+                , c2Encoder patternEncoder pattern
+                ]
+
 
 pattern_Decoder : BD.Decoder Pattern_
 pattern_Decoder =
@@ -1201,6 +1208,9 @@ pattern_Decoder =
                         BD.map2 PInt
                             BD.int
                             BD.string
+
+                    13 ->
+                        BD.map PParens (c2Decoder patternDecoder)
 
                     _ ->
                         BD.fail

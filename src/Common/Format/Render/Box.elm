@@ -798,11 +798,11 @@ formatModu modu =
                                                             Src.Lower (A.At _ name) ->
                                                                 { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
 
-                                                            Src.Upper (A.At _ name) (Src.Public _) ->
-                                                                { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
+                                                            Src.Upper (A.At _ name) ( privacyComments, Src.Public _ ) ->
+                                                                { acc | types = Map.insert identity name ( entryComments, ( privacyComments, OpenListing ( ( [], [] ), () ) ) ) acc.types }
 
-                                                            Src.Upper (A.At _ name) Src.Private ->
-                                                                { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
+                                                            Src.Upper (A.At _ name) ( privacyComments, Src.Private ) ->
+                                                                { acc | types = Map.insert identity name ( entryComments, ( privacyComments, ClosedListing ) ) acc.types }
 
                                                             Src.Operator _ name ->
                                                                 { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
@@ -887,11 +887,11 @@ formatModu modu =
                                                         Src.Lower (A.At _ name) ->
                                                             { acc | values = Map.insert identity name ( entryComments, () ) acc.values }
 
-                                                        Src.Upper (A.At _ name) (Src.Public _) ->
-                                                            { acc | types = Map.insert identity name ( entryComments, ( [], OpenListing ( ( [], [] ), () ) ) ) acc.types }
+                                                        Src.Upper (A.At _ name) ( privacyComments, Src.Public _ ) ->
+                                                            { acc | types = Map.insert identity name ( entryComments, ( privacyComments, OpenListing ( ( [], [] ), () ) ) ) acc.types }
 
-                                                        Src.Upper (A.At _ name) Src.Private ->
-                                                            { acc | types = Map.insert identity name ( entryComments, ( [], ClosedListing ) ) acc.types }
+                                                        Src.Upper (A.At _ name) ( privacyComments, Src.Private ) ->
+                                                            { acc | types = Map.insert identity name ( entryComments, ( privacyComments, ClosedListing ) ) acc.types }
 
                                                         Src.Operator _ name ->
                                                             { acc | operators = Map.insert identity name ( entryComments, () ) acc.operators }
@@ -1887,6 +1887,19 @@ formatPattern apattern =
 
         Src.PCons hd tl ->
             let
+                go : List (Src.C2Eol Src.Pattern) -> Src.C2Eol Src.Pattern -> List (Src.C2Eol Src.Pattern)
+                go acc p =
+                    case p of
+                        ( comments, A.At _ (Src.PCons ( _, hd_ ) tl_) ) ->
+                            go (( comments, hd_ ) :: acc) tl_
+
+                        _ ->
+                            List.reverse (p :: acc)
+
+                rest : List (Src.C2Eol Src.Pattern)
+                rest =
+                    go [] tl
+
                 formatRight : Src.C2Eol Src.Pattern -> ( ( Bool, Src.FComments, Box ), Box )
                 formatRight ( ( preOp, postOp, eol ), term ) =
                     ( ( False
@@ -1902,7 +1915,7 @@ formatPattern apattern =
             ( SpaceSeparated
             , formatBinary False
                 (formatEolCommented (Src.c0EolMap (syntaxParens SpaceSeparated << formatPattern << A.toValue) hd))
-                [ formatRight tl ]
+                (List.map formatRight rest)
             )
 
         Src.PChr chr ->
@@ -1917,6 +1930,14 @@ formatPattern apattern =
         Src.PInt _ src ->
             ( SyntaxSeparated
             , formatLiteral (IntNum src)
+            )
+
+        Src.PParens ( ( [], [] ), A.At _ pattern ) ->
+            formatPattern pattern
+
+        Src.PParens pattern ->
+            ( SyntaxSeparated
+            , parens (formatCommented (Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue) pattern))
             )
 
 

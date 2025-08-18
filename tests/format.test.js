@@ -154,7 +154,16 @@ things.
         "letSignatureArgsFn {- letSignatureArgs4 -} = {- letSignatureArgs5 -}\n let\n  {- letSignatureArgs6 -}\n  val1 {- letSignatureArgs7 -} : {- letSignatureArgs8 -} a {- letSignatureArgs9 -}\n  val1 {- letSignatureArgs10 -} a {- letSignatureArgs11 -} = {- letSignatureArgs12 -} 42 {- letSignatureArgs13 -}\n in  {- letSignatureArgs14 -} val {- letSignatureArgs15 -}",
         "{-| case comments -}",
         "caseFn {- case1 -} : {- case2 -} Int {- case3 -}",
-        "caseFn {- case4 -} = {- case5 -} case {- case5 -} () {- case6 -} of {- case7 -}\n _ {- case8 -} -> {- case9 -} 1 {- case10 -}",
+        `caseFn {- case4 -} = {- case5 -} case {- case6 -} () {- case7 -} of {- case8 -}
+        ({- case9 -} 1 {- case10 -}, {- case11 -} 2 {- case12 -}) -> {- case13 -} 3 {- case14 -}
+        [{- case15 -}] -> {- case16 -} 4 {- case17 -}
+        [{- case18 -} 1 {- case19 -}] -> {- case20 -} 5 {- case21 -}
+        [{- case22 -} 1 {- case23 -}, {- case24 -} 2 {- case25 -}] -> {- case26 -} 6 {- case27 -}
+        1 {- case28 -} :: {- case29 -} 2 {- case30 -} :: {- case31 -} 3 {- case32 -} -> {- case33 -} 7 {- case34 -}
+        1 {- case35 -} as {- case36 -} x {- case37 -} -> {- case38 -} 8 {- case39 -}
+        ({- case40 -} 1 {- case41 -} :: {- case42 -} [{- case43 -}] {- case44 -}) {- case45 -} as {- case46 -} y {- case47 -} -> {- case48 -} 9 {- case49 -}
+        (1) {- case50 -} as {- case51 -} z {- case52 -} -> {- case53 -} 10 {- case54 -}
+        _ {- case55 -} -> {- case56 -} 8 {- case57 -}`,
         "{-| acces comments -}",
         "accesFn {- acces1 -} : {- acces2 -} Int {- acces3 -}",
         "accesFn {- acces4 -} = {- acces5 -} a.b {- acces6 -}",
@@ -292,6 +301,7 @@ const examples = [
         { title: "single-line header", filename: "SingleLineHeaderComments", module: { ...defaultModule, header: ["module -- C1\n Main -- C2\n exposing -- C3\n (..)"] } },
         { title: "port header", filename: "PortHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\nport {- C2 -} module {- C3 -} Main {- C4 -} exposing {- C5 -} (..)"] } },
         { title: "manager header", filename: "ManagerHeaderComments", module: { ...defaultModule, header: ["{- C1 -}\neffect {- C2 -} module {- C3 -} Main {- C4 -} where {- C5 -} { {- C6 -} command {- C7 -} = {- C8 -} MyCmd {- C9 -} , {- C10 -} subscription {- C11 -} = {- C12 -} MySub {- C13 -} } {- C14 -} exposing {- C15 -} (..)"] } },
+        { title: "header exposed", filename: "HeaderExposedComments", module: { ...defaultModule, header: ["module Main exposing ({- C1 -} A {- C2 -} ({- C3 -}..{- C4 -}), {- C5 -} B {- C6 -} ({- C7 -}..{- C8 -}), {- C9 -} C {- C10 -}, {- C11 -} fn {- C12 -})"] } },
         { title: "single-line declaration", filename: "SingleLineDeclarationComments", module: { ...defaultModule, declarations: ["-- COMMENT", "fn = ()"] } },
         { title: "infix", filename: "InfixComments", module: { ...defaultModule, infixes: ["infix {- 1 -} right {- 2 -} 0 {- 3 -} (<|) {- 4 -} = {- 5 -} apL"] } },
         {

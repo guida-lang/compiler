@@ -311,7 +311,7 @@ checkExposed values unions aliases binops effects exposed =
             else
                 R.throw (Error.ExportNotFound region Error.BadOp name (Dict.keys compare binops))
 
-        Src.Upper (A.At region name) (Src.Public dotDotRegion) ->
+        Src.Upper (A.At region name) ( _, Src.Public dotDotRegion ) ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionOpen
 
@@ -321,7 +321,7 @@ checkExposed values unions aliases binops effects exposed =
             else
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
-        Src.Upper (A.At region name) Src.Private ->
+        Src.Upper (A.At region name) ( _, Src.Private ) ->
             if Dict.member identity name unions then
                 ok name region Can.ExportUnionClosed
 

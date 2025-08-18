@@ -66,56 +66,71 @@ type alias DupsDict =
 
 canonicalize : SyntaxVersion -> Env.Env -> Src.Pattern -> PResult DupsDict w Can.Pattern
 canonicalize syntaxVersion env (A.At region pattern) =
-    R.fmap (A.At region) <|
-        case pattern of
-            Src.PAnything _ ->
-                R.ok Can.PAnything
+    case pattern of
+        Src.PAnything _ ->
+            R.ok Can.PAnything
+                |> R.fmap (A.At region)
 
-            Src.PVar name ->
-                logVar name region (Can.PVar name)
+        Src.PVar name ->
+            logVar name region (Can.PVar name)
+                |> R.fmap (A.At region)
 
-            Src.PRecord ( _, c2Fields ) ->
-                let
-                    fields =
-                        List.map Src.c2Value c2Fields
-                in
-                logFields fields (Can.PRecord (List.map A.toValue fields))
+        Src.PRecord ( _, c2Fields ) ->
+            let
+                fields =
+                    List.map Src.c2Value c2Fields
+            in
+            logFields fields (Can.PRecord (List.map A.toValue fields))
+                |> R.fmap (A.At region)
 
-            Src.PUnit _ ->
-                R.ok Can.PUnit
+        Src.PUnit _ ->
+            R.ok Can.PUnit
+                |> R.fmap (A.At region)
 
-            Src.PTuple ( _, a ) ( _, b ) cs ->
-                R.fmap Can.PTuple (canonicalize syntaxVersion env a)
-                    |> R.apply (canonicalize syntaxVersion env b)
-                    |> R.apply (canonicalizeTuple syntaxVersion region env (List.map Src.c2Value cs))
+        Src.PTuple ( _, a ) ( _, b ) cs ->
+            R.fmap Can.PTuple (canonicalize syntaxVersion env a)
+                |> R.apply (canonicalize syntaxVersion env b)
+                |> R.apply (canonicalizeTuple syntaxVersion region env (List.map Src.c2Value cs))
+                |> R.fmap (A.At region)
 
-            Src.PCtor nameRegion name patterns ->
-                Env.findCtor nameRegion env name
-                    |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+        Src.PCtor nameRegion name patterns ->
+            Env.findCtor nameRegion env name
+                |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+                |> R.fmap (A.At region)
 
-            Src.PCtorQual nameRegion home name patterns ->
-                Env.findCtorQual nameRegion env home name
-                    |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+        Src.PCtorQual nameRegion home name patterns ->
+            Env.findCtorQual nameRegion env home name
+                |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+                |> R.fmap (A.At region)
 
-            Src.PList ( _, patterns ) ->
-                R.fmap Can.PList (canonicalizeList syntaxVersion env (List.map Src.c2Value patterns))
+        Src.PList ( _, patterns ) ->
+            R.fmap Can.PList (canonicalizeList syntaxVersion env (List.map Src.c2Value patterns))
+                |> R.fmap (A.At region)
 
-            Src.PCons ( _, first ) ( _, rest ) ->
-                R.fmap Can.PCons (canonicalize syntaxVersion env first)
-                    |> R.apply (canonicalize syntaxVersion env rest)
+        Src.PCons ( _, first ) ( _, rest ) ->
+            R.fmap Can.PCons (canonicalize syntaxVersion env first)
+                |> R.apply (canonicalize syntaxVersion env rest)
+                |> R.fmap (A.At region)
 
-            Src.PAlias ( _, ptrn ) ( _, A.At reg name ) ->
-                canonicalize syntaxVersion env ptrn
-                    |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
+        Src.PAlias ( _, ptrn ) ( _, A.At reg name ) ->
+            canonicalize syntaxVersion env ptrn
+                |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
+                |> R.fmap (A.At region)
 
-            Src.PChr chr ->
-                R.ok (Can.PChr chr)
+        Src.PChr chr ->
+            R.ok (Can.PChr chr)
+                |> R.fmap (A.At region)
 
-            Src.PStr str multiline ->
-                R.ok (Can.PStr str multiline)
+        Src.PStr str multiline ->
+            R.ok (Can.PStr str multiline)
+                |> R.fmap (A.At region)
 
-            Src.PInt int _ ->
-                R.ok (Can.PInt int)
+        Src.PInt int _ ->
+            R.ok (Can.PInt int)
+                |> R.fmap (A.At region)
+
+        Src.PParens ( _, pattern_ ) ->
+            canonicalize syntaxVersion env pattern_
 
 
 canonicalizeCtor : SyntaxVersion -> Env.Env -> A.Region -> Name.Name -> List Src.Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
