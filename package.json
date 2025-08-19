@@ -21,7 +21,7 @@
     "test:elm": "elm-test",
     "test:elm-review": "elm-review",
     "elm-format": "elm-format . --yes",
-    "prepack": "npm run build"
+    "prepare": "npm run build"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",

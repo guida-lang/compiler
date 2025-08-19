@@ -23,10 +23,8 @@
             "guida-lang/glsl": "1.0.0",
             "guida-lang/graph": "1.0.1",
             "jxxcarlson/hex": "4.0.1",
-            "lue-bird/elm-syntax-format": "1.1.7",
             "obiloud/numeric-decimal": "3.0.1",
             "rtfeldman/elm-hex": "1.0.0",
-            "stil4m/elm-syntax": "7.3.8",
             "the-sett/elm-pretty-printer": "3.1.0",
             "truqu/elm-base64": "2.0.4"
         },
@@ -35,9 +33,7 @@
             "elm/file": "1.0.5",
             "elm/parser": "1.1.0",
             "fredcy/elm-parseint": "2.0.1",
-            "miniBill/elm-unicode": "1.1.1",
             "pilatch/flip": "1.0.0",
-            "stil4m/structured-writer": "1.0.3",
             "zwilias/elm-rosetree": "1.5.0"
         }
     },
@@ -48,7 +44,7 @@
         "indirect": {
             "elm/html": "1.0.0",
             "elm/random": "1.0.0",
-            "elm/virtual-dom": "1.0.3"
+            "elm/virtual-dom": "1.0.4"
         }
     }
 }

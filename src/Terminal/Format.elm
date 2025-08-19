@@ -10,9 +10,6 @@ import Compiler.Parse.Module as M
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
-import Elm.Syntax.File
-import ElmSyntaxParserLenient
-import ElmSyntaxPrint
 import Json.Encode as Encode
 import Result.Extra as Result
 import System.Exit as Exit
@@ -155,9 +152,9 @@ determineWhatToDoFromConfig (Flags maybeOutput _ doValidate stdin) resolvedInput
 
 validate : ( FilePath, String ) -> Result InfoMessage ()
 validate (( inputFile, inputText ) as input) =
-    case parseModule input of
+    case format input of
         Ok modu ->
-            if inputText /= render modu then
+            if inputText /= modu then
                 Err (FileWouldChange inputFile)
 
             else
@@ -167,23 +164,12 @@ validate (( inputFile, inputText ) as input) =
             Err err
 
 
-parseModule : ( FilePath, String ) -> Result InfoMessage Elm.Syntax.File.File
-parseModule ( inputFile, inputText ) =
-    case ElmSyntaxParserLenient.run ElmSyntaxParserLenient.module_ inputText of
-        Just modu ->
-            Ok modu
-
-        Nothing ->
-            -- FIXME missings errs
-            Err (ParseError inputFile [])
-
-
 format : ( FilePath, String ) -> Result InfoMessage String
 format ( inputFile, inputText ) =
     -- FIXME fix hardcoded projectType
     Common.Format.format (SV.fileSyntaxVersion inputFile) (M.Package Pkg.core) inputText
         |> Result.mapError
-            (\err ->
+            (\_ ->
                 -- FIXME show errors!
                 -- let
                 --     _ =
@@ -683,16 +669,6 @@ logErrorOr onInfo fn result =
         Ok value ->
             fn value
                 |> Task.fmap (\_ -> True)
-
-
-
--- RENDER
-
-
-render : Elm.Syntax.File.File -> String
-render modul =
-    ElmSyntaxPrint.module_ modul
-        |> ElmSyntaxPrint.toString
 
 
 
