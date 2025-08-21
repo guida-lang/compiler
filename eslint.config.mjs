@@ -21,6 +21,7 @@ export default defineConfig([
   { files: ["lib/browser.js"], languageOptions: { globals: globals.browser } },
   { files: ["lib/node.js"], languageOptions: { globals: globals.node } },
   { files: ["try/**/*.{js,mjs,cjs}"], languageOptions: { globals: { ...globals.browser, ...globals.node } } },
+  { files: ["scripts/*.js"], languageOptions: { globals: globals.node } },
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: { js },
