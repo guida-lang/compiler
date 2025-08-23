@@ -45,35 +45,32 @@ import Utils.Bytes.Encode as BE
 
 
 type Expr
-    = Bool A.Region Bool
-    | Chr A.Region String
-    | Str A.Region String
-    | Int A.Region Int
-    | Float A.Region Float
+    = Bool Bool
+    | Chr String
+    | Str String
+    | Int Int
+    | Float Float
     | VarLocal Name
-    | TrackedVarLocal A.Region Name
-    | VarGlobal A.Region Global
-    | VarEnum A.Region Global Index.ZeroBased
-    | VarBox A.Region Global
-    | VarCycle A.Region IO.Canonical Name
-    | VarDebug A.Region Name IO.Canonical (Maybe Name)
-    | VarKernel A.Region Name Name
-    | List A.Region (List Expr)
+    | VarGlobal Global
+    | VarEnum Global Index.ZeroBased
+    | VarBox Global
+    | VarCycle IO.Canonical Name
+    | VarDebug Name IO.Canonical A.Region (Maybe Name)
+    | VarKernel Name Name
+    | List (List Expr)
     | Function (List Name) Expr
-    | TrackedFunction (List (A.Located Name)) Expr
-    | Call A.Region Expr (List Expr)
+    | Call Expr (List Expr)
     | TailCall Name (List ( Name, Expr ))
     | If (List ( Expr, Expr )) Expr
     | Let Def Expr
     | Destruct Destructor Expr
     | Case Name Name (Decider Choice) (List ( Int, Expr ))
-    | Accessor A.Region Name
-    | Access Expr A.Region Name
-    | Update A.Region Expr (Dict String (A.Located Name) Expr)
+    | Accessor Name
+    | Access Expr Name
+    | Update Expr (Dict String Name Expr)
     | Record (Dict String Name Expr)
-    | TrackedRecord A.Region (Dict String (A.Located Name) Expr)
     | Unit
-    | Tuple A.Region Expr Expr (List Expr)
+    | Tuple Expr Expr (List Expr)
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
@@ -104,8 +101,8 @@ toComparableGlobal (Global home name) =
 
 
 type Def
-    = Def A.Region Name Expr
-    | TailDef A.Region Name (List (A.Located Name)) Expr
+    = Def Name Expr
+    | TailDef Name (List Name) Expr
 
 
 type Destructor
@@ -158,8 +155,7 @@ type Main
 
 type Node
     = Define Expr (EverySet (List String) Global)
-    | TrackedDefine A.Region Expr (EverySet (List String) Global)
-    | DefineTailFunc A.Region (List (A.Located Name)) Expr (EverySet (List String) Global)
+    | DefineTailFunc (List Name) Expr (EverySet (List String) Global)
     | Ctor Index.ZeroBased Int
     | Enum Index.ZeroBased
     | Box
@@ -343,48 +339,39 @@ nodeEncoder node =
                 , BE.everySet compareGlobal globalEncoder deps
                 ]
 
-        TrackedDefine region expr deps ->
+        DefineTailFunc argNames body deps ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , A.regionEncoder region
-                , exprEncoder expr
-                , BE.everySet compareGlobal globalEncoder deps
-                ]
-
-        DefineTailFunc region argNames body deps ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , A.regionEncoder region
-                , BE.list (A.locatedEncoder BE.string) argNames
+                , BE.list BE.string argNames
                 , exprEncoder body
                 , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         Ctor index arity ->
             BE.sequence
-                [ BE.unsignedInt8 3
+                [ BE.unsignedInt8 2
                 , Index.zeroBasedEncoder index
                 , BE.int arity
                 ]
 
         Enum index ->
             BE.sequence
-                [ BE.unsignedInt8 4
+                [ BE.unsignedInt8 3
                 , Index.zeroBasedEncoder index
                 ]
 
         Box ->
-            BE.unsignedInt8 5
+            BE.unsignedInt8 4
 
         Link linkedGlobal ->
             BE.sequence
-                [ BE.unsignedInt8 6
+                [ BE.unsignedInt8 5
                 , globalEncoder linkedGlobal
                 ]
 
         Cycle names values functions deps ->
             BE.sequence
-                [ BE.unsignedInt8 7
+                [ BE.unsignedInt8 6
                 , BE.list BE.string names
                 , BE.list (BE.jsonPair BE.string exprEncoder) values
                 , BE.list defEncoder functions
@@ -393,27 +380,27 @@ nodeEncoder node =
 
         Manager effectsType ->
             BE.sequence
-                [ BE.unsignedInt8 8
+                [ BE.unsignedInt8 7
                 , effectsTypeEncoder effectsType
                 ]
 
         Kernel chunks deps ->
             BE.sequence
-                [ BE.unsignedInt8 9
+                [ BE.unsignedInt8 8
                 , BE.list K.chunkEncoder chunks
                 , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         PortIncoming decoder deps ->
             BE.sequence
-                [ BE.unsignedInt8 10
+                [ BE.unsignedInt8 9
                 , exprEncoder decoder
                 , BE.everySet compareGlobal globalEncoder deps
                 ]
 
         PortOutgoing encoder deps ->
             BE.sequence
-                [ BE.unsignedInt8 11
+                [ BE.unsignedInt8 10
                 , exprEncoder encoder
                 , BE.everySet compareGlobal globalEncoder deps
                 ]
@@ -431,54 +418,47 @@ nodeDecoder =
                             (BD.everySet toComparableGlobal globalDecoder)
 
                     1 ->
-                        BD.map3 TrackedDefine
-                            A.regionDecoder
+                        BD.map3 DefineTailFunc
+                            (BD.list BD.string)
                             exprDecoder
                             (BD.everySet toComparableGlobal globalDecoder)
 
                     2 ->
-                        BD.map4 DefineTailFunc
-                            A.regionDecoder
-                            (BD.list (A.locatedDecoder BD.string))
-                            exprDecoder
-                            (BD.everySet toComparableGlobal globalDecoder)
-
-                    3 ->
                         BD.map2 Ctor
                             Index.zeroBasedDecoder
                             BD.int
 
-                    4 ->
+                    3 ->
                         BD.map Enum
                             Index.zeroBasedDecoder
 
-                    5 ->
+                    4 ->
                         BD.succeed Box
 
-                    6 ->
+                    5 ->
                         BD.map Link globalDecoder
 
-                    7 ->
+                    6 ->
                         BD.map4 Cycle
                             (BD.list BD.string)
                             (BD.list (BD.jsonPair BD.string exprDecoder))
                             (BD.list defDecoder)
                             (BD.everySet toComparableGlobal globalDecoder)
 
-                    8 ->
+                    7 ->
                         BD.map Manager effectsTypeDecoder
 
-                    9 ->
+                    8 ->
                         BD.map2 Kernel
                             (BD.list K.chunkDecoder)
                             (BD.everySet toComparableGlobal globalDecoder)
 
-                    10 ->
+                    9 ->
                         BD.map2 PortIncoming
                             exprDecoder
                             (BD.everySet toComparableGlobal globalDecoder)
 
-                    11 ->
+                    10 ->
                         BD.map2 PortOutgoing
                             exprDecoder
                             (BD.everySet toComparableGlobal globalDecoder)
@@ -491,38 +471,33 @@ nodeDecoder =
 exprEncoder : Expr -> BE.Encoder
 exprEncoder expr =
     case expr of
-        Bool region value ->
+        Bool value ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , A.regionEncoder region
                 , BE.bool value
                 ]
 
-        Chr region value ->
+        Chr value ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , A.regionEncoder region
                 , BE.string value
                 ]
 
-        Str region value ->
+        Str value ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , A.regionEncoder region
                 , BE.string value
                 ]
 
-        Int region value ->
+        Int value ->
             BE.sequence
                 [ BE.unsignedInt8 3
-                , A.regionEncoder region
                 , BE.int value
                 ]
 
-        Float region value ->
+        Float value ->
             BE.sequence
                 [ BE.unsignedInt8 4
-                , A.regionEncoder region
                 , BE.float value
                 ]
 
@@ -532,64 +507,51 @@ exprEncoder expr =
                 , BE.string value
                 ]
 
-        TrackedVarLocal region value ->
-            BE.sequence
-                [ BE.unsignedInt8 6
-                , A.regionEncoder region
-                , BE.string value
-                ]
-
-        VarGlobal region value ->
+        VarGlobal value ->
             BE.sequence
                 [ BE.unsignedInt8 7
-                , A.regionEncoder region
                 , globalEncoder value
                 ]
 
-        VarEnum region global index ->
+        VarEnum global index ->
             BE.sequence
                 [ BE.unsignedInt8 8
-                , A.regionEncoder region
                 , globalEncoder global
                 , Index.zeroBasedEncoder index
                 ]
 
-        VarBox region value ->
+        VarBox value ->
             BE.sequence
                 [ BE.unsignedInt8 9
-                , A.regionEncoder region
                 , globalEncoder value
                 ]
 
-        VarCycle region home name ->
+        VarCycle home name ->
             BE.sequence
                 [ BE.unsignedInt8 10
-                , A.regionEncoder region
                 , ModuleName.canonicalEncoder home
                 , BE.string name
                 ]
 
-        VarDebug region name home unhandledValueName ->
+        VarDebug name home region unhandledValueName ->
             BE.sequence
                 [ BE.unsignedInt8 11
-                , A.regionEncoder region
                 , BE.string name
                 , ModuleName.canonicalEncoder home
+                , A.regionEncoder region
                 , BE.maybe BE.string unhandledValueName
                 ]
 
-        VarKernel region home name ->
+        VarKernel home name ->
             BE.sequence
                 [ BE.unsignedInt8 12
-                , A.regionEncoder region
                 , BE.string home
                 , BE.string name
                 ]
 
-        List region value ->
+        List value ->
             BE.sequence
                 [ BE.unsignedInt8 13
-                , A.regionEncoder region
                 , BE.list exprEncoder value
                 ]
 
@@ -600,17 +562,9 @@ exprEncoder expr =
                 , exprEncoder body
                 ]
 
-        TrackedFunction args body ->
-            BE.sequence
-                [ BE.unsignedInt8 15
-                , BE.list (A.locatedEncoder BE.string) args
-                , exprEncoder body
-                ]
-
-        Call region func args ->
+        Call func args ->
             BE.sequence
                 [ BE.unsignedInt8 16
-                , A.regionEncoder region
                 , exprEncoder func
                 , BE.list exprEncoder args
                 ]
@@ -652,27 +606,24 @@ exprEncoder expr =
                 , BE.list (BE.jsonPair BE.int exprEncoder) jumps
                 ]
 
-        Accessor region field ->
+        Accessor field ->
             BE.sequence
                 [ BE.unsignedInt8 22
-                , A.regionEncoder region
                 , BE.string field
                 ]
 
-        Access record region field ->
+        Access record field ->
             BE.sequence
                 [ BE.unsignedInt8 23
                 , exprEncoder record
-                , A.regionEncoder region
                 , BE.string field
                 ]
 
-        Update region record fields ->
+        Update record fields ->
             BE.sequence
                 [ BE.unsignedInt8 24
-                , A.regionEncoder region
                 , exprEncoder record
-                , BE.assocListDict A.compareLocated (A.locatedEncoder BE.string) exprEncoder fields
+                , BE.assocListDict compare BE.string exprEncoder fields
                 ]
 
         Record value ->
@@ -681,20 +632,12 @@ exprEncoder expr =
                 , BE.assocListDict compare BE.string exprEncoder value
                 ]
 
-        TrackedRecord region value ->
-            BE.sequence
-                [ BE.unsignedInt8 26
-                , A.regionEncoder region
-                , BE.assocListDict A.compareLocated (A.locatedEncoder BE.string) exprEncoder value
-                ]
-
         Unit ->
             BE.unsignedInt8 27
 
-        Tuple region a b cs ->
+        Tuple a b cs ->
             BE.sequence
                 [ BE.unsignedInt8 28
-                , A.regionEncoder region
                 , exprEncoder a
                 , exprEncoder b
                 , BE.list exprEncoder cs
@@ -716,76 +659,60 @@ exprDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map2 Bool
-                            A.regionDecoder
+                        BD.map Bool
                             BD.bool
 
                     1 ->
-                        BD.map2 Chr
-                            A.regionDecoder
+                        BD.map Chr
                             BD.string
 
                     2 ->
-                        BD.map2 Str
-                            A.regionDecoder
+                        BD.map Str
                             BD.string
 
                     3 ->
-                        BD.map2 Int
-                            A.regionDecoder
+                        BD.map Int
                             BD.int
 
                     4 ->
-                        BD.map2 Float
-                            A.regionDecoder
+                        BD.map Float
                             BD.float
 
                     5 ->
                         BD.map VarLocal BD.string
 
-                    6 ->
-                        BD.map2 TrackedVarLocal
-                            A.regionDecoder
-                            BD.string
-
                     7 ->
-                        BD.map2 VarGlobal
-                            A.regionDecoder
+                        BD.map VarGlobal
                             globalDecoder
 
                     8 ->
-                        BD.map3 VarEnum
-                            A.regionDecoder
+                        BD.map2 VarEnum
                             globalDecoder
                             Index.zeroBasedDecoder
 
                     9 ->
-                        BD.map2 VarBox
-                            A.regionDecoder
+                        BD.map VarBox
                             globalDecoder
 
                     10 ->
-                        BD.map3 VarCycle
-                            A.regionDecoder
+                        BD.map2 VarCycle
                             ModuleName.canonicalDecoder
                             BD.string
 
                     11 ->
                         BD.map4 VarDebug
-                            A.regionDecoder
                             BD.string
                             ModuleName.canonicalDecoder
+                            A.regionDecoder
                             (BD.maybe BD.string)
 
                     12 ->
-                        BD.map3 VarKernel
-                            A.regionDecoder
+                        BD.map2 VarKernel
                             BD.string
                             BD.string
 
                     13 ->
-                        BD.map2 List
-                            A.regionDecoder
+                        BD.map List
                             (BD.list exprDecoder)
 
                     14 ->
@@ -793,14 +720,8 @@ exprDecoder =
                             (BD.list BD.string)
                             exprDecoder
 
-                    15 ->
-                        BD.map2 TrackedFunction
-                            (BD.list (A.locatedDecoder BD.string))
-                            exprDecoder
-
                     16 ->
-                        BD.map3 Call
-                            A.regionDecoder
+                        BD.map2 Call
                             exprDecoder
                             (BD.list exprDecoder)
 
@@ -832,37 +753,28 @@ exprDecoder =
                             (BD.list (BD.jsonPair BD.int exprDecoder))
 
                     22 ->
-                        BD.map2 Accessor
-                            A.regionDecoder
+                        BD.map Accessor
                             BD.string
 
                     23 ->
-                        BD.map3 Access
+                        BD.map2 Access
                             exprDecoder
-                            A.regionDecoder
                             BD.string
 
                     24 ->
-                        BD.map3 Update
-                            A.regionDecoder
+                        BD.map2 Update
                             exprDecoder
-                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
+                            (BD.assocListDict identity BD.string exprDecoder)
 
                     25 ->
                         BD.map Record
                             (BD.assocListDict identity BD.string exprDecoder)
 
-                    26 ->
-                        BD.map2 TrackedRecord
-                            A.regionDecoder
-                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
-
                     27 ->
                         BD.succeed Unit
 
                     28 ->
-                        BD.map4 Tuple
-                            A.regionDecoder
+                        BD.map3 Tuple
                             exprDecoder
                             exprDecoder
                             (BD.list exprDecoder)
@@ -881,20 +793,18 @@ exprDecoder =
 defEncoder : Def -> BE.Encoder
 defEncoder def =
     case def of
-        Def region name expr ->
+        Def name expr ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , A.regionEncoder region
                 , BE.string name
                 , exprEncoder expr
                 ]
 
-        TailDef region name args expr ->
+        TailDef name args expr ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , A.regionEncoder region
                 , BE.string name
-                , BE.list (A.locatedEncoder BE.string) args
+                , BE.list BE.string args
                 , exprEncoder expr
                 ]
 
@@ -906,16 +816,14 @@ defDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map3 Def
-                            A.regionDecoder
+                        BD.map2 Def
                             BD.string
                             exprDecoder
 
                     1 ->
-                        BD.map4 TailDef
-                            A.regionDecoder
+                        BD.map3 TailDef
                             BD.string
-                            (BD.list (A.locatedDecoder BD.string))
+                            (BD.list BD.string)
                             exprDecoder
 
                     _ ->

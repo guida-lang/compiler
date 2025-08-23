@@ -3,12 +3,10 @@ module Compiler.Generate.JavaScript.Name exposing
     , dollar
     , fromCycle
     , fromGlobal
-    , fromGlobalHumanReadable
     , fromIndex
     , fromInt
     , fromKernel
     , fromLocal
-    , fromLocalHumanReadable
     , makeA
     , makeF
     , makeLabel
@@ -53,19 +51,9 @@ fromLocal name =
         name
 
 
-fromLocalHumanReadable : Name.Name -> Name
-fromLocalHumanReadable name =
-    name
-
-
 fromGlobal : IO.Canonical -> Name.Name -> Name
 fromGlobal home name =
     homeToBuilder home ++ usd ++ name
-
-
-fromGlobalHumanReadable : IO.Canonical -> Name.Name -> Name
-fromGlobalHumanReadable (IO.Canonical _ moduleName) name =
-    moduleName ++ "." ++ name
 
 
 fromCycle : IO.Canonical -> Name.Name -> Name

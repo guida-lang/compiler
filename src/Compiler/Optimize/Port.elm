@@ -13,7 +13,6 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Optimize.Names as Names
-import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Utils.Crash exposing (crash)
 
@@ -56,7 +55,7 @@ toEncoder tipe =
                         encode "string"
 
                     else if name == Name.value then
-                        Names.registerGlobal A.zero ModuleName.basics Name.identity_
+                        Names.registerGlobal ModuleName.basics Name.identity_
 
                     else
                         crash "toEncoder: bad custom type"
@@ -90,9 +89,9 @@ toEncoder tipe =
                                 let
                                     value : Opt.Expr
                                     value =
-                                        Opt.Call A.zero encoder [ Opt.Access (Opt.VarLocal Name.dollar) A.zero name ]
+                                        Opt.Call encoder [ Opt.Access (Opt.VarLocal Name.dollar) name ]
                                 in
-                                Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value []
+                                Opt.Tuple (Opt.Str (Name.toElmString name)) value []
                             )
             in
             encode "object"
@@ -102,7 +101,7 @@ toEncoder tipe =
                             |> Names.bind
                                 (\keyValuePairs ->
                                     Names.registerFieldDict fields
-                                        (Opt.Function [ Name.dollar ] (Opt.Call A.zero object [ Opt.List A.zero keyValuePairs ]))
+                                        (Opt.Function [ Name.dollar ] (Opt.Call object [ Opt.List keyValuePairs ]))
                                 )
                     )
 
@@ -119,12 +118,11 @@ encodeMaybe tipe =
                 toEncoder tipe
                     |> Names.bind
                         (\encoder ->
-                            Names.registerGlobal A.zero ModuleName.maybe "destruct"
+                            Names.registerGlobal ModuleName.maybe "destruct"
                                 |> Names.fmap
                                     (\destruct ->
                                         Opt.Function [ Name.dollar ]
-                                            (Opt.Call A.zero
-                                                destruct
+                                            (Opt.Call destruct
                                                 [ null
                                                 , encoder
                                                 , Opt.VarLocal Name.dollar
@@ -141,7 +139,7 @@ encodeList tipe =
         |> Names.bind
             (\list ->
                 toEncoder tipe
-                    |> Names.fmap (Opt.Call A.zero list << List.singleton)
+                    |> Names.fmap (Opt.Call list << List.singleton)
             )
 
 
@@ -151,7 +149,7 @@ encodeArray tipe =
         |> Names.bind
             (\array ->
                 toEncoder tipe
-                    |> Names.fmap (Opt.Call A.zero array << List.singleton)
+                    |> Names.fmap (Opt.Call array << List.singleton)
             )
 
 
@@ -169,12 +167,12 @@ encodeTuple a b cs =
         encodeArg : Name -> Can.Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
             toEncoder tipe
-                |> Names.fmap (\encoder -> Opt.Call A.zero encoder [ Opt.VarLocal arg ])
+                |> Names.fmap (\encoder -> Opt.Call encoder [ Opt.VarLocal arg ])
     in
     encode "list"
         |> Names.bind
             (\list ->
-                Names.registerGlobal A.zero ModuleName.basics Name.identity_
+                Names.registerGlobal ModuleName.basics Name.identity_
                     |> Names.bind
                         (\identity ->
                             Names.bind
@@ -203,7 +201,7 @@ encodeTuple a b cs =
                                                                 (let_ "b"
                                                                     Index.second
                                                                     (List.foldr (\( i, index, _ ) -> letCs_ (JsName.fromIndex index) i)
-                                                                        (Opt.Call A.zero list [ identity, Opt.List A.zero args ])
+                                                                        (Opt.Call list [ identity, Opt.List args ])
                                                                         indexedCs
                                                                     )
                                                                 )
@@ -225,7 +223,7 @@ toFlagsDecoder : Can.Type -> Names.Tracker Opt.Expr
 toFlagsDecoder tipe =
     case tipe of
         Can.TUnit ->
-            Names.fmap (\succeed -> Opt.Call A.zero succeed [ Opt.Unit ])
+            Names.fmap (\succeed -> Opt.Call succeed [ Opt.Unit ])
                 (decode "succeed")
 
         _ ->
@@ -308,11 +306,10 @@ decodeMaybe tipe =
                                         (\map_ ->
                                             Names.fmap
                                                 (\subDecoder ->
-                                                    Opt.Call A.zero
-                                                        oneOf
-                                                        [ Opt.List A.zero
-                                                            [ Opt.Call A.zero null [ nothing ]
-                                                            , Opt.Call A.zero map_ [ just, subDecoder ]
+                                                    Opt.Call oneOf
+                                                        [ Opt.List
+                                                            [ Opt.Call null [ nothing ]
+                                                            , Opt.Call map_ [ just, subDecoder ]
                                                             ]
                                                         ]
                                                 )
@@ -324,9 +321,9 @@ decodeMaybe tipe =
                         )
                         (decode "oneOf")
                 )
-                (Names.registerGlobal A.zero ModuleName.maybe "Just")
+                (Names.registerGlobal ModuleName.maybe "Just")
         )
-        (Names.registerGlobal A.zero ModuleName.maybe "Nothing")
+        (Names.registerGlobal ModuleName.maybe "Nothing")
 
 
 
@@ -337,7 +334,7 @@ decodeList : Can.Type -> Names.Tracker Opt.Expr
 decodeList tipe =
     Names.bind
         (\list ->
-            Names.fmap (Opt.Call A.zero list << List.singleton)
+            Names.fmap (Opt.Call list << List.singleton)
                 (toDecoder tipe)
         )
         (decode "list")
@@ -351,7 +348,7 @@ decodeArray : Can.Type -> Names.Tracker Opt.Expr
 decodeArray tipe =
     Names.bind
         (\array ->
-            Names.fmap (Opt.Call A.zero array << List.singleton)
+            Names.fmap (Opt.Call array << List.singleton)
                 (toDecoder tipe)
         )
         (decode "array")
@@ -363,7 +360,7 @@ decodeArray tipe =
 
 decodeTuple0 : Names.Tracker Opt.Expr
 decodeTuple0 =
-    Names.fmap (\null -> Opt.Call A.zero null [ Opt.Unit ])
+    Names.fmap (\null -> Opt.Call null [ Opt.Unit ])
         (decode "null")
 
 
@@ -382,10 +379,10 @@ decodeTuple a b cs =
 
                 tuple : Opt.Expr
                 tuple =
-                    Opt.Tuple A.zero (toLocal 0) (toLocal 1) (List.indexedMap (\i _ -> toLocal (i + 2)) cs)
+                    Opt.Tuple (toLocal 0) (toLocal 1) (List.indexedMap (\i _ -> toLocal (i + 2)) cs)
             in
             List.foldr (\( i, c ) -> Names.bind (indexAndThen i c))
-                (indexAndThen (List.length cs + 1) lastElem (Opt.Call A.zero succeed [ tuple ]))
+                (indexAndThen (List.length cs + 1) lastElem (Opt.Call succeed [ tuple ]))
                 (List.indexedMap Tuple.pair allElems)
         )
         (decode "succeed")
@@ -404,10 +401,9 @@ indexAndThen i tipe decoder =
                 (\index ->
                     Names.fmap
                         (\typeDecoder ->
-                            Opt.Call A.zero
-                                andThen
+                            Opt.Call andThen
                                 [ Opt.Function [ Name.fromVarIndex i ] decoder
-                                , Opt.Call A.zero index [ Opt.Int A.zero i, typeDecoder ]
+                                , Opt.Call index [ Opt.Int i, typeDecoder ]
                                 ]
                         )
                         (toDecoder tipe)
@@ -438,7 +434,7 @@ decodeRecord fields =
                 |> Names.bind
                     (\fieldDecoders ->
                         List.foldl (\fieldDecoder -> Names.bind (\optCall -> fieldAndThen optCall fieldDecoder))
-                            (Names.pure (Opt.Call A.zero succeed [ record ]))
+                            (Names.pure (Opt.Call succeed [ record ]))
                             fieldDecoders
                     )
         )
@@ -453,10 +449,9 @@ fieldAndThen decoder ( key, Can.FieldType _ tipe ) =
                 (\field ->
                     Names.fmap
                         (\typeDecoder ->
-                            Opt.Call A.zero
-                                andThen
+                            Opt.Call andThen
                                 [ Opt.Function [ key ] decoder
-                                , Opt.Call A.zero field [ Opt.Str A.zero (Name.toElmString key), typeDecoder ]
+                                , Opt.Call field [ Opt.Str (Name.toElmString key), typeDecoder ]
                                 ]
                         )
                         (toDecoder tipe)
@@ -472,9 +467,9 @@ fieldAndThen decoder ( key, Can.FieldType _ tipe ) =
 
 encode : Name -> Names.Tracker Opt.Expr
 encode name =
-    Names.registerGlobal A.zero ModuleName.jsonEncode name
+    Names.registerGlobal ModuleName.jsonEncode name
 
 
 decode : Name -> Names.Tracker Opt.Expr
 decode name =
-    Names.registerGlobal A.zero ModuleName.jsonDecode name
+    Names.registerGlobal ModuleName.jsonDecode name

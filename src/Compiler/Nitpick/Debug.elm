@@ -2,7 +2,6 @@ module Compiler.Nitpick.Debug exposing (hasDebugUses)
 
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Map.Utils as Map
-import Compiler.Reporting.Annotation as A
 import Data.Map as Dict
 
 
@@ -21,10 +20,7 @@ nodeHasDebug node =
         Opt.Define expr _ ->
             hasDebug expr
 
-        Opt.TrackedDefine _ expr _ ->
-            hasDebug expr
-
-        Opt.DefineTailFunc _ _ expr _ ->
+        Opt.DefineTailFunc _ expr _ ->
             hasDebug expr
 
         Opt.Ctor _ _ ->
@@ -58,55 +54,49 @@ nodeHasDebug node =
 hasDebug : Opt.Expr -> Bool
 hasDebug expression =
     case expression of
-        Opt.Bool _ _ ->
+        Opt.Bool _ ->
             False
 
-        Opt.Chr _ _ ->
+        Opt.Chr _ ->
             False
 
-        Opt.Str _ _ ->
+        Opt.Str _ ->
             False
 
-        Opt.Int _ _ ->
+        Opt.Int _ ->
             False
 
-        Opt.Float _ _ ->
+        Opt.Float _ ->
             False
 
         Opt.VarLocal _ ->
             False
 
-        Opt.TrackedVarLocal _ _ ->
+        Opt.VarGlobal _ ->
             False
 
-        Opt.VarGlobal _ _ ->
+        Opt.VarEnum _ _ ->
             False
 
-        Opt.VarEnum _ _ _ ->
+        Opt.VarBox _ ->
             False
 
-        Opt.VarBox _ _ ->
-            False
-
-        Opt.VarCycle _ _ _ ->
+        Opt.VarCycle _ _ ->
             False
 
         Opt.VarDebug _ _ _ _ ->
             True
 
-        Opt.VarKernel _ _ _ ->
+        Opt.VarKernel _ _ ->
             False
 
-        Opt.List _ exprs ->
+        Opt.List exprs ->
             List.any hasDebug exprs
 
         Opt.Function _ expr ->
             hasDebug expr
 
-        Opt.TrackedFunction _ expr ->
-            hasDebug expr
-
-        Opt.Call _ e es ->
+        Opt.Call e es ->
             hasDebug e || List.any hasDebug es
 
         Opt.TailCall _ args ->
@@ -124,25 +114,22 @@ hasDebug expression =
         Opt.Case _ _ d jumps ->
             deciderHasDebug d || List.any (hasDebug << Tuple.second) jumps
 
-        Opt.Accessor _ _ ->
+        Opt.Accessor _ ->
             False
 
-        Opt.Access r _ _ ->
+        Opt.Access r _ ->
             hasDebug r
 
-        Opt.Update _ r fs ->
-            hasDebug r || List.any hasDebug (Dict.values A.compareLocated fs)
+        Opt.Update r fs ->
+            hasDebug r || List.any hasDebug (Dict.values compare fs)
 
         Opt.Record fs ->
             List.any hasDebug (Dict.values compare fs)
 
-        Opt.TrackedRecord _ fs ->
-            List.any hasDebug (Dict.values A.compareLocated fs)
-
         Opt.Unit ->
             False
 
-        Opt.Tuple _ a b cs ->
+        Opt.Tuple a b cs ->
             hasDebug a || hasDebug b || List.any hasDebug cs
 
         Opt.Shader _ _ _ ->
@@ -152,10 +139,10 @@ hasDebug expression =
 defHasDebug : Opt.Def -> Bool
 defHasDebug def =
     case def of
-        Opt.Def _ _ expr ->
+        Opt.Def _ expr ->
             hasDebug expr
 
-        Opt.TailDef _ _ _ expr ->
+        Opt.TailDef _ _ expr ->
             hasDebug expr
 
 

@@ -27,8 +27,8 @@ app =
         |> Task.bind
             (\args ->
                 case args of
-                    MakeArgs path debug optimize withSourceMaps ->
-                        Make.run path (Make.Flags debug optimize withSourceMaps)
+                    MakeArgs path debug optimize ->
+                        Make.run path (Make.Flags debug optimize)
                             |> Task.bind
                                 (\result ->
                                     case result of
@@ -82,7 +82,7 @@ exitWithResponse value =
 
 
 type Args
-    = MakeArgs String Bool Bool Bool
+    = MakeArgs String Bool Bool
     | FormatArgs String
     | InstallArgs String
     | UninstallArgs String
@@ -95,11 +95,10 @@ argsDecoder =
             (\command ->
                 case command of
                     "make" ->
-                        Decode.map4 MakeArgs
+                        Decode.map3 MakeArgs
                             (Decode.field "path" Decode.string)
                             (Decode.field "debug" Decode.bool)
                             (Decode.field "optimize" Decode.bool)
-                            (Decode.field "sourcemaps" Decode.bool)
 
                     "format" ->
                         Decode.map FormatArgs

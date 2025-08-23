@@ -4,10 +4,7 @@ module Compiler.Canonicalize.Environment.Dups exposing
     , Tracker
     , checkFields
     , checkFields_
-    , checkLocatedFields
-    , checkLocatedFields_
     , detect
-    , detectLocated
     , insert
     , none
     , one
@@ -32,8 +29,10 @@ type alias Tracker value =
     Dict String Name (OneOrMore (Info value))
 
 
-type Info value
-    = Info A.Region value
+type alias Info value =
+    { region : A.Region
+    , value : value
+    }
 
 
 
@@ -58,49 +57,22 @@ detect toError dict =
         dict
 
 
-detectLocated : ToError -> Tracker a -> R.RResult i w Error (Dict String (A.Located Name) a)
-detectLocated toError dict =
-    let
-        nameLocations : Dict String Name A.Region
-        nameLocations =
-            Utils.mapMapMaybe identity compare extractLocation dict
-    in
-    dict
-        |> Utils.mapMapKeys A.toValue compare (\k -> A.At (Maybe.withDefault A.zero <| Dict.get identity k nameLocations) k)
-        |> R.mapTraverseWithKey A.toValue A.compareLocated (\(A.At _ name) values -> detectHelp toError name values)
-
-
-extractLocation : OneOrMore.OneOrMore (Info a) -> Maybe A.Region
-extractLocation oneOrMore =
-    case oneOrMore of
-        OneOrMore.One (Info region _) ->
-            Just region
-
-        OneOrMore.More _ _ ->
-            Nothing
-
-
 detectHelp : ToError -> Name -> OneOrMore (Info a) -> R.RResult i w Error a
 detectHelp toError name values =
     case values of
-        OneOrMore.One (Info _ value) ->
+        OneOrMore.One { value } ->
             R.ok value
 
         OneOrMore.More left right ->
             let
-                ( Info r1 _, Info r2 _ ) =
+                ( info1, info2 ) =
                     OneOrMore.getFirstTwo left right
             in
-            R.throw (toError name r1 r2)
+            R.throw (toError name info1.region info2.region)
 
 
 
 -- CHECK FIELDS
-
-
-checkLocatedFields : List ( A.Located Name, a ) -> R.RResult i w Error (Dict String (A.Located Name) a)
-checkLocatedFields fields =
-    detectLocated Error.DuplicateField (List.foldr addField none fields)
 
 
 checkFields : List ( A.Located Name, a ) -> R.RResult i w Error (Dict String Name a)
@@ -111,11 +83,6 @@ checkFields fields =
 addField : ( A.Located Name, a ) -> Tracker a -> Tracker a
 addField ( A.At region name, value ) dups =
     Utils.mapInsertWith identity OneOrMore.more name (OneOrMore.one (Info region value)) dups
-
-
-checkLocatedFields_ : (A.Region -> a -> b) -> List ( A.Located Name, a ) -> R.RResult i w Error (Dict String (A.Located Name) b)
-checkLocatedFields_ toValue fields =
-    detectLocated Error.DuplicateField (List.foldr (addField_ toValue) none fields)
 
 
 checkFields_ : (A.Region -> a -> b) -> List ( A.Located Name, a ) -> R.RResult i w Error (Dict String Name b)

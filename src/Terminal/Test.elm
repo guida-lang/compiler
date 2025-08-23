@@ -1083,7 +1083,7 @@ runMake root path =
                             buildPaths root details (NE.Nonempty path [])
                                 |> Task.bind
                                     (\artifacts ->
-                                        toBuilder 0 root details artifacts
+                                        toBuilder root details artifacts
                                     )
                         )
                 )
@@ -1100,10 +1100,10 @@ buildPaths root details paths =
 -- TO BUILDER
 
 
-toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Test String
-toBuilder leadingLines root details artifacts =
+toBuilder : FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Test String
+toBuilder root details artifacts =
     Task.mapError Exit.TestBadGenerate <|
-        Generate.dev False leadingLines root details artifacts
+        Generate.dev root details artifacts
 
 
 

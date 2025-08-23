@@ -66,8 +66,8 @@ registerKernel home value =
             TResult uid (EverySet.insert Opt.toComparableGlobal (Opt.toKernelGlobal home) deps) fields value
 
 
-registerGlobal : A.Region -> IO.Canonical -> Name -> Tracker Opt.Expr
-registerGlobal region home name =
+registerGlobal : IO.Canonical -> Name -> Tracker Opt.Expr
+registerGlobal home name =
     Tracker <|
         \uid deps fields ->
             let
@@ -75,7 +75,7 @@ registerGlobal region home name =
                 global =
                     Opt.Global home name
             in
-            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal region global)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal global)
 
 
 registerDebug : Name -> IO.Canonical -> A.Region -> Tracker Opt.Expr
@@ -87,11 +87,11 @@ registerDebug name home region =
                 global =
                     Opt.Global ModuleName.debug name
             in
-            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug region name home Nothing)
+            TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug name home region Nothing)
 
 
-registerCtor : A.Region -> IO.Canonical -> A.Located Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
-registerCtor region home (A.At _ name) index opts =
+registerCtor : IO.Canonical -> Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
+registerCtor home name index opts =
     Tracker <|
         \uid deps fields ->
             let
@@ -105,30 +105,30 @@ registerCtor region home (A.At _ name) index opts =
             in
             case opts of
                 Can.Normal ->
-                    TResult uid newDeps fields (Opt.VarGlobal region global)
+                    TResult uid newDeps fields (Opt.VarGlobal global)
 
                 Can.Enum ->
                     TResult uid newDeps fields <|
                         case name of
                             "True" ->
                                 if home == ModuleName.basics then
-                                    Opt.Bool region True
+                                    Opt.Bool True
 
                                 else
-                                    Opt.VarEnum region global index
+                                    Opt.VarEnum global index
 
                             "False" ->
                                 if home == ModuleName.basics then
-                                    Opt.Bool region False
+                                    Opt.Bool False
 
                                 else
-                                    Opt.VarEnum region global index
+                                    Opt.VarEnum global index
 
                             _ ->
-                                Opt.VarEnum region global index
+                                Opt.VarEnum global index
 
                 Can.Unbox ->
-                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox region global)
+                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox global)
 
 
 identity : Opt.Global

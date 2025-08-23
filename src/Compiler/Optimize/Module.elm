@@ -1,8 +1,4 @@
-module Compiler.Optimize.Module exposing
-    ( Annotations
-    , MResult
-    , optimize
-    )
+module Compiler.Optimize.Module exposing (Annotations, MResult, optimize)
 
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
@@ -294,7 +290,7 @@ addDef home annotations def graph =
 addDefHelp : A.Region -> Annotations -> IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
 addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
-        R.ok (addDefNode home region name args body EverySet.empty graph)
+        R.ok (addDefNode home name args body EverySet.empty graph)
 
     else
         let
@@ -303,7 +299,7 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
 
             addMain : ( EverySet (List String) Opt.Global, Dict String Name.Name Int, Opt.Main ) -> Opt.LocalGraph
             addMain ( deps, fields, main ) =
-                addDefNode home region name args body deps <|
+                addDefNode home name args body deps <|
                     Opt.LocalGraph (Just main) nodes (Utils.mapUnionWith identity compare (+) fields fieldCounts)
         in
         case Type.deepDealias tipe of
@@ -330,8 +326,8 @@ addDefHelp region annotations home name args body ((Opt.LocalGraph _ nodes field
                 R.throw (E.BadType region tipe)
 
 
-addDefNode : IO.Canonical -> A.Region -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
-addDefNode home region name args body mainDeps graph =
+addDefNode : IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> EverySet (List String) Opt.Global -> Opt.LocalGraph -> Opt.LocalGraph
+addDefNode home name args body mainDeps graph =
     let
         ( deps, fields, def ) =
             Names.run <|
@@ -346,12 +342,12 @@ addDefNode home region name args body mainDeps graph =
                                     Expr.optimize EverySet.empty body
                                         |> Names.fmap
                                             (\obody ->
-                                                Opt.TrackedFunction argNames <|
+                                                Opt.Function argNames <|
                                                     List.foldr Opt.Destruct obody destructors
                                             )
                                 )
     in
-    addToGraph (Opt.Global home name) (Opt.TrackedDefine region def (EverySet.union deps mainDeps)) fields graph
+    addToGraph (Opt.Global home name) (Opt.Define def (EverySet.union deps mainDeps)) fields graph
 
 
 
@@ -441,15 +437,15 @@ addLink home link def links =
 addRecDef : EverySet String Name.Name -> State -> Can.Def -> Names.Tracker State
 addRecDef cycle state def =
     case def of
-        Can.Def (A.At region name) args body ->
-            addRecDefHelp cycle region state name args body
+        Can.Def (A.At _ name) args body ->
+            addRecDefHelp cycle state name args body
 
-        Can.TypedDef (A.At region name) _ args body _ ->
-            addRecDefHelp cycle region state name (List.map Tuple.first args) body
+        Can.TypedDef (A.At _ name) _ args body _ ->
+            addRecDefHelp cycle state name (List.map Tuple.first args) body
 
 
-addRecDefHelp : EverySet String Name.Name -> A.Region -> State -> Name.Name -> List Can.Pattern -> Can.Expr -> Names.Tracker State
-addRecDefHelp cycle region (State { values, functions }) name args body =
+addRecDefHelp : EverySet String Name.Name -> State -> Name.Name -> List Can.Pattern -> Can.Expr -> Names.Tracker State
+addRecDefHelp cycle (State { values, functions }) name args body =
     case args of
         [] ->
             Expr.optimize cycle body
@@ -462,7 +458,7 @@ addRecDefHelp cycle region (State { values, functions }) name args body =
                     )
 
         _ :: _ ->
-            Expr.optimizePotentialTailCall cycle region name args body
+            Expr.optimizePotentialTailCall cycle name args body
                 |> Names.fmap
                     (\odef ->
                         State

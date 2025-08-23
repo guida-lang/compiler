@@ -35,7 +35,7 @@ import Utils.Task.Extra as Task
 
 
 type Flags
-    = Flags Bool Bool Bool
+    = Flags Bool Bool
 
 
 type Output
@@ -67,7 +67,7 @@ run path flags =
 
 
 runHelp : String -> String -> Flags -> Task Never (Result Exit.Make String)
-runHelp root path (Flags debug optimize withSourceMaps) =
+runHelp root path (Flags debug optimize) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock root <|
@@ -92,7 +92,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                                                                 crash "No main!"
 
                                                             [ name ] ->
-                                                                toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
+                                                                toBuilder root details desiredMode artifacts
                                                                     |> Task.bind (Task.pure << Html.sandwich name)
 
                                                             _ ->
@@ -178,18 +178,18 @@ type DesiredMode
     | Prod
 
 
-toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
-toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
+toBuilder : FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
+toBuilder root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of
             Debug ->
-                Generate.debug withSourceMaps leadingLines root details artifacts
+                Generate.debug root details artifacts
 
             Dev ->
-                Generate.dev withSourceMaps leadingLines root details artifacts
+                Generate.dev root details artifacts
 
             Prod ->
-                Generate.prod withSourceMaps leadingLines root details artifacts
+                Generate.prod root details artifacts
 
 
 

@@ -1,6 +1,5 @@
 module Compiler.Generate.JavaScript exposing
     ( Mains
-    , SourceMaps(..)
     , generate
     , generateForRepl
     , generateForReplEndpoint
@@ -17,9 +16,7 @@ import Compiler.Generate.JavaScript.Builder as JS
 import Compiler.Generate.JavaScript.Expression as Expr
 import Compiler.Generate.JavaScript.Functions as Functions
 import Compiler.Generate.JavaScript.Name as JsName
-import Compiler.Generate.JavaScript.SourceMap as SourceMap
 import Compiler.Generate.Mode as Mode
-import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L
@@ -44,31 +41,16 @@ type alias Mains =
     Dict (List String) IO.Canonical Opt.Main
 
 
-type SourceMaps
-    = NoSourceMaps
-    | SourceMaps (Dict (List String) IO.Canonical String)
-
-
-firstGeneratedLineNumber : Mode.Mode -> Int
-firstGeneratedLineNumber mode =
-    List.length (String.lines (prelude mode))
-
-
-prelude : Mode.Mode -> String
-prelude mode =
-    "(function(scope){\n'use strict';"
-        ++ Functions.functions
-        ++ perfNote mode
-
-
-generate : SourceMaps -> Int -> Mode.Mode -> Opt.GlobalGraph -> Mains -> String
-generate sourceMaps leadingLines mode (Opt.GlobalGraph graph _) mains =
+generate : Mode.Mode -> Opt.GlobalGraph -> Mains -> String
+generate mode (Opt.GlobalGraph graph _) mains =
     let
         state : State
         state =
-            Dict.foldr ModuleName.compareCanonical (addMain mode graph) (emptyState (firstGeneratedLineNumber mode)) mains
+            Dict.foldr ModuleName.compareCanonical (addMain mode graph) emptyState mains
     in
-    prelude mode
+    "(function(scope){\n'use strict';"
+        ++ Functions.functions
+        ++ perfNote mode
         ++ stateToBuilder state
         ++ toMainExports mode mains
         ++ escapeNewCode """// EXTRA GUIDA CORE
@@ -90,29 +72,11 @@ function _Utils_TupleN(a, b, ...cs) {
     }
 }(_Debug_toAnsiString))"""
         ++ "}(this));"
-        ++ generateSourceMaps sourceMaps leadingLines state
 
 
 escapeNewCode : String -> String
 escapeNewCode code =
     "//__START__\n" ++ code ++ "\n//__END__\n"
-
-
-generateSourceMaps : SourceMaps -> Int -> State -> String
-generateSourceMaps sourceMaps leadingLines state =
-    case sourceMaps of
-        NoSourceMaps ->
-            ""
-
-        SourceMaps moduleSources ->
-            let
-                kernelLeadingLines : Int
-                kernelLeadingLines =
-                    stateKernels state
-                        |> List.map (String.length << String.filter ((==) '\n'))
-                        |> List.sum
-            in
-            SourceMap.generate leadingLines kernelLeadingLines moduleSources (stateToMappings state)
 
 
 addMain : Mode.Mode -> Graph -> IO.Canonical -> Opt.Main -> State -> State
@@ -146,7 +110,7 @@ generateForRepl ansi localizer (Opt.GlobalGraph graph _) home name (Can.Forall _
 
         debugState : State
         debugState =
-            addGlobal mode graph (emptyState 0) (Opt.Global ModuleName.debug "toString")
+            addGlobal mode graph emptyState (Opt.Global ModuleName.debug "toString")
 
         evalState : State
         evalState =
@@ -211,7 +175,7 @@ generateForReplEndpoint localizer (Opt.GlobalGraph graph _) home maybeName (Can.
 
         debugState : State
         debugState =
-            addGlobal mode graph (emptyState 0) (Opt.Global ModuleName.debug "toString")
+            addGlobal mode graph emptyState (Opt.Global ModuleName.debug "toString")
 
         evalState : State
         evalState =
@@ -257,17 +221,17 @@ postMessage localizer home maybeName tipe =
 
 
 type State
-    = State JS.Builder (EverySet (List String) Opt.Global)
+    = State (List String) (List String) (EverySet (List String) Opt.Global)
 
 
-emptyState : Int -> State
-emptyState startingLine =
-    State (JS.emptyBuilder startingLine) EverySet.empty
+emptyState : State
+emptyState =
+    State [] [] EverySet.empty
 
 
 stateToBuilder : State -> String
-stateToBuilder (State (JS.Builder revKernels code _ _ _) _) =
-    prependBuilders revKernels code
+stateToBuilder (State revKernels revBuilders _) =
+    prependBuilders revKernels (prependBuilders revBuilders "")
 
 
 prependBuilders : List String -> String -> String
@@ -275,28 +239,18 @@ prependBuilders revBuilders monolith =
     List.foldl (\b m -> b ++ m) monolith revBuilders
 
 
-stateToMappings : State -> List JS.Mapping
-stateToMappings (State (JS.Builder _ _ _ _ mappings) _) =
-    mappings
-
-
-stateKernels : State -> List String
-stateKernels (State (JS.Builder revKernels _ _ _ _) _) =
-    revKernels
-
-
 addGlobal : Mode.Mode -> Graph -> State -> Opt.Global -> State
-addGlobal mode graph ((State builder seen) as state) global =
+addGlobal mode graph ((State revKernels builders seen) as state) global =
     if EverySet.member Opt.toComparableGlobal global seen then
         state
 
     else
         addGlobalHelp mode graph global <|
-            State builder (EverySet.insert Opt.toComparableGlobal global seen)
+            State revKernels builders (EverySet.insert Opt.toComparableGlobal global seen)
 
 
 addGlobalHelp : Mode.Mode -> Graph -> Opt.Global -> State -> State
-addGlobalHelp mode graph ((Opt.Global home _) as global) state =
+addGlobalHelp mode graph global state =
     let
         addDeps : EverySet (List String) Opt.Global -> State -> State
         addDeps deps someState =
@@ -311,19 +265,16 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
     case Utils.find Opt.toComparableGlobal global graph of
         Opt.Define expr deps ->
             addStmt (addDeps deps state)
-                (var global (Expr.generate mode home expr))
+                (var global (Expr.generate mode expr))
 
-        Opt.TrackedDefine region expr deps ->
+        Opt.DefineTailFunc argNames body deps ->
             addStmt (addDeps deps state)
-                (trackedVar region global (Expr.generate mode home expr))
-
-        Opt.DefineTailFunc region argNames body deps ->
-            let
-                (Opt.Global _ name) =
-                    global
-            in
-            addStmt (addDeps deps state)
-                (trackedVar region global (Expr.generateTailDef mode home name argNames body))
+                (let
+                    (Opt.Global _ name) =
+                        global
+                 in
+                 var global (Expr.generateTailDef mode name argNames body)
+                )
 
         Opt.Ctor index arity ->
             addStmt state
@@ -364,23 +315,23 @@ addGlobalHelp mode graph ((Opt.Global home _) as global) state =
 
 
 addStmt : State -> JS.Stmt -> State
-addStmt (State builder seen) stmt =
-    State (JS.stmtToBuilder stmt builder) seen
+addStmt state stmt =
+    addBuilder state (JS.stmtToBuilder stmt)
+
+
+addBuilder : State -> String -> State
+addBuilder (State revKernels revBuilders seen) builder =
+    State revKernels (builder :: revBuilders) seen
 
 
 addKernel : State -> String -> State
-addKernel (State builder seen) kernel =
-    State (JS.addKernel kernel builder) seen
+addKernel (State revKernels revBuilders seen) kernel =
+    State (kernel :: revKernels) revBuilders seen
 
 
 var : Opt.Global -> Expr.Code -> JS.Stmt
 var (Opt.Global home name) code =
     JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr code)
-
-
-trackedVar : A.Region -> Opt.Global -> Expr.Code -> JS.Stmt
-trackedVar (A.Region startPos _) (Opt.Global home name) code =
-    JS.TrackedVar home startPos (JsName.fromGlobalHumanReadable home name) (JsName.fromGlobal home name) (Expr.codeToExpr code)
 
 
 isDebugger : Opt.Global -> Bool
@@ -423,17 +374,17 @@ generateCycle mode (Opt.Global ((IO.Canonical _ module_) as home) _) names value
 generateCycleFunc : Mode.Mode -> IO.Canonical -> Opt.Def -> JS.Stmt
 generateCycleFunc mode home def =
     case def of
-        Opt.Def _ name expr ->
-            JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generate mode home expr))
+        Opt.Def name expr ->
+            JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generate mode expr))
 
-        Opt.TailDef _ name args expr ->
-            JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generateTailDef mode home name args expr))
+        Opt.TailDef name args expr ->
+            JS.Var (JsName.fromGlobal home name) (Expr.codeToExpr (Expr.generateTailDef mode name args expr))
 
 
 generateSafeCycle : Mode.Mode -> IO.Canonical -> ( Name.Name, Opt.Expr ) -> JS.Stmt
 generateSafeCycle mode home ( name, expr ) =
     JS.FunctionStmt (JsName.fromCycle home name) [] <|
-        Expr.codeToStmtList (Expr.generate mode home expr)
+        Expr.codeToStmtList (Expr.generate mode expr)
 
 
 generateRealCycle : IO.Canonical -> ( Name.Name, expr ) -> JS.Stmt
@@ -564,7 +515,7 @@ generatePort mode (Opt.Global home name) makePort converter =
     JS.Var (JsName.fromGlobal home name) <|
         JS.ExprCall (JS.ExprRef (JsName.fromKernel Name.platform makePort))
             [ JS.ExprString name
-            , Expr.codeToExpr (Expr.generate mode home converter)
+            , Expr.codeToExpr (Expr.generate mode converter)
             ]
 
 
@@ -666,12 +617,8 @@ generateExports mode (Trie maybeMain subs) =
                     "{"
 
                 Just ( home, main ) ->
-                    let
-                        (JS.Builder _ code _ _ _) =
-                            JS.exprToBuilder (Expr.generateMain mode home main) (JS.emptyBuilder 0)
-                    in
                     "{'init':"
-                        ++ code
+                        ++ JS.exprToBuilder (Expr.generateMain mode home main)
                         ++ end
     in
     case Dict.toList compare subs of

@@ -6,7 +6,6 @@
     "elm-version": "0.19.1",
     "dependencies": {
         "direct": {
-            "Janiczek/elm-vlq": "1.0.0",
             "dasch/levenshtein": "1.0.3",
             "elm/bytes": "1.0.8",
             "elm/core": "1.0.5",

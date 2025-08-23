@@ -107,8 +107,8 @@ type Expr_
     | Case Expr (List CaseBranch)
     | Accessor Name
     | Access Expr (A.Located Name)
-    | Update Expr (Dict String (A.Located Name) FieldUpdate)
-    | Record (Dict String (A.Located Name) Expr)
+    | Update Expr (Dict String Name FieldUpdate)
+    | Record (Dict String Name Expr)
     | Unit
     | Tuple Expr Expr (List Expr)
     | Shader Shader.Source Shader.Types
@@ -774,13 +774,13 @@ expr_Encoder expr_ =
             BE.sequence
                 [ BE.unsignedInt8 23
                 , exprEncoder record
-                , BE.assocListDict A.compareLocated (A.toValue >> BE.string) fieldUpdateEncoder updates
+                , BE.assocListDict compare BE.string fieldUpdateEncoder updates
                 ]
 
         Record fields ->
             BE.sequence
                 [ BE.unsignedInt8 24
-                , BE.assocListDict A.compareLocated (A.toValue >> BE.string) exprEncoder fields
+                , BE.assocListDict compare BE.string exprEncoder fields
                 ]
 
         Unit ->
@@ -922,11 +922,11 @@ expr_Decoder =
                     23 ->
                         BD.map2 Update
                             exprDecoder
-                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) fieldUpdateDecoder)
+                            (BD.assocListDict identity BD.string fieldUpdateDecoder)
 
                     24 ->
                         BD.map Record
-                            (BD.assocListDict A.toValue (A.locatedDecoder BD.string) exprDecoder)
+                            (BD.assocListDict identity BD.string exprDecoder)
 
                     25 ->
                         BD.succeed Unit
