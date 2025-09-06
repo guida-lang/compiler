@@ -31,33 +31,33 @@ term syntaxVersion =
             (\start ->
                 P.oneOf E.Start
                     [ variable start |> P.bind (accessible start)
-                    , string start
-                    , number start
+                    , string syntaxVersion start
+                    , number syntaxVersion start
                     , Shader.shader start
                     , list syntaxVersion start
                     , record syntaxVersion start |> P.bind (accessible start)
                     , tuple syntaxVersion start |> P.bind (accessible start)
                     , accessor start
-                    , character start
+                    , character syntaxVersion start
                     ]
             )
 
 
-string : A.Position -> P.Parser E.Expr Src.Expr
-string start =
-    String.string E.Start E.String_
+string : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+string syntaxVersion start =
+    String.string syntaxVersion E.Start E.String_
         |> P.bind (\( str, representation ) -> P.addEnd start (Src.Str str representation))
 
 
-character : A.Position -> P.Parser E.Expr Src.Expr
-character start =
-    String.character E.Start E.Char
+character : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+character syntaxVersion start =
+    String.character syntaxVersion E.Start E.Char
         |> P.bind (\chr -> P.addEnd start (Src.Chr chr))
 
 
-number : A.Position -> P.Parser E.Expr Src.Expr
-number start =
-    Number.number E.Start E.Number
+number : SyntaxVersion -> A.Position -> P.Parser E.Expr Src.Expr
+number syntaxVersion start =
+    Number.number syntaxVersion E.Start E.Number
         |> P.bind
             (\nmbr ->
                 P.addEnd start <|
