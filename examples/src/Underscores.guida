@@ -14,12 +14,6 @@ floats =
     , ("1_000.4_205", 1_000.4_205)
     , ("0.000_1", 0.000_1)
     , ("0.000_000_1", 0.000_000_1)
-    --
-    -- the following are not valid
-    -- (NO ADJACENT UNDERSCORES TO DECIMAL POINT AND EXPONENT / NO LEADING OR TRAILING UNDERSCORES / NO CONSECUTIVE UNDERSCORES)
-    -- , ("111_000_.602", 111_000_.602)
-    -- , ("_111000.602", _111000.602)
-    -- , ("111__000.602", 111__000.602)
     ]
 
 
@@ -28,12 +22,6 @@ hexadecimals =
     [ ("0x1F_2A", 0x1F_2A)
     , ("0xDEADBEEF", 0xDEADBEEF)
     , ("0xDE_AD_BE_EF", 0xDE_AD_BE_EF)
-
-    -- the following are not valid
-    -- , ("0x_DE_ADBEEF", 0x_DE_ADBEEF)
-    -- , ("0xDE__ADBEEF", 0xDE__ADBEEF)
-    -- ,("0xDEADBEEF_", 0xDEADBEEF_)
-    -- , ("_0xDEADBEEF", _0xDEADBEEF)
     ]
 
 
