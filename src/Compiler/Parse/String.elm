@@ -6,7 +6,7 @@ module Compiler.Parse.String exposing
 import Compiler.Elm.String as ES
 import Compiler.Parse.Number as Number
 import Compiler.Parse.Primitives as P exposing (Col, Parser(..), Row)
-import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion(..))
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Error.Syntax as E
 
 
@@ -377,16 +377,12 @@ eatUnicode syntaxVersion src pos end row col =
 
     else
         let
-            isGuida : Bool
-            isGuida =
-                syntaxVersion == Guida
-
             digitPos : Int
             digitPos =
                 pos + 1
 
             ( newPos, code ) =
-                Number.chompHex isGuida src digitPos end
+                Number.chompHex syntaxVersion src digitPos end
 
             numDigits : Int
             numDigits =
