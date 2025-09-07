@@ -178,7 +178,7 @@ chompUnderscore_ isGuida src pos end n =
         Err_ pos E.NumberNoLeadingOrTrailingUnderscores
 
     else if nextWord == '_' then
-        Err_ pos E.NumberNoConsecutiveUnderscores
+        Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
 
     else if nextWord == 'e' || nextWord == 'E' then
         Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
@@ -208,7 +208,7 @@ chompUnderscoreHelp isGuida src pos end n =
         in
         if word == '_' then
             if nextWord == '_' then
-                Err_ pos E.NumberNoConsecutiveUnderscores
+                Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
 
             else if nextWord == 'e' || nextWord == 'E' || nextWord == '.' then
                 Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
@@ -247,7 +247,7 @@ chompFraction isGuida src pos end n =
         Err_ pos (E.NumberDot n)
 
     else if isGuida && nextWord == '_' then
-        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+        Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
     else if isDecimalDigit nextWord then
         chompFractionHelp isGuida src (pos1 + 1) end
@@ -277,7 +277,7 @@ chompFractionHelp isGuida src pos end =
                 Err_ pos E.NumberNoLeadingOrTrailingUnderscores
 
             else if nextWord == '_' then
-                Err_ pos E.NumberNoConsecutiveUnderscores
+                Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
 
             else if nextWord == 'e' || nextWord == 'E' then
                 Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
@@ -325,7 +325,7 @@ chompExponent isGuida src pos end =
                     charAtPos pos1 src
             in
             if isGuida && nextWord == '_' then
-                Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+                Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
             else if pos1 < end && isDecimalDigit nextWord then
                 chompExponentHelp isGuida src (pos + 2) end
@@ -369,7 +369,7 @@ chompZero isGuida src pos end =
         in
         if word == 'x' then
             if isGuida && charAtPos (pos + 1) src == '_' then
-                Err_ pos E.NumberNoUnderscoresAdjacentToHexadecimalPreFix
+                Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToHexadecimalPreFix
 
             else
                 chompHexInt isGuida src (pos + 1) end
@@ -394,7 +394,7 @@ chompHexInt isGuida src pos end =
             chompHex isGuida src pos end
     in
     if answer == -4 then
-        Err_ newPos E.NumberNoConsecutiveUnderscores
+        Err_ (newPos + 1) E.NumberNoConsecutiveUnderscores
 
     else if answer == -3 then
         Err_ newPos E.NumberNoLeadingOrTrailingUnderscores

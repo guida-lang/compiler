@@ -5,7 +5,9 @@ import Html.Attributes exposing (style)
 
 ints : List (String, Int)
 ints =
-    [ ("2_000", 2_000), ("42_000_000", 42_000_000) ]
+    [ ("2_000", 2_000)
+    , ("42_000_000", 42_000_000)
+    ]
 
 
 floats : List (String, Float)

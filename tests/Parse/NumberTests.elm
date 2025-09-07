@@ -30,26 +30,21 @@ suite =
                     \_ ->
                         singleNumber SyntaxVersion.Guida "2_000_000"
                             |> Expect.equal (Ok (N.Int 2000000 "2_000_000"))
-                , Test.test "Int with consecutive underscore should fail 42__000" <|
+                , Test.test "Int with consecutive underscore should fail at position 3 '42__000' " <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "42__000"
-                            |> Expect.equal (Err E.NumberNoConsecutiveUnderscores)
-                , Test.test "Leading underscore should fail _42_000" <|
+                        expectErrAt 4 SyntaxVersion.Guida "42__000" E.NumberNoConsecutiveUnderscores
+                , Test.test "Leading underscore should fail at position 1 '_42_000'" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "_42_000"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+                        expectErrAt 1 SyntaxVersion.Guida "_42_000" E.NumberNoLeadingOrTrailingUnderscores
                 , Test.test "Trailing underscore should fail 42_000_" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "42_000_"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
-                , Test.test "INT with multiple underscores, one of them immediately before exponent 'e' 6_001_222_e+36" <|
+                        expectErrAt 7 SyntaxVersion.Guida "42_000_" E.NumberNoLeadingOrTrailingUnderscores
+                , Test.test "INT with multiple underscores, one of them immediately before exponent 'e' should fail at position 10 '6_001_222_e+36'" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "6_001_222_e+36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
-                , Test.test "INT with one underscore immediately before exponent 'e' 222_e+36" <|
+                        expectErrAt 10 SyntaxVersion.Guida "6_001_222_e+36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+                , Test.test "INT with one underscore immediately before exponent 'e' should failt at position 4 '222_e+36'" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "222_e+36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 4 SyntaxVersion.Guida "222_e+36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 ]
             , Test.describe "Parse FLOAT underscores"
                 [ Test.test "Simple FLOAT with no underscores 1000.42" <|
@@ -90,44 +85,34 @@ suite =
                             |> Expect.equal (Ok (N.Float 6.000022e39 "6_000.0_22e+3_6"))
                 , Test.test "FLOAT with Leading underscore _111000.602" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "_111000.602"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+                        expectErrAt 1 SyntaxVersion.Guida "_111000.602" E.NumberNoLeadingOrTrailingUnderscores
                 , Test.test "FLOAT with trailing underscore 111_000.602_" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "111_000.602_"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+                        expectErrAt 12 SyntaxVersion.Guida "111_000.602_" E.NumberNoLeadingOrTrailingUnderscores
                 , Test.test "FLOAT with consecutive underscore before decimal point 111__000.602" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "111__000.602"
-                            |> Expect.equal (Err E.NumberNoConsecutiveUnderscores)
+                        expectErrAt 5 SyntaxVersion.Guida "111__000.602" E.NumberNoConsecutiveUnderscores
                 , Test.test "FLOAT with consecutive underscore after decimal point 111_000.6__002" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "111_000.6__002"
-                            |> Expect.equal (Err E.NumberNoConsecutiveUnderscores)
+                        expectErrAt 11 SyntaxVersion.Guida "111_000.6__002" E.NumberNoConsecutiveUnderscores
                 , Test.test "FLOAT with underscore immediately after decimal point 11._602" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "11._602"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 4 SyntaxVersion.Guida "11._602" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 , Test.test "FLOAT with underscore immediately before decimal point 11_.602" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "11_.602"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 3 SyntaxVersion.Guida "11_.602" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 , Test.test "FLOAT with underscore adjacent to +/- 6_000.022e+_36" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "6_000.022e+_36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 12 SyntaxVersion.Guida "6_000.022e+_36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 , Test.test "FLOAT with underscore adjacent to +/- or immediately after exponent 'e' 6_000.022e_+36" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "6_000.022e_+36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 11 SyntaxVersion.Guida "6_000.022e_+36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 , Test.test "FLOAT with one underscore in fraction part immediately before exponent 'e' 6_000.022_e+36" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "6_000.022_e+36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 10 SyntaxVersion.Guida "6_000.022_e+36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 , Test.test "FLOAT with multiple underscores in fraction part, one of them immediately before exponent 'e' 6_000.1_222_e+36" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "6_000.1_222_e+36"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToDecimalOrExponent)
+                        expectErrAt 12 SyntaxVersion.Guida "6_000.1_222_e+36" E.NumberNoUnderscoresAdjacentToDecimalOrExponent
                 ]
             , Test.describe "Parse HEXADECIMAL underscores"
                 [ Test.test "HEXADECIMAL no underscores 0xDEADBEEF" <|
@@ -140,20 +125,16 @@ suite =
                             |> Expect.equal (Ok (N.Int 3735928559 "0xDE_AD_BE_EF"))
                 , Test.test "HEXADECIMAL leading underscore should fail _0xDEADBEEF" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "_0xDEADBEEF"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+                        expectErrAt 1 SyntaxVersion.Guida "_0xDEADBEEF" E.NumberNoLeadingOrTrailingUnderscores
                 , Test.test "HEXADECIMAL trailing underscore should fail 0xDEADBEEF_" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "0xDEADBEEF_"
-                            |> Expect.equal (Err E.NumberNoLeadingOrTrailingUnderscores)
+                        expectErrAt 11 SyntaxVersion.Guida "0xDEADBEEF_" E.NumberNoLeadingOrTrailingUnderscores
                 , Test.test "HEXADECIMAL consecutive underscores should fail 0xDE__ADBEEF" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "0xDE__ADBEEF"
-                            |> Expect.equal (Err E.NumberNoConsecutiveUnderscores)
+                        expectErrAt 6 SyntaxVersion.Guida "0xDE__ADBEEF" E.NumberNoConsecutiveUnderscores
                 , Test.test "HEXADECIMAL underscores adjacent To Hexadecimal preFix '0x' should fail 0x_DE_ADBEEF" <|
                     \_ ->
-                        singleNumber SyntaxVersion.Guida "0x_DE_ADBEEF"
-                            |> Expect.equal (Err E.NumberNoUnderscoresAdjacentToHexadecimalPreFix)
+                        expectErrAt 3 SyntaxVersion.Guida "0x_DE_ADBEEF" E.NumberNoUnderscoresAdjacentToHexadecimalPreFix
                 ]
             ]
 
@@ -218,3 +199,33 @@ suite =
 singleNumber : SyntaxVersion -> String -> Result E.Number N.Number
 singleNumber syntaxVersion =
     P.fromByteString (N.number syntaxVersion (\_ _ -> E.NumberEnd) (\x _ _ -> x)) (\_ _ -> E.NumberEnd)
+
+
+singleNumberAt : SyntaxVersion -> String -> Result ( E.Number, Int, Int ) N.Number
+singleNumberAt syntaxVersion =
+    P.fromByteString
+        (N.number
+            syntaxVersion
+            (\row col -> ( E.NumberEnd, row, col ))
+            (\problem row col -> ( problem, row, col ))
+        )
+        (\row col -> ( E.NumberEnd, row, col ))
+
+
+expectErrAt :
+    Int
+    -> SyntaxVersion
+    -> String
+    -> E.Number
+    -> Expect.Expectation
+expectErrAt col v src expected =
+    case singleNumberAt v src of
+        Err ( problem, _, c ) ->
+            Expect.all
+                [ \_ -> Expect.equal expected problem
+                , \_ -> Expect.equal col c
+                ]
+                ()
+
+        Ok value ->
+            Expect.fail ("Expected error " ++ Debug.toString expected ++ " but parsed " ++ Debug.toString value)
