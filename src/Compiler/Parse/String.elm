@@ -377,6 +377,7 @@ eatUnicode syntaxVersion src pos end row col =
 
     else
         let
+            isGuida : Bool
             isGuida =
                 syntaxVersion == Guida
 

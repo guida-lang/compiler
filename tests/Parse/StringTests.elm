@@ -2,7 +2,7 @@ module Parse.StringTests exposing (suite)
 
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.String as S
-import Compiler.Parse.SyntaxVersion as SyntaxVersion exposing (SyntaxVersion(..))
+import Compiler.Parse.SyntaxVersion as SyntaxVersion
 import Expect
 import Test exposing (Test)
 

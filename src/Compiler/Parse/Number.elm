@@ -45,9 +45,11 @@ number syntaxVersion toExpectation toError =
 
             else
                 let
+                    word : Char
                     word =
                         charAtPos pos src
 
+                    isGuida : Bool
                     isGuida =
                         syntaxVersion == Guida
                 in
@@ -102,10 +104,7 @@ number syntaxVersion toExpectation toError =
                                 raw =
                                     String.slice pos newPos src
 
-                                newState : P.State
-                                newState =
-                                    P.State src newPos end indent row newCol
-
+                                parsed : Maybe Float
                                 parsed =
                                     if isGuida then
                                         String.replace "_" "" raw |> String.toFloat
@@ -115,6 +114,11 @@ number syntaxVersion toExpectation toError =
                             in
                             case parsed of
                                 Just copy_ ->
+                                    let
+                                        newState : P.State
+                                        newState =
+                                            P.State src newPos end indent row newCol
+                                    in
                                     P.Cok (Float copy_ raw) newState
 
                                 Nothing ->
@@ -142,6 +146,7 @@ chompInt isGuida src pos end n =
 
     else
         let
+            word : Char
             word =
                 charAtPos pos src
         in
@@ -170,27 +175,29 @@ chompInt isGuida src pos end n =
 
 chompUnderscore_ : Bool -> String -> Int -> Int -> Int -> Outcome
 chompUnderscore_ isGuida src pos end n =
-    let
-        nextWord =
-            charAtPos (pos + 1) src
-    in
     if pos >= end then
         Err_ pos E.NumberNoLeadingOrTrailingUnderscores
 
-    else if nextWord == '_' then
-        Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
-
-    else if nextWord == 'e' || nextWord == 'E' then
-        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
-
-    else if nextWord == '.' then
-        Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
-
-    else if isDecimalDigit nextWord then
-        chompUnderscoreHelp isGuida src (pos + 1) end n
-
     else
-        Err_ pos (E.NumberDot n)
+        let
+            nextWord : Char
+            nextWord =
+                charAtPos (pos + 1) src
+        in
+        if nextWord == '_' then
+            Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
+
+        else if nextWord == 'e' || nextWord == 'E' then
+            Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+        else if nextWord == '.' then
+            Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+        else if isDecimalDigit nextWord then
+            chompUnderscoreHelp isGuida src (pos + 1) end n
+
+        else
+            Err_ pos (E.NumberDot n)
 
 
 chompUnderscoreHelp : Bool -> String -> Int -> Int -> Int -> Outcome
@@ -200,13 +207,16 @@ chompUnderscoreHelp isGuida src pos end n =
 
     else
         let
+            word : Char
             word =
                 charAtPos pos src
-
-            nextWord =
-                charAtPos (pos + 1) src
         in
         if word == '_' then
+            let
+                nextWord : Char
+                nextWord =
+                    charAtPos (pos + 1) src
+            in
             if nextWord == '_' then
                 Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
 
@@ -239,21 +249,24 @@ chompFraction isGuida src pos end n =
         pos1 : Int
         pos1 =
             pos + 1
-
-        nextWord =
-            charAtPos pos1 src
     in
     if pos1 >= end then
         Err_ pos (E.NumberDot n)
 
-    else if isGuida && nextWord == '_' then
-        Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
-
-    else if isDecimalDigit nextWord then
-        chompFractionHelp isGuida src (pos1 + 1) end
-
     else
-        Err_ pos (E.NumberDot n)
+        let
+            nextWord : Char
+            nextWord =
+                charAtPos pos1 src
+        in
+        if isGuida && nextWord == '_' then
+            Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+        else if isDecimalDigit nextWord then
+            chompFractionHelp isGuida src (pos1 + 1) end
+
+        else
+            Err_ pos (E.NumberDot n)
 
 
 chompFractionHelp : Bool -> String -> Int -> Int -> Outcome
@@ -263,11 +276,9 @@ chompFractionHelp isGuida src pos end =
 
     else
         let
+            word : Char
             word =
                 charAtPos pos src
-
-            nextWord =
-                charAtPos (pos + 1) src
         in
         if isDecimalDigit word then
             chompFractionHelp isGuida src (pos + 1) end
@@ -276,14 +287,20 @@ chompFractionHelp isGuida src pos end =
             if (pos + 1) == end then
                 Err_ pos E.NumberNoLeadingOrTrailingUnderscores
 
-            else if nextWord == '_' then
-                Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
-
-            else if nextWord == 'e' || nextWord == 'E' then
-                Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
-
             else
-                chompFractionHelp isGuida src (pos + 1) end
+                let
+                    nextWord : Char
+                    nextWord =
+                        charAtPos (pos + 1) src
+                in
+                if nextWord == '_' then
+                    Err_ (pos + 1) E.NumberNoConsecutiveUnderscores
+
+                else if nextWord == 'e' || nextWord == 'E' then
+                    Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
+
+                else
+                    chompFractionHelp isGuida src (pos + 1) end
 
         else if word == 'e' || word == 'E' then
             chompExponent isGuida src (pos + 1) end
@@ -306,6 +323,7 @@ chompExponent isGuida src pos end =
 
     else
         let
+            word : Char
             word =
                 charAtPos pos src
         in
@@ -321,6 +339,7 @@ chompExponent isGuida src pos end =
                 pos1 =
                     pos + 1
 
+                nextWord : Char
                 nextWord =
                     charAtPos pos1 src
             in
@@ -339,18 +358,20 @@ chompExponent isGuida src pos end =
 
 chompExponentHelp : Bool -> String -> Int -> Int -> Outcome
 chompExponentHelp isGuida src pos end =
-    let
-        word =
-            charAtPos pos src
-    in
     if pos >= end then
         OkFloat pos
 
-    else if isDecimalDigit word || (isGuida && word == '_') then
-        chompExponentHelp isGuida src (pos + 1) end
-
     else
-        OkFloat pos
+        let
+            word : Char
+            word =
+                charAtPos pos src
+        in
+        if isDecimalDigit word || (isGuida && word == '_') then
+            chompExponentHelp isGuida src (pos + 1) end
+
+        else
+            OkFloat pos
 
 
 
@@ -364,6 +385,7 @@ chompZero isGuida src pos end =
 
     else
         let
+            word : Char
             word =
                 charAtPos pos src
         in
@@ -458,22 +480,26 @@ stepHex isGuida src pos end word acc =
 
     else if isGuida && '_' == word then
         let
+            nextWord : Char
             nextWord =
                 charAtPos (pos + 1) src
-
-            validNextWord =
-                ('0' <= nextWord && nextWord <= '9')
-                    || ('a' <= nextWord && nextWord <= 'f')
-                    || ('A' <= nextWord && nextWord <= 'F')
         in
         if nextWord == '_' then
             -4
 
-        else if pos + 1 == end || not validNextWord then
-            -3
-
         else
-            acc
+            let
+                validNextWord : Bool
+                validNextWord =
+                    ('0' <= nextWord && nextWord <= '9')
+                        || ('a' <= nextWord && nextWord <= 'f')
+                        || ('A' <= nextWord && nextWord <= 'F')
+            in
+            if pos + 1 == end || not validNextWord then
+                -3
+
+            else
+                acc
 
     else if isDirtyEnd src pos end word then
         -2
@@ -495,6 +521,7 @@ precedence toExpectation =
 
             else
                 let
+                    word : Char
                     word =
                         charAtPos pos src
                 in
