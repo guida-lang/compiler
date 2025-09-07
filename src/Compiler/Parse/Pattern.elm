@@ -61,7 +61,7 @@ termHelp syntaxVersion start =
                                             Src.PCtorQual region home name []
                             )
                 )
-        , Number.number E.PStart E.PNumber
+        , Number.number syntaxVersion E.PStart E.PNumber
             |> P.bind
                 (\number ->
                     P.getPosition
@@ -83,9 +83,9 @@ termHelp syntaxVersion start =
                                                 P.Cerr row (col - width) (E.PFloat width)
                             )
                 )
-        , String.string E.PStart E.PString
+        , String.string syntaxVersion E.PStart E.PString
             |> P.bind (\( str, multiline ) -> P.addEnd start (Src.PStr str multiline))
-        , String.character E.PStart E.PChar
+        , String.character syntaxVersion E.PStart E.PChar
             |> P.bind (\chr -> P.addEnd start (Src.PChr chr))
         ]
 

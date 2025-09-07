@@ -6,6 +6,7 @@ module Compiler.Parse.String exposing
 import Compiler.Elm.String as ES
 import Compiler.Parse.Number as Number
 import Compiler.Parse.Primitives as P exposing (Col, Parser(..), Row)
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Error.Syntax as E
 
 
@@ -13,15 +14,15 @@ import Compiler.Reporting.Error.Syntax as E
 -- CHARACTER
 
 
-character : (Row -> Col -> x) -> (E.Char -> Row -> Col -> x) -> Parser x String
-character toExpectation toError =
+character : SyntaxVersion -> (Row -> Col -> x) -> (E.Char -> Row -> Col -> x) -> Parser x String
+character syntaxVersion toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
             if pos >= end || P.unsafeIndex src pos /= '\'' then
                 P.Eerr row col toExpectation
 
             else
-                case chompChar src (pos + 1) end row (col + 1) 0 placeholder of
+                case chompChar syntaxVersion src (pos + 1) end row (col + 1) 0 placeholder of
                     Good newPos newCol numChars mostRecent ->
                         if numChars /= 1 then
                             P.Cerr row col (toError (E.CharNotString (newCol - col)))
@@ -52,8 +53,8 @@ type CharResult
     | CharEscape Row Col E.Escape
 
 
-chompChar : String -> Int -> Int -> Row -> Col -> Int -> ES.Chunk -> CharResult
-chompChar src pos end row col numChars mostRecent =
+chompChar : SyntaxVersion -> String -> Int -> Int -> Row -> Col -> Int -> ES.Chunk -> CharResult
+chompChar syntaxVersion src pos end row col numChars mostRecent =
     if pos >= end then
         CharEndless col
 
@@ -70,15 +71,15 @@ chompChar src pos end row col numChars mostRecent =
             CharEndless col
 
         else if word == '"' then
-            chompChar src (pos + 1) end row (col + 1) (numChars + 1) doubleQuote
+            chompChar syntaxVersion src (pos + 1) end row (col + 1) (numChars + 1) doubleQuote
 
         else if word == '\\' then
-            case eatEscape src (pos + 1) end row col of
+            case eatEscape syntaxVersion src (pos + 1) end row col of
                 EscapeNormal ->
-                    chompChar src (pos + 2) end row (col + 2) (numChars + 1) (ES.Slice pos 2)
+                    chompChar syntaxVersion src (pos + 2) end row (col + 2) (numChars + 1) (ES.Slice pos 2)
 
                 EscapeUnicode delta code ->
-                    chompChar src (pos + delta) end row (col + delta) (numChars + 1) (ES.CodePoint code)
+                    chompChar syntaxVersion src (pos + delta) end row (col + delta) (numChars + 1) (ES.CodePoint code)
 
                 EscapeProblem r c badEscape ->
                     CharEscape r c badEscape
@@ -96,15 +97,15 @@ chompChar src pos end row col numChars mostRecent =
                 newPos =
                     pos + width
             in
-            chompChar src newPos end row (col + 1) (numChars + 1) (ES.Slice pos width)
+            chompChar syntaxVersion src newPos end row (col + 1) (numChars + 1) (ES.Slice pos width)
 
 
 
 -- STRINGS
 
 
-string : (Row -> Col -> x) -> (E.String_ -> Row -> Col -> x) -> Parser x ( String, Bool )
-string toExpectation toError =
+string : SyntaxVersion -> (Row -> Col -> x) -> (E.String_ -> Row -> Col -> x) -> Parser x ( String, Bool )
+string syntaxVersion toExpectation toError =
     Parser
         (\(P.State src pos end indent row col) ->
             if isDoubleQuote src pos end then
@@ -130,13 +131,13 @@ string toExpectation toError =
                                 col3 =
                                     col + 3
                             in
-                            multiString src pos3 end row col3 pos3 row col []
+                            multiString syntaxVersion src pos3 end row col3 pos3 row col []
 
                         else
                             SROk pos2 row (col + 2) "" False
 
                     else
-                        singleString src pos1 end row (col + 1) pos1 []
+                        singleString syntaxVersion src pos1 end row (col + 1) pos1 []
                 of
                     SROk newPos newRow newCol utf8 multiline ->
                         let
@@ -189,8 +190,8 @@ addEscape chunk start end revChunks =
 -- SINGLE STRINGS
 
 
-singleString : String -> Int -> Int -> Row -> Col -> Int -> List ES.Chunk -> StringResult
-singleString src pos end row col initialPos revChunks =
+singleString : SyntaxVersion -> String -> Int -> Int -> Row -> Col -> Int -> List ES.Chunk -> StringResult
+singleString syntaxVersion src pos end row col initialPos revChunks =
     if pos >= end then
         SRErr row col E.StringEndless_Single
 
@@ -216,13 +217,13 @@ singleString src pos end row col initialPos revChunks =
                 newPos =
                     pos + 1
             in
-            singleString src newPos end row (col + 1) newPos <|
+            singleString syntaxVersion src newPos end row (col + 1) newPos <|
                 addEscape singleQuote initialPos pos revChunks
 
         else if word == '\\' then
-            case eatEscape src (pos + 1) end row col of
+            case eatEscape syntaxVersion src (pos + 1) end row col of
                 EscapeNormal ->
-                    singleString src (pos + 2) end row (col + 2) initialPos revChunks
+                    singleString syntaxVersion src (pos + 2) end row (col + 2) initialPos revChunks
 
                 EscapeUnicode delta code ->
                     let
@@ -230,7 +231,7 @@ singleString src pos end row col initialPos revChunks =
                         newPos =
                             pos + delta
                     in
-                    singleString src newPos end row (col + delta) newPos <|
+                    singleString syntaxVersion src newPos end row (col + delta) newPos <|
                         addEscape (ES.CodePoint code) initialPos pos revChunks
 
                 EscapeProblem r c x ->
@@ -245,15 +246,15 @@ singleString src pos end row col initialPos revChunks =
                 newPos =
                     pos + P.getCharWidth word
             in
-            singleString src newPos end row (col + 1) initialPos revChunks
+            singleString syntaxVersion src newPos end row (col + 1) initialPos revChunks
 
 
 
 -- MULTI STRINGS
 
 
-multiString : String -> Int -> Int -> Row -> Col -> Int -> Row -> Col -> List ES.Chunk -> StringResult
-multiString src pos end row col initialPos sr sc revChunks =
+multiString : SyntaxVersion -> String -> Int -> Int -> Row -> Col -> Int -> Row -> Col -> List ES.Chunk -> StringResult
+multiString syntaxVersion src pos end row col initialPos sr sc revChunks =
     if pos >= end then
         SRErr sr sc E.StringEndless_Multi
 
@@ -276,7 +277,7 @@ multiString src pos end row col initialPos sr sc revChunks =
                 pos1 =
                     pos + 1
             in
-            multiString src pos1 end row (col + 1) pos1 sr sc <|
+            multiString syntaxVersion src pos1 end row (col + 1) pos1 sr sc <|
                 addEscape singleQuote initialPos pos revChunks
 
         else if word == '\n' then
@@ -285,7 +286,7 @@ multiString src pos end row col initialPos sr sc revChunks =
                 pos1 =
                     pos + 1
             in
-            multiString src pos1 end (row + 1) 1 pos1 sr sc <|
+            multiString syntaxVersion src pos1 end (row + 1) 1 pos1 sr sc <|
                 addEscape newline initialPos pos revChunks
 
         else if word == '\u{000D}' then
@@ -294,13 +295,13 @@ multiString src pos end row col initialPos sr sc revChunks =
                 pos1 =
                     pos + 1
             in
-            multiString src pos1 end row col pos1 sr sc <|
+            multiString syntaxVersion src pos1 end row col pos1 sr sc <|
                 addEscape carriageReturn initialPos pos revChunks
 
         else if word == '\\' then
-            case eatEscape src (pos + 1) end row col of
+            case eatEscape syntaxVersion src (pos + 1) end row col of
                 EscapeNormal ->
-                    multiString src (pos + 2) end row (col + 2) initialPos sr sc revChunks
+                    multiString syntaxVersion src (pos + 2) end row (col + 2) initialPos sr sc revChunks
 
                 EscapeUnicode delta code ->
                     let
@@ -308,7 +309,7 @@ multiString src pos end row col initialPos sr sc revChunks =
                         newPos =
                             pos + delta
                     in
-                    multiString src newPos end row (col + delta) newPos sr sc <|
+                    multiString syntaxVersion src newPos end row (col + delta) newPos sr sc <|
                         addEscape (ES.CodePoint code) initialPos pos revChunks
 
                 EscapeProblem r c x ->
@@ -323,7 +324,7 @@ multiString src pos end row col initialPos sr sc revChunks =
                 newPos =
                     pos + P.getCharWidth word
             in
-            multiString src newPos end row (col + 1) initialPos sr sc revChunks
+            multiString syntaxVersion src newPos end row (col + 1) initialPos sr sc revChunks
 
 
 
@@ -337,8 +338,8 @@ type Escape
     | EscapeProblem Row Col E.Escape
 
 
-eatEscape : String -> Int -> Int -> Row -> Col -> Escape
-eatEscape src pos end row col =
+eatEscape : SyntaxVersion -> String -> Int -> Int -> Row -> Col -> Escape
+eatEscape syntaxVersion src pos end row col =
     if pos >= end then
         EscapeEndOfFile
 
@@ -363,14 +364,14 @@ eatEscape src pos end row col =
                 EscapeNormal
 
             'u' ->
-                eatUnicode src (pos + 1) end row col
+                eatUnicode syntaxVersion src (pos + 1) end row col
 
             _ ->
                 EscapeProblem row col E.EscapeUnknown
 
 
-eatUnicode : String -> Int -> Int -> Row -> Col -> Escape
-eatUnicode src pos end row col =
+eatUnicode : SyntaxVersion -> String -> Int -> Int -> Row -> Col -> Escape
+eatUnicode syntaxVersion src pos end row col =
     if pos >= end || P.unsafeIndex src pos /= '{' then
         EscapeProblem row col (E.BadUnicodeFormat 2)
 
@@ -381,7 +382,7 @@ eatUnicode src pos end row col =
                 pos + 1
 
             ( newPos, code ) =
-                Number.chompHex src digitPos end
+                Number.chompHex syntaxVersion src digitPos end
 
             numDigits : Int
             numDigits =

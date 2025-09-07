@@ -1,0 +1,56 @@
+module Underscores exposing (main)
+
+import Html exposing (text, table, tr, td, div)
+import Html.Attributes exposing (style)
+
+ints : List (String, Int)
+ints =
+    [ ("2_000", 2_000)
+    , ("42_000_000", 42_000_000)
+    ]
+
+
+floats : List (String, Float)
+floats =
+    [ ("111_000.602", 111_000.602)
+    , ("1_000.4_205", 1_000.4_205)
+    , ("0.000_1", 0.000_1)
+    , ("0.000_000_1", 0.000_000_1)
+    ]
+
+
+hexadecimals : List (String, Int)
+hexadecimals =
+    [ ("0x1F_2A", 0x1F_2A)
+    , ("0xDEADBEEF", 0xDEADBEEF)
+    , ("0xDE_AD_BE_EF", 0xDE_AD_BE_EF)
+    ]
+
+
+tableRow : (a -> String) -> (String, a) -> Html.Html msg
+tableRow toString (label, value) =
+    tr []
+        [ td [style "min-width" "150px", style "padding" "7px"] [ text (label) ]
+        , td [style "min-width" "150px", style "padding" "7px"] [ text (toString value) ]
+        ]
+
+
+main =
+    div
+        [ style "width" "100%"
+        , style "width" "100%"
+        , style "display" "flex"
+        , style "justify-content" "center"
+        , style "align-item" "center"
+        ]
+        [ table
+            [ style "margin" "150px"
+            , style "padding" "20px"
+            ]
+            ( List.map (tableRow String.fromInt) ints
+                ++ List.map (tableRow String.fromFloat) floats
+                ++ List.map (tableRow String.fromInt) hexadecimals
+            )
+        ]
+
+

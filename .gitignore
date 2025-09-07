@@ -23,3 +23,6 @@ try/public/app.js
 
 # Assets
 assets/some-application/index.html
+
+# Examples
+examples/index.html

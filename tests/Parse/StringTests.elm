@@ -2,6 +2,7 @@ module Parse.StringTests exposing (suite)
 
 import Compiler.Parse.Primitives as P
 import Compiler.Parse.String as S
+import Compiler.Parse.SyntaxVersion as SyntaxVersion
 import Expect
 import Test exposing (Test)
 
@@ -32,4 +33,4 @@ suite =
 
 singleString : String -> Result () ( String, Bool )
 singleString =
-    P.fromByteString (S.string (\_ _ -> ()) (\_ _ _ -> ())) (\_ _ -> ())
+    P.fromByteString (S.string SyntaxVersion.Guida (\_ _ -> ()) (\_ _ _ -> ())) (\_ _ -> ())
