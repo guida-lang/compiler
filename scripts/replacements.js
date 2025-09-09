@@ -16,9 +16,9 @@ const data = fs
 \t\tcontinue crash;
 \t}
 };`, `var $author$project$Utils$Crash$crash = function (str) {
-\tprocess.stderr.write(str);
+\tError.stackTraceLimit = Infinity;
 \ttry {
-\t\tthrow new Error();
+\t\tthrow new Error(str);
 \t} catch(e) {
 \t\tprocess.stderr.write(e.stack);
 \t\tprocess.stderr.write("\\\\n");
