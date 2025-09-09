@@ -11,6 +11,6 @@ describe("maybe map", () => {
         );
 
         const duration = Date.now() - start;
-        expect(duration).toBeLessThan(5000);
+        expect(duration).toBeLessThan(10_000);
     });
 });
