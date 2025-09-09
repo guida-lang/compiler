@@ -53,7 +53,7 @@ constrainDecls decls finalConstraint =
     constrainDeclsHelp decls finalConstraint identity
 
 
-constrainDeclsHelp : Can.Decls -> Type.Constraint -> (IO Type.Constraint -> IO Type.Constraint) -> IO Type.Constraint
+constrainDeclsHelp : Can.Decls -> Constraint -> (IO Constraint -> IO Constraint) -> IO Constraint
 constrainDeclsHelp decls finalConstraint cont =
     case decls of
         Can.Declare def otherDecls ->

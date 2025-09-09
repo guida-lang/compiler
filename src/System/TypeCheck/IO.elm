@@ -137,7 +137,7 @@ foldrMHelp callback ( list, result ) =
 
 foldM : (b -> a -> IO b) -> b -> List a -> IO b
 foldM f b list =
-    loop (foldMHelp f) ( List.reverse list, b )
+    loop (foldMHelp f) ( list, b )
 
 
 foldMHelp : (b -> a -> IO b) -> ( List a, b ) -> IO (Step ( List a, b ) b)
