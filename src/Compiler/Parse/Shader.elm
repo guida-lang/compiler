@@ -227,6 +227,9 @@ extractInputs decl =
                     GLS.Sampler2D ->
                         [ ( qual, Shader.Texture, name ) ]
 
+                    GLS.Bool ->
+                        [ ( qual, Shader.Bool, name ) ]
+
                     _ ->
                         []
 

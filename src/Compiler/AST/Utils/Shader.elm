@@ -42,6 +42,7 @@ type Type
     | V4
     | M4
     | Texture
+    | Bool
 
 
 
@@ -176,6 +177,9 @@ typeEncoder type_ =
 
             Texture ->
                 6
+
+            Bool ->
+                7
         )
 
 
@@ -205,6 +209,9 @@ typeDecoder =
 
                     6 ->
                         BD.succeed Texture
+
+                    7 ->
+                        BD.succeed Bool
 
                     _ ->
                         BD.fail

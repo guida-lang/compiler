@@ -802,6 +802,9 @@ glToType glType =
         Shader.Texture ->
             Type.texture
 
+        Shader.Bool ->
+            Type.bool
+
 
 
 -- CONSTRAIN DESTRUCTURES
