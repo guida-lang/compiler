@@ -1756,7 +1756,7 @@ toDeclStartReport source row col =
                                             , D.dullyellow <| D.fromChars "\"Hey!\""
                                             ]
                                         ]
-                                , D.reflow "This defines a `reviewPowerLevel` function that you can use elsewhere in your program."
+                                , D.reflow "This defines a `greet` function that you can use elsewhere in your program."
                                 ]
 
                         _ ->
