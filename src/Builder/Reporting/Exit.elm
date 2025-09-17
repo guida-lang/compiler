@@ -2856,7 +2856,7 @@ corruptCacheReport =
         [ D.reflow <|
             "Try deleting your guida-stuff/ directory to get unstuck."
         , D.toSimpleNote <|
-            "This almost certainly means that a 3rd party tool (or editor plugin) is causing problems your the guida-stuff/ directory. Try disabling 3rd party tools one by one until you figure out which it is!"
+            "This almost certainly means that a 3rd party tool (or editor plugin) is causing problems to the guida-stuff/ directory. Try disabling 3rd party tools one by one until you figure out which it is!"
         ]
 
 
