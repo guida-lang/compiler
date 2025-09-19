@@ -491,7 +491,7 @@ toDeclPosition src decl r c =
 
         report : Report.Report
         report =
-            ES.toReport (Code.toSource src) err
+            ES.toReport SV.Guida (Code.toSource src) err
 
         (Report.Report _ (A.Region (A.Position row col) _) _ _) =
             report

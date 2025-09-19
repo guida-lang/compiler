@@ -8,7 +8,7 @@ module Compiler.Parse.Number exposing
 
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Parse.Primitives as P exposing (Col, Row)
-import Compiler.Parse.SyntaxVersion as SyntaxVersion exposing (SyntaxVersion)
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Parse.Variable as Var
 import Compiler.Reporting.Error.Syntax as E
 
@@ -49,7 +49,7 @@ number syntaxVersion toExpectation toError =
                     word =
                         charAtPos pos src
                 in
-                if word == '_' && isGuida syntaxVersion then
+                if word == '_' && syntaxVersion == SV.Guida then
                     P.Cerr row col (toError E.NumberNoLeadingOrTrailingUnderscores)
 
                 else if not (isDecimalDigit word) then
@@ -102,8 +102,9 @@ number syntaxVersion toExpectation toError =
 
                                 parsed : Maybe Float
                                 parsed =
-                                    if isGuida syntaxVersion then
-                                        String.replace "_" "" raw |> String.toFloat
+                                    if syntaxVersion == SV.Guida then
+                                        String.replace "_" "" raw
+                                            |> String.toFloat
 
                                     else
                                         String.toFloat raw
@@ -155,7 +156,7 @@ chompInt syntaxVersion src pos end n =
         else if word == 'e' || word == 'E' then
             chompExponent syntaxVersion src (pos + 1) end
 
-        else if isGuida syntaxVersion && word == '_' then
+        else if word == '_' && syntaxVersion == SV.Guida then
             chompUnderscore_ syntaxVersion src pos end n
 
         else if isDirtyEnd src pos end word then
@@ -255,7 +256,7 @@ chompFraction syntaxVersion src pos end n =
             nextWord =
                 charAtPos pos1 src
         in
-        if isGuida syntaxVersion && nextWord == '_' then
+        if nextWord == '_' && syntaxVersion == SV.Guida then
             Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
         else if isDecimalDigit nextWord then
@@ -279,7 +280,7 @@ chompFractionHelp syntaxVersion src pos end =
         if isDecimalDigit word then
             chompFractionHelp syntaxVersion src (pos + 1) end
 
-        else if isGuida syntaxVersion && word == '_' then
+        else if word == '_' && syntaxVersion == SV.Guida then
             if (pos + 1) == end then
                 Err_ pos E.NumberNoLeadingOrTrailingUnderscores
 
@@ -326,7 +327,7 @@ chompExponent syntaxVersion src pos end =
         if isDecimalDigit word then
             chompExponentHelp syntaxVersion src (pos + 1) end
 
-        else if isGuida syntaxVersion && word == '_' then
+        else if word == '_' && syntaxVersion == SV.Guida then
             Err_ pos E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
         else if word == '+' || word == '-' then
@@ -339,7 +340,7 @@ chompExponent syntaxVersion src pos end =
                 nextWord =
                     charAtPos pos1 src
             in
-            if isGuida syntaxVersion && nextWord == '_' then
+            if nextWord == '_' && syntaxVersion == SV.Guida then
                 Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToDecimalOrExponent
 
             else if pos1 < end && isDecimalDigit nextWord then
@@ -363,7 +364,7 @@ chompExponentHelp syntaxVersion src pos end =
             word =
                 charAtPos pos src
         in
-        if isDecimalDigit word || (isGuida syntaxVersion && word == '_') then
+        if isDecimalDigit word || (word == '_' && syntaxVersion == SV.Guida) then
             chompExponentHelp syntaxVersion src (pos + 1) end
 
         else
@@ -386,11 +387,18 @@ chompZero syntaxVersion src pos end =
                 charAtPos pos src
         in
         if word == 'x' then
-            if isGuida syntaxVersion && charAtPos (pos + 1) src == '_' then
+            if charAtPos (pos + 1) src == '_' && syntaxVersion == SV.Guida then
                 Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToHexadecimalPreFix
 
             else
                 chompHexInt syntaxVersion src (pos + 1) end
+
+        else if word == 'b' && syntaxVersion == SV.Guida then
+            if charAtPos (pos + 1) src == '_' then
+                Err_ (pos + 1) E.NumberNoUnderscoresAdjacentToBinaryPreFix
+
+            else
+                chompBinInt src (pos + 1) end
 
         else if word == '.' then
             chompFraction syntaxVersion src pos end 0
@@ -419,6 +427,25 @@ chompHexInt syntaxVersion src pos end =
 
     else if answer < 0 then
         Err_ newPos E.NumberHexDigit
+
+    else
+        OkInt newPos answer
+
+
+chompBinInt : String -> Int -> Int -> Outcome
+chompBinInt src pos end =
+    let
+        ( newPos, answer ) =
+            chompBin src pos end
+    in
+    if answer == -4 then
+        Err_ (newPos + 1) E.NumberNoConsecutiveUnderscores
+
+    else if answer == -3 then
+        Err_ newPos E.NumberNoLeadingOrTrailingUnderscores
+
+    else if answer < 0 then
+        Err_ newPos E.NumberBinDigit
 
     else
         OkInt newPos answer
@@ -474,7 +501,7 @@ stepHex syntaxVersion src pos end word acc =
     else if 'A' <= word && word <= 'F' then
         16 * acc + 10 + (Char.toCode word - Char.toCode 'A')
 
-    else if isGuida syntaxVersion && '_' == word then
+    else if word == '_' && syntaxVersion == SV.Guida then
         let
             nextWord : Char
             nextWord =
@@ -490,6 +517,78 @@ stepHex syntaxVersion src pos end word acc =
                     ('0' <= nextWord && nextWord <= '9')
                         || ('a' <= nextWord && nextWord <= 'f')
                         || ('A' <= nextWord && nextWord <= 'F')
+            in
+            if pos + 1 == end || not validNextWord then
+                -3
+
+            else
+                acc
+
+    else if isDirtyEnd src pos end word then
+        -2
+
+    else
+        -1
+
+
+
+-- CHOMP BIN
+
+
+chompBin : String -> Int -> Int -> ( Int, Int )
+chompBin src pos end =
+    chompBinHelp src pos end -1 0
+
+
+chompBinHelp : String -> Int -> Int -> Int -> Int -> ( Int, Int )
+chompBinHelp src pos end answer accumulator =
+    if pos >= end then
+        ( pos, answer )
+
+    else
+        let
+            newAnswer : Int
+            newAnswer =
+                stepBin src pos end (charAtPos pos src) accumulator
+        in
+        if newAnswer < 0 then
+            ( pos
+            , if newAnswer == -1 then
+                answer
+
+              else if newAnswer == -3 then
+                -3
+
+              else if newAnswer == -4 then
+                -4
+
+              else
+                -2
+            )
+
+        else
+            chompBinHelp src (pos + 1) end newAnswer newAnswer
+
+
+stepBin : String -> Int -> Int -> Char -> Int -> Int
+stepBin src pos end word acc =
+    if '0' <= word && word <= '1' then
+        2 * acc + (Char.toCode word - Char.toCode '0')
+
+    else if word == '_' then
+        let
+            nextWord : Char
+            nextWord =
+                charAtPos (pos + 1) src
+        in
+        if nextWord == '_' then
+            -4
+
+        else
+            let
+                validNextWord : Bool
+                validNextWord =
+                    '0' <= nextWord && nextWord <= '1'
             in
             if pos + 1 == end || not validNextWord then
                 -3
@@ -531,7 +630,7 @@ precedence toExpectation =
 
 
 
--- helpers
+-- CHAR AT POSITION
 
 
 charAtPos : Int -> String -> Char
@@ -540,8 +639,3 @@ charAtPos pos src =
         |> String.uncons
         |> Maybe.map Tuple.first
         |> Maybe.withDefault ' '
-
-
-isGuida : SyntaxVersion -> Bool
-isGuida syntaxVersion =
-    syntaxVersion == SyntaxVersion.Guida
