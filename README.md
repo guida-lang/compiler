@@ -3,6 +3,9 @@
 Guida is a functional programming language that builds upon the solid foundation of Elm, offering
 backward compatibility with all existing Elm 0.19.1 projects.
 
+Join the [Guida Discord server](https://discord.gg/Ur33engz) to connect with the community, ask 
+questions, and share ideas.
+
 # Vision
 
 Guida builds on the foundations of Elm, aiming to advance the future of functional programming.
