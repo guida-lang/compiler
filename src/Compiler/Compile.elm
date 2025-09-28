@@ -8,9 +8,9 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Module as Canonicalize
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Interface as I
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Nitpick.PatternMatches as PatternMatches
 import Compiler.Optimize.Module as Optimize
 import Compiler.Reporting.Error as E

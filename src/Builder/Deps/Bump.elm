@@ -1,8 +1,8 @@
 module Builder.Deps.Bump exposing (getPossibilities)
 
 import Builder.Deps.Registry exposing (KnownVersions(..))
-import Compiler.Elm.Magnitude as M
-import Compiler.Elm.Version as V
+import Compiler.Guida.Magnitude as M
+import Compiler.Guida.Version as V
 import List.Extra
 import Utils.Main as Utils
 

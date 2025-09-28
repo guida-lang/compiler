@@ -10,7 +10,7 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Optimize.Case as Case
 import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A

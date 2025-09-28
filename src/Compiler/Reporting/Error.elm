@@ -10,7 +10,7 @@ module Compiler.Reporting.Error exposing
 import Builder.File as File
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Json.Encode as E
 import Compiler.Nitpick.PatternMatches as P
 import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)

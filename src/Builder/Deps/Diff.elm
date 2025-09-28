@@ -15,12 +15,12 @@ import Builder.Http as Http
 import Builder.Reporting.Exit as Exit exposing (DocsProblem(..))
 import Builder.Stuff as Stuff
 import Compiler.Data.Name as Name
-import Compiler.Elm.Compiler.Type as Type
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Magnitude as M
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V exposing (Version)
+import Compiler.Guida.Compiler.Type as Type
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Magnitude as M
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V exposing (Version)
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet

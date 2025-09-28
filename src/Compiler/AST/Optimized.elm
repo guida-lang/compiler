@@ -28,9 +28,9 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.Kernel as K
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Kernel as K
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -222,13 +222,13 @@ addKernelDep chunk deps =
         K.JS _ ->
             deps
 
-        K.ElmVar home name ->
+        K.GuidaVar home name ->
             EverySet.insert toComparableGlobal (Global home name) deps
 
         K.JsVar shortName _ ->
             EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
 
-        K.ElmField _ ->
+        K.GuidaField _ ->
             deps
 
         K.JsField _ ->

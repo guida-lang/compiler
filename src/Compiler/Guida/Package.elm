@@ -1,4 +1,4 @@
-module Compiler.Elm.Package exposing
+module Compiler.Guida.Package exposing
     ( Author
     , Name
     , Project

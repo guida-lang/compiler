@@ -18,7 +18,7 @@ module Compiler.Type.Error exposing
 
 import Compiler.Data.Bag as Bag
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
 import Compiler.Reporting.Render.Type.Localizer as L

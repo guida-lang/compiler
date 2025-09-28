@@ -1,11 +1,12 @@
 module Builder.Deps.Website exposing
-    ( metadata
+    ( domain
+    , metadata
     , route
     )
 
 import Builder.Http as Http
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
@@ -14,7 +15,7 @@ import Utils.Task.Extra as Task
 domain : Task Never String
 domain =
     Utils.envLookupEnv "GUIDA_REGISTRY"
-        |> Task.fmap (Maybe.withDefault "https://package.elm-lang.org")
+        |> Task.fmap (Maybe.withDefault "https://package.guida-lang.org")
 
 
 route : String -> List ( String, String ) -> Task Never String

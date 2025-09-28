@@ -1,4 +1,4 @@
-module Compiler.Elm.String exposing
+module Compiler.Guida.String exposing
     ( Chunk(..)
     , fromChunks
     )

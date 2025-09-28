@@ -23,7 +23,7 @@ module Builder.Http exposing
 
 import Basics.Extra exposing (uncurry)
 import Codec.Archive.Zip as Zip
-import Compiler.Elm.Version as V
+import Compiler.Guida.Version as V
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -124,7 +124,7 @@ addDefaultHeaders headers =
 
 userAgent : String
 userAgent =
-    "elm/" ++ V.toChars V.compiler
+    "guida/" ++ V.toChars V.compiler
 
 
 accept : String -> Header

@@ -1,7 +1,7 @@
 module Common.FormatTests exposing (suite)
 
 import Common.Format
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Module as M
 import Compiler.Parse.SyntaxVersion as SV
 import Expect

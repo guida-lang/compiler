@@ -1,14 +1,15 @@
-module Builder.Elm.Outline exposing
+module Builder.Guida.Outline exposing
     ( AppOutline(..)
     , Decoder
     , Exposed(..)
     , Outline(..)
     , PkgOutline(..)
     , SrcDir(..)
-    , decoder
     , defaultSummary
+    , elmDecoder
     , flattenExposed
     , getAllModulePaths
+    , guidaDecoder
     , read
     , srcDirDecoder
     , srcDirEncoder
@@ -22,11 +23,11 @@ import Builder.Stuff as Stuff
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Elm.Constraint as Con
-import Compiler.Elm.Licenses as Licenses
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as Con
+import Compiler.Guida.Licenses as Licenses
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
@@ -49,11 +50,13 @@ type Outline
 
 
 type AppOutline
-    = AppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version)
+    = GuidaAppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version)
+    | ElmAppOutline V.Version (NE.Nonempty SrcDir) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version) (Dict ( String, String ) Pkg.Name V.Version)
 
 
 type PkgOutline
-    = PkgOutline Pkg.Name String Licenses.License V.Version Exposed (Dict ( String, String ) Pkg.Name Con.Constraint) (Dict ( String, String ) Pkg.Name Con.Constraint) Con.Constraint
+    = GuidaPkgOutline Pkg.Name String Licenses.License V.Version Exposed (Dict ( String, String ) Pkg.Name Con.Constraint) (Dict ( String, String ) Pkg.Name Con.Constraint) Con.Constraint
+    | ElmPkgOutline Pkg.Name String Licenses.License V.Version Exposed (Dict ( String, String ) Pkg.Name Con.Constraint) (Dict ( String, String ) Pkg.Name Con.Constraint) Con.Constraint
 
 
 type Exposed
@@ -93,9 +96,9 @@ flattenExposed exposed =
 -- WRITE
 
 
-write : FilePath -> Outline -> Task Never ()
+write : Stuff.Root -> Outline -> Task Never ()
 write root outline =
-    E.write (root ++ "/elm.json") (encode outline)
+    E.write (Stuff.rootProjectFilePath root) (encode outline)
 
 
 
@@ -105,7 +108,26 @@ write root outline =
 encode : Outline -> E.Value
 encode outline =
     case outline of
-        App (AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
+        App (GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
+            E.object
+                [ ( "type", E.string "application" )
+                , ( "source-directories", E.list encodeSrcDir (NE.toList srcDirs) )
+                , ( "guida-version", V.encode guida )
+                , ( "dependencies"
+                  , E.object
+                        [ ( "direct", encodeDeps V.encode depsDirect )
+                        , ( "indirect", encodeDeps V.encode depsTrans )
+                        ]
+                  )
+                , ( "test-dependencies"
+                  , E.object
+                        [ ( "direct", encodeDeps V.encode testDirect )
+                        , ( "indirect", encodeDeps V.encode testTrans )
+                        ]
+                  )
+                ]
+
+        App (ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
             E.object
                 [ ( "type", E.string "application" )
                 , ( "source-directories", E.list encodeSrcDir (NE.toList srcDirs) )
@@ -124,7 +146,20 @@ encode outline =
                   )
                 ]
 
-        Pkg (PkgOutline name summary license version exposed deps tests elm) ->
+        Pkg (GuidaPkgOutline name summary license version exposed deps tests guida) ->
+            E.object
+                [ ( "type", E.string "package" )
+                , ( "name", Pkg.encode name )
+                , ( "summary", E.string summary )
+                , ( "license", Licenses.encode license )
+                , ( "version", V.encode version )
+                , ( "exposed-modules", encodeExposed exposed )
+                , ( "guida-version", Con.encode guida )
+                , ( "dependencies", encodeDeps Con.encode deps )
+                , ( "test-dependencies", encodeDeps Con.encode tests )
+                ]
+
+        Pkg (ElmPkgOutline name summary license version exposed deps tests elm) ->
             E.object
                 [ ( "type", E.string "package" )
                 , ( "name", Pkg.encode name )
@@ -172,31 +207,53 @@ encodeSrcDir srcDir =
 -- PARSE AND VERIFY
 
 
-read : FilePath -> Task Never (Result Exit.Outline Outline)
+read : Stuff.Root -> Task Never (Result Exit.Outline Outline)
 read root =
-    File.readUtf8 (root ++ "/elm.json")
+    File.readUtf8 (Stuff.rootProjectFilePath root)
         |> Task.bind
             (\bytes ->
+                let
+                    decoder =
+                        case root of
+                            Stuff.GuidaRoot _ ->
+                                guidaDecoder
+
+                            Stuff.ElmRoot _ ->
+                                elmDecoder
+                in
                 case D.fromByteString decoder bytes of
                     Err err ->
-                        Task.pure <| Err (Exit.OutlineHasBadStructure err)
+                        case root of
+                            Stuff.GuidaRoot _ ->
+                                Task.pure <| Err (Exit.OutlineHasBadGuidaStructure err)
+
+                            Stuff.ElmRoot _ ->
+                                Task.pure <| Err (Exit.OutlineHasBadElmStructure err)
 
                     Ok outline ->
                         case outline of
-                            Pkg (PkgOutline pkg _ _ _ _ deps _ _) ->
+                            Pkg (GuidaPkgOutline pkg _ _ _ _ deps _ _) ->
                                 Task.pure <|
                                     if not (Dict.member identity Pkg.core deps) && pkg /= Pkg.core then
-                                        Err Exit.OutlineNoPkgCore
+                                        Err Exit.OutlineNoGuidaPkgCore
 
                                     else
                                         Ok outline
 
-                            App (AppOutline _ srcDirs direct indirect _ _) ->
+                            Pkg (ElmPkgOutline pkg _ _ _ _ deps _ _) ->
+                                Task.pure <|
+                                    if not (Dict.member identity Pkg.core deps) && pkg /= Pkg.core then
+                                        Err Exit.OutlineNoElmPkgCore
+
+                                    else
+                                        Ok outline
+
+                            App (GuidaAppOutline _ srcDirs direct indirect _ _) ->
                                 if not (Dict.member identity Pkg.core direct) then
-                                    Task.pure <| Err Exit.OutlineNoAppCore
+                                    Task.pure <| Err Exit.OutlineNoGuidaAppCore
 
                                 else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then
-                                    Task.pure <| Err Exit.OutlineNoAppJson
+                                    Task.pure <| Err Exit.OutlineNoGuidaAppJson
 
                                 else
                                     Utils.filterM (isSrcDirMissing root) (NE.toList srcDirs)
@@ -207,7 +264,35 @@ read root =
                                                         Task.pure <| Err (Exit.OutlineHasMissingSrcDirs d ds)
 
                                                     [] ->
-                                                        detectDuplicates root (NE.toList srcDirs)
+                                                        detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
+                                                            |> Task.bind
+                                                                (\maybeDups ->
+                                                                    case maybeDups of
+                                                                        Nothing ->
+                                                                            Task.pure <| Ok outline
+
+                                                                        Just ( canonicalDir, ( dir1, dir2 ) ) ->
+                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateSrcDirs canonicalDir dir1 dir2)
+                                                                )
+                                            )
+
+                            App (ElmAppOutline _ srcDirs direct indirect _ _) ->
+                                if not (Dict.member identity Pkg.core direct) then
+                                    Task.pure <| Err Exit.OutlineNoElmAppCore
+
+                                else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then
+                                    Task.pure <| Err Exit.OutlineNoElmAppJson
+
+                                else
+                                    Utils.filterM (isSrcDirMissing root) (NE.toList srcDirs)
+                                        |> Task.bind
+                                            (\badDirs ->
+                                                case List.map toGiven badDirs of
+                                                    d :: ds ->
+                                                        Task.pure <| Err (Exit.OutlineHasMissingSrcDirs d ds)
+
+                                                    [] ->
+                                                        detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
                                                             |> Task.bind
                                                                 (\maybeDups ->
                                                                     case maybeDups of
@@ -221,9 +306,9 @@ read root =
             )
 
 
-isSrcDirMissing : FilePath -> SrcDir -> Task Never Bool
+isSrcDirMissing : Stuff.Root -> SrcDir -> Task Never Bool
 isSrcDirMissing root srcDir =
-    Task.fmap not (Utils.dirDoesDirectoryExist (toAbsolute root srcDir))
+    Task.fmap not (Utils.dirDoesDirectoryExist (toAbsolute (Stuff.rootPath root) srcDir))
 
 
 toGiven : SrcDir -> FilePath
@@ -280,7 +365,7 @@ isDup paths =
 -- GET ALL MODULE PATHS
 
 
-getAllModulePaths : FilePath -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
+getAllModulePaths : Stuff.Root -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
 getAllModulePaths root =
     read root
         |> Task.bind
@@ -290,8 +375,8 @@ getAllModulePaths root =
                         Task.pure Dict.empty
 
                     Ok outline ->
-                        case outline of
-                            App (AppOutline _ srcDirs depsDirect indirect _ _) ->
+                        let
+                            getAllAppModulePaths srcDirs depsDirect indirect =
                                 let
                                     deps : Dict ( String, String ) Pkg.Name V.Version
                                     deps =
@@ -299,17 +384,30 @@ getAllModulePaths root =
 
                                     absoluteSrcDirs : List FilePath
                                     absoluteSrcDirs =
-                                        List.map (toAbsolute root) (NE.toList srcDirs)
+                                        List.map (toAbsolute (Stuff.rootPath root)) (NE.toList srcDirs)
                                 in
                                 getAllModulePathsHelper Pkg.dummyName absoluteSrcDirs deps
 
-                            Pkg (PkgOutline name _ _ _ _ pkgDeps _ _) ->
+                            getAllPkgModulePaths name pkgDeps =
                                 let
                                     deps : Dict ( String, String ) Pkg.Name V.Version
                                     deps =
                                         Dict.map (\_ -> Con.lowerBound) pkgDeps
                                 in
-                                getAllModulePathsHelper name [ root ++ "/src" ] deps
+                                getAllModulePathsHelper name [ Stuff.rootPath root ++ "/src" ] deps
+                        in
+                        case outline of
+                            App (GuidaAppOutline _ srcDirs depsDirect indirect _ _) ->
+                                getAllAppModulePaths srcDirs depsDirect indirect
+
+                            App (ElmAppOutline _ srcDirs depsDirect indirect _ _) ->
+                                getAllAppModulePaths srcDirs depsDirect indirect
+
+                            Pkg (GuidaPkgOutline name _ _ _ _ pkgDeps _ _) ->
+                                getAllPkgModulePaths name pkgDeps
+
+                            Pkg (ElmPkgOutline name _ _ _ _ pkgDeps _ _) ->
+                                getAllPkgModulePaths name pkgDeps
             )
 
 
@@ -392,52 +490,83 @@ type alias Decoder a =
     D.Decoder Exit.OutlineProblem a
 
 
-decoder : Decoder Outline
-decoder =
-    let
-        application : String
-        application =
-            "application"
-
-        package : String
-        package =
-            "package"
-    in
+guidaDecoder : Decoder Outline
+guidaDecoder =
     D.field "type" D.string
         |> D.bind
             (\tipe ->
-                if tipe == application then
-                    D.fmap App appDecoder
+                if tipe == "application" then
+                    D.fmap App guidaAppDecoder
 
-                else if tipe == package then
-                    D.fmap Pkg pkgDecoder
+                else if tipe == "package" then
+                    D.fmap Pkg guidaPkgDecoder
 
                 else
                     D.failure Exit.OP_BadType
             )
 
 
-appDecoder : Decoder AppOutline
-appDecoder =
-    D.pure AppOutline
-        |> D.apply (D.field "elm-version" versionDecoder)
+guidaAppDecoder : Decoder AppOutline
+guidaAppDecoder =
+    D.pure GuidaAppOutline
+        |> D.apply (D.field "guida-version" versionDecoder)
         |> D.apply (D.field "source-directories" dirsDecoder)
-        |> D.apply (D.field "dependencies" (D.field "direct" (depsDecoder versionDecoder)))
-        |> D.apply (D.field "dependencies" (D.field "indirect" (depsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "direct" (depsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "indirect" (depsDecoder versionDecoder)))
+        |> D.apply (D.field "dependencies" (D.field "direct" (guidaDepsDecoder versionDecoder)))
+        |> D.apply (D.field "dependencies" (D.field "indirect" (guidaDepsDecoder versionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "direct" (guidaDepsDecoder versionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "indirect" (guidaDepsDecoder versionDecoder)))
 
 
-pkgDecoder : Decoder PkgOutline
-pkgDecoder =
-    D.pure PkgOutline
+guidaPkgDecoder : Decoder PkgOutline
+guidaPkgDecoder =
+    D.pure GuidaPkgOutline
         |> D.apply (D.field "name" nameDecoder)
         |> D.apply (D.field "summary" summaryDecoder)
         |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadLicense))
         |> D.apply (D.field "version" versionDecoder)
         |> D.apply (D.field "exposed-modules" exposedDecoder)
-        |> D.apply (D.field "dependencies" (depsDecoder constraintDecoder))
-        |> D.apply (D.field "test-dependencies" (depsDecoder constraintDecoder))
+        |> D.apply (D.field "dependencies" (guidaDepsDecoder constraintDecoder))
+        |> D.apply (D.field "test-dependencies" (guidaDepsDecoder constraintDecoder))
+        |> D.apply (D.field "guida-version" constraintDecoder)
+
+
+elmDecoder : Decoder Outline
+elmDecoder =
+    D.field "type" D.string
+        |> D.bind
+            (\tipe ->
+                if tipe == "application" then
+                    D.fmap App elmAppDecoder
+
+                else if tipe == "package" then
+                    D.fmap Pkg elmPkgDecoder
+
+                else
+                    D.failure Exit.OP_BadType
+            )
+
+
+elmAppDecoder : Decoder AppOutline
+elmAppDecoder =
+    D.pure ElmAppOutline
+        |> D.apply (D.field "elm-version" versionDecoder)
+        |> D.apply (D.field "source-directories" dirsDecoder)
+        |> D.apply (D.field "dependencies" (D.field "direct" (elmDepsDecoder versionDecoder)))
+        |> D.apply (D.field "dependencies" (D.field "indirect" (elmDepsDecoder versionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "direct" (elmDepsDecoder versionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "indirect" (elmDepsDecoder versionDecoder)))
+
+
+elmPkgDecoder : Decoder PkgOutline
+elmPkgDecoder =
+    D.pure ElmPkgOutline
+        |> D.apply (D.field "name" nameDecoder)
+        |> D.apply (D.field "summary" summaryDecoder)
+        |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadLicense))
+        |> D.apply (D.field "version" versionDecoder)
+        |> D.apply (D.field "exposed-modules" exposedDecoder)
+        |> D.apply (D.field "dependencies" (elmDepsDecoder constraintDecoder))
+        |> D.apply (D.field "test-dependencies" (elmDepsDecoder constraintDecoder))
         |> D.apply (D.field "elm-version" constraintDecoder)
 
 
@@ -467,9 +596,14 @@ constraintDecoder =
     D.mapError Exit.OP_BadConstraint Con.decoder
 
 
-depsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.Name a)
-depsDecoder valueDecoder =
-    D.dict identity (Pkg.keyDecoder Exit.OP_BadDependencyName) valueDecoder
+guidaDepsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.Name a)
+guidaDepsDecoder valueDecoder =
+    D.dict identity (Pkg.keyDecoder Exit.OP_BadGuidaDependencyName) valueDecoder
+
+
+elmDepsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.Name a)
+elmDepsDecoder valueDecoder =
+    D.dict identity (Pkg.keyDecoder Exit.OP_BadElmDependencyName) valueDecoder
 
 
 dirsDecoder : Decoder (NE.Nonempty SrcDir)

@@ -346,9 +346,9 @@ const examples = [
 describe("format", () => {
     describe.each(examples)("%s", (example, modules) => {
         test.each(modules)("$title", ({ filename, module }) => {
-            const moduleFilename = `${tmpDir}/GuidaTest${example}${filename}${process.pid}.Elm`;
-            const elmOutput = `${tmpDir}/GuidaTestElmOutput${example}${filename}${process.pid}.Elm`;
-            const guidaOutput = `${tmpDir}/GuidaTestGuidaOutput${example}${filename}${process.pid}.Elm`;
+            const moduleFilename = `${tmpDir}/GuidaTest${example}${filename}${process.pid}.elm`;
+            const elmOutput = `${tmpDir}/GuidaTestElmOutput${example}${filename}${process.pid}.elm`;
+            const guidaOutput = `${tmpDir}/GuidaTestGuidaOutput${example}${filename}${process.pid}.elm`;
 
             fs.writeFileSync(moduleFilename, generateModule(module));
 
@@ -366,11 +366,6 @@ describe("format", () => {
 });
 
 const generateModule = ({ header, docs, imports, infixes, declarations }) => {
-    //     console.log(`${header}
-    // ${docs}
-    // ${imports.join("\n")}
-    // ${infixes.join("\n")}
-    // ${declarations.join("\n")}`);
     return `${header}
 ${docs}
 ${imports.join("\n")}

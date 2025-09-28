@@ -38,7 +38,7 @@ type Block
     | HtmlBlock String
     | HRule
     | ReferencesBlock (List ( String, String, String ))
-    | ElmDocs (List (List String))
+    | GuidaDocs (List (List String))
 
 
 {-| Attributes for fenced code blocks. 'codeLang' is the

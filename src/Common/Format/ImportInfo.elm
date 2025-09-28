@@ -9,7 +9,7 @@ import Basics.Extra exposing (flip)
 import Common.Format.Bimap as Bimap exposing (Bimap)
 import Common.Format.KnownContents as KnownContents exposing (KnownContents)
 import Compiler.AST.Source as Src
-import Compiler.Elm.Compiler.Imports as Imports
+import Compiler.Guida.Compiler.Imports as Imports
 import Compiler.Parse.Module as M
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)

@@ -1,4 +1,4 @@
-module Compiler.Elm.Docs exposing
+module Compiler.Guida.Docs exposing
     ( Alias(..)
     , Binop(..)
     , Comment
@@ -28,9 +28,9 @@ import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Elm.Compiler.Type as Type
-import Compiler.Elm.Compiler.Type.Extract as Extract
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.Compiler.Type as Type
+import Compiler.Guida.Compiler.Type.Extract as Extract
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Json.String as Json

@@ -17,7 +17,7 @@ much everything except for functions and things that contain functions.
 All functions in this module are "stack safe," which means that your program
 won't crash from recursing over large association lists. You can read
 Evan Czaplicki's
-[document on tail-call elimination](https://github.com/evancz/functional-programming-in-elm/blob/master/recursion/tail-call-elimination.md)
+[document on tail-call elimination](https://github.com/evancz/functional-programming-in-elm/blob/master/book/recursion/tail-call-elimination.md)
 for more information about this topic.
 
 

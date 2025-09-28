@@ -18,7 +18,7 @@ import Compiler.AST.Source as Src
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -557,7 +557,7 @@ toReport source err =
                     Code.toSnippet source
                         region
                         Nothing
-                        ( D.fromChars "Elm does not have a (===) operator like JavaScript."
+                        ( D.fromChars "Guida does not have a (===) operator like JavaScript."
                         , D.fromChars "Switch to (==) instead."
                         )
 
@@ -567,7 +567,7 @@ toReport source err =
                         region
                         Nothing
                         ( D.reflow
-                            "Elm uses a different name for the “not equal” operator:"
+                            "Guida uses a different name for the “not equal” operator:"
                         , D.stack
                             [ D.reflow "Switch to (/=) instead."
                             , D.toSimpleNote
@@ -595,14 +595,11 @@ toReport source err =
                         region
                         Nothing
                         ( D.reflow
-                            "Elm does not use (%) as the remainder operator:"
+                            "Guida does not use (%) as the remainder operator:"
                         , D.stack
-                            [ D.reflow
-                                "If you want the behavior of (%) like in JavaScript, switch to: <https://package.elm-lang.org/packages/elm/core/latest/Basics#remainderBy>"
-                            , D.reflow
-                                "If you want modular arithmetic like in math, switch to: <https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy>"
-                            , D.reflow
-                                "The difference is how things work when negative numbers are involved."
+                            [ D.reflow "If you want the behavior of (%) like in JavaScript, switch to: <https://package.elm-lang.org/packages/elm/core/latest/Basics#remainderBy>"
+                            , D.reflow "If you want modular arithmetic like in math, switch to: <https://package.elm-lang.org/packages/elm/core/latest/Basics#modBy>"
+                            , D.reflow "The difference is how things work when negative numbers are involved."
                             ]
                         )
 
@@ -692,20 +689,19 @@ toReport source err =
 
                     Function ->
                         ( "a function"
-                        , D.reflow
-                            "But functions cannot be sent in and out ports. If we allowed functions in from JS they may perform some side-effects. If we let functions out, they could produce incorrect results because Elm optimizations assume there are no side-effects."
+                        , D.reflow "But functions cannot be sent in and out ports. If we allowed functions in from JS they may perform some side-effects. If we let functions out, they could produce incorrect results because Guida optimizations assume there are no side-effects."
                         )
 
                     TypeVariable name ->
                         ( "an unspecified type"
                         , D.reflow
-                            ("But type variables like `" ++ name ++ "` cannot flow through ports. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Elm program.")
+                            ("But type variables like `" ++ name ++ "` cannot flow through ports. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Guida program.")
                         )
 
                     UnsupportedType name ->
                         ( "a `" ++ name ++ "` value"
                         , D.stack
-                            [ D.reflow "I cannot handle that. The types that CAN flow in and out of Elm include:"
+                            [ D.reflow "I cannot handle that. The types that CAN flow in and out of Guida include:"
                             , D.indent 4 <|
                                 D.reflow
                                     "Ints, Floats, Bools, Strings, Maybes, Lists, Arrays, tuples, records, and JSON values."
@@ -760,7 +756,7 @@ toReport source err =
                     CmdBadMsg ->
                         ( "The `" ++ name ++ "` port cannot send any messages to the `update` function."
                         , D.reflow
-                            "It must produce a (Cmd msg) type. Notice the lower case `msg` type variable. The command will trigger some JS code, but it will not send anything particular back to Elm."
+                            "It must produce a (Cmd msg) type. Notice the lower case `msg` type variable. The command will trigger some JS code, but it will not send anything particular back to Guida."
                         )
 
                     SubBad ->
@@ -795,7 +791,7 @@ toReport source err =
                         [] ->
                             ( D.reflow <| "The `" ++ name ++ "` value is defined directly in terms of itself, causing an infinite loop."
                             , D.stack
-                                [ makeTheory "Are you trying to mutate a variable?" <| "Elm does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
+                                [ makeTheory "Are you trying to mutate a variable?" <| "Guida does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
                                 , makeTheory "Maybe you DO want a recursive value?" <| "To define " ++ name ++ " we need to know what " ++ name ++ " is, so let’s expand it. Wait, but now we need to know what " ++ name ++ " is, so let’s expand it... This will keep going infinitely!"
                                 , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
                                 ]
@@ -822,7 +818,7 @@ toReport source err =
                             in
                             ( D.reflow <| "The `" ++ name ++ "` value is defined directly in terms of itself, causing an infinite loop."
                             , D.stack
-                                [ makeTheory "Are you trying to mutate a variable?" <| "Elm does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
+                                [ makeTheory "Are you trying to mutate a variable?" <| "Guida does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
                                 , makeTheory "Maybe you DO want a recursive value?" <| "To define " ++ name ++ " we need to know what " ++ name ++ " is, so let’s expand it. Wait, but now we need to know what " ++ name ++ " is, so let’s expand it... This will keep going infinitely!"
                                 , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
                                 ]
@@ -843,7 +839,7 @@ toReport source err =
                 advice =
                     D.stack
                         [ D.reflow <| "Think of a more helpful name for one of them and you should be all set!"
-                        , D.link "Note" "Linters advise against shadowing, so Elm makes “best practices” the default. Read" "shadowing" "for more details on this choice."
+                        , D.link "Note" "Linters advise against shadowing, so Guida makes “best practices” the default. Read" "shadowing" "for more details on this choice."
                         ]
             in
             Report.Report "SHADOWING" r2 [] <|
@@ -866,7 +862,7 @@ toReport source err =
                     ( D.fromChars "I only accept tuples with two or three items. This has too many:"
                     , D.stack
                         [ D.reflow <| "I recommend switching to records. Each item will be named, and you can use the `point.x` syntax to access them."
-                        , D.link "Note" "Read" "tuples" "for more comprehensive advice on working with large chunks of data in Elm."
+                        , D.link "Note" "Read" "tuples" "for more comprehensive advice on working with large chunks of data in Guida."
                         ]
                     )
 
@@ -1204,14 +1200,14 @@ notFound source region maybePrefix name thing { locals, quals } =
                 [] ->
                     D.stack
                         [ D.reflow noSuggestionDetails
-                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Elm."
+                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
                         ]
 
                 suggestions ->
                     D.stack
                         [ D.reflow yesSuggestionDetails
                         , D.indent 4 <| D.vcat (List.map D.dullyellow (List.map D.fromChars suggestions))
-                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Elm."
+                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
                         ]
     in
     Report.Report "NAMING ERROR" region nearbyNames <|

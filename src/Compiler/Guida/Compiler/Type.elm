@@ -1,4 +1,4 @@
-module Compiler.Elm.Compiler.Type exposing
+module Compiler.Guida.Compiler.Type exposing
     ( Alias(..)
     , DebugMetadata(..)
     , Type(..)

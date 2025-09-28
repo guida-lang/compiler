@@ -1,4 +1,4 @@
-module Builder.Elm.Details exposing
+module Builder.Guida.Details exposing
     ( BuildID
     , Details(..)
     , Extras
@@ -20,8 +20,8 @@ import Builder.BackgroundWriter as BW
 import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
 import Builder.Deps.Website as Website
-import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Guida.Outline as Outline
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
@@ -33,13 +33,13 @@ import Compiler.Compile as Compile
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Elm.Constraint as Con
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Interface as I
-import Compiler.Elm.Kernel as Kernel
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as Con
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Interface as I
+import Compiler.Guida.Kernel as Kernel
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
@@ -134,9 +134,9 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 -- VERIFY INSTALL -- used by Install
 
 
-verifyInstall : BW.Scope -> FilePath -> Solver.Env -> Outline.Outline -> Task Never (Result Exit.Details ())
+verifyInstall : BW.Scope -> Stuff.Root -> Solver.Env -> Outline.Outline -> Task Never (Result Exit.Details ())
 verifyInstall scope root (Solver.Env cache manager connection registry) outline =
-    File.getTime (root ++ "/elm.json")
+    File.getTime (Stuff.rootProjectFilePath root)
         |> Task.bind
             (\time ->
                 let
@@ -161,12 +161,12 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 -- LOAD -- used by Make, Repl, Reactor, Test
 
 
-load : Reporting.Style -> BW.Scope -> FilePath -> Task Never (Result Exit.Details Details)
+load : Reporting.Style -> BW.Scope -> Stuff.Root -> Task Never (Result Exit.Details Details)
 load style scope root =
-    File.getTime (root ++ "/elm.json")
+    File.getTime (Stuff.rootProjectFilePath root)
         |> Task.bind
             (\newTime ->
-                File.readBinary detailsDecoder (Stuff.details root)
+                File.readBinary detailsDecoder (Stuff.details (Stuff.rootPath root))
                     |> Task.bind
                         (\maybeDetails ->
                             case maybeDetails of
@@ -187,7 +187,7 @@ load style scope root =
 -- GENERATE
 
 
-generate : Reporting.Style -> BW.Scope -> FilePath -> File.Time -> Task Never (Result Exit.Details Details)
+generate : Reporting.Style -> BW.Scope -> Stuff.Root -> File.Time -> Task Never (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
         (\key ->
@@ -214,10 +214,10 @@ generate style scope root time =
 
 
 type Env
-    = Env Reporting.DKey BW.Scope FilePath Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
+    = Env Reporting.DKey BW.Scope Stuff.Root Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
 
 
-initEnv : Reporting.DKey -> BW.Scope -> FilePath -> Task Never (Result Exit.Details ( Env, Outline.Outline ))
+initEnv : Reporting.DKey -> BW.Scope -> Stuff.Root -> Task Never (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork resultRegistryProblemEnvEncoder Solver.initEnv
         |> Task.bind
@@ -249,59 +249,113 @@ initEnv key scope root =
 
 
 verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Exit.Details Details
-verifyPkg env time (Outline.PkgOutline pkg _ _ _ exposed direct testDirect elm) =
-    if Con.goodElm elm then
-        union identity Pkg.compareName noDups direct testDirect
-            |> Task.bind (verifyConstraints env)
-            |> Task.bind
-                (\solution ->
-                    let
-                        exposedList : List ModuleName.Raw
-                        exposedList =
-                            Outline.flattenExposed exposed
+verifyPkg env time outline =
+    case outline of
+        Outline.GuidaPkgOutline pkg _ _ _ exposed direct testDirect guida ->
+            if Con.goodGuida guida then
+                union identity Pkg.compareName noGuidaDups direct testDirect
+                    |> Task.bind (verifyConstraints env)
+                    |> Task.bind
+                        (\solution ->
+                            let
+                                exposedList : List ModuleName.Raw
+                                exposedList =
+                                    Outline.flattenExposed exposed
 
-                        exactDeps : Dict ( String, String ) Pkg.Name V.Version
-                        exactDeps =
-                            Dict.map (\_ (Solver.Details v _) -> v) solution
+                                exactDeps : Dict ( String, String ) Pkg.Name V.Version
+                                exactDeps =
+                                    -- for pkg docs in reactor
+                                    Dict.map (\_ (Solver.Details v _) -> v) solution
+                            in
+                            verifyDependencies env time (ValidPkg pkg exposedList exactDeps) solution direct
+                        )
 
-                        -- for pkg docs in reactor
-                    in
-                    verifyDependencies env time (ValidPkg pkg exposedList exactDeps) solution direct
-                )
+            else
+                Task.throw (Exit.DetailsBadGuidaInPkg guida)
 
-    else
-        Task.throw (Exit.DetailsBadElmInPkg elm)
+        Outline.ElmPkgOutline pkg _ _ _ exposed direct testDirect elm ->
+            if Con.goodElm elm then
+                union identity Pkg.compareName noElmDups direct testDirect
+                    |> Task.bind (verifyConstraints env)
+                    |> Task.bind
+                        (\solution ->
+                            let
+                                exposedList : List ModuleName.Raw
+                                exposedList =
+                                    Outline.flattenExposed exposed
+
+                                exactDeps : Dict ( String, String ) Pkg.Name V.Version
+                                exactDeps =
+                                    -- for pkg docs in reactor
+                                    Dict.map (\_ (Solver.Details v _) -> v) solution
+                            in
+                            verifyDependencies env time (ValidPkg pkg exposedList exactDeps) solution direct
+                        )
+
+            else
+                Task.throw (Exit.DetailsBadElmInPkg elm)
 
 
 verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Exit.Details Details
-verifyApp env time ((Outline.AppOutline elmVersion srcDirs direct _ _ _) as outline) =
-    if elmVersion == V.elmCompiler then
-        checkAppDeps outline
-            |> Task.bind
-                (\stated ->
-                    verifyConstraints env (Dict.map (\_ -> Con.exactly) stated)
-                        |> Task.bind
-                            (\actual ->
-                                if Dict.size stated == Dict.size actual then
-                                    verifyDependencies env time (ValidApp srcDirs) actual direct
+verifyApp env time outline =
+    case outline of
+        Outline.GuidaAppOutline guidaVersion srcDirs direct _ _ _ ->
+            if guidaVersion == V.compiler then
+                checkAppDeps outline
+                    |> Task.bind
+                        (\stated ->
+                            verifyConstraints env (Dict.map (\_ -> Con.exactly) stated)
+                                |> Task.bind
+                                    (\actual ->
+                                        if Dict.size stated == Dict.size actual then
+                                            verifyDependencies env time (ValidApp srcDirs) actual direct
 
-                                else
-                                    Task.throw Exit.DetailsHandEditedDependencies
-                            )
-                )
+                                        else
+                                            Task.throw Exit.DetailsHandEditedGuidaDependencies
+                                    )
+                        )
 
-    else
-        Task.throw (Exit.DetailsBadElmInAppOutline elmVersion)
+            else
+                Task.throw (Exit.DetailsBadGuidaInAppOutline guidaVersion)
+
+        Outline.ElmAppOutline elmVersion srcDirs direct _ _ _ ->
+            if elmVersion == V.elmCompiler then
+                checkAppDeps outline
+                    |> Task.bind
+                        (\stated ->
+                            verifyConstraints env (Dict.map (\_ -> Con.exactly) stated)
+                                |> Task.bind
+                                    (\actual ->
+                                        if Dict.size stated == Dict.size actual then
+                                            verifyDependencies env time (ValidApp srcDirs) actual direct
+
+                                        else
+                                            Task.throw Exit.DetailsHandEditedElmDependencies
+                                    )
+                        )
+
+            else
+                Task.throw (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
 checkAppDeps : Outline.AppOutline -> Task Exit.Details (Dict ( String, String ) Pkg.Name V.Version)
-checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
-    union identity Pkg.compareName allowEqualDups indirect testDirect
-        |> Task.bind
-            (\x ->
-                union identity Pkg.compareName noDups direct testIndirect
-                    |> Task.bind (\y -> union identity Pkg.compareName noDups x y)
-            )
+checkAppDeps outline =
+    case outline of
+        Outline.GuidaAppOutline _ _ direct indirect testDirect testIndirect ->
+            union identity Pkg.compareName allowEqualGuidaDups indirect testDirect
+                |> Task.bind
+                    (\x ->
+                        union identity Pkg.compareName noGuidaDups direct testIndirect
+                            |> Task.bind (\y -> union identity Pkg.compareName noGuidaDups x y)
+                    )
+
+        Outline.ElmAppOutline _ _ direct indirect testDirect testIndirect ->
+            union identity Pkg.compareName allowEqualElmDups indirect testDirect
+                |> Task.bind
+                    (\x ->
+                        union identity Pkg.compareName noElmDups direct testIndirect
+                            |> Task.bind (\y -> union identity Pkg.compareName noElmDups x y)
+                    )
 
 
 
@@ -309,7 +363,7 @@ checkAppDeps (Outline.AppOutline _ _ direct indirect testDirect testIndirect) =
 
 
 verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Exit.Details (Dict ( String, String ) Pkg.Name Solver.Details)
-verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
+verifyConstraints (Env _ _ root cache _ connection registry) constraints =
     Task.io (Solver.verify cache connection registry constraints)
         |> Task.bind
             (\result ->
@@ -318,10 +372,28 @@ verifyConstraints (Env _ _ _ cache _ connection registry) constraints =
                         Task.pure details
 
                     Solver.NoSolution ->
-                        Task.throw Exit.DetailsNoSolution
+                        Task.throw
+                            (case root of
+                                Stuff.GuidaRoot _ ->
+                                    Exit.DetailsNoGuidaSolution
+
+                                Stuff.ElmRoot _ ->
+                                    Exit.DetailsNoElmSolution
+                            )
 
                     Solver.NoOfflineSolution ->
-                        Task.throw Exit.DetailsNoOfflineSolution
+                        Task.io Website.domain
+                            |> Task.bind
+                                (\registryDomain ->
+                                    Task.throw
+                                        (case root of
+                                            Stuff.GuidaRoot _ ->
+                                                Exit.DetailsNoGuidaOfflineSolution registryDomain
+
+                                            Stuff.ElmRoot _ ->
+                                                Exit.DetailsNoElmOfflineSolution registryDomain
+                                        )
+                                )
 
                     Solver.SolverErr exit ->
                         Task.throw (Exit.DetailsSolverProblem exit)
@@ -346,18 +418,32 @@ union toComparable keyComparison tieBreaker deps1 deps2 =
         (Task.pure Dict.empty)
 
 
-noDups : k -> v -> v -> Task Exit.Details v
-noDups _ _ _ =
-    Task.throw Exit.DetailsHandEditedDependencies
+noGuidaDups : k -> v -> v -> Task Exit.Details v
+noGuidaDups _ _ _ =
+    Task.throw Exit.DetailsHandEditedGuidaDependencies
 
 
-allowEqualDups : k -> v -> v -> Task Exit.Details v
-allowEqualDups _ v1 v2 =
+noElmDups : k -> v -> v -> Task Exit.Details v
+noElmDups _ _ _ =
+    Task.throw Exit.DetailsHandEditedElmDependencies
+
+
+allowEqualGuidaDups : k -> v -> v -> Task Exit.Details v
+allowEqualGuidaDups _ v1 v2 =
     if v1 == v2 then
         Task.pure v1
 
     else
-        Task.throw Exit.DetailsHandEditedDependencies
+        Task.throw Exit.DetailsHandEditedGuidaDependencies
+
+
+allowEqualElmDups : k -> v -> v -> Task Exit.Details v
+allowEqualElmDups _ v1 v2 =
+    if v1 == v2 then
+        Task.pure v1
+
+    else
+        Task.throw Exit.DetailsHandEditedElmDependencies
 
 
 
@@ -397,7 +483,7 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                     (\deps ->
                                                         case Utils.sequenceDictResult identity Pkg.compareName deps of
                                                             Err _ ->
-                                                                Stuff.getElmHome
+                                                                Stuff.getGuidaHome
                                                                     |> Task.fmap
                                                                         (\home ->
                                                                             Err
@@ -424,9 +510,9 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
                                                                     details =
                                                                         Details time outline 0 Dict.empty foreigns (ArtifactsFresh ifaces objs)
                                                                 in
-                                                                BW.writeBinary Opt.globalGraphEncoder scope (Stuff.objects root) objs
-                                                                    |> Task.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces root) ifaces)
-                                                                    |> Task.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details root) details)
+                                                                BW.writeBinary Opt.globalGraphEncoder scope (Stuff.objects (Stuff.rootPath root)) objs
+                                                                    |> Task.bind (\_ -> BW.writeBinary interfacesEncoder scope (Stuff.interfaces (Stuff.rootPath root)) ifaces)
+                                                                    |> Task.bind (\_ -> BW.writeBinary detailsEncoder scope (Stuff.details (Stuff.rootPath root)) details)
                                                                     |> Task.fmap (\_ -> Ok details)
                                                     )
                                         )
@@ -559,19 +645,13 @@ toComparableFingerprint fingerprint =
 
 build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
-    Outline.read (Stuff.package cache pkg vsn)
+    -- FIXME hardcoded ElmRoot!
+    Outline.read (Stuff.ElmRoot (Stuff.package cache pkg vsn))
         |> Task.bind
             (\eitherOutline ->
-                case eitherOutline of
-                    Err _ ->
-                        Reporting.report key Reporting.DBroken
-                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
-
-                    Ok (Outline.App _) ->
-                        Reporting.report key Reporting.DBroken
-                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
-
-                    Ok (Outline.Pkg (Outline.PkgOutline _ _ _ _ exposed deps _ _)) ->
+                let
+                    pkgBuild : Outline.Exposed -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Never Dep
+                    pkgBuild exposed deps =
                         Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
                             |> Task.bind
                                 (\allDeps ->
@@ -667,6 +747,21 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                 )
                                             )
                                 )
+                in
+                case eitherOutline of
+                    Err _ ->
+                        Reporting.report key Reporting.DBroken
+                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+
+                    Ok (Outline.App _) ->
+                        Reporting.report key Reporting.DBroken
+                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+
+                    Ok (Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ exposed deps _ _)) ->
+                        pkgBuild exposed deps
+
+                    Ok (Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ exposed deps _ _)) ->
+                        pkgBuild exposed deps
             )
 
 
@@ -700,7 +795,7 @@ gatherInterfaces exposed artifacts =
     let
         onLeft : a -> b -> c -> d
         onLeft _ _ _ =
-            crash "compiler bug manifesting in Elm.Details.gatherInterfaces"
+            crash "compiler bug manifesting in Guida.Details.gatherInterfaces"
 
         onBoth : comparable -> () -> DResult -> Dict comparable comparable I.DependencyInterface -> Dict comparable comparable I.DependencyInterface
         onBoth k () iface =

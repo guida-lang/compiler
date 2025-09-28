@@ -34,7 +34,7 @@ module System.TypeCheck.IO exposing
 @docs Descriptor, Content, SuperType, Mark, Variable, FlatType
 
 
-# Compiler.Elm.ModuleName
+# Compiler.Guida.ModuleName
 
 @docs Canonical
 
@@ -319,7 +319,7 @@ type FlatType
 -- CANONICAL
 
 
-{-| FIXME Compiler.Elm.ModuleName
+{-| FIXME Compiler.Guida.ModuleName
 -}
 type Canonical
     = Canonical ( String, String ) String

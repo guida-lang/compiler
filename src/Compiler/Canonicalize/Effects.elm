@@ -9,7 +9,7 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error

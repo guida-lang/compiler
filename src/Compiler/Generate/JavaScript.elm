@@ -11,14 +11,14 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
-import Compiler.Elm.Kernel as K
-import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.JavaScript.Builder as JS
 import Compiler.Generate.JavaScript.Expression as Expr
 import Compiler.Generate.JavaScript.Functions as Functions
 import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Generate.JavaScript.SourceMap as SourceMap
 import Compiler.Generate.Mode as Mode
+import Compiler.Guida.Kernel as K
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
@@ -488,13 +488,13 @@ addChunk mode chunk builder =
         K.JS javascript ->
             javascript ++ builder
 
-        K.ElmVar home name ->
+        K.GuidaVar home name ->
             JsName.fromGlobal home name ++ builder
 
         K.JsVar home name ->
             JsName.fromKernel home name ++ builder
 
-        K.ElmField name ->
+        K.GuidaField name ->
             Expr.generateField mode name ++ builder
 
         K.JsField int ->

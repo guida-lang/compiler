@@ -268,7 +268,7 @@ parseErrorToReport path source parseError reason =
                 col
                 ( "I got stuck while trying to parse this number:"
                 , D.reflow
-                    "I do not accept floating point numbers like 3.1415 right now. That kind of JSON value is not needed for any of the uses that Elm has for now."
+                    "I do not accept floating point numbers like 3.1415 right now. That kind of JSON value is not needed for any of the uses that Guida has for now."
                 )
 
         BadEnd row col ->
@@ -326,7 +326,7 @@ problemToReport path (FailureToReport ftr) source context problem reason =
 
         OneOf p ps ->
             -- NOTE: only displays the deepest problem. This works well for the kind
-            -- of JSON used by Elm, but probably would not work well in general.
+            -- of JSON used by Guida, but probably would not work well in general.
             let
                 (NE.Nonempty prob _) =
                     NE.sortBy (negate << getMaxDepth) (NE.Nonempty p ps)
@@ -350,8 +350,6 @@ getMaxDepth problem =
             1 + getMaxDepth prob
 
         OneOf p ps ->
-            -- NOTE: only displays the deepest problem. This works well for the kind
-            -- of JSON used by Elm, but probably would not work well in general.
             Utils.listMaximum compare (getMaxDepth p :: List.map getMaxDepth ps)
 
         Failure _ _ ->

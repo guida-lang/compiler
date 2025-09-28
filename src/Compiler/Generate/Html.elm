@@ -23,13 +23,13 @@ sandwich moduleName javascript =
 
 <body>
 
-<pre id="elm"></pre>
+<pre id="guida"></pre>
 
 <script>
 try {
 """ ++ javascript ++ """
 
-  var app = Elm.""" ++ moduleName ++ """.init({ node: document.getElementById("elm") });
+  var app = Guida.""" ++ moduleName ++ """.init({ node: document.getElementById("guida") });
 }
 catch (e)
 {
@@ -37,7 +37,7 @@ catch (e)
   var header = document.createElement("h1");
   header.style.fontFamily = "monospace";
   header.innerText = "Initialization Error";
-  var pre = document.getElementById("elm");
+  var pre = document.getElementById("guida");
   document.body.insertBefore(header, pre);
   pre.innerText = e;
   throw e;

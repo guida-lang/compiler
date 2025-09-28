@@ -1,4 +1,4 @@
-module Compiler.Elm.Interface exposing
+module Compiler.Guida.Interface exposing
     ( Alias(..)
     , Binop(..)
     , DependencyInterface(..)
@@ -21,7 +21,7 @@ module Compiler.Elm.Interface exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Package as Pkg
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import Utils.Bytes.Decode as BD

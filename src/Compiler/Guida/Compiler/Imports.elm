@@ -1,8 +1,8 @@
-module Compiler.Elm.Compiler.Imports exposing (defaults)
+module Compiler.Guida.Compiler.Imports exposing (defaults)
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import System.TypeCheck.IO as IO
 

@@ -10,19 +10,19 @@ module Terminal.Repl exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.Generate as Generate
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as N
-import Compiler.Elm.Constraint as C
-import Compiler.Elm.Licenses as Licenses
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as C
+import Compiler.Guida.Licenses as Licenses
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Parse.Declaration as PD
 import Compiler.Parse.Expression as PE
 import Compiler.Parse.Module as PM
@@ -116,7 +116,7 @@ printWelcomeMessage =
 
 
 type Env
-    = Env FilePath FilePath Bool
+    = Env Stuff.Root FilePath Bool
 
 
 initEnv : Flags -> Task Never Env
@@ -194,7 +194,7 @@ read =
                         let
                             lines : Lines
                             lines =
-                                Lines (stripLegacyBackslash chars) []
+                                Lines chars []
                         in
                         case categorize lines of
                             Done input ->
@@ -218,7 +218,7 @@ readMore previousLines prefill =
                         let
                             lines : Lines
                             lines =
-                                addLine (stripLegacyBackslash chars) previousLines
+                                addLine chars previousLines
                         in
                         case categorize lines of
                             Done doneInput ->
@@ -227,28 +227,6 @@ readMore previousLines prefill =
                             Continue p ->
                                 readMore lines p
             )
-
-
-
--- For compatibility with 0.19.0 such that readers of "Programming Elm" by @jfairbank
--- can get through the REPL section successfully.
---
--- TODO: remove stripLegacyBackslash in next MAJOR release
---
-
-
-stripLegacyBackslash : String -> String
-stripLegacyBackslash chars =
-    case String.toList chars of
-        [] ->
-            ""
-
-        (_ :: _) as charsList ->
-            if Prelude.last charsList == '\\' then
-                String.fromList (Prelude.init charsList)
-
-            else
-                chars
 
 
 type Prefill
@@ -589,17 +567,17 @@ attemptEval : Env -> IO.ReplState -> IO.ReplState -> Output -> Task Never IO.Rep
 attemptEval (Env root interpreter ansi) oldState newState output =
     BW.withScope
         (\scope ->
-            Stuff.withRootLock root
+            Stuff.withRootLock (Stuff.rootPath root)
                 (Task.run
                     (Task.eio Exit.ReplBadDetails
                         (Details.load Reporting.silent scope root)
                         |> Task.bind
                             (\details ->
                                 Task.eio identity
-                                    (Build.fromRepl root details (toByteString newState output))
+                                    (Build.fromRepl (Stuff.rootPath root) details (toByteString newState output))
                                     |> Task.bind
                                         (\artifacts ->
-                                            Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl root details ansi artifacts) (toPrintName output)
+                                            Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl (Stuff.rootPath root) details ansi artifacts) (toPrintName output)
                                         )
                             )
                     )
@@ -722,7 +700,7 @@ genericHelpMessage =
 -- GET ROOT
 
 
-getRoot : Task Never FilePath
+getRoot : Task Never Stuff.Root
 getRoot =
     Stuff.findRoot
         |> Task.bind
@@ -736,16 +714,16 @@ getRoot =
                             |> Task.bind
                                 (\cache ->
                                     let
-                                        root : String
+                                        root : Stuff.Root
                                         root =
-                                            cache ++ "/tmp"
+                                            Stuff.GuidaRoot (cache ++ "/tmp")
                                     in
-                                    Utils.dirCreateDirectoryIfMissing True (root ++ "/src")
+                                    Utils.dirCreateDirectoryIfMissing True (Stuff.rootPath root ++ "/src")
                                         |> Task.bind
                                             (\_ ->
                                                 Outline.write root <|
                                                     Outline.Pkg <|
-                                                        Outline.PkgOutline
+                                                        Outline.GuidaPkgOutline
                                                             Pkg.dummyName
                                                             Outline.defaultSummary
                                                             Licenses.bsd3
@@ -753,7 +731,7 @@ getRoot =
                                                             (Outline.ExposedList [])
                                                             defaultDeps
                                                             Map.empty
-                                                            C.defaultElm
+                                                            C.defaultGuida
                                             )
                                         |> Task.fmap (\_ -> root)
                                 )

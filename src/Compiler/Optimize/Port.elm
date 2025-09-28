@@ -10,7 +10,7 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A

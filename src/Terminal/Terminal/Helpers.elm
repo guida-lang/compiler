@@ -11,8 +11,8 @@ module Terminal.Terminal.Helpers exposing
 
 import Builder.Deps.Registry as Registry
 import Builder.Stuff as Stuff
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Parse.Primitives as P
 import Compiler.Reporting.Suggest as Suggest
 import Data.Map as Dict
@@ -133,7 +133,7 @@ parseFilePath =
 
 exampleFilePaths : String -> Task Never (List String)
 exampleFilePaths _ =
-    Task.pure [ "Main.elm", "src" ]
+    Task.pure [ "Main.guida", "src" ]
 
 
 

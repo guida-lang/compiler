@@ -14,14 +14,14 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
-import Compiler.Elm.Compiler.Type as Type
-import Compiler.Elm.Compiler.Type.Extract as Extract
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
 import Compiler.Generate.JavaScript.Builder as JS
 import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Generate.Mode as Mode
+import Compiler.Guida.Compiler.Type as Type
+import Compiler.Guida.Compiler.Type.Extract as Extract
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Encode as Encode
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
@@ -614,11 +614,11 @@ generateBitwiseCall parentModule pos home name args =
 generateBasicsCall : Mode.Mode -> IO.Canonical -> A.Position -> IO.Canonical -> Name.Name -> List Opt.Expr -> JS.Expr
 generateBasicsCall mode parentModule pos home name args =
     case args of
-        [ elmArg ] ->
+        [ guidaArg ] ->
             let
                 arg : JS.Expr
                 arg =
-                    generateJsExpr mode parentModule elmArg
+                    generateJsExpr mode parentModule guidaArg
             in
             case name of
                 "not" ->
@@ -636,28 +636,28 @@ generateBasicsCall mode parentModule pos home name args =
                 _ ->
                     generateGlobalCall parentModule pos home name [ arg ]
 
-        [ elmLeft, elmRight ] ->
+        [ guidaLeft, guidaRight ] ->
             case name of
                 -- NOTE: removed "composeL" and "composeR" because of this issue:
                 -- https://github.com/elm/compiler/issues/1722
                 "append" ->
-                    append mode parentModule elmLeft elmRight
+                    append mode parentModule guidaLeft guidaRight
 
                 "apL" ->
-                    generateJsExpr mode parentModule <| apply elmLeft elmRight
+                    generateJsExpr mode parentModule <| apply guidaLeft guidaRight
 
                 "apR" ->
-                    generateJsExpr mode parentModule <| apply elmRight elmLeft
+                    generateJsExpr mode parentModule <| apply guidaRight guidaLeft
 
                 _ ->
                     let
                         left : JS.Expr
                         left =
-                            generateJsExpr mode parentModule elmLeft
+                            generateJsExpr mode parentModule guidaLeft
 
                         right : JS.Expr
                         right =
-                            generateJsExpr mode parentModule elmRight
+                            generateJsExpr mode parentModule guidaRight
                     in
                     case name of
                         "add" ->
@@ -1447,7 +1447,7 @@ toDebugMetadata mode msgType =
         Mode.Dev (Just interfaces) ->
             JS.ExprJson
                 (Encode.object
-                    [ ( "versions", Encode.object [ ( "elm", V.encode V.elmCompiler ) ] )
+                    [ ( "versions", Encode.object [ ( "guida", V.encode V.compiler ) ] )
                     , ( "types", Type.encodeMetadata (Extract.fromMsg interfaces msgType) )
                     ]
                 )

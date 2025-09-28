@@ -11,7 +11,7 @@ module Compiler.Reporting.Doc exposing
     , encode
     , stack, reflow, commaSep
     , toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
-    , link, fancyLink, reflowLink, makeLink, makeNakedLink
+    , link, fancyLink, reflowLink, makeLink, makeNakedLink, makeCommandLink
     , args, moreArgs, ordinal, intToOrdinal, cycle
     )
 
@@ -29,15 +29,15 @@ module Compiler.Reporting.Doc exposing
 @docs encode
 @docs stack, reflow, commaSep
 @docs toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
-@docs link, fancyLink, reflowLink, makeLink, makeNakedLink
+@docs link, fancyLink, reflowLink, makeLink, makeNakedLink, makeCommandLink
 @docs args, moreArgs, ordinal, intToOrdinal, cycle
 
 -}
 
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Encode as E
 import Maybe.Extra as Maybe
 import Prelude
@@ -180,6 +180,11 @@ fancyLink word before fileName after =
             :: after
 
 
+makeCommandLink : String -> String
+makeCommandLink command =
+    "<https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/commands/" ++ command ++ ">"
+
+
 makeLink : String -> String
 makeLink fileName =
     "<" ++ makeNakedLink fileName ++ ">"
@@ -187,7 +192,7 @@ makeLink fileName =
 
 makeNakedLink : String -> String
 makeNakedLink fileName =
-    "https://elm-lang.org/" ++ V.toChars V.elmCompiler ++ "/" ++ fileName
+    "https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/hints/" ++ fileName
 
 
 reflowLink : String -> String -> String -> Doc

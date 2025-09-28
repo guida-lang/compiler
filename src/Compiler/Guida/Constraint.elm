@@ -1,12 +1,14 @@
-module Compiler.Elm.Constraint exposing
+module Compiler.Guida.Constraint exposing
     ( Constraint
     , Error(..)
     , anything
     , decoder
     , defaultElm
+    , defaultGuida
     , encode
     , exactly
     , goodElm
+    , goodGuida
     , intersect
     , lowerBound
     , satisfies
@@ -15,7 +17,7 @@ module Compiler.Elm.Constraint exposing
     , untilNextMinor
     )
 
-import Compiler.Elm.Version as V
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D exposing (Decoder)
 import Compiler.Json.Encode as E exposing (Value)
 import Compiler.Parse.Primitives as P exposing (Col, Row)
@@ -148,6 +150,28 @@ intersect (Range lo lop hop hi) (Range lo_ lop_ hop_ hi_) =
 
     else
         Nothing
+
+
+
+-- GUIDA CONSTRAINT
+
+
+goodGuida : Constraint -> Bool
+goodGuida constraint =
+    satisfies constraint V.compiler
+
+
+defaultGuida : Constraint
+defaultGuida =
+    let
+        (V.Version major _ _) =
+            V.compiler
+    in
+    if major > 0 then
+        untilNextMajor V.compiler
+
+    else
+        untilNextMinor V.compiler
 
 
 
