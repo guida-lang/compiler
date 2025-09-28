@@ -4,7 +4,7 @@ module Compiler.Type.Unify exposing
     )
 
 import Compiler.Data.Name as Name
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Type.Error as Error
 import Compiler.Type.Occurs as Occurs
 import Compiler.Type.Type as Type

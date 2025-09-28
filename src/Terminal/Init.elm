@@ -6,17 +6,18 @@ module Terminal.Init exposing
 import Basics.Extra exposing (flip)
 import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
-import Builder.Elm.Outline as Outline
+import Builder.Deps.Website as Website
 import Builder.File as File
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Constraint as Con
-import Compiler.Elm.Licenses as Licenses
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as Con
+import Compiler.Guida.Licenses as Licenses
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import System.IO as IO
@@ -36,7 +37,7 @@ type Flags
 run : () -> Flags -> Task Never ()
 run () (Flags package autoYes) =
     Reporting.attempt Exit.initToReport <|
-        (Utils.dirDoesFileExist "elm.json"
+        (Utils.dirDoesFileExist "guida.json"
             |> Task.bind
                 (\exists ->
                     if exists then
@@ -53,7 +54,7 @@ run () (Flags package autoYes) =
                                 else
                                     Reporting.ask
                                         (information
-                                            [ D.fromChars "Knowing all that, would you like me to create an elm.json file now? [Y/n]: "
+                                            [ D.fromChars "Knowing all that, would you like me to create an guida.json file now? [Y/n]: "
                                             ]
                                         )
                         in
@@ -76,24 +77,24 @@ information question =
     D.stack
         (D.fillSep
             [ D.fromChars "Hello!"
-            , D.fromChars "Elm"
+            , D.fromChars "Guida"
             , D.fromChars "projects"
             , D.fromChars "always"
             , D.fromChars "start"
             , D.fromChars "with"
-            , D.fromChars "an"
-            , D.green (D.fromChars "elm.json")
+            , D.fromChars "a"
+            , D.green (D.fromChars "guida.json")
             , D.fromChars "file."
             , D.fromChars "I"
             , D.fromChars "can"
             , D.fromChars "create"
-            , D.fromChars "them!"
+            , D.fromChars "it!"
             ]
-            :: D.reflow "Now you may be wondering, what will be in this file? How do I add Elm files to my project? How do I see it in the browser? How will my code grow? Do I need more directories? What about tests? Etc."
+            :: D.reflow "Now you may be wondering, what will be in this file? How do I add Guida files to my project? How do I see it in the browser? How will my code grow? Do I need more directories? What about tests? Etc."
             :: D.fillSep
                 [ D.fromChars "Check"
                 , D.fromChars "out"
-                , D.cyan (D.fromChars (D.makeLink "init"))
+                , D.cyan (D.fromChars (D.makeCommandLink "init"))
                 , D.fromChars "for"
                 , D.fromChars "all"
                 , D.fromChars "the"
@@ -123,7 +124,7 @@ init package =
                                     \testDetails ->
                                         Utils.dirCreateDirectoryIfMissing True "src"
                                             |> Task.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
-                                            |> Task.bind (\_ -> File.writeUtf8 "tests/Example.elm" testExample)
+                                            |> Task.bind (\_ -> File.writeUtf8 "tests/Example.guida" testExample)
                                             |> Task.bind
                                                 (\_ ->
                                                     let
@@ -156,7 +157,7 @@ init package =
                                                                             packageTestDefaults
                                                                 in
                                                                 Outline.Pkg <|
-                                                                    Outline.PkgOutline
+                                                                    Outline.GuidaPkgOutline
                                                                         Pkg.dummyName
                                                                         Outline.defaultSummary
                                                                         Licenses.bsd3
@@ -164,7 +165,7 @@ init package =
                                                                         (Outline.ExposedList [])
                                                                         directs
                                                                         testDirects
-                                                                        Con.defaultElm
+                                                                        Con.defaultGuida
 
                                                             else
                                                                 let
@@ -195,14 +196,14 @@ init package =
                                                                             |> flip Dict.diff indirects
                                                                 in
                                                                 Outline.App <|
-                                                                    Outline.AppOutline V.elmCompiler
+                                                                    Outline.GuidaAppOutline V.compiler
                                                                         (NE.Nonempty (Outline.RelativeSrcDir "src") [])
                                                                         directs
                                                                         indirects
                                                                         testDirects
                                                                         testIndirects
                                                     in
-                                                    Outline.write "." outline
+                                                    Outline.write (Stuff.GuidaRoot ".") outline
                                                 )
                                             |> Task.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
                                             |> Task.fmap (\_ -> Ok ())
@@ -222,7 +223,11 @@ verify cache connection registry constraints callback =
                         Task.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
 
                     Solver.NoOfflineSolution ->
-                        Task.pure (Err (Exit.InitNoOfflineSolution (Dict.keys compare constraints)))
+                        Task.io Website.domain
+                            |> Task.fmap
+                                (\registryDomain ->
+                                    Err (Exit.InitNoOfflineSolution registryDomain (Dict.keys compare constraints))
+                                )
 
                     Solver.SolverOk details ->
                         callback details
@@ -270,5 +275,5 @@ import Test exposing (..)
 
 suite : Test
 suite =
-    todo "Implement our first test. See https://package.elm-lang.org/packages/elm-explorations/test/latest for how to do this!"
+    todo "Implement our first test. See https://guida-lang.org/docs/1.0.0/commands/test for how to do this!"
 """

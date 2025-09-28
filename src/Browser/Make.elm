@@ -13,14 +13,14 @@ module Browser.Make exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
-import Builder.Elm.Details as Details
+import Builder.Guida.Details as Details
 import Builder.Generate as Generate
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
 import Maybe.Extra as Maybe
 import Task exposing (Task)
@@ -66,11 +66,11 @@ run path flags =
             )
 
 
-runHelp : String -> String -> Flags -> Task Never (Result Exit.Make String)
+runHelp : Stuff.Root -> String -> Flags -> Task Never (Result Exit.Make String)
 runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
-            Stuff.withRootLock root <|
+            Stuff.withRootLock (Stuff.rootPath root) <|
                 Task.run <|
                     (getMode debug optimize
                         |> Task.bind
@@ -128,10 +128,10 @@ getMode debug optimize =
 -- BUILD PROJECTS
 
 
-buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
+buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromPaths style root details paths
+        Build.fromPaths style (Stuff.rootPath root) details paths
 
 
 
@@ -178,7 +178,7 @@ type DesiredMode
     | Prod
 
 
-toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
+toBuilder : Bool -> Int -> Stuff.Root -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
 toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of
@@ -221,7 +221,7 @@ output =
         { singular = "output file"
         , plural = "output files"
         , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "elm.js", "index.html", "/dev/null" ]
+        , examples = \_ -> Task.pure [ "guida.js", "index.html", "/dev/null" ]
         }
 
 

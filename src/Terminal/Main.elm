@@ -1,6 +1,7 @@
 module Terminal.Main exposing (main)
 
-import Compiler.Elm.Version as V
+import Builder.Deps.Website as Website
+import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import System.IO as IO
 import Task exposing (Task)
@@ -38,19 +39,23 @@ main =
 
 app : Task Never ()
 app =
-    Terminal.app intro
-        outro
-        [ repl
-        , init
-        , make
-        , install
-        , uninstall
-        , bump
-        , diff
-        , publish
-        , format
-        , test
-        ]
+    Task.io Website.domain
+        |> Task.bind
+            (\registryDomain ->
+                Terminal.app intro
+                    outro
+                    [ repl
+                    , init
+                    , make
+                    , install registryDomain
+                    , uninstall
+                    , bump
+                    , diff
+                    , publish registryDomain
+                    , format
+                    , test
+                    ]
+            )
 
 
 intro : D.Doc
@@ -63,16 +68,16 @@ intro =
             , D.fromChars "for"
             , D.fromChars "trying"
             , D.fromChars "out"
-            , D.green (D.fromChars "Elm")
+            , D.green (D.fromChars "Guida")
             , D.green (D.fromChars (V.toChars V.compiler))
                 |> D.a (D.fromChars ".")
             , D.fromChars "I hope you like it!"
             ]
         , D.fromChars ""
-        , D.black (D.fromChars "-------------------------------------------------------------------------------")
-        , D.black (D.fromChars "I highly recommend working through <https://guide.elm-lang.org> to get started.")
-        , D.black (D.fromChars "It teaches many important concepts, including how to use `elm` in the terminal.")
-        , D.black (D.fromChars "-------------------------------------------------------------------------------")
+        , D.black (D.fromChars "---------------------------------------------------------------------------------")
+        , D.black (D.fromChars "I highly recommend working through <https://guida-lang.org/docs> to get started.")
+        , D.black (D.fromChars "It teaches many important concepts, including how to use `guida` in the terminal.")
+        , D.black (D.fromChars "---------------------------------------------------------------------------------")
         ]
 
 
@@ -81,7 +86,7 @@ outro =
     D.fillSep <|
         (List.map D.fromChars <|
             String.words <|
-                "Be sure to ask on the Elm slack if you run into trouble! Folks are friendly and happy to help out. They hang out there because it is fun, so be kind to get the best results!"
+                "Be sure to check <https://guida-lang.org/community> if you run into trouble! It lists the best places to ask questions and connect with others."
         )
 
 
@@ -94,21 +99,21 @@ init =
     let
         summary : String
         summary =
-            "Start an Elm project. It creates a starter elm.json file and provides a link explaining what to do from there."
+            "Start a Guida project. It creates a starter guida.json file and provides a link explaining what to do from there."
 
         details : String
         details =
-            "The `init` command helps start Elm projects:"
+            "The `init` command helps start Guida projects:"
 
         example : D.Doc
         example =
             reflow
-                "It will ask permission to create an elm.json file, the one thing common to all Elm projects. It also provides a link explaining what to do from there."
+                "It will ask permission to create a guida.json file, the one thing common to all Guida projects. It also provides a link explaining what to do from there."
 
         initFlags : Terminal.Flags
         initFlags =
             Terminal.flags
-                |> Terminal.more (Terminal.onOff "package" "Creates a starter elm.json file for a package project.")
+                |> Terminal.more (Terminal.onOff "package" "Creates a starter guida.json file for a package project.")
                 |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
     in
     Terminal.Command "init" (Terminal.Common summary) details example Terminal.noArgs initFlags <|
@@ -139,7 +144,7 @@ repl =
     let
         summary : String
         summary =
-            "Open up an interactive programming session. Type in Elm expressions like (2 + 2) or (String.length \"test\") and see if they equal four!"
+            "Open up an interactive programming session. Type in Guida expressions like (2 + 2) or (String.length \"test\") and see if they equal four!"
 
         details : String
         details =
@@ -148,7 +153,7 @@ repl =
         example : D.Doc
         example =
             reflow
-                "Start working through <https://guide.elm-lang.org> to learn how to use this! It has a whole chapter that uses the REPL for everything, so that is probably the quickest way to get started."
+                "Start working through <https://guida-lang.org/docs> to learn how to use this! It has a whole chapter that uses the REPL for everything, so that is probably the quickest way to get started."
 
         replFlags : Terminal.Flags
         replFlags =
@@ -201,7 +206,7 @@ make =
             stack
                 [ reflow "For example:"
                 , D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
-                , reflow "This tries to compile an Guida (and Elm) file named src/Main.guida, generating an index.html file if possible."
+                , reflow "This tries to compile a Guida (and Elm) file named src/Main.guida, generating an index.html file if possible."
                 ]
 
         makeFlags : Terminal.Flags
@@ -241,28 +246,25 @@ make =
 -- INSTALL
 
 
-install : Terminal.Command
-install =
+install : String -> Terminal.Command
+install registryDomain =
     let
         details : String
         details =
-            "The `install` command fetches packages from <https://package.elm-lang.org> for use in your project:"
+            "The `install` command fetches packages from <" ++ registryDomain ++ "> for use in your project:"
 
         example : D.Doc
         example =
             stack
-                [ reflow
-                    "For example, if you want to get packages for HTTP and JSON, you would say:"
+                [ reflow "For example, if you want to get packages for HTTP and JSON, you would say:"
                 , D.indent 4 <|
                     D.green <|
                         D.vcat <|
                             [ D.fromChars "guida install elm/http"
                             , D.fromChars "guida install elm/json"
                             ]
-                , reflow
-                    "Notice that you must say the AUTHOR name and PROJECT name! After running those commands, you could say `import Http` or `import Json.Decode` in your code."
-                , reflow
-                    "What if two projects use different versions of the same package? No problem! Each project is independent, so there cannot be conflicts like that!"
+                , reflow "Notice that you must say the AUTHOR name and PROJECT name! After running those commands, you could say `import Http` or `import Json.Decode` in your code."
+                , reflow "What if two projects use different versions of the same package? No problem! Each project is independent, so there cannot be conflicts like that!"
                 ]
 
         installArgs : Terminal.Args
@@ -371,24 +373,20 @@ uninstall =
 -- PUBLISH
 
 
-publish : Terminal.Command
-publish =
+publish : String -> Terminal.Command
+publish registryDomain =
     let
         details : String
         details =
-            "The `publish` command publishes your package on <https://package.elm-lang.org> so that anyone in the Elm community can use it."
+            "The `publish` command publishes your package on <" ++ registryDomain ++ "> so that it can be used."
 
         example : D.Doc
         example =
             stack
-                [ reflow
-                    "Think hard if you are ready to publish NEW packages though!"
-                , reflow
-                    "Part of what makes Elm great is the packages ecosystem. The fact that there is usually one option (usually very well done) makes it way easier to pick packages and become productive. So having a million packages would be a failure in Elm. We do not need twenty of everything, all coded in a single weekend."
-                , reflow
-                    "So as community members gain wisdom through experience, we want them to share that through thoughtful API design and excellent documentation. It is more about sharing ideas and insights than just sharing code! The first step may be asking for advice from people you respect, or in community forums. The second step may be using it at work to see if it is as nice as you think. Maybe it ends up as an experiment on GitHub only. Point is, try to be respectful of the community and package ecosystem!"
-                , reflow
-                    "Check out <https://package.elm-lang.org/help/design-guidelines> for guidance on how to create great packages!"
+                [ reflow "Think hard if you are ready to publish NEW packages though!"
+                , reflow "Part of what makes Guida great is the packages ecosystem. The fact that there is usually one option (usually very well done) makes it way easier to pick packages and become productive. So having a million packages would be a failure in Guida. We do not need twenty of everything, all coded in a single weekend."
+                , reflow "So as community members gain wisdom through experience, we want them to share that through thoughtful API design and excellent documentation. It is more about sharing ideas and insights than just sharing code! The first step may be asking for advice from people you respect, or in community forums. The second step may be using it at work to see if it is as nice as you think. Maybe it ends up as an experiment on GitHub only. Point is, try to be respectful of the community and package ecosystem!"
+                , reflow "Check out <https://guida-lang.org/docs/help/design-guidelines> for guidance on how to create great packages!"
                 ]
     in
     Terminal.Command "publish" Terminal.Uncommon details example Terminal.noArgs Terminal.noFlags <|
@@ -421,8 +419,7 @@ bump =
 
         example : D.Doc
         example =
-            reflow
-                "Say you just published version 1.0.0, but then decided to remove a function. I will compare the published API to what you have locally, figure out that it is a MAJOR change, and bump your version number to 2.0.0. I do this with all packages, so there cannot be MAJOR changes hiding in PATCH releases in Elm!"
+            reflow "Say you just published version 1.0.0, but then decided to remove a function. I will compare the published API to what you have locally, figure out that it is a MAJOR change, and bump your version number to 2.0.0. I do this with all packages, so there cannot be MAJOR changes hiding in PATCH releases in Guida!"
     in
     Terminal.Command "bump" Terminal.Uncommon details example Terminal.noArgs Terminal.noFlags <|
         \chunks ->
@@ -455,11 +452,9 @@ diff =
         example : D.Doc
         example =
             stack
-                [ reflow
-                    "For example, to see what changed in the HTML package between versions 1.0.0 and 2.0.0, you can say:"
-                , D.indent 4 <| D.green <| D.fromChars "elm diff elm/html 1.0.0 2.0.0"
-                , reflow
-                    "Sometimes a MAJOR change is not actually very big, so this can help you plan your upgrade timelines."
+                [ reflow "For example, to see what changed in the HTML package between versions 1.0.0 and 2.0.0, you can say:"
+                , D.indent 4 <| D.green <| D.fromChars "guida diff elm/html 1.0.0 2.0.0"
+                , reflow "Sometimes a MAJOR change is not actually very big, so this can help you plan your upgrade timelines."
                 ]
 
         diffArgs : Terminal.Args
@@ -536,14 +531,14 @@ format =
     let
         details : String
         details =
-            "The `format` command formats Elm code in place."
+            "The `format` command formats Guida code in place."
 
         example : D.Doc
         example =
             stack
                 [ reflow "For example:"
-                , D.indent 4 <| D.green (D.fromChars "guida format src/Main.elm")
-                , reflow "This tries to format an Elm file named src/Main.elm, formatting it in place."
+                , D.indent 4 <| D.green (D.fromChars "guida format src/Main.guida")
+                , reflow "This tries to format a Guida file named src/Main.guida, formatting it in place."
                 ]
 
         formatArgs : Terminal.Args

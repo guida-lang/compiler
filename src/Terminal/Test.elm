@@ -10,19 +10,19 @@ import Builder.BackgroundWriter as BW
 import Builder.Build as Build
 import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.File as File
 import Builder.Generate as Generate
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Constraint as C
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as C
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -63,11 +63,11 @@ run paths flags =
             )
 
 
-runHelp : String -> List String -> Flags -> Task Never (Result Exit.Test ())
+runHelp : Stuff.Root -> List String -> Flags -> Task Never (Result Exit.Test ())
 runHelp root testFileGlobs flags =
-    Stuff.withRootLock root <|
+    Stuff.withRootLock (Stuff.rootPath root) <|
         Task.run <|
-            (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root)
+            (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root))
                 |> Task.bind (\_ -> Utils.nodeGetDirname)
                 |> Task.io
                 |> Task.bind
@@ -107,8 +107,17 @@ runHelp root testFileGlobs flags =
                                                                         |> NE.cons (Outline.RelativeSrcDir "src")
                                                             in
                                                             case baseOutline of
-                                                                Outline.App (Outline.AppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                    Outline.AppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                Outline.App (Outline.GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                    Outline.GuidaAppOutline guida (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                        |> makeAppPlan env Pkg.core
+                                                                        |> Task.bind (makeAppPlan env Pkg.json)
+                                                                        |> Task.bind (makeAppPlan env Pkg.time)
+                                                                        |> Task.bind (makeAppPlan env Pkg.random)
+                                                                        -- TODO changes should only be done to the `tests/guida.json` in case the top level `guida.json` had changes! This will improve performance!
+                                                                        |> Task.bind (attemptChanges root env)
+
+                                                                Outline.App (Outline.ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                    Outline.ElmAppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
                                                                         |> makeAppPlan env Pkg.core
                                                                         |> Task.bind (makeAppPlan env Pkg.json)
                                                                         |> Task.bind (makeAppPlan env Pkg.time)
@@ -116,8 +125,18 @@ runHelp root testFileGlobs flags =
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env)
 
-                                                                Outline.Pkg (Outline.PkgOutline _ _ _ _ _ deps test _) ->
-                                                                    Outline.AppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
+                                                                    Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                        |> makePkgPlan env (Dict.union deps test)
+                                                                        |> Task.bind (makeAppPlan env Pkg.core)
+                                                                        |> Task.bind (makeAppPlan env Pkg.json)
+                                                                        |> Task.bind (makeAppPlan env Pkg.time)
+                                                                        |> Task.bind (makeAppPlan env Pkg.random)
+                                                                        -- TODO changes should only be done to the `tests/guida.json` in case the top level `guida.json` had changes! This will improve performance!
+                                                                        |> Task.bind (attemptChanges root env)
+
+                                                                Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps test _) ->
+                                                                    Outline.ElmAppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
                                                                         |> makePkgPlan env (Dict.union deps test)
                                                                         |> Task.bind (makeAppPlan env Pkg.core)
                                                                         |> Task.bind (makeAppPlan env Pkg.json)
@@ -135,7 +154,7 @@ runHelp root testFileGlobs flags =
                                         paths =
                                             case testFileGlobs of
                                                 [] ->
-                                                    [ root ++ "/tests" ]
+                                                    [ Stuff.rootPath root ++ "/tests" ]
 
                                                 _ ->
                                                     testFileGlobs
@@ -163,7 +182,7 @@ runHelp root testFileGlobs flags =
                                         |> Task.fmap (List.filterMap identity)
                                         |> Task.bind
                                             (\exposedList ->
-                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir root ++ "/src/Test/Generated")
+                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated")
                                                     |> Task.bind
                                                         (\_ ->
                                                             let
@@ -179,13 +198,13 @@ runHelp root testFileGlobs flags =
                                                             in
                                                             testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
                                                         )
-                                                    |> Task.bind (IO.writeString (Stuff.testDir root ++ "/src/Test/Generated/Main.elm"))
+                                                    |> Task.bind (IO.writeString (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated/Main.elm"))
                                                     |> Task.bind (\_ -> Reporting.terminal)
                                                     |> Task.bind
                                                         (\terminalStyle ->
                                                             Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
-                                                                Utils.dirWithCurrentDirectory (Stuff.testDir root)
-                                                                    (runMake (Stuff.testDir root) "src/Test/Generated/Main.elm")
+                                                                Utils.dirWithCurrentDirectory (Stuff.testDir (Stuff.rootPath root))
+                                                                    (runMake (Stuff.rootMap Stuff.testDir root) "src/Test/Generated/Main.elm")
                                                         )
                                                     |> Task.bind
                                                         (\content ->
@@ -905,7 +924,7 @@ hasFilename name path =
 -- ATTEMPT CHANGES
 
 
-attemptChanges : FilePath -> Solver.Env -> Outline.AppOutline -> Task Exit.Test ()
+attemptChanges : Stuff.Root -> Solver.Env -> Outline.AppOutline -> Task Exit.Test ()
 attemptChanges root env appOutline =
     Task.eio Exit.TestBadDetails <|
         BW.withScope
@@ -915,7 +934,7 @@ attemptChanges root env appOutline =
                     newOutline =
                         Outline.App appOutline
                 in
-                Outline.write (Stuff.testDir root) newOutline
+                Outline.write (Stuff.rootMap Stuff.testDir root) newOutline
                     |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
             )
 
@@ -925,74 +944,145 @@ attemptChanges root env appOutline =
 
 
 makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Test Outline.AppOutline
-makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) as outline) =
-    if Dict.member identity pkg direct then
-        Task.pure outline
+makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
+    case outline of
+        Outline.GuidaAppOutline guidaVersion sourceDirs direct indirect testDirect testIndirect ->
+            if Dict.member identity pkg direct then
+                Task.pure outline
 
-    else
-        -- is it already indirect?
-        case Dict.get identity pkg indirect of
-            Just vsn ->
-                Task.pure <|
-                    Outline.AppOutline elmVersion
-                        sourceDirs
-                        (Dict.insert identity pkg vsn direct)
-                        (Dict.remove identity pkg indirect)
-                        testDirect
-                        testIndirect
-
-            Nothing ->
-                -- is it already a test dependency?
-                case Dict.get identity pkg testDirect of
+            else
+                -- is it already indirect?
+                case Dict.get identity pkg indirect of
                     Just vsn ->
                         Task.pure <|
-                            Outline.AppOutline elmVersion
+                            Outline.GuidaAppOutline guidaVersion
                                 sourceDirs
                                 (Dict.insert identity pkg vsn direct)
-                                indirect
-                                (Dict.remove identity pkg testDirect)
+                                (Dict.remove identity pkg indirect)
+                                testDirect
                                 testIndirect
 
                     Nothing ->
-                        -- is it already an indirect test dependency?
-                        case Dict.get identity pkg testIndirect of
+                        -- is it already a test dependency?
+                        case Dict.get identity pkg testDirect of
                             Just vsn ->
                                 Task.pure <|
-                                    Outline.AppOutline elmVersion
+                                    Outline.GuidaAppOutline guidaVersion
                                         sourceDirs
                                         (Dict.insert identity pkg vsn direct)
                                         indirect
-                                        testDirect
-                                        (Dict.remove identity pkg testIndirect)
+                                        (Dict.remove identity pkg testDirect)
+                                        testIndirect
 
                             Nothing ->
-                                -- finally try to add it from scratch
-                                case Registry.getVersions_ pkg registry of
-                                    Err suggestions ->
-                                        case connection of
-                                            Solver.Online _ ->
-                                                Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
+                                -- is it already an indirect test dependency?
+                                case Dict.get identity pkg testIndirect of
+                                    Just vsn ->
+                                        Task.pure <|
+                                            Outline.GuidaAppOutline guidaVersion
+                                                sourceDirs
+                                                (Dict.insert identity pkg vsn direct)
+                                                indirect
+                                                testDirect
+                                                (Dict.remove identity pkg testIndirect)
 
-                                            Solver.Offline ->
-                                                Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
+                                    Nothing ->
+                                        -- finally try to add it from scratch
+                                        case Registry.getVersions_ pkg registry of
+                                            Err suggestions ->
+                                                case connection of
+                                                    Solver.Online _ ->
+                                                        Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
 
-                                    Ok _ ->
-                                        Task.io (Solver.addToApp cache connection registry pkg outline False)
-                                            |> Task.bind
-                                                (\result ->
-                                                    case result of
-                                                        Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                            Task.pure app
+                                                    Solver.Offline ->
+                                                        Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
 
-                                                        Solver.NoSolution ->
-                                                            Task.throw (Exit.TestNoOnlineAppSolution pkg)
+                                            Ok _ ->
+                                                Task.io (Solver.addToApp cache connection registry pkg outline False)
+                                                    |> Task.bind
+                                                        (\result ->
+                                                            case result of
+                                                                Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                                                    Task.pure app
 
-                                                        Solver.NoOfflineSolution ->
-                                                            Task.throw (Exit.TestNoOfflineAppSolution pkg)
+                                                                Solver.NoSolution ->
+                                                                    Task.throw (Exit.TestNoOnlineAppSolution pkg)
 
-                                                        Solver.SolverErr exit ->
-                                                            Task.throw (Exit.TestHadSolverTrouble exit)
-                                                )
+                                                                Solver.NoOfflineSolution ->
+                                                                    Task.throw (Exit.TestNoOfflineAppSolution pkg)
+
+                                                                Solver.SolverErr exit ->
+                                                                    Task.throw (Exit.TestHadSolverTrouble exit)
+                                                        )
+
+        Outline.ElmAppOutline elmVersion sourceDirs direct indirect testDirect testIndirect ->
+            if Dict.member identity pkg direct then
+                Task.pure outline
+
+            else
+                -- is it already indirect?
+                case Dict.get identity pkg indirect of
+                    Just vsn ->
+                        Task.pure <|
+                            Outline.ElmAppOutline elmVersion
+                                sourceDirs
+                                (Dict.insert identity pkg vsn direct)
+                                (Dict.remove identity pkg indirect)
+                                testDirect
+                                testIndirect
+
+                    Nothing ->
+                        -- is it already a test dependency?
+                        case Dict.get identity pkg testDirect of
+                            Just vsn ->
+                                Task.pure <|
+                                    Outline.ElmAppOutline elmVersion
+                                        sourceDirs
+                                        (Dict.insert identity pkg vsn direct)
+                                        indirect
+                                        (Dict.remove identity pkg testDirect)
+                                        testIndirect
+
+                            Nothing ->
+                                -- is it already an indirect test dependency?
+                                case Dict.get identity pkg testIndirect of
+                                    Just vsn ->
+                                        Task.pure <|
+                                            Outline.ElmAppOutline elmVersion
+                                                sourceDirs
+                                                (Dict.insert identity pkg vsn direct)
+                                                indirect
+                                                testDirect
+                                                (Dict.remove identity pkg testIndirect)
+
+                                    Nothing ->
+                                        -- finally try to add it from scratch
+                                        case Registry.getVersions_ pkg registry of
+                                            Err suggestions ->
+                                                case connection of
+                                                    Solver.Online _ ->
+                                                        Task.throw (Exit.TestUnknownPackageOnline pkg suggestions)
+
+                                                    Solver.Offline ->
+                                                        Task.throw (Exit.TestUnknownPackageOffline pkg suggestions)
+
+                                            Ok _ ->
+                                                Task.io (Solver.addToApp cache connection registry pkg outline False)
+                                                    |> Task.bind
+                                                        (\result ->
+                                                            case result of
+                                                                Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                                                    Task.pure app
+
+                                                                Solver.NoSolution ->
+                                                                    Task.throw (Exit.TestNoOnlineAppSolution pkg)
+
+                                                                Solver.NoOfflineSolution ->
+                                                                    Task.throw (Exit.TestNoOfflineAppSolution pkg)
+
+                                                                Solver.SolverErr exit ->
+                                                                    Task.throw (Exit.TestHadSolverTrouble exit)
+                                                        )
 
 
 
@@ -1072,7 +1162,7 @@ exeNotFound name =
 
 {-| FROM MAKE
 -}
-runMake : String -> String -> Task Never (Result Exit.Test String)
+runMake : Stuff.Root -> String -> Task Never (Result Exit.Test String)
 runMake root path =
     BW.withScope
         (\scope ->
@@ -1080,7 +1170,7 @@ runMake root path =
                 (Task.eio Exit.TestBadDetails (Details.load style scope root)
                     |> Task.bind
                         (\details ->
-                            buildPaths root details (NE.Nonempty path [])
+                            buildPaths (Stuff.rootPath root) details (NE.Nonempty path [])
                                 |> Task.bind
                                     (\artifacts ->
                                         toBuilder 0 root details artifacts
@@ -1100,7 +1190,7 @@ buildPaths root details paths =
 -- TO BUILDER
 
 
-toBuilder : Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Test String
+toBuilder : Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Test String
 toBuilder leadingLines root details artifacts =
     Task.mapError Exit.TestBadGenerate <|
         Generate.dev False leadingLines root details artifacts

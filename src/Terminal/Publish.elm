@@ -6,19 +6,19 @@ import Builder.Deps.Bump as Bump
 import Builder.Deps.Diff as Diff
 import Builder.Deps.Registry as Registry
 import Builder.Deps.Website as Website
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Magnitude as M
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Magnitude as M
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
@@ -27,7 +27,7 @@ import System.Exit as Exit
 import System.IO as IO
 import System.Process as Process
 import Task exposing (Task)
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main as Utils
 import Utils.Task.Extra as Task
 
 
@@ -36,7 +36,7 @@ import Utils.Task.Extra as Task
 
 
 {-| TODO mandate no "exposing (..)" in packages to make
-optimization to skip builds in Elm.Details always valid
+optimization to skip builds in Guida.Details always valid
 -}
 run : () -> () -> Task Never ()
 run () () =
@@ -49,7 +49,7 @@ run () () =
 
 
 type Env
-    = Env FilePath Stuff.PackageCache Http.Manager Registry.Registry Outline.Outline
+    = Env Stuff.Root Stuff.PackageCache Http.Manager Registry.Registry Outline.Outline
 
 
 getEnv : Task Exit.Publish Env
@@ -87,7 +87,7 @@ publish ((Env root _ manager registry outline) as env) =
         Outline.App _ ->
             Task.throw Exit.PublishApplication
 
-        Outline.Pkg (Outline.PkgOutline pkg summary _ vsn exposed _ _ _) ->
+        Outline.Pkg (Outline.GuidaPkgOutline pkg summary _ vsn exposed _ _ _) ->
             let
                 maybeKnownVersions : Maybe Registry.KnownVersions
                 maybeKnownVersions =
@@ -110,8 +110,8 @@ publish ((Env root _ manager registry outline) as env) =
                         else
                             Task.pure ()
                     )
-                |> Task.bind (\_ -> verifyReadme root)
-                |> Task.bind (\_ -> verifyLicense root)
+                |> Task.bind (\_ -> verifyReadme (Stuff.rootPath root))
+                |> Task.bind (\_ -> verifyLicense (Stuff.rootPath root))
                 |> Task.bind (\_ -> verifyBuild root)
                 |> Task.bind
                     (\docs ->
@@ -129,7 +129,57 @@ publish ((Env root _ manager registry outline) as env) =
                                                                 |> Task.bind
                                                                     (\zipHash ->
                                                                         Task.io (IO.putStrLn "")
-                                                                            |> Task.bind (\_ -> register manager pkg vsn docs commitHash zipHash)
+                                                                            |> Task.bind (\_ -> register root manager pkg vsn docs commitHash zipHash)
+                                                                            |> Task.bind (\_ -> Task.io (IO.putStrLn "Success!"))
+                                                                    )
+                                                        )
+                                            )
+                                )
+                    )
+
+        Outline.Pkg (Outline.ElmPkgOutline pkg summary _ vsn exposed _ _ _) ->
+            let
+                maybeKnownVersions : Maybe Registry.KnownVersions
+                maybeKnownVersions =
+                    Registry.getVersions pkg registry
+            in
+            reportPublishStart pkg vsn maybeKnownVersions
+                |> Task.bind
+                    (\_ ->
+                        if noExposed exposed then
+                            Task.throw Exit.PublishNoExposed
+
+                        else
+                            Task.pure ()
+                    )
+                |> Task.bind
+                    (\_ ->
+                        if badSummary summary then
+                            Task.throw Exit.PublishNoSummary
+
+                        else
+                            Task.pure ()
+                    )
+                |> Task.bind (\_ -> verifyReadme (Stuff.rootPath root))
+                |> Task.bind (\_ -> verifyLicense (Stuff.rootPath root))
+                |> Task.bind (\_ -> verifyBuild root)
+                |> Task.bind
+                    (\docs ->
+                        verifyVersion env pkg vsn docs maybeKnownVersions
+                            |> Task.bind (\_ -> getGit)
+                            |> Task.bind
+                                (\git ->
+                                    verifyTag git manager pkg vsn
+                                        |> Task.bind
+                                            (\commitHash ->
+                                                verifyNoChanges git commitHash vsn
+                                                    |> Task.bind
+                                                        (\_ ->
+                                                            verifyZip env pkg vsn
+                                                                |> Task.bind
+                                                                    (\zipHash ->
+                                                                        Task.io (IO.putStrLn "")
+                                                                            |> Task.bind (\_ -> register root manager pkg vsn docs commitHash zipHash)
                                                                             |> Task.bind (\_ -> Task.io (IO.putStrLn "Success!"))
                                                                     )
                                                         )
@@ -217,7 +267,7 @@ verifyLicense root =
 -- VERIFY BUILD
 
 
-verifyBuild : String -> Task Exit.Publish Docs.Documentation
+verifyBuild : Stuff.Root -> Task Exit.Publish Docs.Documentation
 verifyBuild root =
     reportBuildCheck <|
         BW.withScope <|
@@ -240,7 +290,7 @@ verifyBuild root =
                                     |> Task.bind
                                         (\exposed ->
                                             Task.eio Exit.PublishBuildProblem <|
-                                                Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed
+                                                Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs exposed
                                         )
                             )
                     )
@@ -373,11 +423,11 @@ verifyZip (Env root _ manager _ _) pkg vsn =
                 )
                 |> Task.bind
                     (\( sha, archive ) ->
-                        Task.io (File.writePackage prepublishDir archive)
+                        Task.io (File.writePackage (Stuff.rootPath prepublishDir) archive)
                             |> Task.bind
                                 (\_ ->
                                     reportZipBuildCheck <|
-                                        Utils.dirWithCurrentDirectory prepublishDir <|
+                                        Utils.dirWithCurrentDirectory (Stuff.rootPath prepublishDir) <|
                                             verifyZipBuild prepublishDir
                                 )
                             |> Task.fmap (\_ -> sha)
@@ -389,21 +439,21 @@ toZipUrl pkg vsn =
     "https://github.com/" ++ Pkg.toUrl pkg ++ "/zipball/" ++ V.toChars vsn ++ "/"
 
 
-withPrepublishDir : String -> (String -> Task x a) -> Task x a
+withPrepublishDir : Stuff.Root -> (Stuff.Root -> Task x a) -> Task x a
 withPrepublishDir root callback =
     let
-        dir : String
+        dir : Stuff.Root
         dir =
-            Stuff.prepublishDir root
+            Stuff.rootMap Stuff.prepublishDir root
     in
     Task.eio identity <|
         Utils.bracket_
-            (Utils.dirCreateDirectoryIfMissing True dir)
-            (Utils.dirRemoveDirectoryRecursive dir)
+            (Utils.dirCreateDirectoryIfMissing True (Stuff.rootPath dir))
+            (Utils.dirRemoveDirectoryRecursive (Stuff.rootPath dir))
             (Task.run (callback dir))
 
 
-verifyZipBuild : FilePath -> Task Never (Result Exit.Publish ())
+verifyZipBuild : Stuff.Root -> Task Never (Result Exit.Publish ())
 verifyZipBuild root =
     BW.withScope
         (\scope ->
@@ -425,7 +475,7 @@ verifyZipBuild root =
                                 |> Task.bind
                                     (\exposed ->
                                         Task.eio Exit.PublishZipBuildProblem
-                                            (Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed)
+                                            (Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs exposed)
                                             |> Task.fmap (\_ -> ())
                                     )
                         )
@@ -443,7 +493,7 @@ type GoodVersion
 
 
 verifyVersion : Env -> Pkg.Name -> V.Version -> Docs.Documentation -> Maybe Registry.KnownVersions -> Task Exit.Publish ()
-verifyVersion env pkg vsn newDocs publishedVersions =
+verifyVersion ((Env root _ _ _ _) as env) pkg vsn newDocs publishedVersions =
     reportSemverCheck vsn <|
         case publishedVersions of
             Nothing ->
@@ -451,7 +501,14 @@ verifyVersion env pkg vsn newDocs publishedVersions =
                     Task.pure <| Ok GoodStart
 
                 else
-                    Task.pure <| Err <| Exit.PublishNotInitialVersion vsn
+                    Task.pure <|
+                        Err <|
+                            case root of
+                                Stuff.GuidaRoot _ ->
+                                    Exit.PublishGuidaNotInitialVersion vsn
+
+                                Stuff.ElmRoot _ ->
+                                    Exit.PublishElmNotInitialVersion vsn
 
             Just ((Registry.KnownVersions latest previous) as knownVersions) ->
                 if vsn == latest || List.member vsn previous then
@@ -500,8 +557,8 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
 -- REGISTER PACKAGES
 
 
-register : Http.Manager -> Pkg.Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task Exit.Publish ()
-register manager pkg vsn docs commitHash sha =
+register : Stuff.Root -> Http.Manager -> Pkg.Name -> V.Version -> Docs.Documentation -> String -> Http.Sha -> Task Exit.Publish ()
+register root manager pkg vsn docs commitHash sha =
     Website.route "/register"
         [ ( "name", Pkg.toChars pkg )
         , ( "version", V.toChars vsn )
@@ -511,7 +568,7 @@ register manager pkg vsn docs commitHash sha =
             (\url ->
                 Http.upload manager
                     url
-                    [ Http.filePart "elm.json" "elm.json"
+                    [ Http.filePart (Stuff.rootFilename root) (Stuff.rootFilename root)
                     , Http.jsonPart "docs.json" "docs.json" (Docs.jsonEncoder docs)
                     , Http.filePart "README.md" "README.md"
                     , Http.stringPart "github-hash" (Http.shaToChars sha)

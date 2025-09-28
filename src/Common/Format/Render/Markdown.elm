@@ -109,7 +109,7 @@ type Context
 formatMardownBlock : (String -> Maybe String) -> Context -> Block -> String
 formatMardownBlock formatCode context block =
     case block of
-        ElmDocs terms ->
+        GuidaDocs terms ->
             (String.join "\n" <| List.map (\term -> "@docs " ++ String.join ", " term) terms) ++ "\n"
 
         Para inlines ->
@@ -147,14 +147,14 @@ formatMardownBlock formatCode context block =
 
         CodeBlock (CodeAttr { codeLang }) code ->
             let
-                isElm : Bool
-                isElm =
-                    codeLang == "elm" || codeLang == ""
+                isGuidaOrElm : Bool
+                isGuidaOrElm =
+                    codeLang == "guida" || codeLang == "elm" || codeLang == ""
 
                 formatted : String
                 formatted =
                     Maybe.withDefault (ensureNewline code) <|
-                        if isElm then
+                        if isGuidaOrElm then
                             formatCode code
 
                         else
@@ -177,7 +177,7 @@ formatMardownBlock formatCode context block =
                         AfterIndentedList ->
                             False
             in
-            if isElm && canIndent then
+            if isGuidaOrElm && canIndent then
                 Utils.unlines <| List.map (\line -> "    " ++ line) <| lines formatted
 
             else

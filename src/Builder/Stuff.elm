@@ -1,8 +1,9 @@
 module Builder.Stuff exposing
     ( PackageCache
+    , Root(..)
     , details
     , findRoot
-    , getElmHome
+    , getGuidaHome
     , getPackageCache
     , getReplCache
     , guidai
@@ -14,14 +15,18 @@ module Builder.Stuff exposing
     , packageCacheEncoder
     , prepublishDir
     , registry
+    , rootFilename
+    , rootMap
+    , rootPath
+    , rootProjectFilePath
     , testDir
     , withRegistryLock
     , withRootLock
     )
 
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Prelude
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
@@ -70,7 +75,7 @@ compilerVersion =
 
 
 
--- ELMI and ELMO
+-- GUIDAI and GUIDAO
 
 
 guidai : String -> ModuleName.Raw -> String
@@ -92,7 +97,52 @@ toArtifactPath root name ext =
 -- ROOT
 
 
-findRoot : Task Never (Maybe String)
+type Root
+    = GuidaRoot String
+    | ElmRoot String
+
+
+rootProjectFilePath : Root -> Utils.FilePath
+rootProjectFilePath root =
+    case root of
+        GuidaRoot path ->
+            path ++ "/guida.json"
+
+        ElmRoot path ->
+            path ++ "/elm.json"
+
+
+rootFilename : Root -> String
+rootFilename root =
+    case root of
+        GuidaRoot _ ->
+            "guida.json"
+
+        ElmRoot _ ->
+            "elm.json"
+
+
+rootPath : Root -> Utils.FilePath
+rootPath root =
+    case root of
+        GuidaRoot path ->
+            path
+
+        ElmRoot path ->
+            path
+
+
+rootMap : (String -> String) -> Root -> Root
+rootMap f root =
+    case root of
+        GuidaRoot path ->
+            GuidaRoot (f path)
+
+        ElmRoot path ->
+            GuidaRoot (f path)
+
+
+findRoot : Task Never (Maybe Root)
 findRoot =
     Utils.dirGetCurrentDirectory
         |> Task.bind
@@ -101,21 +151,29 @@ findRoot =
             )
 
 
-findRootHelp : List String -> Task Never (Maybe String)
+findRootHelp : List String -> Task Never (Maybe Root)
 findRootHelp dirs =
     case dirs of
         [] ->
             Task.pure Nothing
 
         _ :: _ ->
-            Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/elm.json")
+            Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/guida.json")
                 |> Task.bind
-                    (\exists ->
-                        if exists then
-                            Task.pure (Just (Utils.fpJoinPath dirs))
+                    (\guidaExists ->
+                        if guidaExists then
+                            Task.pure (Just (GuidaRoot (Utils.fpJoinPath dirs)))
 
                         else
-                            findRootHelp (Prelude.init dirs)
+                            Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/elm.json")
+                                |> Task.bind
+                                    (\elmExists ->
+                                        if elmExists then
+                                            Task.pure (Just (ElmRoot (Utils.fpJoinPath dirs)))
+
+                                        else
+                                            findRootHelp (Prelude.init dirs)
+                                    )
                     )
 
 
@@ -176,7 +234,7 @@ getReplCache =
 
 getCacheDir : String -> Task Never String
 getCacheDir projectName =
-    getElmHome
+    getGuidaHome
         |> Task.bind
             (\home ->
                 let
@@ -189,8 +247,8 @@ getCacheDir projectName =
             )
 
 
-getElmHome : Task Never String
-getElmHome =
+getGuidaHome : Task Never String
+getGuidaHome =
     Utils.envLookupEnv "GUIDA_HOME"
         |> Task.bind
             (\maybeCustomHome ->

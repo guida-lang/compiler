@@ -1,4 +1,4 @@
-module Common.Format.Render.ElmStructure exposing
+module Common.Format.Render.GuidaStructure exposing
     ( FunctionApplicationMultiline(..)
     , Multiline(..)
     , application

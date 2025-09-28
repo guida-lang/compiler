@@ -17,8 +17,8 @@ import Builder.File as File
 import Builder.Http as Http
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)

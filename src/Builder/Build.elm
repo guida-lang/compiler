@@ -18,9 +18,9 @@ module Builder.Build exposing
     )
 
 import Basics.Extra exposing (flip)
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
@@ -32,10 +32,10 @@ import Compiler.Data.Map.Utils as Map
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Interface as I
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV

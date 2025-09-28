@@ -3,7 +3,7 @@ module Compiler.Parse.String exposing
     , string
     )
 
-import Compiler.Elm.String as ES
+import Compiler.Guida.String as ES
 import Compiler.Parse.Number as Number
 import Compiler.Parse.Primitives as P exposing (Col, Parser(..), Row)
 import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)

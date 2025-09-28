@@ -1,4 +1,4 @@
-module Compiler.Elm.Compiler.Type.Extract exposing
+module Compiler.Guida.Compiler.Type.Extract exposing
     ( Types(..)
     , Types_
     , fromDependencyInterface
@@ -15,9 +15,9 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name
-import Compiler.Elm.Compiler.Type as T
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.Compiler.Type as T
+import Compiler.Guida.Interface as I
+import Compiler.Guida.ModuleName as ModuleName
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import System.TypeCheck.IO as IO

@@ -59,7 +59,7 @@ toReports source err =
                         region
                         Nothing
                         ( D.reflow "You must have a documentation comment between the module declaration and the imports."
-                        , D.reflow "Learn more at <https://package.elm-lang.org/help/documentation-format>"
+                        , D.reflow "Learn more at <https://guida-lang.org/docs/help/documentation-format>"
                         )
 
         ImplicitExposing region ->

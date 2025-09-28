@@ -356,7 +356,7 @@ isGeneric var =
                                         ++ " [rank = "
                                         ++ String.fromInt rank
                                         ++ "]\n\n"
-                                        ++ "Please create an <http://sscce.org/> and then report it\nat <https://github.com/elm/compiler/issues>\n\n"
+                                        ++ "Please create an <http://sscce.org/> and then report it\nat <https://github.com/guida-lang/compiler/issues>\n\n"
                             )
             )
 

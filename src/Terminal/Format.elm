@@ -5,7 +5,7 @@ module Terminal.Format exposing
 
 import Builder.File as File
 import Common.Format
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Module as M
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -29,7 +29,7 @@ type Flags
 
 run : List String -> Flags -> Task Never ()
 run paths ((Flags _ autoYes _ _) as flags) =
-    resolveElmFiles paths
+    resolveGuidaAndElmFiles paths
         |> Task.bind
             (\resolvedInputFiles ->
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
@@ -227,7 +227,7 @@ toConsolePromptMessage promptMessage =
     case promptMessage of
         FilesWillBeOverwritten filePaths ->
             unlines
-                [ "This will overwrite the following files to use Elm's preferred style:"
+                [ "This will overwrite the following files to use Guida's preferred style:"
                 , ""
                 , showFiles filePaths
                 , "This cannot be undone! Make sure to back up these files before proceeding."
@@ -256,7 +256,7 @@ toConsoleInfoMessage infoMessage =
                         (A.At (A.Region (A.Position line col) _) _) :: _ ->
                             inputFile ++ ":" ++ String.fromInt line ++ ":" ++ String.fromInt col
             in
-            "Unable to parse file " ++ location ++ " To see a detailed explanation, run elm make on the file."
+            "Unable to parse file " ++ location ++ " To see a detailed explanation, run guida make on the file."
 
         JsonParseError inputFile err ->
             "Unable to parse JSON file " ++ inputFile ++ "\n\n" ++ err
@@ -299,9 +299,9 @@ toConsoleErrorMessage errorMessage =
 
         SingleOutputWithMultipleInputs ->
             unlines
-                [ "Can't write to the OUTPUT path, because multiple .elm files have been specified."
+                [ "Can't write to the OUTPUT path, because multiple .guida files have been specified."
                 , ""
-                , "Please remove the --output argument. The .elm files in INPUT will be formatted in place."
+                , "Please remove the --output argument. The .guida files in INPUT will be formatted in place."
                 ]
 
         TooManyInputs ->
@@ -431,7 +431,7 @@ resultsToJsonString results =
 
 type Error
     = FileDoesNotExist FilePath
-    | NoElmFiles FilePath
+    | NoGuidaOrElmFiles FilePath
 
 
 toConsoleError : Error -> String
@@ -440,8 +440,8 @@ toConsoleError error =
         FileDoesNotExist path ->
             path ++ ": No such file or directory"
 
-        NoElmFiles path ->
-            path ++ ": Directory does not contain any *.elm files"
+        NoGuidaOrElmFiles path ->
+            path ++ ": Directory does not contain any *.guida or *.elm files"
 
 
 resolveFile : FilePath -> Task Never (Result Error (List FilePath))
@@ -454,15 +454,15 @@ resolveFile path =
                         Task.pure (Ok [ path ])
 
                     IsDirectory ->
-                        findAllElmFiles path
+                        findAllGuidaAndElmFiles path
                             |> Task.fmap
-                                (\elmFiles ->
-                                    case elmFiles of
+                                (\guidaAndElmFiles ->
+                                    case guidaAndElmFiles of
                                         [] ->
-                                            Err (NoElmFiles path)
+                                            Err (NoGuidaOrElmFiles path)
 
                                         _ ->
-                                            Ok elmFiles
+                                            Ok guidaAndElmFiles
                                 )
 
                     DoesNotExist ->
@@ -470,8 +470,8 @@ resolveFile path =
             )
 
 
-resolveElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
-resolveElmFiles inputFiles =
+resolveGuidaAndElmFiles : List FilePath -> Task Never (Result (List Error) (List FilePath))
+resolveGuidaAndElmFiles inputFiles =
     Task.mapM resolveFile inputFiles
         |> Task.fmap collectErrors
         |> Task.fmap
@@ -713,7 +713,8 @@ fileList =
 isSkippable : FilePath -> Bool
 isSkippable path =
     List.any identity
-        [ hasFilename "elm-stuff" path
+        [ hasFilename "guida-stuff" path
+        , hasFilename "elm-stuff" path
         , hasFilename "node_modules" path
         , hasFilename ".git" path
         ]
@@ -724,10 +725,10 @@ hasExtension ext path =
     ext == Utils.fpTakeExtension path
 
 
-findAllElmFiles : FilePath -> Task Never (List FilePath)
-findAllElmFiles inputFile =
+findAllGuidaAndElmFiles : FilePath -> Task Never (List FilePath)
+findAllGuidaAndElmFiles inputFile =
     fileList inputFile
-        |> Task.fmap (List.filter (hasExtension ".elm"))
+        |> Task.fmap (List.filter (\path -> hasExtension ".guida" path || hasExtension ".elm" path))
 
 
 hasFilename : String -> FilePath -> Bool

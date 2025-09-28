@@ -8,8 +8,8 @@ module Compiler.Reporting.Error.Import exposing
     , toReport
     )
 
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -78,7 +78,7 @@ toReport source (Error region name unimportedModules problem) =
                                     , D.fromChars (Pkg.toChars dependency)
                                     , D.fromChars "package?"
                                     , D.fromChars "Running"
-                                    , D.green (D.fromChars ("elm install " ++ Pkg.toChars dependency))
+                                    , D.green (D.fromChars ("guida install " ++ Pkg.toChars dependency))
                                     , D.fromChars "should"
                                     , D.fromChars "make"
                                     , D.fromChars "it"

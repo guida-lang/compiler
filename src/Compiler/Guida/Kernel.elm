@@ -1,4 +1,4 @@
-module Compiler.Elm.Kernel exposing
+module Compiler.Guida.Kernel exposing
     ( Chunk(..)
     , Content(..)
     , Foreigns
@@ -10,8 +10,8 @@ module Compiler.Elm.Kernel exposing
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Module as Module
 import Compiler.Parse.Primitives as P exposing (Col, Row)
 import Compiler.Parse.Space as Space
@@ -30,9 +30,9 @@ import Utils.Crash exposing (crash)
 
 type Chunk
     = JS String
-    | ElmVar IO.Canonical Name
+    | GuidaVar IO.Canonical Name
     | JsVar Name Name
-    | ElmField Name
+    | GuidaField Name
     | JsField Int
     | JsEnum Int
     | Debug
@@ -54,13 +54,13 @@ addField chunk fields =
         JS _ ->
             fields
 
-        ElmVar _ _ ->
+        GuidaVar _ _ ->
             fields
 
         JsVar _ _ ->
             fields
 
-        ElmField f ->
+        GuidaField f ->
             Dict.update identity
                 f
                 (Maybe.map ((+) 1)
@@ -241,7 +241,7 @@ chompTag vs es fs src pos end row col revChunks =
                 Name.fromPtr src pos newPos
         in
         chompChunks vs es fs src newPos end row newCol newPos <|
-            (ElmField name :: revChunks)
+            (GuidaField name :: revChunks)
 
     else
         let
@@ -368,7 +368,7 @@ addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, 
 
             add : Name -> Dict String Name Chunk -> Dict String Name Chunk
             add name table =
-                Dict.insert identity (Name.sepBy '_' prefix name) (ElmVar home name) table
+                Dict.insert identity (Name.sepBy '_' prefix name) (GuidaVar home name) table
         in
         List.foldl add vtable (toNames exposing_)
 
@@ -426,7 +426,7 @@ chunkEncoder chunk =
                 , BE.string javascript
                 ]
 
-        ElmVar home name ->
+        GuidaVar home name ->
             BE.sequence
                 [ BE.unsignedInt8 1
                 , ModuleName.canonicalEncoder home
@@ -440,7 +440,7 @@ chunkEncoder chunk =
                 , BE.string name
                 ]
 
-        ElmField name ->
+        GuidaField name ->
             BE.sequence
                 [ BE.unsignedInt8 3
                 , BE.string name
@@ -475,7 +475,7 @@ chunkDecoder =
                         BD.map JS BD.string
 
                     1 ->
-                        BD.map2 ElmVar
+                        BD.map2 GuidaVar
                             ModuleName.canonicalDecoder
                             BD.string
 
@@ -485,7 +485,7 @@ chunkDecoder =
                             BD.string
 
                     3 ->
-                        BD.map ElmField BD.string
+                        BD.map GuidaField BD.string
 
                     4 ->
                         BD.map JsField BD.int

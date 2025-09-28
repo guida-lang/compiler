@@ -472,7 +472,7 @@ problemToHint problem =
                 [ D.fromChars "to"
                 , D.fromChars "learn"
                 , D.fromChars "why"
-                , D.fromChars "Elm"
+                , D.fromChars "Guida"
                 , D.fromChars "does"
                 , D.fromChars "not"
                 , D.fromChars "implicitly"
@@ -561,7 +561,7 @@ problemToHint problem =
 
         T.AnythingToBool ->
             [ D.toSimpleHint <|
-                "Elm does not have “truthiness” such that ints and strings and lists are automatically converted to booleans. Do that conversion explicitly!"
+                "Guida does not have “truthiness” such that ints and strings and lists are automatically converted to booleans. Do that conversion explicitly!"
             ]
 
         T.AnythingFromMaybe ->
@@ -949,7 +949,7 @@ badFlexFlexSuper s1 s2 =
                     "appendable"
     in
     [ D.toSimpleHint <|
-        "There are no values in Elm that are both "
+        "There are no values in Guida that are both "
             ++ likeThis s1
             ++ " and "
             ++ likeThis s2
@@ -1310,7 +1310,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                         , ( "The record is"
                                           , "But this update needs it to be compatable with:"
                                           , [ D.reflow
-                                                "Do you mind creating an <http://sscce.org/> that produces this error message and sharing it at <https://github.com/elm/error-message-catalog/issues> so we can try to give better advice here?"
+                                                "Do you mind creating an <http://sscce.org/> that produces this error message and sharing it at <https://github.com/guida-lang/compiler/issues> so we can try to give better advice here?"
                                             ]
                                           )
                                         )
@@ -2120,7 +2120,7 @@ badCastHelp anInt aFloat toFloat round =
             , D.fromChars "sides"
             , D.fromChars "match!"
             ]
-        , D.link "Note" "Read" "implicit-casts" "to learn why Elm does not implicitly convert Ints to Floats."
+        , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
         ]
 
 
@@ -2273,7 +2273,7 @@ badFDiv localizer direction tipe expected =
                     |> D.a (D.fromChars " for integer division         ")
                     |> D.a (D.black (D.fromChars "(5 // 2)        == 2"))
                 ]
-            , D.link "Note" "Read" "implicit-casts" "to learn why Elm does not implicitly convert Ints to Floats."
+            , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
             ]
 
       else
@@ -2340,7 +2340,7 @@ badIDiv localizer direction tipe expected =
                 , D.green (D.fromChars "ceiling") |> D.a (D.fromChars " 3.5   == 4")
                 , D.green (D.fromChars "truncate") |> D.a (D.fromChars " 3.5  == 3")
                 ]
-            , D.link "Note" "Read" "implicit-casts" "to learn why Elm does not implicitly convert Ints to Floats."
+            , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
             ]
 
       else

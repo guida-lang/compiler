@@ -5,7 +5,7 @@ import Browser.Install as Install
 import Browser.Make as Make
 import Browser.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Json.Decode as Decode

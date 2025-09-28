@@ -46,11 +46,11 @@ import Builder.Http as Http
 import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Constraint as C
-import Compiler.Elm.Magnitude as M
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as C
+import Compiler.Guida.Magnitude as M
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Decode as Decode
 import Compiler.Json.Encode as Encode
 import Compiler.Parse.Primitives exposing (Col, Row)
@@ -87,7 +87,7 @@ toJson report =
 
 type Init
     = InitNoSolution (List Pkg.Name)
-    | InitNoOfflineSolution (List Pkg.Name)
+    | InitNoOfflineSolution String (List Pkg.Name)
     | InitSolverProblem Solver
     | InitAlreadyExists
     | InitRegistryProblem RegistryProblem
@@ -99,21 +99,21 @@ initToReport exit =
         InitNoSolution pkgs ->
             Help.report "NO SOLUTION"
                 Nothing
-                "I tried to create an elm.json with the following direct dependencies:"
+                "I tried to create a guida.json with the following direct dependencies:"
                 [ D.indent 4 <|
                     D.vcat <|
                         List.map (D.dullyellow << D.fromChars << Pkg.toChars) pkgs
-                , D.reflow "I could not find compatible versions though! This should not happen, so please ask around one of the community forums at https://elm-lang.org/community to learn what is going on!"
+                , D.reflow "I could not find compatible versions though! This should not happen, so please ask around one of the community forums at https://guida-lang.org/community to learn what is going on!"
                 ]
 
-        InitNoOfflineSolution pkgs ->
+        InitNoOfflineSolution registry pkgs ->
             Help.report "NO OFFLINE SOLUTION"
                 Nothing
-                "I tried to create an elm.json with the following direct dependencies:"
+                "I tried to create an guida.json with the following direct dependencies:"
                 [ D.indent 4 <|
                     D.vcat <|
                         List.map (D.dullyellow << D.fromChars << Pkg.toChars) pkgs
-                , D.reflow "I could not find compatible versions though, but that may be because I could not connect to https://package.elm-lang.org to get the latest list of packages. Are you able to connect to the internet? Please ask around one of the community forums at https://elm-lang.org/community for help!"
+                , D.reflow ("I could not find compatible versions though, but that may be because I could not connect to " ++ registry ++ " to get the latest list of packages. Are you able to connect to the internet? Please ask around one of the community forums at https://guida-lang.org/community for help!")
                 ]
 
         InitSolverProblem solver ->
@@ -122,7 +122,7 @@ initToReport exit =
         InitAlreadyExists ->
             Help.report "EXISTING PROJECT"
                 Nothing
-                "You already have an elm.json file, so there is nothing for me to initialize!"
+                "You already have a guida.json file, so there is nothing for me to initialize!"
                 [ D.fillSep
                     [ D.fromChars "Maybe"
                     , D.green (D.fromChars (D.makeLink "init"))
@@ -150,10 +150,12 @@ initToReport exit =
 type Diff
     = DiffNoOutline
     | DiffBadOutline Outline
-    | DiffApplication
-    | DiffNoExposed
+    | DiffGuidaApplication
+    | DiffElmApplication
+    | DiffGuidaNoExposed
+    | DiffElmNoExposed
     | DiffUnpublished
-    | DiffUnknownPackage Pkg.Name (List Pkg.Name)
+    | DiffUnknownPackage String Pkg.Name (List Pkg.Name)
     | DiffUnknownVersion V.Version (List V.Version)
     | DiffDocsProblem V.Version DocsProblem
     | DiffMustHaveLatestRegistry RegistryProblem
@@ -167,28 +169,42 @@ diffToReport diff =
         DiffNoOutline ->
             Help.report "DIFF WHAT?"
                 Nothing
-                "I cannot find an elm.json so I am not sure what you want me to diff. Normally you run `elm diff` from within a project!"
+                "I cannot find a guida.json (or elm.json) so I am not sure what you want me to diff. Normally you run `guida diff` from within a project!"
                 [ D.reflow <| "If you are just curious to see a diff, try running this command:"
-                , D.indent 4 <| D.green <| D.fromChars "elm diff elm/http 1.0.0 2.0.0"
+                , D.indent 4 <| D.green <| D.fromChars "guida diff elm/json 1.0.0 1.1.4"
                 ]
 
         DiffBadOutline outline ->
             toOutlineReport outline
 
-        DiffApplication ->
+        DiffGuidaApplication ->
             Help.report "CANNOT DIFF APPLICATIONS"
-                (Just "elm.json")
-                "Your elm.json says this project is an application, but `elm diff` only works with packages. That way there are previously published versions of the API to diff against!"
+                (Just "guida.json")
+                "Your guida.json says this project is an application, but `guida diff` only works with packages. That way there are previously published versions of the API to diff against!"
                 [ D.reflow <| "If you are just curious to see a diff, try running this command:"
-                , D.indent 4 <| D.dullyellow <| D.fromChars "elm diff elm/json 1.0.0 1.1.2"
+                , D.indent 4 <| D.dullyellow <| D.fromChars "guida diff elm/json 1.0.0 1.1.2"
                 ]
 
-        DiffNoExposed ->
+        DiffElmApplication ->
+            Help.report "CANNOT DIFF APPLICATIONS"
+                (Just "elm.json")
+                "Your elm.json says this project is an application, but `guida diff` only works with packages. That way there are previously published versions of the API to diff against!"
+                [ D.reflow <| "If you are just curious to see a diff, try running this command:"
+                , D.indent 4 <| D.dullyellow <| D.fromChars "guida diff elm/json 1.0.0 1.1.2"
+                ]
+
+        DiffGuidaNoExposed ->
+            Help.report "NO EXPOSED MODULES"
+                (Just "guida.json")
+                "Your guida.json has no \"exposed-modules\" which means there is no public API at all right now! What am I supposed to diff?"
+                [ D.reflow "Try adding some modules back to the \"exposed-modules\" field."
+                ]
+
+        DiffElmNoExposed ->
             Help.report "NO EXPOSED MODULES"
                 (Just "elm.json")
                 "Your elm.json has no \"exposed-modules\" which means there is no public API at all right now! What am I supposed to diff?"
-                [ D.reflow <|
-                    "Try adding some modules back to the \"exposed-modules\" field."
+                [ D.reflow "Try adding some modules back to the \"exposed-modules\" field."
                 ]
 
         DiffUnpublished ->
@@ -197,14 +213,14 @@ diffToReport diff =
                 "This package is not published yet. There is nothing to diff against!"
                 []
 
-        DiffUnknownPackage pkg suggestions ->
+        DiffUnknownPackage registry pkg suggestions ->
             Help.report "UNKNOWN PACKAGE"
                 Nothing
                 "I cannot find a package called:"
                 [ D.indent 4 <| D.red <| D.fromChars <| Pkg.toChars pkg
                 , D.fromChars "Maybe you want one of these instead?"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map (D.fromChars << Pkg.toChars) suggestions
-                , D.fromChars "But check <https://package.elm-lang.org> to see all possibilities!"
+                , D.fromChars ("But check <" ++ registry ++ "> to see all possibilities!")
                 ]
 
         DiffUnknownVersion vsn realVersions ->
@@ -266,12 +282,15 @@ diffToReport diff =
 type Bump
     = BumpNoOutline
     | BumpBadOutline Outline
-    | BumpApplication
-    | BumpUnexpectedVersion V.Version (List V.Version)
+    | BumpGuidaApplication String
+    | BumpElmApplication String
+    | BumpGuidaUnexpectedVersion String V.Version (List V.Version)
+    | BumpElmUnexpectedVersion String V.Version (List V.Version)
     | BumpMustHaveLatestRegistry RegistryProblem
     | BumpCannotFindDocs V.Version DocsProblem
     | BumpBadDetails Details
-    | BumpNoExposed
+    | BumpGuidaNoExposed
+    | BumpElmNoExposed
     | BumpBadBuild BuildProblem
 
 
@@ -281,21 +300,98 @@ bumpToReport bump =
         BumpNoOutline ->
             Help.report "BUMP WHAT?"
                 Nothing
-                "I cannot find an elm.json so I am not sure what you want me to bump."
+                "I cannot find a guida.json so I am not sure what you want me to bump."
                 [ D.reflow <|
-                    "Elm packages always have an elm.json that says the current version number. If you run this command from a directory with an elm.json file, I will try to bump the version in there based on the API changes."
+                    "Guida packages always have an guida.json that says the current version number. If you run this command from a directory with a guida.json file, I will try to bump the version in there based on the API changes."
                 ]
 
         BumpBadOutline outline ->
             toOutlineReport outline
 
-        BumpApplication ->
+        BumpGuidaApplication registry ->
             Help.report "CANNOT BUMP APPLICATIONS"
-                (Just "elm.json")
-                "Your elm.json says this is an application. That means it cannot be published on <https://package.elm-lang.org> and therefore has no version to bump!"
+                (Just "guida.json")
+                ("Your guida.json says this is an application. That means it cannot be published on <" ++ registry ++ "> and therefore has no version to bump!")
                 []
 
-        BumpUnexpectedVersion vsn versions ->
+        BumpElmApplication registry ->
+            Help.report "CANNOT BUMP APPLICATIONS"
+                (Just "elm.json")
+                ("Your elm.json says this is an application. That means it cannot be published on <" ++ registry ++ "> and therefore has no version to bump!")
+                []
+
+        BumpGuidaUnexpectedVersion registryDomain vsn versions ->
+            Help.docReport "CANNOT BUMP"
+                (Just "guida.json")
+                (D.fillSep
+                    [ D.fromChars "Your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "says"
+                    , D.fromChars "I"
+                    , D.fromChars "should"
+                    , D.fromChars "bump"
+                    , D.fromChars "relative"
+                    , D.fromChars "to"
+                    , D.fromChars "version"
+                    , D.red (D.fromVersion vsn)
+                        |> D.a (D.fromChars ",")
+                    , D.fromChars "but"
+                    , D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "find"
+                    , D.fromChars "that"
+                    , D.fromChars "version"
+                    , D.fromChars "on"
+                    , D.fromChars ("<" ++ registryDomain ++ ">.")
+                    , D.fromChars "That"
+                    , D.fromChars "means"
+                    , D.fromChars "there"
+                    , D.fromChars "is"
+                    , D.fromChars "no"
+                    , D.fromChars "API"
+                    , D.fromChars "for"
+                    , D.fromChars "me"
+                    , D.fromChars "to"
+                    , D.fromChars "diff"
+                    , D.fromChars "against"
+                    , D.fromChars "and"
+                    , D.fromChars "figure"
+                    , D.fromChars "out"
+                    , D.fromChars "if"
+                    , D.fromChars "these"
+                    , D.fromChars "are"
+                    , D.fromChars "MAJOR,"
+                    , D.fromChars "MINOR,"
+                    , D.fromChars "or"
+                    , D.fromChars "PATCH"
+                    , D.fromChars "changes."
+                    ]
+                )
+                [ D.fillSep <|
+                    [ D.fromChars "Try"
+                    , D.fromChars "bumping"
+                    , D.fromChars "again"
+                    , D.fromChars "after"
+                    , D.fromChars "changing"
+                    , D.fromChars "the"
+                    , D.dullyellow (D.fromChars "\"version\"")
+                    , D.fromChars "in"
+                    , D.fromChars "guida.json"
+                    ]
+                        ++ (if List.length versions == 1 then
+                                [ D.fromChars "to:" ]
+
+                            else
+                                [ D.fromChars "to"
+                                , D.fromChars "one"
+                                , D.fromChars "of"
+                                , D.fromChars "these:"
+                                ]
+                           )
+                , D.vcat <| List.map (D.green << D.fromVersion) versions
+                ]
+
+        BumpElmUnexpectedVersion registryDomain vsn versions ->
             Help.docReport "CANNOT BUMP"
                 (Just "elm.json")
                 (D.fillSep
@@ -317,7 +413,7 @@ bumpToReport bump =
                     , D.fromChars "that"
                     , D.fromChars "version"
                     , D.fromChars "on"
-                    , D.fromChars "<https://package.elm-lang.org>."
+                    , D.fromChars ("<" ++ registryDomain ++ ">.")
                     , D.fromChars "That"
                     , D.fromChars "means"
                     , D.fromChars "there"
@@ -379,7 +475,32 @@ bumpToReport bump =
         BumpBadDetails details ->
             toDetailsReport details
 
-        BumpNoExposed ->
+        BumpGuidaNoExposed ->
+            Help.docReport "NO EXPOSED MODULES"
+                (Just "guida.json")
+                (D.fillSep <|
+                    [ D.fromChars "To"
+                    , D.fromChars "bump"
+                    , D.fromChars "a"
+                    , D.fromChars "package,"
+                    , D.fromChars "the"
+                    , D.dullyellow (D.fromChars "\"exposed-modules\"")
+                    , D.fromChars "field"
+                    , D.fromChars "of"
+                    , D.fromChars "your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "must"
+                    , D.fromChars "list"
+                    , D.fromChars "at"
+                    , D.fromChars "least"
+                    , D.fromChars "one"
+                    , D.fromChars "module."
+                    ]
+                )
+                [ D.reflow "Try adding some modules back to the \"exposed-modules\" field."
+                ]
+
+        BumpElmNoExposed ->
             Help.docReport "NO EXPOSED MODULES"
                 (Just "elm.json")
                 (D.fillSep <|
@@ -401,8 +522,7 @@ bumpToReport bump =
                     , D.fromChars "module."
                     ]
                 )
-                [ D.reflow <|
-                    "Try adding some modules back to the \"exposed-modules\" field."
+                [ D.reflow "Try adding some modules back to the \"exposed-modules\" field."
                 ]
 
         BumpBadBuild problem ->
@@ -443,7 +563,8 @@ type Publish
     | PublishBadDetails Details
     | PublishMustHaveLatestRegistry RegistryProblem
     | PublishApplication
-    | PublishNotInitialVersion V.Version
+    | PublishGuidaNotInitialVersion V.Version
+    | PublishElmNotInitialVersion V.Version
     | PublishAlreadyPublished V.Version
     | PublishInvalidBump V.Version V.Version
     | PublishBadBump V.Version V.Version M.Magnitude V.Version M.Magnitude
@@ -475,9 +596,8 @@ publishToReport publish =
         PublishNoOutline ->
             Help.report "PUBLISH WHAT?"
                 Nothing
-                "I cannot find an elm.json so I am not sure what you want me to publish."
-                [ D.reflow <|
-                    "Elm packages always have an elm.json that states the version number, dependencies, exposed modules, etc."
+                "I cannot find a guida.json (or elm.json) so I am not sure what you want me to publish."
+                [ D.reflow "Guida (and Elm) packages always have a guida.json (or elm.json) that states the version number, dependencies, exposed modules, etc."
                 ]
 
         PublishBadOutline outline ->
@@ -493,7 +613,38 @@ publishToReport publish =
         PublishApplication ->
             Help.report "UNPUBLISHABLE" Nothing "I cannot publish applications, only packages!" []
 
-        PublishNotInitialVersion vsn ->
+        PublishGuidaNotInitialVersion vsn ->
+            Help.docReport "INVALID VERSION"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "publish"
+                    , D.red (D.fromVersion vsn)
+                    , D.fromChars "as"
+                    , D.fromChars "the"
+                    , D.fromChars "initial"
+                    , D.fromChars "version."
+                    ]
+                )
+                [ D.fillSep
+                    [ D.fromChars "Change"
+                    , D.fromChars "it"
+                    , D.fromChars "to"
+                    , D.green (D.fromChars "1.0.0")
+                    , D.fromChars "which"
+                    , D.fromChars "is"
+                    , D.fromChars "the"
+                    , D.fromChars "initial"
+                    , D.fromChars "version"
+                    , D.fromChars "for"
+                    , D.fromChars "all"
+                    , D.fromChars "Guida"
+                    , D.fromChars "packages."
+                    ]
+                ]
+
+        PublishElmNotInitialVersion vsn ->
             Help.docReport "INVALID VERSION"
                 Nothing
                 (D.fillSep
@@ -544,7 +695,7 @@ publishToReport publish =
                     , D.fromChars "Try using the `bump` command:"
                     ]
                 )
-                [ D.dullyellow <| D.indent 4 (D.fromChars "elm bump")
+                [ D.dullyellow <| D.indent 4 (D.fromChars "guida bump")
                 , D.reflow <|
                     "It computes the version number based on API changes, ensuring that no breaking changes end up in PATCH releases!"
                 ]
@@ -599,7 +750,7 @@ publishToReport publish =
                     , D.fromChars "by"
                     , D.fromChars "running:"
                     ]
-                , D.indent 4 <| D.green (D.fromChars "elm bump")
+                , D.indent 4 <| D.green (D.fromChars "guida bump")
                 , D.reflow <|
                     "If you want more insight on the API changes Elm detects, you can run `elm diff` at this point as well."
                 ]
@@ -1059,7 +1210,7 @@ installToReport exit =
             toRegistryProblemReport "PROBLEM LOADING PACKAGE LIST" problem <|
                 "I need the list of published packages to figure out how to install things"
 
-        InstallNoArgs elmHome ->
+        InstallNoArgs guidaHome ->
             Help.report "INSTALL WHAT?"
                 Nothing
                 "I am expecting commands like:"
@@ -1090,11 +1241,11 @@ installToReport exit =
                     , D.fromChars "and"
                     , D.fromChars "again?"
                     , D.fromChars "Instead,"
-                    , D.fromChars "Elm"
+                    , D.fromChars "Guida"
                     , D.fromChars "caches"
                     , D.fromChars "packages"
                     , D.fromChars "in"
-                    , D.dullyellow (D.fromChars elmHome)
+                    , D.dullyellow (D.fromChars guidaHome)
                     , D.fromChars "so"
                     , D.fromChars "each"
                     , D.fromChars "one"
@@ -1106,7 +1257,7 @@ installToReport exit =
                     , D.fromChars "on"
                     , D.fromChars "your"
                     , D.fromChars "machine."
-                    , D.fromChars "Elm"
+                    , D.fromChars "Guida"
                     , D.fromChars "projects"
                     , D.fromChars "check"
                     , D.fromChars "that"
@@ -1132,16 +1283,16 @@ installToReport exit =
                     , D.fromChars "As"
                     , D.fromChars "a"
                     , D.fromChars "result"
-                    , D.dullcyan (D.fromChars "elm install")
+                    , D.dullcyan (D.fromChars "guida install")
                     , D.fromChars "is"
                     , D.fromChars "only"
                     , D.fromChars "for"
                     , D.fromChars "adding"
                     , D.fromChars "dependencies"
                     , D.fromChars "to"
-                    , D.fromChars "elm.json,"
+                    , D.fromChars "guida.json,"
                     , D.fromChars "whereas"
-                    , D.dullcyan (D.fromChars "elm make")
+                    , D.dullcyan (D.fromChars "guida make")
                     , D.fromChars "is"
                     , D.fromChars "in"
                     , D.fromChars "charge"
@@ -1154,7 +1305,7 @@ installToReport exit =
                     , D.fromChars "So"
                     , D.fromChars "maybe"
                     , D.fromChars "try"
-                    , D.green (D.fromChars "elm make")
+                    , D.green (D.fromChars "guida make")
                     , D.fromChars "instead?"
                     ]
                 ]
@@ -1369,12 +1520,16 @@ toSolverReport problem =
 
 
 type Outline
-    = OutlineHasBadStructure (Decode.Error OutlineProblem)
+    = OutlineHasBadGuidaStructure (Decode.Error OutlineProblem)
+    | OutlineHasBadElmStructure (Decode.Error OutlineProblem)
     | OutlineHasMissingSrcDirs FilePath (List FilePath)
     | OutlineHasDuplicateSrcDirs FilePath FilePath FilePath
-    | OutlineNoPkgCore
-    | OutlineNoAppCore
-    | OutlineNoAppJson
+    | OutlineNoGuidaPkgCore
+    | OutlineNoElmPkgCore
+    | OutlineNoGuidaAppCore
+    | OutlineNoElmAppCore
+    | OutlineNoGuidaAppJson
+    | OutlineNoElmAppJson
 
 
 type OutlineProblem
@@ -1384,7 +1539,8 @@ type OutlineProblem
     | OP_BadConstraint C.Error
     | OP_BadModuleName Row Col
     | OP_BadModuleHeaderTooLong
-    | OP_BadDependencyName Row Col
+    | OP_BadGuidaDependencyName Row Col
+    | OP_BadElmDependencyName Row Col
     | OP_BadLicense (List String)
     | OP_BadSummaryTooLong
     | OP_NoSrcDirs
@@ -1393,7 +1549,11 @@ type OutlineProblem
 toOutlineReport : Outline -> Help.Report
 toOutlineReport problem =
     case problem of
-        OutlineHasBadStructure decodeError ->
+        OutlineHasBadGuidaStructure decodeError ->
+            Json.toReport "guida.json" (Json.FailureToReport toOutlineProblemReport) decodeError <|
+                Json.ExplicitReason "I ran into a problem with your guida.json file."
+
+        OutlineHasBadElmStructure decodeError ->
             Json.toReport "elm.json" (Json.FailureToReport toOutlineProblemReport) decodeError <|
                 Json.ExplicitReason "I ran into a problem with your elm.json file."
 
@@ -1445,7 +1605,15 @@ toOutlineReport problem =
                         "Remove one of the redundant entries from your \"source-directories\" field."
                     ]
 
-        OutlineNoPkgCore ->
+        OutlineNoGuidaPkgCore ->
+            Help.report "MISSING DEPENDENCY"
+                (Just "guida.json")
+                "I need to see an \"elm/core\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
+                [ D.reflow <|
+                    "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to find a working package and start fresh with their guida.json file."
+                ]
+
+        OutlineNoElmPkgCore ->
             Help.report "MISSING DEPENDENCY"
                 (Just "elm.json")
                 "I need to see an \"elm/core\" dependency your elm.json file. The default imports of `List` and `Maybe` do not work without it."
@@ -1453,7 +1621,15 @@ toOutlineReport problem =
                     "If you modified your elm.json by hand, try to change it back! And if you are having trouble getting back to a working elm.json, it may be easier to find a working package and start fresh with their elm.json file."
                 ]
 
-        OutlineNoAppCore ->
+        OutlineNoGuidaAppCore ->
+            Help.report "MISSING DEPENDENCY"
+                (Just "guida.json")
+                "I need to see an \"elm/core\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
+                [ D.reflow <|
+                    "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to delete it and use `guida init` to start fresh."
+                ]
+
+        OutlineNoElmAppCore ->
             Help.report "MISSING DEPENDENCY"
                 (Just "elm.json")
                 "I need to see an \"elm/core\" dependency your elm.json file. The default imports of `List` and `Maybe` do not work without it."
@@ -1461,7 +1637,15 @@ toOutlineReport problem =
                     "If you modified your elm.json by hand, try to change it back! And if you are having trouble getting back to a working elm.json, it may be easier to delete it and use `elm init` to start fresh."
                 ]
 
-        OutlineNoAppJson ->
+        OutlineNoGuidaAppJson ->
+            Help.report "MISSING DEPENDENCY"
+                (Just "guida.json")
+                "I need to see an \"elm/json\" dependency your guida.json file. It helps me handle flags and ports."
+                [ D.reflow <|
+                    "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to delete it and use `guida init` to start fresh."
+                ]
+
+        OutlineNoElmAppJson ->
             Help.report "MISSING DEPENDENCY"
                 (Just "elm.json")
                 "I need to see an \"elm/json\" dependency your elm.json file. It helps me handle flags and ports."
@@ -1607,10 +1791,9 @@ toOutlineProblemReport path source _ region problem =
                     if before == after then
                         toSnippet "PROBLEM WITH CONSTRAINT"
                             Nothing
-                            ( D.reflow <|
-                                "I got stuck while reading your elm.json file. I ran into an invalid version constraint:"
+                            ( D.reflow "I got stuck while reading your elm.json file. I ran into an invalid version constraint:"
                             , D.fillSep
-                                [ D.fromChars "Elm"
+                                [ D.fromChars "Guida"
                                 , D.fromChars "checks"
                                 , D.fromChars "that"
                                 , D.fromChars "all"
@@ -1670,7 +1853,7 @@ toOutlineProblemReport path source _ region problem =
                                         |> D.a (D.fromChars "\"")
                                     )
                                 , D.fromChars "instead?"
-                                , D.fromChars "Elm"
+                                , D.fromChars "Guida"
                                 , D.fromChars "checks"
                                 , D.fromChars "that"
                                 , D.fromChars "all"
@@ -1760,7 +1943,60 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadDependencyName row col ->
+        OP_BadGuidaDependencyName row col ->
+            toSnippet "PROBLEM WITH DEPENDENCY NAME"
+                (toHighlight row col)
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. There is something wrong with this dependency name:"
+                , D.stack
+                    [ D.fillSep
+                        [ D.fromChars "Package"
+                        , D.fromChars "names"
+                        , D.fromChars "always"
+                        , D.fromChars "include"
+                        , D.fromChars "the"
+                        , D.fromChars "name"
+                        , D.fromChars "of"
+                        , D.fromChars "the"
+                        , D.fromChars "author,"
+                        , D.fromChars "so"
+                        , D.fromChars "I"
+                        , D.fromChars "am"
+                        , D.fromChars "expecting"
+                        , D.fromChars "to"
+                        , D.fromChars "see"
+                        , D.fromChars "dependencies"
+                        , D.fromChars "like"
+                        , D.dullyellow (D.fromChars "\"mdgriffith/elm-ui\"")
+                        , D.fromChars "and"
+                        , D.dullyellow (D.fromChars "\"Microsoft/elm-json-tree-view\"")
+                            |> D.a (D.fromChars ".")
+                        ]
+                    , D.fillSep <|
+                        [ D.fromChars "I"
+                        , D.fromChars "generally"
+                        , D.fromChars "recommend"
+                        , D.fromChars "finding"
+                        , D.fromChars "the"
+                        , D.fromChars "package"
+                        , D.fromChars "you"
+                        , D.fromChars "want"
+                        , D.fromChars "on"
+                        , D.fromChars "the"
+                        , D.fromChars "package"
+                        , D.fromChars "website,"
+                        , D.fromChars "and"
+                        , D.fromChars "installing"
+                        , D.fromChars "it"
+                        , D.fromChars "with"
+                        , D.fromChars "the"
+                        , D.green (D.fromChars "guida install")
+                        , D.fromChars "command!"
+                        ]
+                    ]
+                )
+
+        OP_BadElmDependencyName row col ->
             toSnippet "PROBLEM WITH DEPENDENCY NAME"
                 (toHighlight row col)
                 ( D.reflow <|
@@ -1807,7 +2043,7 @@ toOutlineProblemReport path source _ region problem =
                         , D.fromChars "it"
                         , D.fromChars "with"
                         , D.fromChars "the"
-                        , D.green (D.fromChars "elm install")
+                        , D.green (D.fromChars "guida install")
                         , D.fromChars "command!"
                         ]
                     ]
@@ -1910,12 +2146,17 @@ toOutlineProblemReport path source _ region problem =
 
 
 type Details
-    = DetailsNoSolution
-    | DetailsNoOfflineSolution
+    = DetailsNoGuidaSolution
+    | DetailsNoElmSolution
+    | DetailsNoGuidaOfflineSolution String
+    | DetailsNoElmOfflineSolution String
     | DetailsSolverProblem Solver
+    | DetailsBadGuidaInPkg C.Constraint
     | DetailsBadElmInPkg C.Constraint
+    | DetailsBadGuidaInAppOutline V.Version
     | DetailsBadElmInAppOutline V.Version
-    | DetailsHandEditedDependencies
+    | DetailsHandEditedGuidaDependencies
+    | DetailsHandEditedElmDependencies
     | DetailsBadOutline Outline
     | DetailsCannotGetRegistry RegistryProblem
     | DetailsBadDeps FilePath (List DetailsBadDep)
@@ -1929,7 +2170,38 @@ type DetailsBadDep
 toDetailsReport : Details -> Help.Report
 toDetailsReport details =
     case details of
-        DetailsNoSolution ->
+        DetailsNoGuidaSolution ->
+            Help.report "INCOMPATIBLE DEPENDENCIES"
+                (Just "guida.json")
+                "The dependencies in your guida.json are not compatible."
+                [ D.fillSep
+                    [ D.fromChars "Did"
+                    , D.fromChars "you"
+                    , D.fromChars "change"
+                    , D.fromChars "them"
+                    , D.fromChars "by"
+                    , D.fromChars "hand?"
+                    , D.fromChars "Try"
+                    , D.fromChars "to"
+                    , D.fromChars "change"
+                    , D.fromChars "it"
+                    , D.fromChars "back!"
+                    , D.fromChars "It"
+                    , D.fromChars "is"
+                    , D.fromChars "much"
+                    , D.fromChars "more"
+                    , D.fromChars "reliable"
+                    , D.fromChars "to"
+                    , D.fromChars "add"
+                    , D.fromChars "dependencies"
+                    , D.fromChars "with"
+                    , D.green (D.fromChars "guida install")
+                        |> D.a (D.fromChars ".")
+                    ]
+                , D.reflow "Please ask for help on the community forums if you try those paths and are still having problems!"
+                ]
+
+        DetailsNoElmSolution ->
             Help.report "INCOMPATIBLE DEPENDENCIES"
                 (Just "elm.json")
                 "The dependencies in your elm.json are not compatible."
@@ -1954,19 +2226,17 @@ toDetailsReport details =
                     , D.fromChars "add"
                     , D.fromChars "dependencies"
                     , D.fromChars "with"
-                    , D.green (D.fromChars "elm install")
+                    , D.green (D.fromChars "guida install")
                         |> D.a (D.fromChars ".")
                     ]
-                , D.reflow <|
-                    "Please ask for help on the community forums if you try those paths and are still having problems!"
+                , D.reflow "Please ask for help on the community forums if you try those paths and are still having problems!"
                 ]
 
-        DetailsNoOfflineSolution ->
+        DetailsNoGuidaOfflineSolution registryDomain ->
             Help.report "TROUBLE VERIFYING DEPENDENCIES"
-                (Just "elm.json")
-                "I could not connect to https://package.elm-lang.org to get the latest list of packages, and I was unable to verify your dependencies with the information I have cached locally."
-                [ D.reflow <|
-                    "Are you able to connect to the internet? These dependencies may work once you get access to the registry!"
+                (Just "guida.json")
+                ("I could not connect to " ++ registryDomain ++ " to get the latest list of packages, and I was unable to verify your dependencies with the information I have cached locally.")
+                [ D.reflow "Are you able to connect to the internet? These dependencies may work once you get access to the registry!"
                 , D.toFancyNote
                     [ D.fromChars "If"
                     , D.fromChars "you"
@@ -1989,13 +2259,62 @@ toDetailsReport details =
                     , D.fromChars "add"
                     , D.fromChars "dependencies"
                     , D.fromChars "with"
-                    , D.green (D.fromChars "elm install")
+                    , D.green (D.fromChars "guida install")
+                        |> D.a (D.fromChars ".")
+                    ]
+                ]
+
+        DetailsNoElmOfflineSolution registryDomain ->
+            Help.report "TROUBLE VERIFYING DEPENDENCIES"
+                (Just "elm.json")
+                ("I could not connect to " ++ registryDomain ++ " to get the latest list of packages, and I was unable to verify your dependencies with the information I have cached locally.")
+                [ D.reflow "Are you able to connect to the internet? These dependencies may work once you get access to the registry!"
+                , D.toFancyNote
+                    [ D.fromChars "If"
+                    , D.fromChars "you"
+                    , D.fromChars "changed"
+                    , D.fromChars "your"
+                    , D.fromChars "dependencies"
+                    , D.fromChars "by"
+                    , D.fromChars "hand,"
+                    , D.fromChars "try"
+                    , D.fromChars "to"
+                    , D.fromChars "change"
+                    , D.fromChars "them"
+                    , D.fromChars "back!"
+                    , D.fromChars "It"
+                    , D.fromChars "is"
+                    , D.fromChars "much"
+                    , D.fromChars "more"
+                    , D.fromChars "reliable"
+                    , D.fromChars "to"
+                    , D.fromChars "add"
+                    , D.fromChars "dependencies"
+                    , D.fromChars "with"
+                    , D.green (D.fromChars "guida install")
                         |> D.a (D.fromChars ".")
                     ]
                 ]
 
         DetailsSolverProblem solver ->
             toSolverReport solver
+
+        DetailsBadGuidaInPkg constraint ->
+            Help.report "GUIDA VERSION MISMATCH"
+                (Just "guida.json")
+                "Your guida.json says this package needs a version of Guida in this range:"
+                [ D.indent 4 <| D.dullyellow <| D.fromChars <| C.toChars constraint
+                , D.fillSep
+                    [ D.fromChars "But"
+                    , D.fromChars "you"
+                    , D.fromChars "are"
+                    , D.fromChars "using"
+                    , D.fromChars "Guida"
+                    , D.red (D.fromVersion V.compiler)
+                    , D.fromChars "right"
+                    , D.fromChars "now."
+                    ]
+                ]
 
         DetailsBadElmInPkg constraint ->
             Help.report "ELM VERSION MISMATCH"
@@ -2008,6 +2327,25 @@ toDetailsReport details =
                     , D.fromChars "are"
                     , D.fromChars "using"
                     , D.fromChars "Elm"
+                    , D.red (D.fromVersion V.compiler)
+                    , D.fromChars "right"
+                    , D.fromChars "now."
+                    ]
+                ]
+
+        DetailsBadGuidaInAppOutline version ->
+            Help.report "GUIDA VERSION MISMATCH"
+                (Just "guida.json")
+                "Your guida.json says this application needs a different version of Guida."
+                [ D.fillSep
+                    [ D.fromChars "It"
+                    , D.fromChars "requires"
+                    , D.green (D.fromVersion version)
+                        |> D.a (D.fromChars ",")
+                    , D.fromChars "but"
+                    , D.fromChars "you"
+                    , D.fromChars "are"
+                    , D.fromChars "using"
                     , D.red (D.fromVersion V.compiler)
                     , D.fromChars "right"
                     , D.fromChars "now."
@@ -2033,7 +2371,38 @@ toDetailsReport details =
                     ]
                 ]
 
-        DetailsHandEditedDependencies ->
+        DetailsHandEditedGuidaDependencies ->
+            Help.report "ERROR IN DEPENDENCIES"
+                (Just "guida.json")
+                "It looks like the dependencies guida.json in were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
+                [ D.fillSep
+                    [ D.fromChars "Try"
+                    , D.fromChars "to"
+                    , D.fromChars "change"
+                    , D.fromChars "them"
+                    , D.fromChars "back"
+                    , D.fromChars "to"
+                    , D.fromChars "what"
+                    , D.fromChars "they"
+                    , D.fromChars "were"
+                    , D.fromChars "before!"
+                    , D.fromChars "It"
+                    , D.fromChars "is"
+                    , D.fromChars "much"
+                    , D.fromChars "more"
+                    , D.fromChars "reliable"
+                    , D.fromChars "to"
+                    , D.fromChars "add"
+                    , D.fromChars "dependencies"
+                    , D.fromChars "with"
+                    , D.green (D.fromChars "guida install")
+                        |> D.a (D.fromChars ".")
+                    ]
+                , D.reflow <|
+                    "Please ask for help on the community forums if you try those paths and are still having problems!"
+                ]
+
+        DetailsHandEditedElmDependencies ->
             Help.report "ERROR IN DEPENDENCIES"
                 (Just "elm.json")
                 "It looks like the dependencies elm.json in were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
@@ -2057,7 +2426,7 @@ toDetailsReport details =
                     , D.fromChars "add"
                     , D.fromChars "dependencies"
                     , D.fromChars "with"
-                    , D.green (D.fromChars "elm install")
+                    , D.green (D.fromChars "guida install")
                         |> D.a (D.fromChars ".")
                     ]
                 , D.reflow <|
@@ -2082,7 +2451,7 @@ toDetailsReport details =
                                 ++ cacheDir
                                 ++ " and guida-stuff/ directories, then trying to build again. That will work if some cached files got corrupted somehow."
                         , D.reflow <|
-                            "If that does not work, go to https://elm-lang.org/community and ask for help. This is a weird case!"
+                            "If that does not work, go to https://guida-lang.org/community and ask for help. This is a weird case!"
                         ]
 
                 d :: _ ->
@@ -2096,7 +2465,7 @@ toDetailsReport details =
                                 "I ran into a compilation error when trying to build the following package:"
                                 [ D.indent 4 <| D.red <| D.fromChars <| Pkg.toChars pkg ++ " " ++ V.toChars vsn
                                 , D.reflow <|
-                                    "This probably means it has package constraints that are too wide. It may be possible to tweak your elm.json to avoid the root problem as a stopgap. Head over to https://elm-lang.org/community to get help figuring out how to take this path!"
+                                    "This probably means it has package constraints that are too wide. It may be possible to tweak your elm.json to avoid the root problem as a stopgap. Head over to https://guida-lang.org/community to get help figuring out how to take this path!"
                                 , D.toSimpleNote <|
                                     "To help with the root problem, please report this to the package author along with the following information:"
                                 , D.indent 4 <|
@@ -2179,8 +2548,7 @@ toPackageProblemReport pkg vsn problem =
                         [ "  Expected: " ++ expectedHash
                         , "    Actual: " ++ actualHash
                         ]
-                , D.reflow <|
-                    "This usually means that the package author moved the version tag, so report it to them and see if that is the issue. Folks on Elm slack can probably help as well."
+                , D.reflow "This usually means that the package author moved the version tag, so report it to them and see if that is the issue. Folks on Guida discord can probably help as well."
                 ]
 
 
@@ -2240,10 +2608,9 @@ toHttpErrorReport title err context =
         Http.BadUrl url reason ->
             toHttpReport (context ++ ", so I wanted to fetch:")
                 url
-                [ D.reflow <| "But my HTTP library is saying this is not a valid URL. It is saying:"
+                [ D.reflow "But my HTTP library is saying this is not a valid URL. It is saying:"
                 , D.indent 4 <| D.fromChars reason
-                , D.reflow <|
-                    "This may indicate that there is some problem in the compiler, so please open an issue at https://github.com/elm/compiler/issues listing your operating system, Elm version, the command you ran, the terminal output, and any additional information that might help others reproduce the error."
+                , D.reflow "This may indicate that there is some problem in the compiler, so please open an issue at https://github.com/guida-lang/compiler/issues listing your operating system, Guida version, the command you ran, the terminal output, and any additional information that might help others reproduce the error."
                 ]
 
         Http.BadHttp url httpExceptionContent ->
@@ -2265,8 +2632,7 @@ toHttpErrorReport title err context =
                             ]
                                 ++ List.map D.fromChars (String.words message)
                         , D.indent 4 <| D.reflow <| body
-                        , D.reflow <|
-                            "This may mean some online endpoint changed in an unexpected way, so if does not seem like something on your side is causing this (e.g. firewall) please report this to https://github.com/elm/compiler/issues with your operating system, Elm version, the command you ran, the terminal output, and any additional information that can help others reproduce the error!"
+                        , D.reflow "This may mean some online endpoint changed in an unexpected way, so if does not seem like something on your side is causing this (e.g. firewall) please report this to https://github.com/guida-lang/compiler/issues with your operating system, Guida version, the command you ran, the terminal output, and any additional information that can help others reproduce the error!"
                         ]
 
                 Utils.TooManyRedirects responses ->
@@ -2335,12 +2701,11 @@ makeToReport : Make -> Help.Report
 makeToReport make =
     case make of
         MakeNoOutline ->
-            Help.report "NO elm.json FILE"
+            Help.report "NO guida.json (or elm.json) FILE"
                 Nothing
-                "It looks like you are starting a new Elm project. Very exciting! Try running:"
-                [ D.indent 4 <| D.green <| D.fromChars "elm init"
-                , D.reflow <|
-                    "It will help you get set up. It is really simple!"
+                "It looks like you are starting a new Guida project. Very exciting! Try running:"
+                [ D.indent 4 <| D.green <| D.fromChars "guida init"
+                , D.reflow "It will help you get set up. It is really simple!"
                 ]
 
         MakeCannotOptimizeAndDebug ->
@@ -2372,11 +2737,11 @@ makeToReport make =
                 Nothing
                 "What should I make though? I need specific files like:"
                 [ D.vcat
-                    [ D.indent 4 <| D.green (D.fromChars "elm make src/Main.elm")
-                    , D.indent 4 <| D.green (D.fromChars "elm make src/This.elm src/That.elm")
+                    [ D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
+                    , D.indent 4 <| D.green (D.fromChars "guida make src/This.guida src/That.guida")
                     ]
                 , D.reflow <|
-                    "I recommend reading through https://guide.elm-lang.org for guidance on what to actually put in those files!"
+                    "I recommend reading through https://guida-lang.org/docs for guidance on what to actually put in those files!"
                 ]
 
         MakePkgNeedsExposing ->
@@ -2384,11 +2749,10 @@ makeToReport make =
                 Nothing
                 "What should I make though? I need specific files like:"
                 [ D.vcat
-                    [ D.indent 4 <| D.green (D.fromChars "elm make src/Main.elm")
-                    , D.indent 4 <| D.green (D.fromChars "elm make src/This.elm src/That.elm")
+                    [ D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
+                    , D.indent 4 <| D.green (D.fromChars "guida make src/This.guida src/That.guida")
                     ]
-                , D.reflow <|
-                    "You can also entries to the \"exposed-modules\" list in your elm.json file, and I will try to compile the relevant files."
+                , D.reflow "You can also add entries to the \"exposed-modules\" list in your elm.json file, and I will try to compile the relevant files."
                 ]
 
         MakeMultipleFilesIntoHtml ->

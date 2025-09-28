@@ -14,7 +14,7 @@ module Terminal.Terminal exposing
     , zeroOrMore
     )
 
-import Compiler.Elm.Version as V
+import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import List.Extra as List
 import System.Exit as Exit

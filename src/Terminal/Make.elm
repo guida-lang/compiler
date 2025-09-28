@@ -13,16 +13,16 @@ module Terminal.Make exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
-import Builder.Elm.Details as Details
 import Builder.File as File
 import Builder.Generate as Generate
+import Builder.Guida.Details as Details
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
+import Compiler.Guida.ModuleName as ModuleName
 import Maybe.Extra as Maybe
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
@@ -73,11 +73,11 @@ run paths ((Flags _ _ _ _ report _) as flags) =
             )
 
 
-runHelp : String -> List String -> Reporting.Style -> Flags -> Task Never (Result Exit.Make ())
+runHelp : Stuff.Root -> List String -> Reporting.Style -> Flags -> Task Never (Result Exit.Make ())
 runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ maybeDocs) =
     BW.withScope
         (\scope ->
-            Stuff.withRootLock root <|
+            Stuff.withRootLock (Stuff.rootPath root) <|
                 Task.run <|
                     (getMode debug optimize
                         |> Task.bind
@@ -88,10 +88,10 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                             case paths of
                                                 [] ->
                                                     getExposed details
-                                                        |> Task.bind (\exposed -> buildExposed style root details maybeDocs exposed)
+                                                        |> Task.bind (\exposed -> buildExposed style (Stuff.rootPath root) details maybeDocs exposed)
 
                                                 p :: ps ->
-                                                    buildPaths style root details (NE.Nonempty p ps)
+                                                    buildPaths style (Stuff.rootPath root) details (NE.Nonempty p ps)
                                                         |> Task.bind
                                                             (\artifacts ->
                                                                 case maybeOutput of
@@ -111,7 +111,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                                 toBuilder withSourceMaps 0 root details desiredMode artifacts
                                                                                     |> Task.bind
                                                                                         (\builder ->
-                                                                                            generate style "elm.js" builder (NE.Nonempty name names)
+                                                                                            generate style "guida.js" builder (NE.Nonempty name names)
                                                                                         )
 
                                                                     Just DevNull ->
@@ -317,7 +317,7 @@ type DesiredMode
     | Prod
 
 
-toBuilder : Bool -> Int -> FilePath -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
+toBuilder : Bool -> Int -> Stuff.Root -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
 toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
     Task.mapError Exit.MakeBadGenerate <|
         case desiredMode of
@@ -360,7 +360,7 @@ output =
         { singular = "output file"
         , plural = "output files"
         , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "elm.js", "index.html", "/dev/null" ]
+        , examples = \_ -> Task.pure [ "guida.js", "index.html", "/dev/null" ]
         }
 
 

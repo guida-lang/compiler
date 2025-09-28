@@ -6,7 +6,7 @@ import Common.Format.Cheapskate.Parse as Parse
 import Common.Format.Cheapskate.Types exposing (Block(..), Blocks, Doc(..), LinkTarget(..), Options(..))
 import Common.Format.ImportInfo as ImportInfo exposing (ImportInfo)
 import Common.Format.KnownContents as KnownContents
-import Common.Format.Render.ElmStructure as ElmStructure
+import Common.Format.Render.GuidaStructure as GuidaStructure
 import Common.Format.Render.Markdown as Markdown
 import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
@@ -176,7 +176,7 @@ intersperseMap spacer fn list =
 pleaseReport__ : String -> String -> String
 pleaseReport__ what details =
     -- TODO: include version in the message
-    "<elm-format: " ++ what ++ ": " ++ details ++ " -- please report this at https://github.com/guida-lang/compiler/issues>"
+    "<guida-format: " ++ what ++ ": " ++ details ++ " -- please report this at https://github.com/guida-lang/compiler/issues>"
 
 
 pleaseReport_ : String -> String -> Box.Line
@@ -224,8 +224,8 @@ formatBinary multiline left ops =
 
         ( ( isLeftPipe, comments, op ), next ) :: rest ->
             if isLeftPipe then
-                ElmStructure.forceableSpaceSepOrIndented multiline
-                    (ElmStructure.spaceSepOrStack left
+                GuidaStructure.forceableSpaceSepOrIndented multiline
+                    (GuidaStructure.spaceSepOrStack left
                         (List.concat
                             [ Maybe.toList <| formatComments comments
                             , [ op ]
@@ -237,7 +237,7 @@ formatBinary multiline left ops =
             else
                 formatBinary
                     multiline
-                    (ElmStructure.forceableSpaceSepOrIndented multiline left [ formatCommentedApostrophe comments (ElmStructure.spaceSepOrPrefix op next) ])
+                    (GuidaStructure.forceableSpaceSepOrIndented multiline left [ formatCommentedApostrophe comments (GuidaStructure.spaceSepOrPrefix op next) ])
                     rest
 
 
@@ -450,7 +450,7 @@ formatModuleHeader addDefaultHeader modu =
         extractDocs : Block -> List (List String)
         extractDocs block =
             case block of
-                ElmDocs vars ->
+                GuidaDocs vars ->
                     List.map (List.map (refName << textToRef)) vars
 
                 _ ->
@@ -677,12 +677,12 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
                     Box.line (Box.keyword "module")
 
                 Port comments ->
-                    ElmStructure.spaceSepOrIndented
+                    GuidaStructure.spaceSepOrIndented
                         (formatTailCommented ( comments, Box.line <| Box.keyword "port" ))
                         [ Box.line (Box.keyword "module") ]
 
                 Effect comments ->
-                    ElmStructure.spaceSepOrIndented
+                    GuidaStructure.spaceSepOrIndented
                         (formatTailCommented ( comments, Box.line <| Box.keyword "effect" ))
                         [ Box.line (Box.keyword "module") ]
 
@@ -695,12 +695,12 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
                 [ oneGroup ] ->
                     oneGroup
                         |> List.map (formatCommented << Src.c2map formatVarValue)
-                        |> ElmStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" False
+                        |> GuidaStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" False
 
                 _ ->
                     varsToExpose
-                        |> List.map (formatCommented << Src.c2map (ElmStructure.group False "" "," "" False << List.map formatVarValue) << Src.sequenceAC2)
-                        |> ElmStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" True
+                        |> List.map (formatCommented << Src.c2map (GuidaStructure.group False "" "," "" False << List.map formatVarValue) << Src.sequenceAC2)
+                        |> GuidaStructure.group_ False "(" "," (Maybe.toList (formatComments extraComments)) ")" True
 
         formatSetting : ( Src.C2 String, Src.C2 String ) -> Box
         formatSetting ( k, v ) =
@@ -709,7 +709,7 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
         formatSettings : List ( Src.C2 String, Src.C2 String ) -> Box
         formatSettings settings =
             List.map formatSetting settings
-                |> ElmStructure.group True "{" "," "}" False
+                |> GuidaStructure.group True "{" "," "}" False
 
         whereClause : List Box
         whereClause =
@@ -740,8 +740,8 @@ formatModuleLine ( varsToExpose, extraComments ) srcTag name moduleSettings preE
                         , Box.indent name_
                         ]
     in
-    ElmStructure.spaceSepOrIndented
-        (ElmStructure.spaceSepOrIndented
+    GuidaStructure.spaceSepOrIndented
+        (GuidaStructure.spaceSepOrIndented
             nameClause
             (whereClause ++ [ formatCommented ( ( preExposing, postExposing ), Box.line <| Box.keyword "exposing" ) ])
         )
@@ -1226,7 +1226,7 @@ formatTopLevelBody linesBetween importInfo body =
             Just <| Box.stack1 boxes
 
 
-type ElmCodeBlock
+type GuidaCodeBlock
     = DeclarationsCode (List (TopLevelStructure Declaration))
     | ExpressionsCode (List (TopLevelStructure (Src.C0Eol Src.Expr)))
     | ModuleCode Module
@@ -1235,7 +1235,7 @@ type ElmCodeBlock
 formatDocComment : ImportInfo -> Blocks -> Box
 formatDocComment importInfo blocks =
     let
-        parse : String -> Maybe ElmCodeBlock
+        parse : String -> Maybe GuidaCodeBlock
         parse source =
             source
                 |> Maybe.oneOf
@@ -1244,7 +1244,7 @@ formatDocComment importInfo blocks =
                     , Maybe.map ModuleCode << Result.toMaybe << parseModule
                     ]
 
-        format : ElmCodeBlock -> String
+        format : GuidaCodeBlock -> String
         format result =
             case result of
                 ModuleCode modu ->
@@ -1271,8 +1271,8 @@ formatDocComment importInfo blocks =
         cleanBlock : Block -> Block
         cleanBlock block =
             case block of
-                ElmDocs docs ->
-                    ElmDocs <|
+                GuidaDocs docs ->
+                    GuidaDocs <|
                         (List.map << List.map)
                             (String.replace "(..)" "")
                             docs
@@ -1528,7 +1528,7 @@ formatListing format listing =
                     Nothing
 
                 vars_ ->
-                    Just <| ElmStructure.group False "(" "," ")" multiline vars_
+                    Just <| GuidaStructure.group False "(" "," ")" multiline vars_
 
 
 
@@ -1548,7 +1548,7 @@ formatListing format listing =
 --                         multiline =
 --                             A.isMultiline region
 --                     in
---                     Just <| ElmStructure.group False "(" "," ")" multiline vars_
+--                     Just <| GuidaStructure.group False "(" "," ")" multiline vars_
 
 
 formatDetailedListing : DetailedListing -> List Box
@@ -1691,7 +1691,7 @@ formatDeclaration importInfo decl =
                                 ]
 
         TypeAlias preAlias nameWithArgs typ ->
-            ElmStructure.definition "="
+            GuidaStructure.definition "="
                 True
                 (Box.line <| Box.keyword "type")
                 [ formatPreCommented ( preAlias, Box.line <| Box.keyword "alias" )
@@ -1700,7 +1700,7 @@ formatDeclaration importInfo decl =
                 (formatPreCommentedStack <| Src.c1map (typeParens NotRequired << formatType) typ)
 
         PortAnnotation name typeComments typ ->
-            ElmStructure.definition ":"
+            GuidaStructure.definition ":"
                 False
                 (Box.line <| Box.keyword "port")
                 [ formatCommented <| Src.c2map (Box.line << formatLowercaseIdentifier []) name ]
@@ -1720,7 +1720,7 @@ formatDeclaration importInfo decl =
                         Binop.Non ->
                             Box.keyword "non  "
             in
-            ElmStructure.spaceSepOrIndented
+            GuidaStructure.spaceSepOrIndented
                 (Box.line <| Box.keyword "infix")
                 [ formatPreCommented <| Src.c1map (Box.line << formatAssoc) assoc
                 , formatPreCommented <| Src.c1map (Box.line << Box.literal << String.fromInt) precedence
@@ -1754,7 +1754,7 @@ formatDefinition importInfo (A.At _ name) args comments expr =
                     ]
                 )
     in
-    ElmStructure.definition "="
+    GuidaStructure.definition "="
         True
         (syntaxParens SpaceSeparated (formatPattern name))
         (List.map (\( x, A.At _ y ) -> formatCommentedApostrophe x (syntaxParens SpaceSeparated (formatPattern y))) args)
@@ -1763,7 +1763,7 @@ formatDefinition importInfo (A.At _ name) args comments expr =
 
 formatTypeAnnotation : Src.C1 (Ref ()) -> Src.C1 Src.Type -> Box
 formatTypeAnnotation name typ =
-    ElmStructure.definition ":"
+    GuidaStructure.definition ":"
         False
         (formatTailCommented (Src.c1map (Box.line << formatVar << refMap (\() -> [])) name))
         []
@@ -1786,7 +1786,7 @@ formatPattern apattern =
 
         Src.PRecord ( _, fields ) ->
             ( SyntaxSeparated
-            , ElmStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) (List.reverse fields))
+            , GuidaStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) (List.reverse fields))
             )
 
         Src.PAlias aliasPattern name ->
@@ -1825,7 +1825,7 @@ formatPattern apattern =
                     a :: b :: cs
             in
             ( SyntaxSeparated
-            , ElmStructure.group True "(" "," ")" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
+            , GuidaStructure.group True "(" "," ")" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
             )
 
         Src.PCtor _ name [] ->
@@ -1845,8 +1845,8 @@ formatPattern apattern =
                     [ name ]
             in
             ( SpaceSeparated
-            , ElmStructure.application
-                (ElmStructure.FAJoinFirst ElmStructure.JoinAll)
+            , GuidaStructure.application
+                (GuidaStructure.FAJoinFirst GuidaStructure.JoinAll)
                 (Box.line (formatQualifiedUppercaseIdentifier ctor))
                 (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) patterns)
             )
@@ -1868,8 +1868,8 @@ formatPattern apattern =
                     String.split "." home ++ [ name ]
             in
             ( SpaceSeparated
-            , ElmStructure.application
-                (ElmStructure.FAJoinFirst ElmStructure.JoinAll)
+            , GuidaStructure.application
+                (GuidaStructure.FAJoinFirst GuidaStructure.JoinAll)
                 (Box.line (formatQualifiedUppercaseIdentifier ctor))
                 (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) patterns)
             )
@@ -1881,7 +1881,7 @@ formatPattern apattern =
 
         Src.PList ( _, patterns ) ->
             ( SyntaxSeparated
-            , ElmStructure.group True "[" "," "]" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
+            , GuidaStructure.group True "[" "," "]" False (List.map (formatCommented << Src.c2map (syntaxParens SyntaxSeparated << formatPattern << A.toValue)) patterns)
             )
 
         Src.PCons hd tl ->
@@ -1942,7 +1942,7 @@ formatPattern apattern =
 
 formatRecordPair : String -> (v -> Box) -> ( Src.C2 String, Src.C2 v, Bool ) -> Box
 formatRecordPair delim formatValue ( ( ( pre, postK ), k ), v, forceMultiline ) =
-    ElmStructure.equalsPair delim
+    GuidaStructure.equalsPair delim
         forceMultiline
         (formatCommented <| Src.c2map (Box.line << formatLowercaseIdentifier []) ( ( [], postK ), k ))
         (formatCommented <| Src.c2map formatValue v)
@@ -1952,7 +1952,7 @@ formatRecordPair delim formatValue ( ( ( pre, postK ), k ), v, forceMultiline ) 
 
 formatPair : String -> Src.Pair Box.Line Box -> Box
 formatPair delim (Src.Pair a b (Src.ForceMultiline forceMultiline)) =
-    ElmStructure.equalsPair delim
+    GuidaStructure.equalsPair delim
         forceMultiline
         (formatTailCommented <| Src.c1map Box.line a)
         (formatPreCommented b)
@@ -2160,22 +2160,22 @@ formatExpression importInfo (A.At region aexpr) =
                 (A.Region (A.Position aexprStartRow _) _) =
                     region
 
-                multiline : ElmStructure.FunctionApplicationMultiline
+                multiline : GuidaStructure.FunctionApplicationMultiline
                 multiline =
                     if firstArgEndRow > aexprStartRow then
-                        ElmStructure.FASplitFirst
+                        GuidaStructure.FASplitFirst
 
                     else
-                        ElmStructure.FAJoinFirst
+                        GuidaStructure.FAJoinFirst
                             (if A.isMultiline region then
-                                ElmStructure.SplitAll
+                                GuidaStructure.SplitAll
 
                              else
-                                ElmStructure.JoinAll
+                                GuidaStructure.JoinAll
                             )
             in
             ( SpaceSeparated
-            , ElmStructure.application
+            , GuidaStructure.application
                 multiline
                 (syntaxParens InfixSeparated <| formatExpression importInfo func)
                 (List.map (formatPreCommentedExpression importInfo SpaceSeparated) args)
@@ -2447,7 +2447,7 @@ formatExpression importInfo (A.At region aexpr) =
                     a :: b :: cs
             in
             ( SyntaxSeparated
-            , ElmStructure.group True "(" "," ")" multiline <|
+            , GuidaStructure.group True "(" "," ")" multiline <|
                 List.map (formatCommentedExpression importInfo) exprs
             )
 
@@ -2511,7 +2511,7 @@ formatRecordLike : Maybe (Src.C2 Box) -> List (Src.C2Eol Box) -> Src.FComments -
 formatRecordLike base_ fields trailing multiline =
     case ( base_, fields ) of
         ( Just base, pairs_ ) ->
-            ElmStructure.extensionGroup_
+            GuidaStructure.extensionGroup_
                 ((\(Src.ForceMultiline b) -> b) multiline)
                 (formatCommented base)
                 (formatSequence '|'
@@ -2542,8 +2542,8 @@ formatSequence left delim maybeRight (Src.ForceMultiline multiline) trailing lis
                         Box.prefix (Box.row [ Box.punc (String.fromChar delim_), Box.space ]) <|
                             formatC2Eol ( ( post, [], eol ), item )
             in
-            ElmStructure.forceableSpaceSepOrStack multiline
-                (ElmStructure.forceableRowOrStack multiline
+            GuidaStructure.forceableSpaceSepOrStack multiline
+                (GuidaStructure.forceableRowOrStack multiline
                     (formatItem left first)
                     (List.map (formatItem delim) rest)
                 )
@@ -2630,12 +2630,12 @@ formatComments comments =
             Nothing
 
         first :: rest ->
-            Just (ElmStructure.spaceSepOrStack first rest)
+            Just (GuidaStructure.spaceSepOrStack first rest)
 
 
 formatCommented_ : Bool -> Src.C2 Box -> Box
 formatCommented_ forceMultiline ( ( pre, post ), inner ) =
-    ElmStructure.forceableSpaceSepOrStack1 forceMultiline <|
+    GuidaStructure.forceableSpaceSepOrStack1 forceMultiline <|
         List.concat
             [ Maybe.toList (formatComments pre)
             , [ inner ]
@@ -2696,7 +2696,7 @@ formatPreCommentedStack ( pre, inner ) =
 
 formatKeywordCommented : String -> Src.C2 Box -> Box
 formatKeywordCommented word ( ( pre, post ), value ) =
-    ElmStructure.spaceSepOrIndented
+    GuidaStructure.spaceSepOrIndented
         (formatCommented ( ( pre, post ), Box.line (Box.keyword word) ))
         [ value ]
 
@@ -2950,9 +2950,9 @@ formatType (A.At region atype) =
 
                 formatRight : Src.C2Eol Src.Type -> Box
                 formatRight ( ( preOp, postOp, eol ), term ) =
-                    ElmStructure.forceableSpaceSepOrStack1 False <|
+                    GuidaStructure.forceableSpaceSepOrStack1 False <|
                         ((Maybe.toList <| formatComments preOp)
-                            ++ [ ElmStructure.prefixOrIndented
+                            ++ [ GuidaStructure.prefixOrIndented
                                     (Box.line <| Box.punc "->")
                                     (formatC2Eol <|
                                         (Src.c2EolMap <| typeParens ForLambda << formatType)
@@ -2962,7 +2962,7 @@ formatType (A.At region atype) =
                         )
             in
             ( ForFunctionType
-            , ElmStructure.forceableSpaceSepOrStack
+            , GuidaStructure.forceableSpaceSepOrStack
                 forceMultiline
                 (formatEolCommented (Src.c0EolMap (typeParens ForLambda << formatType) first))
                 (List.map formatRight rest)
@@ -2981,21 +2981,21 @@ formatType (A.At region atype) =
                 forceMultiline =
                     Src.ForceMultiline (A.isMultiline region)
 
-                join : ElmStructure.FunctionApplicationMultiline
+                join : GuidaStructure.FunctionApplicationMultiline
                 join =
                     case forceMultiline of
                         Src.ForceMultiline True ->
-                            ElmStructure.FASplitFirst
+                            GuidaStructure.FASplitFirst
 
                         Src.ForceMultiline False ->
-                            ElmStructure.FAJoinFirst ElmStructure.JoinAll
+                            GuidaStructure.FAJoinFirst GuidaStructure.JoinAll
             in
             ( if List.isEmpty args then
                 NotNeeded
 
               else
                 ForTypeConstruction
-            , ElmStructure.application
+            , GuidaStructure.application
                 join
                 (formatTypeConstructor ctor)
                 (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args)
@@ -3007,21 +3007,21 @@ formatType (A.At region atype) =
                 forceMultiline =
                     Src.ForceMultiline (A.isMultiline region)
 
-                join : ElmStructure.FunctionApplicationMultiline
+                join : GuidaStructure.FunctionApplicationMultiline
                 join =
                     case forceMultiline of
                         Src.ForceMultiline True ->
-                            ElmStructure.FASplitFirst
+                            GuidaStructure.FASplitFirst
 
                         Src.ForceMultiline False ->
-                            ElmStructure.FAJoinFirst ElmStructure.JoinAll
+                            GuidaStructure.FAJoinFirst GuidaStructure.JoinAll
             in
             ( if List.isEmpty args then
                 NotNeeded
 
               else
                 ForTypeConstruction
-            , ElmStructure.application
+            , GuidaStructure.application
                 join
                 (formatTypeConstructor (home ++ "." ++ name))
                 (List.map (formatPreCommented << Src.c1map (typeParens ForCtor << formatType)) args)
@@ -3071,7 +3071,7 @@ formatType (A.At region atype) =
                     A.isMultiline region
             in
             ( NotNeeded
-            , ElmStructure.group True "(" "," ")" forceMultiline (List.map (formatC2Eol << Src.c2EolMap (typeParens NotRequired << formatType)) types)
+            , GuidaStructure.group True "(" "," ")" forceMultiline (List.map (formatC2Eol << Src.c2EolMap (typeParens NotRequired << formatType)) types)
             )
 
         Src.TParens type_ ->
