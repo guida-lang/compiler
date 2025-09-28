@@ -206,7 +206,7 @@ make =
             stack
                 [ reflow "For example:"
                 , D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
-                , reflow "This tries to compile a Guida (and Elm) file named src/Main.guida, generating an index.html file if possible."
+                , reflow "This tries to compile a Guida file named src/Main.guida, generating an index.html file if possible."
                 ]
 
         makeFlags : Terminal.Flags

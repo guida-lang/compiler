@@ -188,11 +188,11 @@ readOutline (Env maybeRoot _ _ registry) =
                                         let
                                             pkg =
                                                 case pkgOutline of
-                                                    Outline.GuidaPkgOutline pkg_ _ _ _ _ _ _ _ ->
-                                                        pkg_
+                                                    Outline.GuidaPkgOutline guidaPkg _ _ _ _ _ _ _ ->
+                                                        guidaPkg
 
-                                                    Outline.ElmPkgOutline pkg_ _ _ _ _ _ _ _ ->
-                                                        pkg_
+                                                    Outline.ElmPkgOutline elmPkg _ _ _ _ _ _ _ ->
+                                                        elmPkg
                                         in
                                         case Registry.getVersions pkg registry of
                                             Just vsns ->

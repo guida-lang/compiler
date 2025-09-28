@@ -2548,7 +2548,7 @@ toPackageProblemReport pkg vsn problem =
                         [ "  Expected: " ++ expectedHash
                         , "    Actual: " ++ actualHash
                         ]
-                , D.reflow "This usually means that the package author moved the version tag, so report it to them and see if that is the issue. Folks on Guida discord can probably help as well."
+                , D.reflow "This usually means that the package author moved the version tag, so report it to them and see if that is the issue. Check <https://guida-lang.org/community> for help!"
                 ]
 
 

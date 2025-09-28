@@ -299,9 +299,9 @@ toConsoleErrorMessage errorMessage =
 
         SingleOutputWithMultipleInputs ->
             unlines
-                [ "Can't write to the OUTPUT path, because multiple .guida files have been specified."
+                [ "Can't write to the OUTPUT path, because multiple files have been specified."
                 , ""
-                , "Please remove the --output argument. The .guida files in INPUT will be formatted in place."
+                , "Please remove the --output argument. The files in INPUT will be formatted in place."
                 ]
 
         TooManyInputs ->
