@@ -1,9 +1,9 @@
-module Browser.Main exposing (main)
+module API.Main exposing (main)
 
-import Browser.Format as Format
-import Browser.Install as Install
-import Browser.Make as Make
-import Browser.Uninstall as Uninstall
+import API.Format as Format
+import API.Install as Install
+import API.Make as Make
+import API.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
 import Compiler.Elm.Package as Pkg
 import Compiler.Json.Encode as E

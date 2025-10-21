@@ -22,7 +22,7 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm run build:bin
-      - run: npm run build:browser
+      - run: npm run build:api
       - run: npm run test:eslint
       - run: npm run test:elm-format-validate
       - run: npm run test:jest

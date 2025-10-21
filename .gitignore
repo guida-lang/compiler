@@ -7,12 +7,8 @@ elm-stuff
 guida-stuff
 
 # Main
-lib/guida.node.js
-lib/guida.node.min.js
-
-# Browser
-lib/guida.browser.js
-lib/guida.browser.min.js
+lib/guida.js
+lib/guida.min.js
 
 # Command line
 bin/guida.js
