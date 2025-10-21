@@ -1,6 +1,5 @@
 module Terminal.Main exposing (main)
 
-import Builder.Deps.Website as Website
 import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import System.IO as IO
@@ -39,23 +38,19 @@ main =
 
 app : Task Never ()
 app =
-    Task.io Website.domain
-        |> Task.bind
-            (\registryDomain ->
-                Terminal.app intro
-                    outro
-                    [ repl
-                    , init
-                    , make
-                    , install registryDomain
-                    , uninstall
-                    , bump
-                    , diff
-                    , publish registryDomain
-                    , format
-                    , test
-                    ]
-            )
+    Terminal.app intro
+        outro
+        [ repl
+        , init
+        , make
+        , install
+        , uninstall
+        , bump
+        , diff
+        , publish
+        , format
+        , test
+        ]
 
 
 intro : D.Doc
@@ -246,12 +241,12 @@ make =
 -- INSTALL
 
 
-install : String -> Terminal.Command
-install registryDomain =
+install : Terminal.Command
+install =
     let
         details : String
         details =
-            "The `install` command fetches packages from <" ++ registryDomain ++ "> for use in your project:"
+            "The `install` command fetches packages from the configured registry for use in your project:"
 
         example : D.Doc
         example =
@@ -316,7 +311,7 @@ uninstall =
     let
         details : String
         details =
-            "The `uninstall` command removes packages your project:"
+            "The `uninstall` command removes packages from your project:"
 
         example : D.Doc
         example =
@@ -373,12 +368,12 @@ uninstall =
 -- PUBLISH
 
 
-publish : String -> Terminal.Command
-publish registryDomain =
+publish : Terminal.Command
+publish =
     let
         details : String
         details =
-            "The `publish` command publishes your package on <" ++ registryDomain ++ "> so that it can be used."
+            "The `publish` command publishes your package on the configured registry so that it can be used by other projects."
 
         example : D.Doc
         example =
@@ -531,7 +526,7 @@ format =
     let
         details : String
         details =
-            "The `format` command formats Guida code in place."
+            "The `format` command formats Guida (and Elm) source code."
 
         example : D.Doc
         example =
@@ -601,7 +596,7 @@ test =
                 [ reflow "For example:"
                 , D.indent 4 <| D.green (D.fromChars "guida test")
                 , reflow "Run tests in the tests/ folder."
-                , D.indent 4 <| D.green (D.fromChars "guida test src/Main.guida")
+                , D.indent 4 <| D.green (D.fromChars "guida test src/**/*Tests.guida")
                 , reflow "Run tests in files matching the glob."
                 ]
 

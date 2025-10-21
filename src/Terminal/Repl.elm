@@ -41,7 +41,6 @@ import Data.Map as Map exposing (Dict)
 import Dict
 import List.Extra as List
 import Maybe.Extra as Maybe
-import Prelude
 import System.Exit as Exit
 import System.IO as IO
 import System.Process as Process
@@ -97,7 +96,7 @@ printWelcomeMessage =
 
         dashes : String
         dashes =
-            String.repeat (70 - String.length vsn) "-"
+            String.repeat (80 - String.length vsn) "-"
     in
     D.toAnsi IO.stdout <|
         D.vcat
@@ -105,8 +104,8 @@ printWelcomeMessage =
                 |> D.plus (D.dullcyan title)
                 |> D.plus (D.black (D.fromChars dashes))
             , D.black (D.fromChars "Say :help for help and :exit to exit! More at ")
-                |> D.a (D.fromChars (D.makeLink "repl"))
-            , D.black (D.fromChars "--------------------------------------------------------------------------------")
+                |> D.a (D.fromChars (D.makeCommandLink "repl"))
+            , D.black (D.fromChars "--------------------------------------------------------------------------------------------")
             , D.fromChars ""
             ]
 
@@ -693,7 +692,7 @@ toHelpMessage maybeBadCommand =
 
 genericHelpMessage : String
 genericHelpMessage =
-    "Valid commands include:\n\n  :exit    Exit the REPL\n  :help    Show this information\n  :reset   Clear all previous imports and definitions\n\nMore info at " ++ D.makeLink "repl" ++ "\n"
+    "Valid commands include:\n\n  :exit    Exit the REPL\n  :help    Show this information\n  :reset   Clear all previous imports and definitions\n\nMore info at " ++ D.makeCommandLink "repl" ++ "\n"
 
 
 

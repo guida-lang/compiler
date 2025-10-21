@@ -125,7 +125,7 @@ initToReport exit =
                 "You already have a guida.json file, so there is nothing for me to initialize!"
                 [ D.fillSep
                     [ D.fromChars "Maybe"
-                    , D.green (D.fromChars (D.makeLink "init"))
+                    , D.green (D.fromChars (D.makeCommandLink "init"))
                     , D.fromChars "can"
                     , D.fromChars "help"
                     , D.fromChars "you"
@@ -566,13 +566,18 @@ type Publish
     | PublishGuidaNotInitialVersion V.Version
     | PublishElmNotInitialVersion V.Version
     | PublishAlreadyPublished V.Version
-    | PublishInvalidBump V.Version V.Version
-    | PublishBadBump V.Version V.Version M.Magnitude V.Version M.Magnitude
-    | PublishNoSummary
-    | PublishNoExposed
+    | PublishGuidaInvalidBump V.Version V.Version
+    | PublishElmInvalidBump V.Version V.Version
+    | PublishGuidaBadBump V.Version V.Version M.Magnitude V.Version M.Magnitude
+    | PublishElmBadBump V.Version V.Version M.Magnitude V.Version M.Magnitude
+    | PublishGuidaNoSummary
+    | PublishElmNoSummary
+    | PublishGuidaNoExposed
+    | PublishElmNoExposed
     | PublishNoReadme
     | PublishShortReadme
-    | PublishNoLicense
+    | PublishGuidaNoLicense
+    | PublishElmNoLicense
     | PublishBuildProblem BuildProblem
     | PublishMissingTag V.Version
     | PublishCannotGetTag V.Version Http.Error
@@ -700,7 +705,62 @@ publishToReport publish =
                     "It computes the version number based on API changes, ensuring that no breaking changes end up in PATCH releases!"
                 ]
 
-        PublishInvalidBump statedVersion latestVersion ->
+        PublishGuidaInvalidBump statedVersion latestVersion ->
+            Help.docReport "INVALID VERSION"
+                (Just "guida.json")
+                (D.fillSep <|
+                    [ D.fromChars "Your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "says"
+                    , D.fromChars "the"
+                    , D.fromChars "next"
+                    , D.fromChars "version"
+                    , D.fromChars "should"
+                    , D.fromChars "be"
+                    , D.red (D.fromVersion statedVersion) |> D.a (D.fromChars ",")
+                    , D.fromChars "but"
+                    , D.fromChars "that"
+                    , D.fromChars "is"
+                    , D.fromChars "not"
+                    , D.fromChars "valid"
+                    , D.fromChars "based"
+                    , D.fromChars "on"
+                    , D.fromChars "the"
+                    , D.fromChars "previously"
+                    , D.fromChars "published"
+                    , D.fromChars "versions."
+                    ]
+                )
+                [ D.fillSep <|
+                    [ D.fromChars "Change"
+                    , D.fromChars "the"
+                    , D.fromChars "version"
+                    , D.fromChars "back"
+                    , D.fromChars "to"
+                    , D.green (D.fromVersion latestVersion)
+                    , D.fromChars "which"
+                    , D.fromChars "is"
+                    , D.fromChars "the"
+                    , D.fromChars "most"
+                    , D.fromChars "recently"
+                    , D.fromChars "published"
+                    , D.fromChars "version."
+                    , D.fromChars "From"
+                    , D.fromChars "there,"
+                    , D.fromChars "have"
+                    , D.fromChars "Guida"
+                    , D.fromChars "bump"
+                    , D.fromChars "the"
+                    , D.fromChars "version"
+                    , D.fromChars "by"
+                    , D.fromChars "running:"
+                    ]
+                , D.indent 4 <| D.green (D.fromChars "guida bump")
+                , D.reflow <|
+                    "If you want more insight on the API changes Guida detects, you can run `guida diff` at this point as well."
+                ]
+
+        PublishElmInvalidBump statedVersion latestVersion ->
             Help.docReport "INVALID VERSION"
                 (Just "elm.json")
                 (D.fillSep <|
@@ -743,7 +803,7 @@ publishToReport publish =
                     , D.fromChars "From"
                     , D.fromChars "there,"
                     , D.fromChars "have"
-                    , D.fromChars "Elm"
+                    , D.fromChars "Guida"
                     , D.fromChars "bump"
                     , D.fromChars "the"
                     , D.fromChars "version"
@@ -752,10 +812,80 @@ publishToReport publish =
                     ]
                 , D.indent 4 <| D.green (D.fromChars "guida bump")
                 , D.reflow <|
-                    "If you want more insight on the API changes Elm detects, you can run `elm diff` at this point as well."
+                    "If you want more insight on the API changes Guida detects, you can run `guida diff` at this point as well."
                 ]
 
-        PublishBadBump old new magnitude realNew realMagnitude ->
+        PublishGuidaBadBump old new magnitude realNew realMagnitude ->
+            Help.docReport "INVALID VERSION"
+                (Just "guida.json")
+                (D.fillSep <|
+                    [ D.fromChars "Your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "says"
+                    , D.fromChars "the"
+                    , D.fromChars "next"
+                    , D.fromChars "version"
+                    , D.fromChars "should"
+                    , D.fromChars "be"
+                    , D.red (D.fromVersion new)
+                        |> D.a (D.fromChars ",")
+                    , D.fromChars "indicating"
+                    , D.fromChars "a"
+                    , D.fromChars (M.toChars magnitude)
+                    , D.fromChars "change"
+                    , D.fromChars "to"
+                    , D.fromChars "the"
+                    , D.fromChars "public"
+                    , D.fromChars "API."
+                    , D.fromChars "This"
+                    , D.fromChars "does"
+                    , D.fromChars "not"
+                    , D.fromChars "match"
+                    , D.fromChars "the"
+                    , D.fromChars "API"
+                    , D.fromChars "diff"
+                    , D.fromChars "given"
+                    , D.fromChars "by:"
+                    ]
+                )
+                [ D.indent 4 <|
+                    D.fromChars <|
+                        "guida diff "
+                            ++ V.toChars old
+                , D.fillSep <|
+                    [ D.fromChars "This"
+                    , D.fromChars "command"
+                    , D.fromChars "says"
+                    , D.fromChars "this"
+                    , D.fromChars "is"
+                    , D.fromChars "a"
+                    , D.fromChars (M.toChars realMagnitude)
+                    , D.fromChars "change,"
+                    , D.fromChars "so"
+                    , D.fromChars "the"
+                    , D.fromChars "next"
+                    , D.fromChars "version"
+                    , D.fromChars "should"
+                    , D.fromChars "be"
+                    , D.green (D.fromVersion realNew) |> D.a (D.fromChars ".")
+                    , D.fromChars "Double"
+                    , D.fromChars "check"
+                    , D.fromChars "everything"
+                    , D.fromChars "to"
+                    , D.fromChars "make"
+                    , D.fromChars "sure"
+                    , D.fromChars "you"
+                    , D.fromChars "are"
+                    , D.fromChars "publishing"
+                    , D.fromChars "what"
+                    , D.fromChars "you"
+                    , D.fromChars "want!"
+                    ]
+                , D.reflow <|
+                    "Also, next time use `guida bump` and I'll figure all this out for you!"
+                ]
+
+        PublishElmBadBump old new magnitude realNew realMagnitude ->
             Help.docReport "INVALID VERSION"
                 (Just "elm.json")
                 (D.fillSep <|
@@ -790,7 +920,7 @@ publishToReport publish =
                 )
                 [ D.indent 4 <|
                     D.fromChars <|
-                        "elm diff "
+                        "guida diff "
                             ++ V.toChars old
                 , D.fillSep <|
                     [ D.fromChars "This"
@@ -822,10 +952,39 @@ publishToReport publish =
                     , D.fromChars "want!"
                     ]
                 , D.reflow <|
-                    "Also, next time use `elm bump` and I'll figure all this out for you!"
+                    "Also, next time use `guida bump` and I'll figure all this out for you!"
                 ]
 
-        PublishNoSummary ->
+        PublishGuidaNoSummary ->
+            Help.docReport "NO SUMMARY"
+                (Just "guida.json")
+                (D.fillSep <|
+                    [ D.fromChars "To"
+                    , D.fromChars "publish"
+                    , D.fromChars "a"
+                    , D.fromChars "package,"
+                    , D.fromChars "your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "must"
+                    , D.fromChars "have"
+                    , D.fromChars "a"
+                    , D.dullyellow (D.fromChars "\"summary\"")
+                    , D.fromChars "field"
+                    , D.fromChars "that"
+                    , D.fromChars "gives"
+                    , D.fromChars "a"
+                    , D.fromChars "consice"
+                    , D.fromChars "overview"
+                    , D.fromChars "of"
+                    , D.fromChars "your"
+                    , D.fromChars "project."
+                    ]
+                )
+                [ D.reflow <|
+                    "The summary must be less than 80 characters. It should describe the concrete use of your package as clearly and as plainly as possible."
+                ]
+
+        PublishElmNoSummary ->
             Help.docReport "NO SUMMARY"
                 (Just "elm.json")
                 (D.fillSep <|
@@ -854,7 +1013,33 @@ publishToReport publish =
                     "The summary must be less than 80 characters. It should describe the concrete use of your package as clearly and as plainly as possible."
                 ]
 
-        PublishNoExposed ->
+        PublishGuidaNoExposed ->
+            Help.docReport "NO EXPOSED MODULES"
+                (Just "guida.json")
+                (D.fillSep <|
+                    [ D.fromChars "To"
+                    , D.fromChars "publish"
+                    , D.fromChars "a"
+                    , D.fromChars "package,"
+                    , D.fromChars "the"
+                    , D.dullyellow (D.fromChars "\"exposed-modules\"")
+                    , D.fromChars "field"
+                    , D.fromChars "of"
+                    , D.fromChars "your"
+                    , D.fromChars "guida.json"
+                    , D.fromChars "must"
+                    , D.fromChars "list"
+                    , D.fromChars "at"
+                    , D.fromChars "least"
+                    , D.fromChars "one"
+                    , D.fromChars "module."
+                    ]
+                )
+                [ D.reflow <|
+                    "Which modules do you want users of the package to have access to? Add their names to the \"exposed-modules\" list."
+                ]
+
+        PublishElmNoExposed ->
             Help.docReport "NO EXPOSED MODULES"
                 (Just "elm.json")
                 (D.fillSep <|
@@ -888,10 +1073,18 @@ publishToReport publish =
             toBadReadmeReport "SHORT README" <|
                 "This README.md is too short. Having more details will help people assess your package quickly and fairly."
 
-        PublishNoLicense ->
+        PublishGuidaNoLicense ->
             Help.report "NO LICENSE FILE"
                 (Just "LICENSE")
-                "By publishing a package you are inviting the Elm community to build upon your work. But without knowing your license, we have no idea if that is legal!"
+                "By publishing a package you are inviting the Guida community to build upon your work. But without knowing your license, we have no idea if that is legal!"
+                [ D.reflow <|
+                    "Once you pick an OSI approved license from <https://spdx.org/licenses/>, you must share that choice in two places. First, the license identifier must appear in your guida.json file. Second, the full license text must appear in the root of your project in a file named LICENSE. Add that file and you will be all set!"
+                ]
+
+        PublishElmNoLicense ->
+            Help.report "NO LICENSE FILE"
+                (Just "LICENSE")
+                "By publishing a package you are inviting the Guida community to build upon your work. But without knowing your license, we have no idea if that is legal!"
                 [ D.reflow <|
                     "Once you pick an OSI approved license from <https://spdx.org/licenses/>, you must share that choice in two places. First, the license identifier must appear in your elm.json file. Second, the full license text must appear in the root of your project in a file named LICENSE. Add that file and you will be all set!"
                 ]
@@ -1182,13 +1375,17 @@ type Install
     | InstallBadOutline Outline
     | InstallBadRegistry RegistryProblem
     | InstallNoArgs FilePath
-    | InstallNoOnlineAppSolution Pkg.Name
-    | InstallNoOfflineAppSolution Pkg.Name
-    | InstallNoOnlinePkgSolution Pkg.Name
-    | InstallNoOfflinePkgSolution Pkg.Name
+    | InstallGuidaNoOnlineAppSolution Pkg.Name
+    | InstallElmNoOnlineAppSolution Pkg.Name
+    | InstallGuidaNoOfflineAppSolution String Pkg.Name
+    | InstallElmNoOfflineAppSolution String Pkg.Name
+    | InstallGuidaNoOnlinePkgSolution Pkg.Name
+    | InstallElmNoOnlinePkgSolution Pkg.Name
+    | InstallGuidaNoOfflinePkgSolution String Pkg.Name
+    | InstallElmNoOfflinePkgSolution String Pkg.Name
     | InstallHadSolverTrouble Solver
-    | InstallUnknownPackageOnline Pkg.Name (List Pkg.Name)
-    | InstallUnknownPackageOffline Pkg.Name (List Pkg.Name)
+    | InstallUnknownPackageOnline String Pkg.Name (List Pkg.Name)
+    | InstallUnknownPackageOffline String Pkg.Name (List Pkg.Name)
     | InstallBadDetails Details
 
 
@@ -1310,29 +1507,65 @@ installToReport exit =
                     ]
                 ]
 
-        InstallNoOnlineAppSolution pkg ->
+        InstallGuidaNoOnlineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "guida.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
+                , D.reflow <|
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Guida came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://guida-lang.org/community to learn what might be going on with this package."
+                , D.toSimpleNote <|
+                    "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
+                ]
+
+        InstallElmNoOnlineAppSolution pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
                 [ D.reflow <|
                     "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
                 , D.reflow <|
-                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Elm came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://elm-lang.org/community to learn what might be going on with this package."
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Guida came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://guida-lang.org/community to learn what might be going on with this package."
                 , D.toSimpleNote <|
                     "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
                 ]
 
-        InstallNoOfflineAppSolution pkg ->
+        InstallGuidaNoOfflineAppSolution registryDomain pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
-                (Just "elm.json")
+                (Just "guida.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
                 [ D.reflow <|
-                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
                 , D.reflow <|
                     "Try again later when you have internet!"
                 ]
 
-        InstallNoOnlinePkgSolution pkg ->
+        InstallElmNoOfflineAppSolution registryDomain pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        InstallGuidaNoOnlinePkgSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "guida.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
+                [ D.reflow <|
+                    "With applications, I try to broaden the constraints to see if anything works, but messing with package constraints is much more delicate business. E.g. making your constraints stricter may make it harder for applications to find compatible dependencies. So fixing something here may break it for a lot of other people!"
+                , D.reflow <|
+                    "So I recommend making an application with the same dependencies as your package. See if there is a solution at all. From there it may be easier to figure out how to proceed in a way that will disrupt your users as little as possible. And the solution may be to help other package authors to get their packages updated, or to drop a dependency entirely."
+                ]
+
+        InstallElmNoOnlinePkgSolution pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
@@ -1342,12 +1575,26 @@ installToReport exit =
                     "So I recommend making an application with the same dependencies as your package. See if there is a solution at all. From there it may be easier to figure out how to proceed in a way that will disrupt your users as little as possible. And the solution may be to help other package authors to get their packages updated, or to drop a dependency entirely."
                 ]
 
-        InstallNoOfflinePkgSolution pkg ->
+        InstallGuidaNoOfflinePkgSolution registryDomain pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "guida.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        InstallElmNoOfflinePkgSolution registryDomain pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
                 [ D.reflow <|
-                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
                 , D.reflow <|
                     "Try again later when you have internet!"
                 ]
@@ -1355,7 +1602,7 @@ installToReport exit =
         InstallHadSolverTrouble solver ->
             toSolverReport solver
 
-        InstallUnknownPackageOnline pkg suggestions ->
+        InstallUnknownPackageOnline registryDomain pkg suggestions ->
             Help.docReport "UNKNOWN PACKAGE"
                 Nothing
                 (D.fillSep
@@ -1370,12 +1617,14 @@ installToReport exit =
                     ]
                 )
                 [ D.reflow <|
-                    "I looked through https://package.elm-lang.org for packages with similar names and found these:"
+                    "I looked through "
+                        ++ registryDomain
+                        ++ " for packages with similar names and found these:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
                 , D.reflow <| "Maybe you want one of these instead?"
                 ]
 
-        InstallUnknownPackageOffline pkg suggestions ->
+        InstallUnknownPackageOffline registryDomain pkg suggestions ->
             Help.docReport "UNKNOWN PACKAGE"
                 Nothing
                 (D.fillSep
@@ -1390,7 +1639,9 @@ installToReport exit =
                     ]
                 )
                 [ D.reflow <|
-                    "I could not connect to https://package.elm-lang.org though, so new packages may have been published since I last updated my local cache of package names."
+                    "I could not connect to "
+                        ++ registryDomain
+                        ++ " though, so new packages may have been published since I last updated my local cache of package names."
                 , D.reflow <|
                     "Looking through the locally cached names, the closest ones are:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
@@ -1410,8 +1661,10 @@ type Uninstall
     | UninstallBadOutline Outline
     | UninstallBadRegistry RegistryProblem
     | UninstallNoArgs
-    | UninstallNoOnlineAppSolution Pkg.Name
-    | UninstallNoOfflineAppSolution Pkg.Name
+    | UninstallGuidaNoOnlineAppSolution Pkg.Name
+    | UninstallElmNoOnlineAppSolution Pkg.Name
+    | UninstallGuidaNoOfflineAppSolution String Pkg.Name
+    | UninstallElmNoOfflineAppSolution String Pkg.Name
     | UninstallHadSolverTrouble Solver
     | UninstallBadDetails Details
 
@@ -1447,24 +1700,50 @@ uninstallToReport exit =
                             ]
                 ]
 
-        UninstallNoOnlineAppSolution pkg ->
+        UninstallGuidaNoOnlineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "guida.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
+                , D.reflow <|
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Guida came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://guida-lang.org/community to learn what might be going on with this package."
+                , D.toSimpleNote <|
+                    "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
+                ]
+
+        UninstallElmNoOnlineAppSolution pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
                 [ D.reflow <|
                     "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
                 , D.reflow <|
-                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Elm came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://elm-lang.org/community to learn what might be going on with this package."
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Guida came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://guida-lang.org/community to learn what might be going on with this package."
                 , D.toSimpleNote <|
                     "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
                 ]
 
-        UninstallNoOfflineAppSolution pkg ->
+        UninstallGuidaNoOfflineAppSolution registryDomain pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "guida.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        UninstallElmNoOfflineAppSolution registryDomain pkg ->
             Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
                 [ D.reflow <|
-                    "I was not able to connect to https://package.elm-lang.org/ though, so I was only able to look through packages that you have downloaded in the past."
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
                 , D.reflow <|
                     "Try again later when you have internet!"
                 ]
@@ -1522,8 +1801,10 @@ toSolverReport problem =
 type Outline
     = OutlineHasBadGuidaStructure (Decode.Error OutlineProblem)
     | OutlineHasBadElmStructure (Decode.Error OutlineProblem)
-    | OutlineHasMissingSrcDirs FilePath (List FilePath)
-    | OutlineHasDuplicateSrcDirs FilePath FilePath FilePath
+    | OutlineHasMissingGuidaSrcDirs FilePath (List FilePath)
+    | OutlineHasMissingElmSrcDirs FilePath (List FilePath)
+    | OutlineHasDuplicateGuidaSrcDirs FilePath FilePath FilePath
+    | OutlineHasDuplicateElmSrcDirs FilePath FilePath FilePath
     | OutlineNoGuidaPkgCore
     | OutlineNoElmPkgCore
     | OutlineNoGuidaAppCore
@@ -1557,7 +1838,29 @@ toOutlineReport problem =
             Json.toReport "elm.json" (Json.FailureToReport toOutlineProblemReport) decodeError <|
                 Json.ExplicitReason "I ran into a problem with your elm.json file."
 
-        OutlineHasMissingSrcDirs dir dirs ->
+        OutlineHasMissingGuidaSrcDirs dir dirs ->
+            case dirs of
+                [] ->
+                    Help.report "MISSING SOURCE DIRECTORY"
+                        (Just "guida.json")
+                        "I need a valid guida.json file, but the \"source-directories\" field lists the following directory:"
+                        [ D.indent 4 <| D.red <| D.fromChars dir
+                        , D.reflow <|
+                            "I cannot find it though. Is it missing? Is there a typo?"
+                        ]
+
+                _ :: _ ->
+                    Help.report "MISSING SOURCE DIRECTORIES"
+                        (Just "guida.json")
+                        "I need a valid guida.json file, but the \"source-directories\" field lists the following directories:"
+                        [ D.indent 4 <|
+                            D.vcat <|
+                                List.map (D.red << D.fromChars) (dir :: dirs)
+                        , D.reflow <|
+                            "I cannot find them though. Are they missing? Are there typos?"
+                        ]
+
+        OutlineHasMissingElmSrcDirs dir dirs ->
             case dirs of
                 [] ->
                     Help.report "MISSING SOURCE DIRECTORY"
@@ -1579,7 +1882,33 @@ toOutlineReport problem =
                             "I cannot find them though. Are they missing? Are there typos?"
                         ]
 
-        OutlineHasDuplicateSrcDirs canonicalDir dir1 dir2 ->
+        OutlineHasDuplicateGuidaSrcDirs canonicalDir dir1 dir2 ->
+            if dir1 == dir2 then
+                Help.report "REDUNDANT SOURCE DIRECTORIES"
+                    (Just "guida.json")
+                    "I need a valid guida.json file, but the \"source-directories\" field lists the same directory twice:"
+                    [ D.indent 4 <|
+                        D.vcat <|
+                            List.map (D.red << D.fromChars) [ dir1, dir2 ]
+                    , D.reflow <|
+                        "Remove one of the entries!"
+                    ]
+
+            else
+                Help.report "REDUNDANT SOURCE DIRECTORIES"
+                    (Just "guida.json")
+                    "I need a valid guida.json file, but the \"source-directories\" field has some redundant directories:"
+                    [ D.indent 4 <|
+                        D.vcat <|
+                            List.map (D.red << D.fromChars) [ dir1, dir2 ]
+                    , D.reflow <|
+                        "These are two different ways of refering to the same directory:"
+                    , D.indent 4 <| D.dullyellow <| D.fromChars canonicalDir
+                    , D.reflow <|
+                        "Remove one of the redundant entries from your \"source-directories\" field."
+                    ]
+
+        OutlineHasDuplicateElmSrcDirs canonicalDir dir1 dir2 ->
             if dir1 == dir2 then
                 Help.report "REDUNDANT SOURCE DIRECTORIES"
                     (Just "elm.json")
@@ -2689,7 +3018,8 @@ type Make
     | MakeCannotOptimizeAndDebug
     | MakeBadDetails Details
     | MakeAppNeedsFileNames
-    | MakePkgNeedsExposing
+    | MakeGuidaPkgNeedsExposing
+    | MakeElmPkgNeedsExposing
     | MakeMultipleFilesIntoHtml
     | MakeNoMain
     | MakeNonMainFilesIntoJavaScript ModuleName.Raw (List ModuleName.Raw)
@@ -2701,7 +3031,7 @@ makeToReport : Make -> Help.Report
 makeToReport make =
     case make of
         MakeNoOutline ->
-            Help.report "NO guida.json (or elm.json) FILE"
+            Help.report "NO guida.json (OR elm.json) FILE"
                 Nothing
                 "It looks like you are starting a new Guida project. Very exciting! Try running:"
                 [ D.indent 4 <| D.green <| D.fromChars "guida init"
@@ -2744,7 +3074,18 @@ makeToReport make =
                     "I recommend reading through https://guida-lang.org/docs for guidance on what to actually put in those files!"
                 ]
 
-        MakePkgNeedsExposing ->
+        MakeGuidaPkgNeedsExposing ->
+            Help.report "NO INPUT"
+                Nothing
+                "What should I make though? I need specific files like:"
+                [ D.vcat
+                    [ D.indent 4 <| D.green (D.fromChars "guida make src/Main.guida")
+                    , D.indent 4 <| D.green (D.fromChars "guida make src/This.guida src/That.guida")
+                    ]
+                , D.reflow "You can also add entries to the \"exposed-modules\" list in your guida.json file, and I will try to compile the relevant files."
+                ]
+
+        MakeElmPkgNeedsExposing ->
             Help.report "NO INPUT"
                 Nothing
                 "What should I make though? I need specific files like:"

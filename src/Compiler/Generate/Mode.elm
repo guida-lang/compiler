@@ -7,8 +7,8 @@ module Compiler.Generate.Mode exposing
 
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Name as Name
-import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Generate.JavaScript.Name as JsName
+import Compiler.Guida.Compiler.Type.Extract as Extract
 import Data.Map as Dict exposing (Dict)
 import Utils.Main as Utils
 

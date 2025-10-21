@@ -97,7 +97,7 @@ publish ((Env root _ manager registry outline) as env) =
                 |> Task.bind
                     (\_ ->
                         if noExposed exposed then
-                            Task.throw Exit.PublishNoExposed
+                            Task.throw Exit.PublishGuidaNoExposed
 
                         else
                             Task.pure ()
@@ -105,13 +105,13 @@ publish ((Env root _ manager registry outline) as env) =
                 |> Task.bind
                     (\_ ->
                         if badSummary summary then
-                            Task.throw Exit.PublishNoSummary
+                            Task.throw Exit.PublishGuidaNoSummary
 
                         else
                             Task.pure ()
                     )
                 |> Task.bind (\_ -> verifyReadme (Stuff.rootPath root))
-                |> Task.bind (\_ -> verifyLicense (Stuff.rootPath root))
+                |> Task.bind (\_ -> verifyLicense root)
                 |> Task.bind (\_ -> verifyBuild root)
                 |> Task.bind
                     (\docs ->
@@ -147,7 +147,7 @@ publish ((Env root _ manager registry outline) as env) =
                 |> Task.bind
                     (\_ ->
                         if noExposed exposed then
-                            Task.throw Exit.PublishNoExposed
+                            Task.throw Exit.PublishElmNoExposed
 
                         else
                             Task.pure ()
@@ -155,13 +155,13 @@ publish ((Env root _ manager registry outline) as env) =
                 |> Task.bind
                     (\_ ->
                         if badSummary summary then
-                            Task.throw Exit.PublishNoSummary
+                            Task.throw Exit.PublishElmNoSummary
 
                         else
                             Task.pure ()
                     )
                 |> Task.bind (\_ -> verifyReadme (Stuff.rootPath root))
-                |> Task.bind (\_ -> verifyLicense (Stuff.rootPath root))
+                |> Task.bind (\_ -> verifyLicense root)
                 |> Task.bind (\_ -> verifyBuild root)
                 |> Task.bind
                     (\docs ->
@@ -243,12 +243,12 @@ verifyReadme root =
 -- VERIFY LICENSE
 
 
-verifyLicense : String -> Task Exit.Publish ()
+verifyLicense : Stuff.Root -> Task Exit.Publish ()
 verifyLicense root =
     let
         licensePath : String
         licensePath =
-            root ++ "/LICENSE"
+            Stuff.rootPath root ++ "/LICENSE"
     in
     reportLicenseCheck <|
         (File.exists licensePath
@@ -258,7 +258,14 @@ verifyLicense root =
                         Ok ()
 
                     else
-                        Err Exit.PublishNoLicense
+                        Err
+                            (case root of
+                                Stuff.GuidaRoot _ ->
+                                    Exit.PublishGuidaNoLicense
+
+                                Stuff.ElmRoot _ ->
+                                    Exit.PublishElmNoLicense
+                            )
                 )
         )
 
@@ -282,7 +289,14 @@ verifyBuild root =
                                         Task.throw Exit.PublishApplication
 
                                     Details.ValidPkg _ [] _ ->
-                                        Task.throw Exit.PublishNoExposed
+                                        Task.throw
+                                            (case root of
+                                                Stuff.GuidaRoot _ ->
+                                                    Exit.PublishGuidaNoExposed
+
+                                                Stuff.ElmRoot _ ->
+                                                    Exit.PublishElmNoExposed
+                                            )
 
                                     Details.ValidPkg _ (e :: es) _ ->
                                         Task.pure (NE.Nonempty e es)
@@ -519,12 +533,17 @@ verifyVersion ((Env root _ _ _ _) as env) pkg vsn newDocs publishedVersions =
 
 
 verifyBump : Env -> Pkg.Name -> V.Version -> Docs.Documentation -> Registry.KnownVersions -> Task Never (Result Exit.Publish GoodVersion)
-verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
+verifyBump (Env root cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
             Task.pure <|
                 Err <|
-                    Exit.PublishInvalidBump vsn latest
+                    case root of
+                        Stuff.GuidaRoot _ ->
+                            Exit.PublishGuidaInvalidBump vsn latest
+
+                        Stuff.ElmRoot _ ->
+                            Exit.PublishElmInvalidBump vsn latest
 
         Just ( old, new, magnitude ) ->
             Diff.getDocs cache manager pkg old
@@ -549,7 +568,12 @@ verifyBump (Env _ cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions la
 
                                 else
                                     Err <|
-                                        Exit.PublishBadBump old new magnitude realNew (Diff.toMagnitude changes)
+                                        case root of
+                                            Stuff.GuidaRoot _ ->
+                                                Exit.PublishGuidaBadBump old new magnitude realNew (Diff.toMagnitude changes)
+
+                                            Stuff.ElmRoot _ ->
+                                                Exit.PublishElmBadBump old new magnitude realNew (Diff.toMagnitude changes)
                     )
 
 

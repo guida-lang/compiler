@@ -42,11 +42,11 @@ run pkg =
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
-                                                                makeAppPlan env pkg outline
+                                                                makeAppPlan root env pkg outline
                                                                     |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes)
 
                                                             Outline.Pkg outline ->
-                                                                makePkgPlan env pkg outline
+                                                                makePkgPlan root env pkg outline
                                                                     |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes)
                                                     )
                                         )
@@ -107,8 +107,8 @@ attemptChangesHelp root env oldOutline newOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Install (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
+makeAppPlan : Stuff.Root -> Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Install (Changes V.Version)
+makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
     case outline of
         Outline.GuidaAppOutline guidaVersion sourceDirs direct indirect testDirect testIndirect ->
             if Dict.member identity pkg direct then
@@ -162,10 +162,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
-                                                        Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                                     Solver.Offline ->
-                                                        Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                                             Ok _ ->
                                                 Task.io (Solver.addToApp cache connection registry pkg outline False)
@@ -176,10 +176,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                                                     Task.pure (Changes (Outline.App app))
 
                                                                 Solver.NoSolution ->
-                                                                    Task.throw (Exit.InstallNoOnlineAppSolution pkg)
+                                                                    Task.throw (Exit.InstallGuidaNoOnlineAppSolution pkg)
 
                                                                 Solver.NoOfflineSolution ->
-                                                                    Task.throw (Exit.InstallNoOfflineAppSolution pkg)
+                                                                    Task.throw (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                                                 Solver.SolverErr exit ->
                                                                     Task.throw (Exit.InstallHadSolverTrouble exit)
@@ -237,10 +237,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
-                                                        Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                                     Solver.Offline ->
-                                                        Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                                             Ok _ ->
                                                 Task.io (Solver.addToApp cache connection registry pkg outline False)
@@ -251,10 +251,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                                                     Task.pure (Changes (Outline.App app))
 
                                                                 Solver.NoSolution ->
-                                                                    Task.throw (Exit.InstallNoOnlineAppSolution pkg)
+                                                                    Task.throw (Exit.InstallElmNoOnlineAppSolution pkg)
 
                                                                 Solver.NoOfflineSolution ->
-                                                                    Task.throw (Exit.InstallNoOfflineAppSolution pkg)
+                                                                    Task.throw (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                                                 Solver.SolverErr exit ->
                                                                     Task.throw (Exit.InstallHadSolverTrouble exit)
@@ -265,8 +265,8 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
 -- MAKE PACKAGE PLAN
 
 
-makePkgPlan : Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Exit.Install (Changes C.Constraint)
-makePkgPlan (Solver.Env cache _ connection registry) pkg outline =
+makePkgPlan : Stuff.Root -> Solver.Env -> Pkg.Name -> Outline.PkgOutline -> Task Exit.Install (Changes C.Constraint)
+makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
     case outline of
         Outline.GuidaPkgOutline name summary license version exposed deps test guidaVersion ->
             if Dict.member identity pkg deps then
@@ -294,10 +294,10 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg outline =
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->
-                                        Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                     Solver.Offline ->
-                                        Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                             Ok (Registry.KnownVersions _ _) ->
                                 let
@@ -347,10 +347,10 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg outline =
                                                                     guidaVersion
 
                                                 Solver.NoSolution ->
-                                                    Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
+                                                    Task.throw (Exit.InstallGuidaNoOnlinePkgSolution pkg)
 
                                                 Solver.NoOfflineSolution ->
-                                                    Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
+                                                    Task.throw (Exit.InstallGuidaNoOfflinePkgSolution (Stuff.rootPath root) pkg)
 
                                                 Solver.SolverErr exit ->
                                                     Task.throw (Exit.InstallHadSolverTrouble exit)
@@ -382,10 +382,10 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg outline =
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->
-                                        Task.throw (Exit.InstallUnknownPackageOnline pkg suggestions)
+                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                     Solver.Offline ->
-                                        Task.throw (Exit.InstallUnknownPackageOffline pkg suggestions)
+                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                             Ok (Registry.KnownVersions _ _) ->
                                 let
@@ -435,10 +435,10 @@ makePkgPlan (Solver.Env cache _ connection registry) pkg outline =
                                                                     elmVersion
 
                                                 Solver.NoSolution ->
-                                                    Task.throw (Exit.InstallNoOnlinePkgSolution pkg)
+                                                    Task.throw (Exit.InstallElmNoOnlinePkgSolution pkg)
 
                                                 Solver.NoOfflineSolution ->
-                                                    Task.throw (Exit.InstallNoOfflinePkgSolution pkg)
+                                                    Task.throw (Exit.InstallElmNoOfflinePkgSolution (Stuff.rootPath root) pkg)
 
                                                 Solver.SolverErr exit ->
                                                     Task.throw (Exit.InstallHadSolverTrouble exit)

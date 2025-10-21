@@ -51,16 +51,14 @@ toReport source (Error region name unimportedModules problem) =
                     ( D.reflow
                         ("You are trying to import a `" ++ name ++ "` module:")
                     , D.stack
-                        [ D.reflow
-                            "I checked the \"dependencies\" and \"source-directories\" listed in your elm.json, but I cannot find it! Maybe it is a typo for one of these names?"
+                        [ D.reflow "I checked the \"dependencies\" and \"source-directories\" listed in your elm.json, but I cannot find it! Maybe it is a typo for one of these names?"
                         , D.dullyellow <|
                             D.indent 4 <|
                                 D.vcat <|
                                     List.map D.fromName (toSuggestions name unimportedModules)
                         , case Dict.get identity name Pkg.suggestions of
                             Nothing ->
-                                D.toSimpleHint
-                                    "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
+                                D.toSimpleHint "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
 
                             Just dependency ->
                                 D.toFancyHint

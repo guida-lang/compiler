@@ -59,7 +59,7 @@ run args (Flags autoYes) =
                                                             (\oldOutline ->
                                                                 case oldOutline of
                                                                     Outline.App outline ->
-                                                                        makeAppPlan env pkg outline
+                                                                        makeAppPlan root env pkg outline
                                                                             |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes autoYes)
 
                                                                     Outline.Pkg outline ->
@@ -149,8 +149,8 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Uninstall (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
+makeAppPlan : Stuff.Root -> Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Uninstall (Changes V.Version)
+makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
     case outline of
         Outline.GuidaAppOutline _ _ direct _ testDirect _ ->
             case Dict.get identity pkg (Dict.union direct testDirect) of
@@ -163,10 +163,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                         Task.pure (Changes (detectChanges old new) (Outline.App app))
 
                                     Solver.NoSolution ->
-                                        Task.throw (Exit.UninstallNoOnlineAppSolution pkg)
+                                        Task.throw (Exit.UninstallGuidaNoOnlineAppSolution pkg)
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UninstallNoOfflineAppSolution pkg)
+                                        Task.throw (Exit.UninstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                     Solver.SolverErr exit ->
                                         Task.throw (Exit.UninstallHadSolverTrouble exit)
@@ -186,10 +186,10 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
                                         Task.pure (Changes (detectChanges old new) (Outline.App app))
 
                                     Solver.NoSolution ->
-                                        Task.throw (Exit.UninstallNoOnlineAppSolution pkg)
+                                        Task.throw (Exit.UninstallElmNoOnlineAppSolution pkg)
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UninstallNoOfflineAppSolution pkg)
+                                        Task.throw (Exit.UninstallElmNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                     Solver.SolverErr exit ->
                                         Task.throw (Exit.UninstallHadSolverTrouble exit)

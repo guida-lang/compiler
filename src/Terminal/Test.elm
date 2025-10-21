@@ -894,7 +894,8 @@ fileList =
 isSkippable : FilePath -> Bool
 isSkippable path =
     List.any identity
-        [ hasFilename "elm-stuff" path
+        [ hasFilename "guida-stuff" path
+        , hasFilename "elm-stuff" path
         , hasFilename "node_modules" path
         , hasFilename ".git" path
         ]

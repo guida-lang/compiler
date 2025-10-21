@@ -6,20 +6,20 @@ module Builder.Generate exposing
     )
 
 import Builder.Build as Build
+import Builder.File as File
 import Builder.Guida.Details as Details
 import Builder.Guida.Outline as Outline
-import Builder.File as File
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.JavaScript as JS
+import Compiler.Generate.Mode as Mode
 import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
-import Compiler.Generate.JavaScript as JS
-import Compiler.Generate.Mode as Mode
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
 import System.TypeCheck.IO as TypeCheck

@@ -13,15 +13,15 @@ module Browser.Make exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
-import Builder.Guida.Details as Details
 import Builder.Generate as Generate
+import Builder.Guida.Details as Details
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Generate.Html as Html
+import Compiler.Guida.ModuleName as ModuleName
 import Maybe.Extra as Maybe
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))

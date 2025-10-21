@@ -87,7 +87,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                         (\details ->
                                             case paths of
                                                 [] ->
-                                                    getExposed details
+                                                    getExposed root details
                                                         |> Task.bind (\exposed -> buildExposed style (Stuff.rootPath root) details maybeDocs exposed)
 
                                                 p :: ps ->
@@ -176,8 +176,8 @@ getMode debug optimize =
             Task.pure Prod
 
 
-getExposed : Details.Details -> Task Exit.Make (NE.Nonempty ModuleName.Raw)
-getExposed (Details.Details _ validOutline _ _ _ _) =
+getExposed : Stuff.Root -> Details.Details -> Task Exit.Make (NE.Nonempty ModuleName.Raw)
+getExposed root (Details.Details _ validOutline _ _ _ _) =
     case validOutline of
         Details.ValidApp _ ->
             Task.throw Exit.MakeAppNeedsFileNames
@@ -185,7 +185,14 @@ getExposed (Details.Details _ validOutline _ _ _ _) =
         Details.ValidPkg _ exposed _ ->
             case exposed of
                 [] ->
-                    Task.throw Exit.MakePkgNeedsExposing
+                    Task.throw
+                        (case root of
+                            Stuff.GuidaRoot _ ->
+                                Exit.MakeGuidaPkgNeedsExposing
+
+                            Stuff.ElmRoot _ ->
+                                Exit.MakeElmPkgNeedsExposing
+                        )
 
                 m :: ms ->
                     Task.pure (NE.Nonempty m ms)

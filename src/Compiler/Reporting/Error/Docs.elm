@@ -100,7 +100,7 @@ toSyntaxProblemReport source problem =
                     ( D.reflow "I was partway through parsing your module documentation, but I got stuck here:"
                     , D.stack
                         [ D.reflow details
-                        , D.toSimpleHint "Read through <https://package.elm-lang.org/help/documentation-format> for tips on how to write module documentation!"
+                        , D.toSimpleHint "Read through <https://guida-lang.org/docs/help/documentation-format> for tips on how to write module documentation!"
                         ]
                     )
     in

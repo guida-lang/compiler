@@ -862,7 +862,7 @@ toReport source err =
                     ( D.fromChars "I only accept tuples with two or three items. This has too many:"
                     , D.stack
                         [ D.reflow <| "I recommend switching to records. Each item will be named, and you can use the `point.x` syntax to access them."
-                        , D.link "Note" "Read" "tuples" "for more comprehensive advice on working with large chunks of data in Guida."
+                        , D.elmLink "Note" "Read" "tuples" "for more comprehensive advice on working with large chunks of data in Guida."
                         ]
                     )
 

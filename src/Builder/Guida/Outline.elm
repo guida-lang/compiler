@@ -213,6 +213,7 @@ read root =
         |> Task.bind
             (\bytes ->
                 let
+                    decoder : Decoder Outline
                     decoder =
                         case root of
                             Stuff.GuidaRoot _ ->
@@ -261,7 +262,7 @@ read root =
                                             (\badDirs ->
                                                 case List.map toGiven badDirs of
                                                     d :: ds ->
-                                                        Task.pure <| Err (Exit.OutlineHasMissingSrcDirs d ds)
+                                                        Task.pure <| Err (Exit.OutlineHasMissingGuidaSrcDirs d ds)
 
                                                     [] ->
                                                         detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
@@ -272,7 +273,7 @@ read root =
                                                                             Task.pure <| Ok outline
 
                                                                         Just ( canonicalDir, ( dir1, dir2 ) ) ->
-                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateSrcDirs canonicalDir dir1 dir2)
+                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateGuidaSrcDirs canonicalDir dir1 dir2)
                                                                 )
                                             )
 
@@ -289,7 +290,7 @@ read root =
                                             (\badDirs ->
                                                 case List.map toGiven badDirs of
                                                     d :: ds ->
-                                                        Task.pure <| Err (Exit.OutlineHasMissingSrcDirs d ds)
+                                                        Task.pure <| Err (Exit.OutlineHasMissingElmSrcDirs d ds)
 
                                                     [] ->
                                                         detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
@@ -300,7 +301,7 @@ read root =
                                                                             Task.pure <| Ok outline
 
                                                                         Just ( canonicalDir, ( dir1, dir2 ) ) ->
-                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateSrcDirs canonicalDir dir1 dir2)
+                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateElmSrcDirs canonicalDir dir1 dir2)
                                                                 )
                                             )
             )
@@ -376,6 +377,7 @@ getAllModulePaths root =
 
                     Ok outline ->
                         let
+                            getAllAppModulePaths : NE.Nonempty SrcDir -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
                             getAllAppModulePaths srcDirs depsDirect indirect =
                                 let
                                     deps : Dict ( String, String ) Pkg.Name V.Version
@@ -388,6 +390,7 @@ getAllModulePaths root =
                                 in
                                 getAllModulePathsHelper Pkg.dummyName absoluteSrcDirs deps
 
+                            getAllPkgModulePaths : Pkg.Name -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
                             getAllPkgModulePaths name pkgDeps =
                                 let
                                     deps : Dict ( String, String ) Pkg.Name V.Version

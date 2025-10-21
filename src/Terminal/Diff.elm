@@ -186,6 +186,7 @@ readOutline (Env maybeRoot _ _ registry) =
 
                                     Outline.Pkg pkgOutline ->
                                         let
+                                            pkg : Pkg.Name
                                             pkg =
                                                 case pkgOutline of
                                                     Outline.GuidaPkgOutline guidaPkg _ _ _ _ _ _ _ ->
