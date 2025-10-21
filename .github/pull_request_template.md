@@ -16,8 +16,7 @@ Briefly describe the goal of this pull request and what problem it solves.
 - [ ] The code compiles and all tests pass (`npm test`)
 - [ ] The change has been tested in:
   - [ ] CLI
-  - [ ] Browser
-  - [ ] Node (API)
+  - [ ] API
 - [ ] I’ve added or updated tests, if applicable
 - [ ] I’ve updated relevant documentation or comments
 - [ ] My changes follow the project's coding style
