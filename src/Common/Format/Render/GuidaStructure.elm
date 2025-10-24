@@ -54,9 +54,7 @@ forceableSpaceSepOrStack forceMultiline first rest =
 
 forceableRowOrStack : Bool -> Box -> List Box -> Box
 forceableRowOrStack forceMultiline first rest =
-    case
-        ( forceMultiline, first, Box.allSingles rest )
-    of
+    case ( forceMultiline, first, Box.allSingles rest ) of
         ( False, Box.SingleLine first_, Ok rest_ ) ->
             Box.line <| Box.row (first_ :: rest_)
 

@@ -1,4 +1,4 @@
-module Browser.Install exposing (run)
+module API.Install exposing (run)
 
 import Builder.BackgroundWriter as BW
 import Builder.Deps.Registry as Registry

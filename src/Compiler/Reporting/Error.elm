@@ -3,6 +3,7 @@ module Compiler.Reporting.Error exposing
     , Module
     , moduleDecoder
     , moduleEncoder
+    , reportToJson
     , toDoc
     , toJson
     )

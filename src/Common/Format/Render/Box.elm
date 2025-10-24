@@ -2398,7 +2398,13 @@ formatExpression importInfo (A.At region aexpr) =
 
                 fields_ : List (Src.C2Eol (Src.Pair Name Src.Expr))
                 fields_ =
-                    List.map (Src.c2EolMap (\( ( nameComments, A.At _ name_ ), expr ) -> Src.Pair ( nameComments, name_ ) expr multiline)) fields
+                    List.map
+                        (Src.c2EolMap
+                            (\( ( nameComments, A.At _ name_ ), ( _, A.At exprRegion _ ) as expr ) ->
+                                Src.Pair ( nameComments, name_ ) expr (Src.ForceMultiline (A.isMultiline exprRegion))
+                            )
+                        )
+                        fields
             in
             ( SyntaxSeparated
             , formatRecordLike

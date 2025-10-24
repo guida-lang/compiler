@@ -277,6 +277,7 @@ const examples = [
             }
         },
         { title: "multi-line record", filename: "MultiLineRecordDeclarations", module: { ...defaultModule, declarations: [`recordFn =\n { age = 23\n , name =\n "John"\n }`] } },
+        { title: "multi-line update record", filename: "MultiLineUpdateRecordDeclarations", module: { ...defaultModule, declarations: [`updateRecordFn =\n { record | age = 23\n , name = "John"\n }`] } },
     ]],
     // UNION DECLARATIONS
     ["Union", [

@@ -6,12 +6,12 @@ This is an example of how to use the browser version of the compiler.
 
 To run this example, follow these steps:
 
-1. Start by building guida for the browser at the top level folder by running the following:
+1. Start by building guida API at the top level folder by running the following:
 
 ```
 nvm use
 npm install
-npm run build:browser
+npm run build:api
 ```
 
 2. Move into this folder and install the dependecies:

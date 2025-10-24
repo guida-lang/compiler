@@ -5,20 +5,16 @@
 set -e
 
 case $1 in
-  "node")
-    filepath="lib/guida.node"
-    elm_entry="src/Node/Main.elm"
-    ;;
-  "browser")
-    filepath="lib/guida.browser"
-    elm_entry="src/Browser/Main.elm"
+  "api")
+    filepath="lib/guida"
+    elm_entry="src/API/Main.elm"
     ;;
   "bin")
     filepath="bin/guida"
     elm_entry="src/Terminal/Main.elm"
     ;;
   *)
-    echo "Usage: $0 node|browser|bin"
+    echo "Usage: $0 api|bin"
     exit 1
     ;;
 esac

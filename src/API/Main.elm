@@ -1,13 +1,18 @@
-module Browser.Main exposing (main)
+module API.Main exposing (main)
 
-import Browser.Format as Format
-import Browser.Install as Install
-import Browser.Make as Make
-import Browser.Uninstall as Uninstall
+import API.Format as Format
+import API.Install as Install
+import API.Make as Make
+import API.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
 import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
+import Compiler.Parse.Module as M
 import Compiler.Parse.Primitives as P
+import Compiler.Parse.SyntaxVersion as SV
+import Compiler.Reporting.Error as Error
+import Compiler.Reporting.Error.Syntax as E
+import Compiler.Reporting.Render.Code as Code
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
@@ -39,8 +44,8 @@ app =
                                             exitWithResponse (Encode.object [ ( "error", Encode.string (E.encodeUgly (Exit.toJson (Exit.makeToReport error))) ) ])
                                 )
 
-                    FormatArgs path ->
-                        case Format.run path of
+                    FormatArgs content ->
+                        case Format.run content of
                             Ok output ->
                                 exitWithResponse (Encode.object [ ( "output", Encode.string output ) ])
 
@@ -64,6 +69,41 @@ app =
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
+
+                    DiagnosticsArgs (DiagnosticsSourceContent src) ->
+                        case P.fromByteString (M.chompModule SV.Guida M.Application) E.ModuleBadEnd src of
+                            Ok _ ->
+                                exitWithResponse (Encode.object [])
+
+                            Err err ->
+                                let
+                                    source : Code.Source
+                                    source =
+                                        Code.toSource src
+
+                                    error : Encode.Value
+                                    error =
+                                        E.encodeUgly (Error.reportToJson (E.toReport SV.Guida source (E.ParseError err)))
+                                            |> Decode.decodeString Decode.value
+                                            |> Result.withDefault Encode.null
+                                in
+                                exitWithResponse (Encode.object [ ( "errors", Encode.list identity [ error ] ) ])
+
+                    DiagnosticsArgs (DiagnosticsSourcePath path) ->
+                        Make.run path (Make.Flags False False False)
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Ok _ ->
+                                            exitWithResponse (Encode.object [])
+
+                                        Err error ->
+                                            exitWithResponse
+                                                (E.encodeUgly (Exit.toJson (Exit.makeToReport error))
+                                                    |> Decode.decodeString Decode.value
+                                                    |> Result.withDefault Encode.null
+                                                )
+                                )
             )
 
 
@@ -86,6 +126,12 @@ type Args
     | FormatArgs String
     | InstallArgs String
     | UninstallArgs String
+    | DiagnosticsArgs DiagnosticsSource
+
+
+type DiagnosticsSource
+    = DiagnosticsSourceContent String
+    | DiagnosticsSourcePath String
 
 
 argsDecoder : Decode.Decoder Args
@@ -112,6 +158,14 @@ argsDecoder =
                     "uninstall" ->
                         Decode.map UninstallArgs
                             (Decode.field "pkg" Decode.string)
+
+                    "diagnostics" ->
+                        Decode.map DiagnosticsArgs
+                            (Decode.oneOf
+                                [ Decode.map DiagnosticsSourceContent (Decode.field "content" Decode.string)
+                                , Decode.map DiagnosticsSourcePath (Decode.field "path" Decode.string)
+                                ]
+                            )
 
                     _ ->
                         Decode.fail ("Unknown command: " ++ command)
