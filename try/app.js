@@ -4,14 +4,17 @@ const { createFs } = require("indexeddb-fs");
 const fs = createFs({ databaseName: "guida-fs" });
 
 const config = {
+    XMLHttpRequest: globalThis.XMLHttpRequest,
     env: {
-        GUIDA_REGISTRY: "/proxy/https://package.elm-lang.org"
+        GUIDA_REGISTRY: "https://guida-package-registry.fly.dev"
     },
     writeFile: fs.writeFile,
     readFile: fs.readFile,
     details: fs.details,
     createDirectory: fs.createDirectory,
-    readDirectory: fs.readDirectory
+    readDirectory: fs.readDirectory,
+    getCurrentDirectory: async () => "root",
+    homedir: async () => "root"
 };
 
 window.addEventListener("load", async () => {
