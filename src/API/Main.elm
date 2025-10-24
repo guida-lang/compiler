@@ -77,6 +77,7 @@ app =
 
                             Err err ->
                                 let
+                                    source : Code.Source
                                     source =
                                         Code.toSource src
 
