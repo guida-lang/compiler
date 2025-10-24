@@ -1,4 +1,4 @@
-module Browser.Uninstall exposing (run)
+module API.Uninstall exposing (run)
 
 import Builder.BackgroundWriter as BW
 import Builder.Deps.Solver as Solver

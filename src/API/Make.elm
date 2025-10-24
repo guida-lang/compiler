@@ -1,4 +1,4 @@
-module Browser.Make exposing
+module API.Make exposing
     ( Flags(..)
     , Output(..)
     , ReportType(..)

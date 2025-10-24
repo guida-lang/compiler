@@ -67,7 +67,7 @@ For detailed instructions on setting up your environment for contributing to Gui
 We aim for stability and consistency. If you’re adding features or fixing bugs, please:
 
 - Write tests if applicable.
-- Consider all 3 outputs of the project: bin (command line), browser and node (API).
+- Consider both outputs of the project: bin (command line) and API (browser and node).
 - Make sure to test all three output targets of the project:
   - CLI (bin) — the command-line interface
   - Browser — compiled for browser usage

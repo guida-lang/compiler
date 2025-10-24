@@ -20,10 +20,9 @@ const data = fs
 \ttry {
 \t\tthrow new Error(str);
 \t} catch(e) {
-\t\tprocess.stderr.write(e.stack);
-\t\tprocess.stderr.write("\\\\n");
+\t\tconsole.error(e.stack);
 \t}
-\tprocess.exit(-1);
+\ttypeof process !== "undefined" && process.exit(1);
 };`)
 
     /* Prevents V8 from retaining large "concatenated string" chains, which can cause OOMs.

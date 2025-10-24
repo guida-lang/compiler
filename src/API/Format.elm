@@ -1,4 +1,4 @@
-module Browser.Format exposing (run)
+module API.Format exposing (run)
 
 import Common.Format
 import Compiler.Elm.Package as Pkg
