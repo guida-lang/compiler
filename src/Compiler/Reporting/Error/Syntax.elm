@@ -3661,8 +3661,8 @@ toNumberReport syntaxVersion source number row col =
                         [ D.reflow "Valid binary digits include 0 and 1, so I can only recognize things like this:"
                         , D.indent 4 <|
                             D.vcat
-                                [ D.fromChars "0x10"
-                                , D.fromChars "0x0010"
+                                [ D.fromChars "0b10"
+                                , D.fromChars "0b0010"
                                 , D.fromChars "0b0101_0110_0011_1000"
                                 ]
                         ]
