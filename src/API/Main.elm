@@ -73,7 +73,7 @@ app =
                     DiagnosticsArgs (DiagnosticsSourceContent src) ->
                         case P.fromByteString (M.chompModule SV.Guida M.Application) E.ModuleBadEnd src of
                             Ok _ ->
-                                exitWithResponse (Encode.object [])
+                                exitWithResponse Encode.null
 
                             Err err ->
                                 let
@@ -87,7 +87,12 @@ app =
                                             |> Decode.decodeString Decode.value
                                             |> Result.withDefault Encode.null
                                 in
-                                exitWithResponse (Encode.object [ ( "errors", Encode.list identity [ error ] ) ])
+                                exitWithResponse
+                                    (Encode.object
+                                        [ ( "type", Encode.string "content-error" )
+                                        , ( "error", error )
+                                        ]
+                                    )
 
                     DiagnosticsArgs (DiagnosticsSourcePath path) ->
                         Make.run path (Make.Flags False False False)
@@ -95,7 +100,7 @@ app =
                                 (\result ->
                                     case result of
                                         Ok _ ->
-                                            exitWithResponse (Encode.object [])
+                                            exitWithResponse Encode.null
 
                                         Err error ->
                                             exitWithResponse

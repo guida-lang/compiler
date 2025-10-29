@@ -3,6 +3,7 @@
  */
 export interface GuidaConfig {
     // XMLHttpRequest constructor for making HTTP requests.
+    // @ts-ignore
     XMLHttpRequest: typeof XMLHttpRequest;
 
     // Write text or binary data to a path.
@@ -12,7 +13,7 @@ export interface GuidaConfig {
     readFile(path: string): Promise<string | ArrayBuffer | Uint8Array | Buffer | { buffer: ArrayBuffer }>;
 
     // Read a directory and return a list of files.
-    readDirectory(path: string): Promise<{ files: string[] }>;
+    readDirectory(path: string): Promise<{ files: string[] | Buffer<ArrayBufferLike>[] }>;
 
     // Create a directory.
     createDirectory(path: string): Promise<void>;
@@ -40,12 +41,42 @@ export interface MakeOptions {
 // nature of the results coming from the embedded Elm/runner process.
 export type GuidaResponse = any;
 
-declare const _default: {
-    make: (config: GuidaConfig, path: string, options?: MakeOptions) => Promise<GuidaResponse>;
-    format: (config: GuidaConfig, content: string) => Promise<GuidaResponse>;
-    install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
-    uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
-    diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<{ errors?: any }>;
-};
+export type Message = string | { bold: boolean, underline: boolean, color: null | string, string: string };
 
-export default _default;
+export type Problem = {
+    title: string;
+    region: {
+        start: { line: number; column: number; };
+        end: { line: number; column: number; };
+    };
+    message: Message[];
+}
+
+export type CompileError = {
+    path: string;
+    name: string;
+    problems: Problem[];
+}
+
+export type DiagnosticsResult =
+    | null
+    | {
+        type: "content-error";
+        error: Problem;
+    }
+    | {
+        type: "compile-errors";
+        errors: CompileError[];
+    }
+    | {
+        type: "error";
+        path: null | string;
+        title: string;
+        message: Message[];
+    };
+
+export declare const make: (config: GuidaConfig, path: string, options?: MakeOptions) => Promise<GuidaResponse>;
+export declare const format: (config: GuidaConfig, content: string) => Promise<GuidaResponse>;
+export declare const install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
+export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
+export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;

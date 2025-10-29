@@ -19,12 +19,12 @@ const config = {
 
 window.addEventListener("load", async () => {
     await fs.createDirectory("root/src");
-    await fs.writeFile("root/elm.json", `{
+    await fs.writeFile("root/guida.json", `{
     "type": "application",
     "source-directories": [
         "src"
     ],
-    "elm-version": "0.19.1",
+    "guida-version": "1.0.0",
     "dependencies": {
         "direct": {
             "elm/browser": "1.0.2",

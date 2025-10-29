@@ -668,16 +668,15 @@ getConstraints pkg vsn =
                         home =
                             Stuff.package cache pkg vsn
 
-                        path : String
-                        path =
-                            home ++ "/elm.json"
+                        guidaPath : String
+                        guidaPath =
+                            home ++ "/guida.json"
                     in
-                    -- FIXME extend this to guida!
-                    File.exists path
+                    File.exists guidaPath
                         |> Task.bind
-                            (\outlineExists ->
-                                if outlineExists then
-                                    File.readUtf8 path
+                            (\guidaOutlineExists ->
+                                if guidaOutlineExists then
+                                    File.readUtf8 guidaPath
                                         |> Task.bind
                                             (\bytes ->
                                                 case D.fromByteString constraintsDecoder bytes of
@@ -698,44 +697,103 @@ getConstraints pkg vsn =
                                                                         )
 
                                                     Err _ ->
-                                                        File.remove path
-                                                            |> Task.fmap (\_ -> ISErr (Exit.SolverBadCacheData pkg vsn))
+                                                        File.remove guidaPath
+                                                            |> Task.fmap (\_ -> ISErr (Exit.SolverBadCacheGuidaData pkg vsn))
                                             )
 
                                 else
-                                    case connection of
-                                        Offline ->
-                                            Task.pure (ISBack state)
+                                    let
+                                        elmPath : String
+                                        elmPath =
+                                            home ++ "/elm.json"
+                                    in
+                                    File.exists guidaPath
+                                        |> Task.bind
+                                            (\elmOutlineExists ->
+                                                if elmOutlineExists then
+                                                    File.readUtf8 elmPath
+                                                        |> Task.bind
+                                                            (\bytes ->
+                                                                case D.fromByteString constraintsDecoder bytes of
+                                                                    Ok cs ->
+                                                                        case connection of
+                                                                            Online _ ->
+                                                                                Task.pure (ISOk (toNewState cs) cs)
 
-                                        Online manager ->
-                                            Website.metadata pkg vsn "elm.json"
-                                                |> Task.bind
-                                                    (\url ->
-                                                        Http.get manager url [] identity (Task.pure << Ok)
-                                                            |> Task.bind
-                                                                (\result ->
-                                                                    case result of
-                                                                        Err httpProblem ->
-                                                                            Task.pure (ISErr (Exit.SolverBadHttp pkg vsn httpProblem))
+                                                                            Offline ->
+                                                                                Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
+                                                                                    |> Task.fmap
+                                                                                        (\srcExists ->
+                                                                                            if srcExists then
+                                                                                                ISOk (toNewState cs) cs
 
-                                                                        Ok body ->
-                                                                            case D.fromByteString constraintsDecoder body of
-                                                                                Ok cs ->
-                                                                                    Utils.dirCreateDirectoryIfMissing True home
-                                                                                        |> Task.bind (\_ -> File.writeUtf8 path body)
-                                                                                        |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+                                                                                            else
+                                                                                                ISBack state
+                                                                                        )
 
-                                                                                Err _ ->
-                                                                                    Task.pure (ISErr (Exit.SolverBadHttpData pkg vsn url))
-                                                                )
-                                                    )
+                                                                    Err _ ->
+                                                                        File.remove elmPath
+                                                                            |> Task.fmap (\_ -> ISErr (Exit.SolverBadCacheElmData pkg vsn))
+                                                            )
+
+                                                else
+                                                    case connection of
+                                                        Offline ->
+                                                            Task.pure (ISBack state)
+
+                                                        Online manager ->
+                                                            Website.metadata pkg vsn "guida.json"
+                                                                |> Task.bind
+                                                                    (\guidaUrl ->
+                                                                        Http.get manager guidaUrl [] identity (Task.pure << Ok)
+                                                                            |> Task.bind
+                                                                                (\guidaResult ->
+                                                                                    case guidaResult of
+                                                                                        Err _ ->
+                                                                                            Website.metadata pkg vsn "elm.json"
+                                                                                                |> Task.bind
+                                                                                                    (\elmUrl ->
+                                                                                                        Http.get manager elmUrl [] identity (Task.pure << Ok)
+                                                                                                            |> Task.bind
+                                                                                                                (\elmResult ->
+                                                                                                                    case elmResult of
+                                                                                                                        Err elmHttpProblem ->
+                                                                                                                            Task.pure (ISErr (Exit.SolverBadHttp pkg vsn elmHttpProblem))
+
+                                                                                                                        Ok body ->
+                                                                                                                            case D.fromByteString constraintsDecoder body of
+                                                                                                                                Ok cs ->
+                                                                                                                                    Utils.dirCreateDirectoryIfMissing True home
+                                                                                                                                        |> Task.bind (\_ -> File.writeUtf8 elmPath body)
+                                                                                                                                        |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+
+                                                                                                                                Err _ ->
+                                                                                                                                    Task.pure (ISErr (Exit.SolverBadHttpElmData pkg vsn elmUrl))
+                                                                                                                )
+                                                                                                    )
+
+                                                                                        Ok body ->
+                                                                                            case D.fromByteString constraintsDecoder body of
+                                                                                                Ok cs ->
+                                                                                                    Utils.dirCreateDirectoryIfMissing True home
+                                                                                                        |> Task.bind (\_ -> File.writeUtf8 guidaPath body)
+                                                                                                        |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+
+                                                                                                Err _ ->
+                                                                                                    Task.pure (ISErr (Exit.SolverBadHttpGuidaData pkg vsn guidaUrl))
+                                                                                )
+                                                                    )
+                                            )
                             )
 
 
 constraintsDecoder : D.Decoder () Constraints
 constraintsDecoder =
-    -- FIXME extend this to guida!
-    D.mapError (\_ -> ()) Outline.elmDecoder
+    D.oneOf
+        [ Outline.guidaDecoder
+        , Outline.elmDecoder
+        ]
+        |> D.mapError (\_ -> ())
         |> D.bind
             (\outline ->
                 case outline of

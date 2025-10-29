@@ -29,7 +29,7 @@ sandwich moduleName javascript =
 try {
 """ ++ javascript ++ """
 
-  var app = Guida.""" ++ moduleName ++ """.init({ node: document.getElementById("guida") });
+  var app = Elm.""" ++ moduleName ++ """.init({ node: document.getElementById("guida") });
 }
 catch (e)
 {
