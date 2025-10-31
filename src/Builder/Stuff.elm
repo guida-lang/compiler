@@ -3,6 +3,7 @@ module Builder.Stuff exposing
     , Root(..)
     , details
     , findRoot
+    , findRootIn
     , getGuidaHome
     , getPackageCache
     , getReplCache
@@ -175,6 +176,27 @@ findRootHelp dirs =
                                             findRootHelp (Prelude.init dirs)
                                     )
                     )
+
+
+findRootIn : Utils.FilePath -> Task Never (Maybe Root)
+findRootIn path =
+    Utils.dirDoesFileExist (path ++ "/guida.json")
+        |> Task.bind
+            (\guidaExists ->
+                if guidaExists then
+                    Task.pure (Just (GuidaRoot path))
+
+                else
+                    Utils.dirDoesFileExist (path ++ "/elm.json")
+                        |> Task.bind
+                            (\elmExists ->
+                                if elmExists then
+                                    Task.pure (Just (ElmRoot path))
+
+                                else
+                                    Task.pure Nothing
+                            )
+            )
 
 
 

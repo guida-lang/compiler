@@ -295,7 +295,7 @@ generateDocs root outline =
 
                             e :: es ->
                                 Task.eio Exit.BumpBadBuild <|
-                                    Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs (NE.Nonempty e es)
+                                    Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
                     )
 
         Outline.ElmPkgOutline _ _ _ _ exposed _ _ _ ->
@@ -309,7 +309,7 @@ generateDocs root outline =
 
                             e :: es ->
                                 Task.eio Exit.BumpBadBuild <|
-                                    Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs (NE.Nonempty e es)
+                                    Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs (NE.Nonempty e es)
                     )
 
 

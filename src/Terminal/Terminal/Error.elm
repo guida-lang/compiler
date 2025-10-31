@@ -319,9 +319,7 @@ exitWithError err =
         )
 
 
-toArgErrorRank :
-    ArgError
-    -> Int -- lower is better
+toArgErrorRank : ArgError -> Int
 toArgErrorRank err =
     case err of
         ArgBad _ _ ->

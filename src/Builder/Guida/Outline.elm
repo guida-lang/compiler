@@ -505,32 +505,32 @@ guidaDecoder =
                     D.fmap Pkg guidaPkgDecoder
 
                 else
-                    D.failure Exit.OP_BadType
+                    D.failure Exit.OP_BadGuidaType
             )
 
 
 guidaAppDecoder : Decoder AppOutline
 guidaAppDecoder =
     D.pure GuidaAppOutline
-        |> D.apply (D.field "guida-version" versionDecoder)
-        |> D.apply (D.field "source-directories" dirsDecoder)
-        |> D.apply (D.field "dependencies" (D.field "direct" (guidaDepsDecoder versionDecoder)))
-        |> D.apply (D.field "dependencies" (D.field "indirect" (guidaDepsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "direct" (guidaDepsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "indirect" (guidaDepsDecoder versionDecoder)))
+        |> D.apply (D.field "guida-version" guidaVersionDecoder)
+        |> D.apply (D.field "source-directories" guidaDirsDecoder)
+        |> D.apply (D.field "dependencies" (D.field "direct" (guidaDepsDecoder guidaVersionDecoder)))
+        |> D.apply (D.field "dependencies" (D.field "indirect" (guidaDepsDecoder guidaVersionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "direct" (guidaDepsDecoder guidaVersionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "indirect" (guidaDepsDecoder guidaVersionDecoder)))
 
 
 guidaPkgDecoder : Decoder PkgOutline
 guidaPkgDecoder =
     D.pure GuidaPkgOutline
-        |> D.apply (D.field "name" nameDecoder)
-        |> D.apply (D.field "summary" summaryDecoder)
-        |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadLicense))
-        |> D.apply (D.field "version" versionDecoder)
-        |> D.apply (D.field "exposed-modules" exposedDecoder)
-        |> D.apply (D.field "dependencies" (guidaDepsDecoder constraintDecoder))
-        |> D.apply (D.field "test-dependencies" (guidaDepsDecoder constraintDecoder))
-        |> D.apply (D.field "guida-version" constraintDecoder)
+        |> D.apply (D.field "name" guidaNameDecoder)
+        |> D.apply (D.field "summary" guidaSummaryDecoder)
+        |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadGuidaLicense))
+        |> D.apply (D.field "version" guidaVersionDecoder)
+        |> D.apply (D.field "exposed-modules" guidaExposedDecoder)
+        |> D.apply (D.field "dependencies" (guidaDepsDecoder guidaConstraintDecoder))
+        |> D.apply (D.field "test-dependencies" (guidaDepsDecoder guidaConstraintDecoder))
+        |> D.apply (D.field "guida-version" guidaConstraintDecoder)
 
 
 elmDecoder : Decoder Outline
@@ -545,58 +545,80 @@ elmDecoder =
                     D.fmap Pkg elmPkgDecoder
 
                 else
-                    D.failure Exit.OP_BadType
+                    D.failure Exit.OP_BadElmType
             )
 
 
 elmAppDecoder : Decoder AppOutline
 elmAppDecoder =
     D.pure ElmAppOutline
-        |> D.apply (D.field "elm-version" versionDecoder)
-        |> D.apply (D.field "source-directories" dirsDecoder)
-        |> D.apply (D.field "dependencies" (D.field "direct" (elmDepsDecoder versionDecoder)))
-        |> D.apply (D.field "dependencies" (D.field "indirect" (elmDepsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "direct" (elmDepsDecoder versionDecoder)))
-        |> D.apply (D.field "test-dependencies" (D.field "indirect" (elmDepsDecoder versionDecoder)))
+        |> D.apply (D.field "elm-version" elmVersionDecoder)
+        |> D.apply (D.field "source-directories" elmDirsDecoder)
+        |> D.apply (D.field "dependencies" (D.field "direct" (elmDepsDecoder elmVersionDecoder)))
+        |> D.apply (D.field "dependencies" (D.field "indirect" (elmDepsDecoder elmVersionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "direct" (elmDepsDecoder elmVersionDecoder)))
+        |> D.apply (D.field "test-dependencies" (D.field "indirect" (elmDepsDecoder elmVersionDecoder)))
 
 
 elmPkgDecoder : Decoder PkgOutline
 elmPkgDecoder =
     D.pure ElmPkgOutline
-        |> D.apply (D.field "name" nameDecoder)
-        |> D.apply (D.field "summary" summaryDecoder)
-        |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadLicense))
-        |> D.apply (D.field "version" versionDecoder)
-        |> D.apply (D.field "exposed-modules" exposedDecoder)
-        |> D.apply (D.field "dependencies" (elmDepsDecoder constraintDecoder))
-        |> D.apply (D.field "test-dependencies" (elmDepsDecoder constraintDecoder))
-        |> D.apply (D.field "elm-version" constraintDecoder)
+        |> D.apply (D.field "name" elmNameDecoder)
+        |> D.apply (D.field "summary" elmSummaryDecoder)
+        |> D.apply (D.field "license" (Licenses.decoder Exit.OP_BadElmLicense))
+        |> D.apply (D.field "version" elmVersionDecoder)
+        |> D.apply (D.field "exposed-modules" elmExposedDecoder)
+        |> D.apply (D.field "dependencies" (elmDepsDecoder elmConstraintDecoder))
+        |> D.apply (D.field "test-dependencies" (elmDepsDecoder elmConstraintDecoder))
+        |> D.apply (D.field "elm-version" elmConstraintDecoder)
 
 
 
 -- JSON DECODE HELPERS
 
 
-nameDecoder : Decoder Pkg.Name
-nameDecoder =
-    D.mapError (Basics.uncurry Exit.OP_BadPkgName) Pkg.decoder
+guidaNameDecoder : Decoder Pkg.Name
+guidaNameDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadGuidaPkgName) Pkg.decoder
 
 
-summaryDecoder : Decoder String
-summaryDecoder =
+elmNameDecoder : Decoder Pkg.Name
+elmNameDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadElmPkgName) Pkg.decoder
+
+
+guidaSummaryDecoder : Decoder String
+guidaSummaryDecoder =
     D.customString
-        (boundParser 80 Exit.OP_BadSummaryTooLong)
-        (\_ _ -> Exit.OP_BadSummaryTooLong)
+        (boundParser 80 Exit.OP_BadGuidaSummaryTooLong)
+        (\_ _ -> Exit.OP_BadGuidaSummaryTooLong)
 
 
-versionDecoder : Decoder V.Version
-versionDecoder =
-    D.mapError (Basics.uncurry Exit.OP_BadVersion) V.decoder
+elmSummaryDecoder : Decoder String
+elmSummaryDecoder =
+    D.customString
+        (boundParser 80 Exit.OP_BadElmSummaryTooLong)
+        (\_ _ -> Exit.OP_BadElmSummaryTooLong)
 
 
-constraintDecoder : Decoder Con.Constraint
-constraintDecoder =
-    D.mapError Exit.OP_BadConstraint Con.decoder
+guidaVersionDecoder : Decoder V.Version
+guidaVersionDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadGuidaVersion) V.decoder
+
+
+elmVersionDecoder : Decoder V.Version
+elmVersionDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadElmVersion) V.decoder
+
+
+guidaConstraintDecoder : Decoder Con.Constraint
+guidaConstraintDecoder =
+    D.mapError Exit.OP_BadGuidaConstraint Con.decoder
+
+
+elmConstraintDecoder : Decoder Con.Constraint
+elmConstraintDecoder =
+    D.mapError Exit.OP_BadElmConstraint Con.decoder
 
 
 guidaDepsDecoder : Decoder a -> Decoder (Dict ( String, String ) Pkg.Name a)
@@ -609,9 +631,14 @@ elmDepsDecoder valueDecoder =
     D.dict identity (Pkg.keyDecoder Exit.OP_BadElmDependencyName) valueDecoder
 
 
-dirsDecoder : Decoder (NE.Nonempty SrcDir)
-dirsDecoder =
-    D.fmap (NE.map toSrcDir) (D.nonEmptyList D.string Exit.OP_NoSrcDirs)
+guidaDirsDecoder : Decoder (NE.Nonempty SrcDir)
+guidaDirsDecoder =
+    D.fmap (NE.map toSrcDir) (D.nonEmptyList D.string Exit.OP_NoGuidaSrcDirs)
+
+
+elmDirsDecoder : Decoder (NE.Nonempty SrcDir)
+elmDirsDecoder =
+    D.fmap (NE.map toSrcDir) (D.nonEmptyList D.string Exit.OP_NoElmSrcDirs)
 
 
 toSrcDir : FilePath -> SrcDir
@@ -627,24 +654,44 @@ toSrcDir path =
 -- EXPOSED MODULES DECODER
 
 
-exposedDecoder : Decoder Exposed
-exposedDecoder =
+guidaExposedDecoder : Decoder Exposed
+guidaExposedDecoder =
     D.oneOf
-        [ D.fmap ExposedList (D.list moduleDecoder)
-        , D.fmap ExposedDict (D.pairs headerKeyDecoder (D.list moduleDecoder))
+        [ D.fmap ExposedList (D.list guidaModuleDecoder)
+        , D.fmap ExposedDict (D.pairs guidaHeaderKeyDecoder (D.list guidaModuleDecoder))
         ]
 
 
-moduleDecoder : Decoder ModuleName.Raw
-moduleDecoder =
-    D.mapError (Basics.uncurry Exit.OP_BadModuleName) ModuleName.decoder
+elmExposedDecoder : Decoder Exposed
+elmExposedDecoder =
+    D.oneOf
+        [ D.fmap ExposedList (D.list elmModuleDecoder)
+        , D.fmap ExposedDict (D.pairs elmHeaderKeyDecoder (D.list elmModuleDecoder))
+        ]
 
 
-headerKeyDecoder : D.KeyDecoder Exit.OutlineProblem String
-headerKeyDecoder =
+guidaModuleDecoder : Decoder ModuleName.Raw
+guidaModuleDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadGuidaModuleName) ModuleName.decoder
+
+
+elmModuleDecoder : Decoder ModuleName.Raw
+elmModuleDecoder =
+    D.mapError (Basics.uncurry Exit.OP_BadElmModuleName) ModuleName.decoder
+
+
+guidaHeaderKeyDecoder : D.KeyDecoder Exit.OutlineProblem String
+guidaHeaderKeyDecoder =
     D.KeyDecoder
-        (boundParser 20 Exit.OP_BadModuleHeaderTooLong)
-        (\_ _ -> Exit.OP_BadModuleHeaderTooLong)
+        (boundParser 20 Exit.OP_BadGuidaModuleHeaderTooLong)
+        (\_ _ -> Exit.OP_BadGuidaModuleHeaderTooLong)
+
+
+elmHeaderKeyDecoder : D.KeyDecoder Exit.OutlineProblem String
+elmHeaderKeyDecoder =
+    D.KeyDecoder
+        (boundParser 20 Exit.OP_BadElmModuleHeaderTooLong)
+        (\_ _ -> Exit.OP_BadElmModuleHeaderTooLong)
 
 
 

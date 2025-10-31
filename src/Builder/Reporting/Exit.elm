@@ -1833,17 +1833,26 @@ type Outline
 
 
 type OutlineProblem
-    = OP_BadType
-    | OP_BadPkgName Row Col
-    | OP_BadVersion Row Col
-    | OP_BadConstraint C.Error
-    | OP_BadModuleName Row Col
-    | OP_BadModuleHeaderTooLong
+    = OP_BadGuidaType
+    | OP_BadElmType
+    | OP_BadGuidaPkgName Row Col
+    | OP_BadElmPkgName Row Col
+    | OP_BadGuidaVersion Row Col
+    | OP_BadElmVersion Row Col
+    | OP_BadGuidaConstraint C.Error
+    | OP_BadElmConstraint C.Error
+    | OP_BadGuidaModuleName Row Col
+    | OP_BadElmModuleName Row Col
+    | OP_BadGuidaModuleHeaderTooLong
+    | OP_BadElmModuleHeaderTooLong
     | OP_BadGuidaDependencyName Row Col
     | OP_BadElmDependencyName Row Col
-    | OP_BadLicense (List String)
-    | OP_BadSummaryTooLong
-    | OP_NoSrcDirs
+    | OP_BadGuidaLicense (List String)
+    | OP_BadElmLicense (List String)
+    | OP_BadGuidaSummaryTooLong
+    | OP_BadElmSummaryTooLong
+    | OP_NoGuidaSrcDirs
+    | OP_NoElmSrcDirs
 
 
 toOutlineReport : Outline -> Help.Report
@@ -2015,7 +2024,25 @@ toOutlineProblemReport path source _ region problem =
                 Code.toSnippet source region highlight pair
     in
     case problem of
-        OP_BadType ->
+        OP_BadGuidaType ->
+            toSnippet "UNEXPECTED TYPE"
+                Nothing
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. I cannot handle a \"type\" like this:"
+                , D.fillSep
+                    [ D.fromChars "Try"
+                    , D.fromChars "changing"
+                    , D.fromChars "the"
+                    , D.fromChars "\"type\""
+                    , D.fromChars "to"
+                    , D.green (D.fromChars "\"application\"")
+                    , D.fromChars "or"
+                    , D.green (D.fromChars "\"package\"")
+                    , D.fromChars "instead."
+                    ]
+                )
+
+        OP_BadElmType ->
             toSnippet "UNEXPECTED TYPE"
                 Nothing
                 ( D.reflow <|
@@ -2033,7 +2060,59 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadPkgName row col ->
+        OP_BadGuidaPkgName row col ->
+            toSnippet "INVALID PACKAGE NAME"
+                (toHighlight row col)
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. I ran into trouble with the package name:"
+                , D.stack
+                    [ D.fillSep
+                        [ D.fromChars "Package"
+                        , D.fromChars "names"
+                        , D.fromChars "are"
+                        , D.fromChars "always"
+                        , D.fromChars "written"
+                        , D.fromChars "as"
+                        , D.green (D.fromChars "\"author/project\"")
+                        , D.fromChars "so"
+                        , D.fromChars "I"
+                        , D.fromChars "am"
+                        , D.fromChars "expecting"
+                        , D.fromChars "to"
+                        , D.fromChars "see"
+                        , D.fromChars "something"
+                        , D.fromChars "like:"
+                        ]
+                    , D.dullyellow <|
+                        D.indent 4 <|
+                            D.vcat <|
+                                [ D.fromChars "\"mdgriffith/elm-ui\""
+                                , D.fromChars "\"w0rm/elm-physics\""
+                                , D.fromChars "\"Microsoft/elm-json-tree-view\""
+                                , D.fromChars "\"FordLabs/elm-star-rating\""
+                                , D.fromChars "\"1602/json-schema\""
+                                ]
+                    , D.reflow
+                        "The author name should match your GitHub name exactly, and the project name needs to follow these rules:"
+                    , D.indent 4 <|
+                        D.vcat <|
+                            [ D.fromChars "+--------------------------------------+-----------+-----------+"
+                            , D.fromChars "| RULE                                 | BAD       | GOOD      |"
+                            , D.fromChars "+--------------------------------------+-----------+-----------+"
+                            , D.fromChars "| only lower case, digits, and hyphens | elm-HTTP  | elm-http  |"
+                            , D.fromChars "| no leading digits                    | 3D        | elm-3d    |"
+                            , D.fromChars "| no non-ASCII characters              | elm-bjørn | elm-bear  |"
+                            , D.fromChars "| no underscores                       | elm_ui    | elm-ui    |"
+                            , D.fromChars "| no double hyphens                    | elm--hash | elm-hash  |"
+                            , D.fromChars "| no starting or ending hyphen         | -elm-tar- | elm-tar   |"
+                            , D.fromChars "+--------------------------------------+-----------+-----------+"
+                            ]
+                    , D.toSimpleNote <|
+                        "These rules only apply to the project name, so you should never need to change your GitHub name!"
+                    ]
+                )
+
+        OP_BadElmPkgName row col ->
             toSnippet "INVALID PACKAGE NAME"
                 (toHighlight row col)
                 ( D.reflow <|
@@ -2085,7 +2164,29 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadVersion row col ->
+        OP_BadGuidaVersion row col ->
+            toSnippet "PROBLEM WITH VERSION"
+                (toHighlight row col)
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. I was expecting a version number here:"
+                , D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "need"
+                    , D.fromChars "something"
+                    , D.fromChars "like"
+                    , D.green (D.fromChars "\"1.0.0\"")
+                    , D.fromChars "or"
+                    , D.green (D.fromChars "\"2.0.4\"")
+                    , D.fromChars "that"
+                    , D.fromChars "explicitly"
+                    , D.fromChars "states"
+                    , D.fromChars "all"
+                    , D.fromChars "three"
+                    , D.fromChars "numbers!"
+                    ]
+                )
+
+        OP_BadElmVersion row col ->
             toSnippet "PROBLEM WITH VERSION"
                 (toHighlight row col)
                 ( D.reflow <|
@@ -2107,7 +2208,135 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadConstraint constraintError ->
+        OP_BadGuidaConstraint constraintError ->
+            case constraintError of
+                C.BadFormat row col ->
+                    toSnippet "PROBLEM WITH CONSTRAINT"
+                        (toHighlight row col)
+                        ( D.reflow <|
+                            "I got stuck while reading your guida.json file. I do not understand this version constraint:"
+                        , D.stack
+                            [ D.fillSep
+                                [ D.fromChars "I"
+                                , D.fromChars "need"
+                                , D.fromChars "something"
+                                , D.fromChars "like"
+                                , D.green (D.fromChars "\"1.0.0 <= v < 2.0.0\"")
+                                , D.fromChars "that"
+                                , D.fromChars "explicitly"
+                                , D.fromChars "lists"
+                                , D.fromChars "the"
+                                , D.fromChars "lower"
+                                , D.fromChars "and"
+                                , D.fromChars "upper"
+                                , D.fromChars "bounds."
+                                ]
+                            , D.toSimpleNote <|
+                                "The spaces in there are required! Taking them out will confuse me. Adding extra spaces confuses me too. I recommend starting with a valid example and just changing the version numbers."
+                            ]
+                        )
+
+                C.InvalidRange before after ->
+                    if before == after then
+                        toSnippet "PROBLEM WITH CONSTRAINT"
+                            Nothing
+                            ( D.reflow "I got stuck while reading your guida.json file. I ran into an invalid version constraint:"
+                            , D.fillSep
+                                [ D.fromChars "Guida"
+                                , D.fromChars "checks"
+                                , D.fromChars "that"
+                                , D.fromChars "all"
+                                , D.fromChars "package"
+                                , D.fromChars "APIs"
+                                , D.fromChars "follow"
+                                , D.fromChars "semantic"
+                                , D.fromChars "versioning,"
+                                , D.fromChars "so"
+                                , D.fromChars "it"
+                                , D.fromChars "is"
+                                , D.fromChars "best"
+                                , D.fromChars "to"
+                                , D.fromChars "use"
+                                , D.fromChars "wide"
+                                , D.fromChars "constraints."
+                                , D.fromChars "I"
+                                , D.fromChars "recommend"
+                                , D.green (D.fromChars "\"")
+                                    |> D.a (D.fromVersion before)
+                                    |> D.a (D.fromChars " <= v < ")
+                                    |> D.a (D.fromVersion (V.bumpMajor after))
+                                    |> D.a (D.fromChars "\"")
+                                , D.fromChars "since"
+                                , D.fromChars "it"
+                                , D.fromChars "is"
+                                , D.fromChars "guaranteed"
+                                , D.fromChars "that"
+                                , D.fromChars "breaking"
+                                , D.fromChars "API"
+                                , D.fromChars "changes"
+                                , D.fromChars "cannot"
+                                , D.fromChars "happen"
+                                , D.fromChars "in"
+                                , D.fromChars "any"
+                                , D.fromChars "of"
+                                , D.fromChars "the"
+                                , D.fromChars "versions"
+                                , D.fromChars "in"
+                                , D.fromChars "that"
+                                , D.fromChars "range."
+                                ]
+                            )
+
+                    else
+                        toSnippet "PROBLEM WITH CONSTRAINT"
+                            Nothing
+                            ( D.reflow <|
+                                "I got stuck while reading your guida.json file. I ran into an invalid version constraint:"
+                            , D.fillSep
+                                [ D.fromChars "Maybe"
+                                , D.fromChars "you"
+                                , D.fromChars "want"
+                                , D.fromChars "something"
+                                , D.fromChars "like"
+                                , D.green
+                                    (D.fromChars "\""
+                                        |> D.a (D.fromVersion before)
+                                        |> D.a (D.fromChars " <= v < ")
+                                        |> D.a (D.fromVersion (V.bumpMajor before))
+                                        |> D.a (D.fromChars "\"")
+                                    )
+                                , D.fromChars "instead?"
+                                , D.fromChars "Guida"
+                                , D.fromChars "checks"
+                                , D.fromChars "that"
+                                , D.fromChars "all"
+                                , D.fromChars "package"
+                                , D.fromChars "APIs"
+                                , D.fromChars "follow"
+                                , D.fromChars "semantic"
+                                , D.fromChars "versioning,"
+                                , D.fromChars "so"
+                                , D.fromChars "it"
+                                , D.fromChars "is"
+                                , D.fromChars "guaranteed"
+                                , D.fromChars "that"
+                                , D.fromChars "breaking"
+                                , D.fromChars "API"
+                                , D.fromChars "changes"
+                                , D.fromChars "cannot"
+                                , D.fromChars "happen"
+                                , D.fromChars "in"
+                                , D.fromChars "any"
+                                , D.fromChars "of"
+                                , D.fromChars "the"
+                                , D.fromChars "versions"
+                                , D.fromChars "in"
+                                , D.fromChars "that"
+                                , D.fromChars "range."
+                                ]
+                            )
+
+        OP_BadElmConstraint constraintError ->
             case constraintError of
                 C.BadFormat row col ->
                     toSnippet "PROBLEM WITH CONSTRAINT"
@@ -2160,7 +2389,11 @@ toOutlineProblemReport path source _ region problem =
                                 , D.fromChars "constraints."
                                 , D.fromChars "I"
                                 , D.fromChars "recommend"
-                                , D.green (D.fromChars "\"") |> D.a (D.fromVersion before) |> D.a (D.fromChars " <= v < ") |> D.a (D.fromVersion (V.bumpMajor after)) |> D.a (D.fromChars "\"")
+                                , D.green (D.fromChars "\"")
+                                    |> D.a (D.fromVersion before)
+                                    |> D.a (D.fromChars " <= v < ")
+                                    |> D.a (D.fromVersion (V.bumpMajor after))
+                                    |> D.a (D.fromChars "\"")
                                 , D.fromChars "since"
                                 , D.fromChars "it"
                                 , D.fromChars "is"
@@ -2231,7 +2464,38 @@ toOutlineProblemReport path source _ region problem =
                                 ]
                             )
 
-        OP_BadModuleName row col ->
+        OP_BadGuidaModuleName row col ->
+            toSnippet "PROBLEM WITH MODULE NAME"
+                (toHighlight row col)
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. I was expecting a module name here:"
+                , D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "need"
+                    , D.fromChars "something"
+                    , D.fromChars "like"
+                    , D.green (D.fromChars "\"Html.Events\"")
+                    , D.fromChars "or"
+                    , D.green (D.fromChars "\"Browser.Navigation\"")
+                    , D.fromChars "where"
+                    , D.fromChars "each"
+                    , D.fromChars "segment"
+                    , D.fromChars "starts"
+                    , D.fromChars "with"
+                    , D.fromChars "a"
+                    , D.fromChars "capital"
+                    , D.fromChars "letter"
+                    , D.fromChars "and"
+                    , D.fromChars "the"
+                    , D.fromChars "segments"
+                    , D.fromChars "are"
+                    , D.fromChars "separated"
+                    , D.fromChars "by"
+                    , D.fromChars "dots."
+                    ]
+                )
+
+        OP_BadElmModuleName row col ->
             toSnippet "PROBLEM WITH MODULE NAME"
                 (toHighlight row col)
                 ( D.reflow <|
@@ -2262,7 +2526,36 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadModuleHeaderTooLong ->
+        OP_BadGuidaModuleHeaderTooLong ->
+            toSnippet "HEADER TOO LONG"
+                Nothing
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. This section header is too long:"
+                , D.stack
+                    [ D.fillSep
+                        [ D.fromChars "I"
+                        , D.fromChars "need"
+                        , D.fromChars "it"
+                        , D.fromChars "to"
+                        , D.fromChars "be"
+                        , D.green (D.fromChars "under")
+                        , D.green (D.fromChars "20")
+                        , D.green (D.fromChars "bytes")
+                        , D.fromChars "so"
+                        , D.fromChars "it"
+                        , D.fromChars "renders"
+                        , D.fromChars "nicely"
+                        , D.fromChars "on"
+                        , D.fromChars "the"
+                        , D.fromChars "package"
+                        , D.fromChars "website!"
+                        ]
+                    , D.toSimpleNote
+                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/guida-lang/compiler/issues if this seems overly restrictive for your needs."
+                    ]
+                )
+
+        OP_BadElmModuleHeaderTooLong ->
             toSnippet "HEADER TOO LONG"
                 Nothing
                 ( D.reflow <|
@@ -2287,7 +2580,7 @@ toOutlineProblemReport path source _ region problem =
                         , D.fromChars "website!"
                         ]
                     , D.toSimpleNote
-                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/elm/compiler/issues if this seems overly restrictive for your needs."
+                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/guida-lang/compiler/issues if this seems overly restrictive for your needs."
                     ]
                 )
 
@@ -2397,14 +2690,14 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadLicense suggestions ->
+        OP_BadGuidaLicense suggestions ->
             toSnippet "UNKNOWN LICENSE"
                 Nothing
                 ( D.reflow <|
-                    "I got stuck while reading your elm.json file. I do not know about this type of license:"
+                    "I got stuck while reading your guida.json file. I do not know about this type of license:"
                 , D.stack
                     [ D.fillSep
-                        [ D.fromChars "Elm"
+                        [ D.fromChars "Guida"
                         , D.fromChars "packages"
                         , D.fromChars "generally"
                         , D.fromChars "use"
@@ -2436,7 +2729,75 @@ toOutlineProblemReport path source _ region problem =
                     ]
                 )
 
-        OP_BadSummaryTooLong ->
+        OP_BadElmLicense suggestions ->
+            toSnippet "UNKNOWN LICENSE"
+                Nothing
+                ( D.reflow <|
+                    "I got stuck while reading your elm.json file. I do not know about this type of license:"
+                , D.stack
+                    [ D.fillSep
+                        [ D.fromChars "Guida"
+                        , D.fromChars "packages"
+                        , D.fromChars "generally"
+                        , D.fromChars "use"
+                        , D.green (D.fromChars "\"BSD-3-Clause\"")
+                        , D.fromChars "or"
+                        , D.green (D.fromChars "\"MIT\"")
+                            |> D.a (D.fromChars ",")
+                        , D.fromChars "but"
+                        , D.fromChars "I"
+                        , D.fromChars "accept"
+                        , D.fromChars "any"
+                        , D.fromChars "OSI"
+                        , D.fromChars "approved"
+                        , D.fromChars "SPDX"
+                        , D.fromChars "license."
+                        , D.fromChars "Here"
+                        , D.fromChars "some"
+                        , D.fromChars "that"
+                        , D.fromChars "seem"
+                        , D.fromChars "close"
+                        , D.fromChars "to"
+                        , D.fromChars "what"
+                        , D.fromChars "you"
+                        , D.fromChars "wrote:"
+                        ]
+                    , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromChars suggestions
+                    , D.reflow <|
+                        "Check out https://spdx.org/licenses/ for the full list of options."
+                    ]
+                )
+
+        OP_BadGuidaSummaryTooLong ->
+            toSnippet "SUMMARY TOO LONG"
+                Nothing
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. Your \"summary\" is too long:"
+                , D.stack
+                    [ D.fillSep
+                        [ D.fromChars "I"
+                        , D.fromChars "need"
+                        , D.fromChars "it"
+                        , D.fromChars "to"
+                        , D.fromChars "be"
+                        , D.green (D.fromChars "under")
+                        , D.green (D.fromChars "80")
+                        , D.green (D.fromChars "bytes")
+                        , D.fromChars "so"
+                        , D.fromChars "it"
+                        , D.fromChars "renders"
+                        , D.fromChars "nicely"
+                        , D.fromChars "on"
+                        , D.fromChars "the"
+                        , D.fromChars "package"
+                        , D.fromChars "website!"
+                        ]
+                    , D.toSimpleNote
+                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/guida-lang/compiler/issues if this seems overly restrictive for your needs."
+                    ]
+                )
+
+        OP_BadElmSummaryTooLong ->
             toSnippet "SUMMARY TOO LONG"
                 Nothing
                 ( D.reflow <|
@@ -2461,11 +2822,34 @@ toOutlineProblemReport path source _ region problem =
                         , D.fromChars "website!"
                         ]
                     , D.toSimpleNote
-                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/elm/compiler/issues if this seems overly restrictive for your needs."
+                        "I count the length in bytes, so using non-ASCII characters costs extra. Please report your case at https://github.com/guida-lang/compiler/issues if this seems overly restrictive for your needs."
                     ]
                 )
 
-        OP_NoSrcDirs ->
+        OP_NoGuidaSrcDirs ->
+            toSnippet "NO SOURCE DIRECTORIES"
+                Nothing
+                ( D.reflow <|
+                    "I got stuck while reading your guida.json file. You do not have any \"source-directories\" listed here:"
+                , D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "need"
+                    , D.fromChars "something"
+                    , D.fromChars "like"
+                    , D.green (D.fromChars "[\"src\"]")
+                    , D.fromChars "so"
+                    , D.fromChars "I"
+                    , D.fromChars "know"
+                    , D.fromChars "where"
+                    , D.fromChars "to"
+                    , D.fromChars "look"
+                    , D.fromChars "for"
+                    , D.fromChars "your"
+                    , D.fromChars "modules!"
+                    ]
+                )
+
+        OP_NoElmSrcDirs ->
             toSnippet "NO SOURCE DIRECTORIES"
                 Nothing
                 ( D.reflow <|
@@ -2512,7 +2896,8 @@ type Details
 
 type DetailsBadDep
     = BD_BadDownload Pkg.Name V.Version PackageProblem
-    | BD_BadBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
+    | BD_BadGuidaBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
+    | BD_BadElmBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -2807,7 +3192,24 @@ toDetailsReport details =
                         BD_BadDownload pkg vsn packageProblem ->
                             toPackageProblemReport pkg vsn packageProblem
 
-                        BD_BadBuild pkg vsn fingerprint ->
+                        BD_BadGuidaBuild pkg vsn fingerprint ->
+                            Help.report "PROBLEM BUILDING DEPENDENCIES"
+                                Nothing
+                                "I ran into a compilation error when trying to build the following package:"
+                                [ D.indent 4 <| D.red <| D.fromChars <| Pkg.toChars pkg ++ " " ++ V.toChars vsn
+                                , D.reflow <|
+                                    "This probably means it has package constraints that are too wide. It may be possible to tweak your guida.json to avoid the root problem as a stopgap. Head over to https://guida-lang.org/community to get help figuring out how to take this path!"
+                                , D.toSimpleNote <|
+                                    "To help with the root problem, please report this to the package author along with the following information:"
+                                , D.indent 4 <|
+                                    D.vcat <|
+                                        List.map (\( p, v ) -> D.fromChars <| Pkg.toChars p ++ " " ++ V.toChars v) <|
+                                            Dict.toList compare fingerprint
+                                , D.reflow <|
+                                    "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
+                                ]
+
+                        BD_BadElmBuild pkg vsn fingerprint ->
                             Help.report "PROBLEM BUILDING DEPENDENCIES"
                                 Nothing
                                 "I ran into a compilation error when trying to build the following package:"
@@ -2825,15 +3227,16 @@ toDetailsReport details =
                                 ]
 
 
-toBadDepRank :
-    DetailsBadDep
-    -> Int -- lower is better
+toBadDepRank : DetailsBadDep -> Int
 toBadDepRank badDep =
     case badDep of
         BD_BadDownload _ _ _ ->
             0
 
-        BD_BadBuild _ _ _ ->
+        BD_BadGuidaBuild _ _ _ ->
+            1
+
+        BD_BadElmBuild _ _ _ ->
             1
 
 
@@ -3424,7 +3827,16 @@ toProjectProblemReport projectProblem =
 
         BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
             case problem of
-                Import.NotFound ->
+                Import.GuidaNotFound ->
+                    Help.report "MISSING MODULE"
+                        (Just "guida.json")
+                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        [ D.indent 4 <| D.red <| D.fromName name
+                        , D.reflow <|
+                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
+                        ]
+
+                Import.ElmNotFound ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -3433,7 +3845,18 @@ toProjectProblemReport projectProblem =
                             "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
                         ]
 
-                Import.Ambiguous _ _ pkg _ ->
+                Import.GuidaAmbiguous _ _ pkg _ ->
+                    Help.report "AMBIGUOUS MODULE NAME"
+                        (Just "guida.json")
+                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        [ D.indent 4 <| D.red <| D.fromName name
+                        , D.reflow <|
+                            "But a module from "
+                                ++ Pkg.toChars pkg
+                                ++ " already uses that name. Try choosing a different name for your local file."
+                        ]
+
+                Import.ElmAmbiguous _ _ pkg _ ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -3444,7 +3867,22 @@ toProjectProblemReport projectProblem =
                                 ++ " already uses that name. Try choosing a different name for your local file."
                         ]
 
-                Import.AmbiguousLocal path1 path2 paths ->
+                Import.GuidaAmbiguousLocal path1 path2 paths ->
+                    Help.report "AMBIGUOUS MODULE NAME"
+                        (Just "guida.json")
+                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        [ D.indent 4 <| D.red <| D.fromName name
+                        , D.reflow <|
+                            "But I found multiple files with that name:"
+                        , D.dullyellow <|
+                            D.indent 4 <|
+                                D.vcat <|
+                                    List.map D.fromChars (path1 :: path2 :: paths)
+                        , D.reflow <|
+                            "Change the module names to be distinct!"
+                        ]
+
+                Import.ElmAmbiguousLocal path1 path2 paths ->
                     Help.report "AMBIGUOUS MODULE NAME"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -3459,7 +3897,18 @@ toProjectProblemReport projectProblem =
                             "Change the module names to be distinct!"
                         ]
 
-                Import.AmbiguousForeign _ _ _ ->
+                Import.GuidaAmbiguousForeign _ _ _ ->
+                    Help.report "MISSING MODULE"
+                        (Just "guida.json")
+                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        [ D.indent 4 <| D.red <| D.fromName name
+                        , D.reflow <|
+                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
+                        , D.toSimpleNote <|
+                            "It is not possible to \"re-export\" modules from other packages. You can only expose modules that you define in your own code."
+                        ]
+
+                Import.ElmAmbiguousForeign _ _ _ ->
                     Help.report "MISSING MODULE"
                         (Just "elm.json")
                         "The  \"exposed-modules\" of your elm.json lists the following module:"
@@ -3773,9 +4222,17 @@ detailsBadDepEncoder detailsBadDep =
                 , packageProblemEncoder packageProblem
                 ]
 
-        BD_BadBuild pkg vsn fingerprint ->
+        BD_BadGuidaBuild pkg vsn fingerprint ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Pkg.nameEncoder pkg
+                , V.versionEncoder vsn
+                , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
+                ]
+
+        BD_BadElmBuild pkg vsn fingerprint ->
+            BE.sequence
+                [ BE.unsignedInt8 2
                 , Pkg.nameEncoder pkg
                 , V.versionEncoder vsn
                 , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
@@ -3795,7 +4252,13 @@ detailsBadDepDecoder =
                             packageProblemDecoder
 
                     1 ->
-                        BD.map3 BD_BadBuild
+                        BD.map3 BD_BadGuidaBuild
+                            Pkg.nameDecoder
+                            V.versionDecoder
+                            (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
+
+                    2 ->
+                        BD.map3 BD_BadElmBuild
                             Pkg.nameDecoder
                             V.versionDecoder
                             (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)

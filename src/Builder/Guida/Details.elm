@@ -645,123 +645,162 @@ toComparableFingerprint fingerprint =
 
 build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
 build key cache depsMVar pkg (Solver.Details vsn _) f fs =
-    -- FIXME hardcoded ElmRoot!
-    Outline.read (Stuff.ElmRoot (Stuff.package cache pkg vsn))
+    Stuff.findRootIn (Stuff.package cache pkg vsn)
+        -- TODO/FIXME remove the need to default to GuidaRoot
+        |> Task.fmap (Maybe.withDefault (Stuff.GuidaRoot (Stuff.package cache pkg vsn)))
         |> Task.bind
-            (\eitherOutline ->
-                let
-                    pkgBuild : Outline.Exposed -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Never Dep
-                    pkgBuild exposed deps =
-                        Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
-                            |> Task.bind
-                                (\allDeps ->
-                                    Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps deps)
+            (\root ->
+                Outline.read root
+                    |> Task.bind
+                        (\eitherOutline ->
+                            let
+                                pkgBuild : Outline.Exposed -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Never Dep
+                                pkgBuild exposed deps =
+                                    Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
                                         |> Task.bind
-                                            (\directDeps ->
-                                                case Utils.sequenceDictResult identity Pkg.compareName directDeps of
-                                                    Err _ ->
-                                                        Reporting.report key Reporting.DBroken
-                                                            |> Task.fmap (\_ -> Err Nothing)
+                                            (\allDeps ->
+                                                Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps deps)
+                                                    |> Task.bind
+                                                        (\directDeps ->
+                                                            case Utils.sequenceDictResult identity Pkg.compareName directDeps of
+                                                                Err _ ->
+                                                                    Reporting.report key Reporting.DBroken
+                                                                        |> Task.fmap (\_ -> Err Nothing)
 
-                                                    Ok directArtifacts ->
-                                                        let
-                                                            src : String
-                                                            src =
-                                                                Stuff.package cache pkg vsn ++ "/src"
+                                                                Ok directArtifacts ->
+                                                                    let
+                                                                        src : String
+                                                                        src =
+                                                                            Stuff.package cache pkg vsn ++ "/src"
 
-                                                            foreignDeps : Dict String ModuleName.Raw ForeignInterface
-                                                            foreignDeps =
-                                                                gatherForeignInterfaces directArtifacts
+                                                                        foreignDeps : Dict String ModuleName.Raw ForeignInterface
+                                                                        foreignDeps =
+                                                                            gatherForeignInterfaces directArtifacts
 
-                                                            exposedDict : Dict String ModuleName.Raw ()
-                                                            exposedDict =
-                                                                Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
-                                                        in
-                                                        getDocsStatus cache pkg vsn
-                                                            |> Task.bind
-                                                                (\docsStatus ->
-                                                                    Utils.newEmptyMVar
+                                                                        exposedDict : Dict String ModuleName.Raw ()
+                                                                        exposedDict =
+                                                                            Utils.mapFromKeys identity (\_ -> ()) (Outline.flattenExposed exposed)
+                                                                    in
+                                                                    getDocsStatus cache pkg vsn
                                                                         |> Task.bind
-                                                                            (\mvar ->
-                                                                                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                            (\docsStatus ->
+                                                                                Utils.newEmptyMVar
                                                                                     |> Task.bind
-                                                                                        (\mvars ->
-                                                                                            Utils.putMVar statusDictEncoder mvar mvars
-                                                                                                |> Task.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
-                                                                                                |> Task.bind (\_ -> Task.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                        (\mvar ->
+                                                                                            Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                                 |> Task.bind
-                                                                                                    (\maybeStatuses ->
-                                                                                                        case Utils.sequenceDictMaybe identity compare maybeStatuses of
-                                                                                                            Nothing ->
-                                                                                                                Reporting.report key Reporting.DBroken
-                                                                                                                    |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                    (\mvars ->
+                                                                                                        Utils.putMVar statusDictEncoder mvar mvars
+                                                                                                            |> Task.bind (\_ -> Utils.dictMapM_ compare (Utils.readMVar (BD.maybe statusDecoder)) mvars)
+                                                                                                            |> Task.bind (\_ -> Task.bind (Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe statusDecoder))) (Utils.readMVar statusDictDecoder mvar))
+                                                                                                            |> Task.bind
+                                                                                                                (\maybeStatuses ->
+                                                                                                                    case Utils.sequenceDictMaybe identity compare maybeStatuses of
+                                                                                                                        Nothing ->
+                                                                                                                            let
+                                                                                                                                detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
+                                                                                                                                detailsBadDep =
+                                                                                                                                    case root of
+                                                                                                                                        Stuff.GuidaRoot _ ->
+                                                                                                                                            Exit.BD_BadGuidaBuild
 
-                                                                                                            Just statuses ->
-                                                                                                                Utils.newEmptyMVar
-                                                                                                                    |> Task.bind
-                                                                                                                        (\rmvar ->
-                                                                                                                            Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
+                                                                                                                                        Stuff.ElmRoot _ ->
+                                                                                                                                            Exit.BD_BadElmBuild
+                                                                                                                            in
+                                                                                                                            Reporting.report key Reporting.DBroken
+                                                                                                                                |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
+
+                                                                                                                        Just statuses ->
+                                                                                                                            Utils.newEmptyMVar
                                                                                                                                 |> Task.bind
-                                                                                                                                    (\rmvars ->
-                                                                                                                                        Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
-                                                                                                                                            |> Task.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
+                                                                                                                                    (\rmvar ->
+                                                                                                                                        Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
                                                                                                                                             |> Task.bind
-                                                                                                                                                (\maybeResults ->
-                                                                                                                                                    case Utils.sequenceDictMaybe identity compare maybeResults of
-                                                                                                                                                        Nothing ->
-                                                                                                                                                            Reporting.report key Reporting.DBroken
-                                                                                                                                                                |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                                                                                                                (\rmvars ->
+                                                                                                                                                    Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
+                                                                                                                                                        |> Task.bind (\_ -> Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe dResultDecoder)) rmvars)
+                                                                                                                                                        |> Task.bind
+                                                                                                                                                            (\maybeResults ->
+                                                                                                                                                                case Utils.sequenceDictMaybe identity compare maybeResults of
+                                                                                                                                                                    Nothing ->
+                                                                                                                                                                        let
+                                                                                                                                                                            detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
+                                                                                                                                                                            detailsBadDep =
+                                                                                                                                                                                case root of
+                                                                                                                                                                                    Stuff.GuidaRoot _ ->
+                                                                                                                                                                                        Exit.BD_BadGuidaBuild
 
-                                                                                                                                                        Just results ->
-                                                                                                                                                            let
-                                                                                                                                                                path : String
-                                                                                                                                                                path =
-                                                                                                                                                                    Stuff.package cache pkg vsn ++ "/artifacts.dat"
+                                                                                                                                                                                    Stuff.ElmRoot _ ->
+                                                                                                                                                                                        Exit.BD_BadElmBuild
+                                                                                                                                                                        in
+                                                                                                                                                                        Reporting.report key Reporting.DBroken
+                                                                                                                                                                            |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
 
-                                                                                                                                                                ifaces : Dict String ModuleName.Raw I.DependencyInterface
-                                                                                                                                                                ifaces =
-                                                                                                                                                                    gatherInterfaces exposedDict results
+                                                                                                                                                                    Just results ->
+                                                                                                                                                                        let
+                                                                                                                                                                            path : String
+                                                                                                                                                                            path =
+                                                                                                                                                                                Stuff.package cache pkg vsn ++ "/artifacts.dat"
 
-                                                                                                                                                                objects : Opt.GlobalGraph
-                                                                                                                                                                objects =
-                                                                                                                                                                    gatherObjects results
+                                                                                                                                                                            ifaces : Dict String ModuleName.Raw I.DependencyInterface
+                                                                                                                                                                            ifaces =
+                                                                                                                                                                                gatherInterfaces exposedDict results
 
-                                                                                                                                                                artifacts : Artifacts
-                                                                                                                                                                artifacts =
-                                                                                                                                                                    Artifacts ifaces objects
+                                                                                                                                                                            objects : Opt.GlobalGraph
+                                                                                                                                                                            objects =
+                                                                                                                                                                                gatherObjects results
 
-                                                                                                                                                                fingerprints : EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint
-                                                                                                                                                                fingerprints =
-                                                                                                                                                                    EverySet.insert toComparableFingerprint f fs
-                                                                                                                                                            in
-                                                                                                                                                            writeDocs cache pkg vsn docsStatus results
-                                                                                                                                                                |> Task.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
-                                                                                                                                                                |> Task.bind (\_ -> Reporting.report key Reporting.DBuilt)
-                                                                                                                                                                |> Task.fmap (\_ -> Ok artifacts)
+                                                                                                                                                                            artifacts : Artifacts
+                                                                                                                                                                            artifacts =
+                                                                                                                                                                                Artifacts ifaces objects
+
+                                                                                                                                                                            fingerprints : EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint
+                                                                                                                                                                            fingerprints =
+                                                                                                                                                                                EverySet.insert toComparableFingerprint f fs
+                                                                                                                                                                        in
+                                                                                                                                                                        writeDocs cache pkg vsn docsStatus results
+                                                                                                                                                                            |> Task.bind (\_ -> File.writeBinary artifactCacheEncoder path (ArtifactCache fingerprints artifacts))
+                                                                                                                                                                            |> Task.bind (\_ -> Reporting.report key Reporting.DBuilt)
+                                                                                                                                                                            |> Task.fmap (\_ -> Ok artifacts)
+                                                                                                                                                            )
                                                                                                                                                 )
                                                                                                                                     )
-                                                                                                                        )
+                                                                                                                )
                                                                                                     )
                                                                                         )
                                                                             )
-                                                                )
+                                                        )
                                             )
-                                )
-                in
-                case eitherOutline of
-                    Err _ ->
-                        Reporting.report key Reporting.DBroken
-                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                            in
+                            case eitherOutline of
+                                Err _ ->
+                                    let
+                                        detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
+                                        detailsBadDep =
+                                            case root of
+                                                Stuff.GuidaRoot _ ->
+                                                    Exit.BD_BadGuidaBuild
 
-                    Ok (Outline.App _) ->
-                        Reporting.report key Reporting.DBroken
-                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild pkg vsn f)))
+                                                Stuff.ElmRoot _ ->
+                                                    Exit.BD_BadElmBuild
+                                    in
+                                    Reporting.report key Reporting.DBroken
+                                        |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
 
-                    Ok (Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ exposed deps _ _)) ->
-                        pkgBuild exposed deps
+                                Ok (Outline.App (Outline.GuidaAppOutline _ _ _ _ _ _)) ->
+                                    Reporting.report key Reporting.DBroken
+                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadGuidaBuild pkg vsn f)))
 
-                    Ok (Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ exposed deps _ _)) ->
-                        pkgBuild exposed deps
+                                Ok (Outline.App (Outline.ElmAppOutline _ _ _ _ _ _)) ->
+                                    Reporting.report key Reporting.DBroken
+                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadElmBuild pkg vsn f)))
+
+                                Ok (Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ exposed deps _ _)) ->
+                                    pkgBuild exposed deps
+
+                                Ok (Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ exposed deps _ _)) ->
+                                    pkgBuild exposed deps
+                        )
             )
 
 

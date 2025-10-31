@@ -88,10 +88,10 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                             case paths of
                                                 [] ->
                                                     getExposed root details
-                                                        |> Task.bind (\exposed -> buildExposed style (Stuff.rootPath root) details maybeDocs exposed)
+                                                        |> Task.bind (\exposed -> buildExposed style root details maybeDocs exposed)
 
                                                 p :: ps ->
-                                                    buildPaths style (Stuff.rootPath root) details (NE.Nonempty p ps)
+                                                    buildPaths style root details (NE.Nonempty p ps)
                                                         |> Task.bind
                                                             (\artifacts ->
                                                                 case maybeOutput of
@@ -202,7 +202,7 @@ getExposed root (Details.Details _ validOutline _ _ _ _) =
 -- BUILD PROJECTS
 
 
-buildExposed : Reporting.Style -> FilePath -> Details.Details -> Maybe FilePath -> NE.Nonempty ModuleName.Raw -> Task Exit.Make ()
+buildExposed : Reporting.Style -> Stuff.Root -> Details.Details -> Maybe FilePath -> NE.Nonempty ModuleName.Raw -> Task Exit.Make ()
 buildExposed style root details maybeDocs exposed =
     let
         docsGoal : Build.DocsGoal ()
@@ -219,7 +219,7 @@ buildExposed style root details maybeDocs exposed =
             exposed
 
 
-buildPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
+buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
         Build.fromPaths style root details paths

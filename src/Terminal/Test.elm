@@ -562,7 +562,7 @@ app.ports.elmTestPort__send.subscribe(function (msg) {
             testsToRun = response.testCount;
 
             if (!isMachineReadable(report)) {
-                var headline = 'elm-test """ ++ V.toChars V.elmCompiler ++ """';
+                var headline = 'guida-test """ ++ V.toChars V.compiler ++ """';
                 var bar = '-'.repeat(headline.length);
 
                 console.log('\\n' + headline + '\\n' + bar + '\\n');
@@ -1171,7 +1171,7 @@ runMake root path =
                 (Task.eio Exit.TestBadDetails (Details.load style scope root)
                     |> Task.bind
                         (\details ->
-                            buildPaths (Stuff.rootPath root) details (NE.Nonempty path [])
+                            buildPaths root details (NE.Nonempty path [])
                                 |> Task.bind
                                     (\artifacts ->
                                         toBuilder 0 root details artifacts
@@ -1181,7 +1181,7 @@ runMake root path =
         )
 
 
-buildPaths : FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Test Build.Artifacts
+buildPaths : Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Test Build.Artifacts
 buildPaths root details paths =
     Task.eio Exit.TestCannotBuild <|
         Build.fromPaths style root details paths

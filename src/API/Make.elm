@@ -131,7 +131,7 @@ getMode debug optimize =
 buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details paths =
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromPaths style (Stuff.rootPath root) details paths
+        Build.fromPaths style root details paths
 
 
 

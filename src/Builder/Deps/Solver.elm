@@ -749,38 +749,38 @@ getConstraints pkg vsn =
                                                                             |> Task.bind
                                                                                 (\guidaResult ->
                                                                                     case guidaResult of
-                                                                                        Err _ ->
-                                                                                            Website.metadata pkg vsn "elm.json"
-                                                                                                |> Task.bind
-                                                                                                    (\elmUrl ->
-                                                                                                        Http.get manager elmUrl [] identity (Task.pure << Ok)
-                                                                                                            |> Task.bind
-                                                                                                                (\elmResult ->
-                                                                                                                    case elmResult of
-                                                                                                                        Err elmHttpProblem ->
-                                                                                                                            Task.pure (ISErr (Exit.SolverBadHttp pkg vsn elmHttpProblem))
+                                                                                        Err guidaHttpProblem ->
+                                                                                            Task.pure (ISErr (Exit.SolverBadHttp pkg vsn guidaHttpProblem))
 
-                                                                                                                        Ok body ->
-                                                                                                                            case D.fromByteString constraintsDecoder body of
-                                                                                                                                Ok cs ->
-                                                                                                                                    Utils.dirCreateDirectoryIfMissing True home
-                                                                                                                                        |> Task.bind (\_ -> File.writeUtf8 elmPath body)
-                                                                                                                                        |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
-
-                                                                                                                                Err _ ->
-                                                                                                                                    Task.pure (ISErr (Exit.SolverBadHttpElmData pkg vsn elmUrl))
-                                                                                                                )
-                                                                                                    )
-
-                                                                                        Ok body ->
-                                                                                            case D.fromByteString constraintsDecoder body of
+                                                                                        Ok guidaBody ->
+                                                                                            case D.fromByteString constraintsDecoder guidaBody of
                                                                                                 Ok cs ->
                                                                                                     Utils.dirCreateDirectoryIfMissing True home
-                                                                                                        |> Task.bind (\_ -> File.writeUtf8 guidaPath body)
+                                                                                                        |> Task.bind (\_ -> File.writeUtf8 guidaPath guidaBody)
                                                                                                         |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
 
                                                                                                 Err _ ->
-                                                                                                    Task.pure (ISErr (Exit.SolverBadHttpGuidaData pkg vsn guidaUrl))
+                                                                                                    Website.metadata pkg vsn "elm.json"
+                                                                                                        |> Task.bind
+                                                                                                            (\elmUrl ->
+                                                                                                                Http.get manager elmUrl [] identity (Task.pure << Ok)
+                                                                                                                    |> Task.bind
+                                                                                                                        (\elmResult ->
+                                                                                                                            case elmResult of
+                                                                                                                                Err elmHttpProblem ->
+                                                                                                                                    Task.pure (ISErr (Exit.SolverBadHttp pkg vsn elmHttpProblem))
+
+                                                                                                                                Ok elmBody ->
+                                                                                                                                    case D.fromByteString constraintsDecoder elmBody of
+                                                                                                                                        Ok cs ->
+                                                                                                                                            Utils.dirCreateDirectoryIfMissing True home
+                                                                                                                                                |> Task.bind (\_ -> File.writeUtf8 elmPath elmBody)
+                                                                                                                                                |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+
+                                                                                                                                        Err _ ->
+                                                                                                                                            Task.pure (ISErr (Exit.SolverBadHttpElmData pkg vsn elmUrl))
+                                                                                                                        )
+                                                                                                            )
                                                                                 )
                                                                     )
                                             )

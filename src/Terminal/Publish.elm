@@ -304,7 +304,7 @@ verifyBuild root =
                                     |> Task.bind
                                         (\exposed ->
                                             Task.eio Exit.PublishBuildProblem <|
-                                                Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs exposed
+                                                Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed
                                         )
                             )
                     )
@@ -489,7 +489,7 @@ verifyZipBuild root =
                                 |> Task.bind
                                     (\exposed ->
                                         Task.eio Exit.PublishZipBuildProblem
-                                            (Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent (Stuff.rootPath root) details Build.keepDocs exposed)
+                                            (Build.fromExposed Docs.bytesDecoder Docs.bytesEncoder Reporting.silent root details Build.keepDocs exposed)
                                             |> Task.fmap (\_ -> ())
                                     )
                         )

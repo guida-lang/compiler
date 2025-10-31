@@ -573,7 +573,7 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                         |> Task.bind
                             (\details ->
                                 Task.eio identity
-                                    (Build.fromRepl (Stuff.rootPath root) details (toByteString newState output))
+                                    (Build.fromRepl root details (toByteString newState output))
                                     |> Task.bind
                                         (\artifacts ->
                                             Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl (Stuff.rootPath root) details ansi artifacts) (toPrintName output)
