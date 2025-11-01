@@ -146,6 +146,7 @@ writeEntry destination root entry =
             || (path == "LICENSE")
             || (path == "README.md")
             || (path == "guida.json")
+            || (path == "elm.json")
     then
         if not (String.isEmpty path) && String.endsWith "/" path then
             Utils.dirCreateDirectoryIfMissing True (Utils.fpCombine destination path)
