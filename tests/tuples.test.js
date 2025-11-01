@@ -6,7 +6,7 @@ describe("tuples", () => {
         expect(() => {
             childProcess.execSync(
                 `../../bin/index.js make src/GuidaTupleN.guida`,
-                { cwd: path.join(__dirname, "..", "assets", "some-application") }
+                { cwd: path.join(__dirname, "..", "assets", "some-application"), env: { ...process.env, GUIDA_REGISTRY: "https://package.elm-lang.org" } }
             );
         }).not.toThrow();
     });
