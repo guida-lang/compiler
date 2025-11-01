@@ -75,12 +75,12 @@ toReport localizer source err =
 
                     E.Function ->
                         ( "a function"
-                        , D.reflow "But if I allowed functions from JS, it would be possible to sneak side-effects and runtime exceptions into Elm!"
+                        , D.reflow "But if I allowed functions from JS, it would be possible to sneak side-effects and runtime exceptions into Guida!"
                         )
 
                     E.TypeVariable name ->
                         ( "an unspecified type"
-                        , D.reflow ("But type variables like `" ++ name ++ "` cannot be given as flags. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Elm program.")
+                        , D.reflow ("But type variables like `" ++ name ++ "` cannot be given as flags. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Guida program.")
                         )
 
                     E.UnsupportedType name ->

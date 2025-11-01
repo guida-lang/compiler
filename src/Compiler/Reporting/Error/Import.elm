@@ -8,8 +8,8 @@ module Compiler.Reporting.Error.Import exposing
     , toReport
     )
 
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -30,10 +30,14 @@ type Error
 
 
 type Problem
-    = NotFound
-    | Ambiguous String (List String) Pkg.Name (List Pkg.Name)
-    | AmbiguousLocal String String (List String)
-    | AmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
+    = GuidaNotFound
+    | ElmNotFound
+    | GuidaAmbiguous String (List String) Pkg.Name (List Pkg.Name)
+    | ElmAmbiguous String (List String) Pkg.Name (List Pkg.Name)
+    | GuidaAmbiguousLocal String String (List String)
+    | ElmAmbiguousLocal String String (List String)
+    | GuidaAmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
+    | ElmAmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
 
 
 
@@ -41,26 +45,23 @@ type Problem
 
 
 toReport : Code.Source -> Error -> Report.Report
-toReport source (Error region name unimportedModules problem) =
+toReport source ((Error region name unimportedModules problem) as error) =
     case problem of
-        NotFound ->
+        GuidaNotFound ->
             Report.Report "MODULE NOT FOUND" region [] <|
                 Code.toSnippet source
                     region
                     Nothing
-                    ( D.reflow
-                        ("You are trying to import a `" ++ name ++ "` module:")
+                    ( D.reflow ("You are trying to import a `" ++ name ++ "` module:")
                     , D.stack
-                        [ D.reflow
-                            "I checked the \"dependencies\" and \"source-directories\" listed in your elm.json, but I cannot find it! Maybe it is a typo for one of these names?"
+                        [ D.reflow "I checked the \"dependencies\" and \"source-directories\" listed in your guida.json, but I cannot find it! Maybe it is a typo for one of these names?"
                         , D.dullyellow <|
                             D.indent 4 <|
                                 D.vcat <|
                                     List.map D.fromName (toSuggestions name unimportedModules)
                         , case Dict.get identity name Pkg.suggestions of
                             Nothing ->
-                                D.toSimpleHint
-                                    "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
+                                D.toSimpleHint "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your guida.json to make sure all the packages you need are listed there!"
 
                             Just dependency ->
                                 D.toFancyHint
@@ -78,7 +79,7 @@ toReport source (Error region name unimportedModules problem) =
                                     , D.fromChars (Pkg.toChars dependency)
                                     , D.fromChars "package?"
                                     , D.fromChars "Running"
-                                    , D.green (D.fromChars ("elm install " ++ Pkg.toChars dependency))
+                                    , D.green (D.fromChars ("guida install " ++ Pkg.toChars dependency))
                                     , D.fromChars "should"
                                     , D.fromChars "make"
                                     , D.fromChars "it"
@@ -87,91 +88,156 @@ toReport source (Error region name unimportedModules problem) =
                         ]
                     )
 
-        Ambiguous path _ pkg _ ->
-            Report.Report "AMBIGUOUS IMPORT" region [] <|
+        ElmNotFound ->
+            Report.Report "MODULE NOT FOUND" region [] <|
                 Code.toSnippet source
                     region
                     Nothing
-                    ( D.reflow
-                        ("You are trying to import a `" ++ name ++ "` module:")
+                    ( D.reflow ("You are trying to import a `" ++ name ++ "` module:")
                     , D.stack
-                        [ D.fillSep
-                            [ D.fromChars "But"
-                            , D.fromChars "I"
-                            , D.fromChars "found"
-                            , D.fromChars "multiple"
-                            , D.fromChars "modules"
-                            , D.fromChars "with"
-                            , D.fromChars "that"
-                            , D.fromChars "name."
-                            , D.fromChars "One"
-                            , D.fromChars "in"
-                            , D.fromChars "the"
-                            , D.dullyellow (D.fromChars (Pkg.toChars pkg))
-                            , D.fromChars "package,"
-                            , D.fromChars "and"
-                            , D.fromChars "another"
-                            , D.fromChars "defined"
-                            , D.fromChars "locally"
-                            , D.fromChars "in"
-                            , D.fromChars "the"
-                            , D.dullyellow (D.fromChars path)
-                            , D.fromChars "file."
-                            , D.fromChars "I"
-                            , D.fromChars "do"
-                            , D.fromChars "not"
-                            , D.fromChars "have"
-                            , D.fromChars "a"
-                            , D.fromChars "way"
-                            , D.fromChars "to"
-                            , D.fromChars "choose"
-                            , D.fromChars "between"
-                            , D.fromChars "them."
-                            ]
-                        , D.reflow
-                            "Try changing the name of the locally defined module to clear up the ambiguity?"
-                        ]
-                    )
-
-        AmbiguousLocal path1 path2 paths ->
-            Report.Report "AMBIGUOUS IMPORT" region [] <|
-                Code.toSnippet source
-                    region
-                    Nothing
-                    ( D.reflow
-                        ("You are trying to import a `" ++ name ++ "` module:")
-                    , D.stack
-                        [ D.reflow
-                            "But I found multiple files in your \"source-directories\" with that name:"
+                        [ D.reflow "I checked the \"dependencies\" and \"source-directories\" listed in your elm.json, but I cannot find it! Maybe it is a typo for one of these names?"
                         , D.dullyellow <|
                             D.indent 4 <|
                                 D.vcat <|
-                                    List.map D.fromChars (path1 :: path2 :: paths)
-                        , D.reflow
-                            "Change the module names to be distinct!"
+                                    List.map D.fromName (toSuggestions name unimportedModules)
+                        , case Dict.get identity name Pkg.suggestions of
+                            Nothing ->
+                                D.toSimpleHint "If it is not a typo, check the \"dependencies\" and \"source-directories\" of your elm.json to make sure all the packages you need are listed there!"
+
+                            Just dependency ->
+                                D.toFancyHint
+                                    [ D.fromChars "Maybe"
+                                    , D.fromChars "you"
+                                    , D.fromChars "want"
+                                    , D.fromChars "the"
+                                    , D.fromChars "`"
+                                        |> D.a (D.fromName name)
+                                        |> D.a (D.fromChars "`")
+                                    , D.fromChars "module"
+                                    , D.fromChars "defined"
+                                    , D.fromChars "in"
+                                    , D.fromChars "the"
+                                    , D.fromChars (Pkg.toChars dependency)
+                                    , D.fromChars "package?"
+                                    , D.fromChars "Running"
+                                    , D.green (D.fromChars ("guida install " ++ Pkg.toChars dependency))
+                                    , D.fromChars "should"
+                                    , D.fromChars "make"
+                                    , D.fromChars "it"
+                                    , D.fromChars "available!"
+                                    ]
                         ]
                     )
 
-        AmbiguousForeign pkg1 pkg2 pkgs ->
-            Report.Report "AMBIGUOUS IMPORT" region [] <|
-                Code.toSnippet source
-                    region
-                    Nothing
-                    ( D.reflow
-                        ("You are trying to import a `" ++ name ++ "` module:")
-                    , D.stack
-                        [ D.reflow
-                            "But multiple packages in your \"dependencies\" that expose a module that name:"
-                        , D.dullyellow <|
-                            D.indent 4 <|
-                                D.vcat <|
-                                    List.map (D.fromChars << Pkg.toChars) (pkg1 :: pkg2 :: pkgs)
-                        , D.reflow
-                            "There is no way to disambiguate in cases like this right now. Of the known name clashes, they are usually for packages with similar purposes, so the current recommendation is to pick just one of them."
-                        , D.toSimpleNote
-                            "It seems possible to resolve this with new syntax in imports, but that is more complicated than it sounds. Right now, our module names are tied to GitHub repos, but we may want to get rid of that dependency for a variety of reasons. That would in turn have implications for our package infrastructure, hosting costs, and possibly on how package names are specified. The particular syntax chosen seems like it would interact with all these factors in ways that are difficult to predict, potentially leading to harder problems later on. So more design work and planning is needed on these topics."
-                        ]
-                    )
+        GuidaAmbiguous path _ pkg _ ->
+            ambiguousToReport source error path pkg
+
+        ElmAmbiguous path _ pkg _ ->
+            ambiguousToReport source error path pkg
+
+        GuidaAmbiguousLocal path1 path2 paths ->
+            ambiguousLocalToReport source error path1 path2 paths
+
+        ElmAmbiguousLocal path1 path2 paths ->
+            ambiguousLocalToReport source error path1 path2 paths
+
+        GuidaAmbiguousForeign pkg1 pkg2 pkgs ->
+            ambiguousForeignToReport source error pkg1 pkg2 pkgs
+
+        ElmAmbiguousForeign pkg1 pkg2 pkgs ->
+            ambiguousForeignToReport source error pkg1 pkg2 pkgs
+
+
+ambiguousToReport : Code.Source -> Error -> String -> Pkg.Name -> Report.Report
+ambiguousToReport source (Error region name _ _) path pkg =
+    Report.Report "AMBIGUOUS IMPORT" region [] <|
+        Code.toSnippet source
+            region
+            Nothing
+            ( D.reflow
+                ("You are trying to import a `" ++ name ++ "` module:")
+            , D.stack
+                [ D.fillSep
+                    [ D.fromChars "But"
+                    , D.fromChars "I"
+                    , D.fromChars "found"
+                    , D.fromChars "multiple"
+                    , D.fromChars "modules"
+                    , D.fromChars "with"
+                    , D.fromChars "that"
+                    , D.fromChars "name."
+                    , D.fromChars "One"
+                    , D.fromChars "in"
+                    , D.fromChars "the"
+                    , D.dullyellow (D.fromChars (Pkg.toChars pkg))
+                    , D.fromChars "package,"
+                    , D.fromChars "and"
+                    , D.fromChars "another"
+                    , D.fromChars "defined"
+                    , D.fromChars "locally"
+                    , D.fromChars "in"
+                    , D.fromChars "the"
+                    , D.dullyellow (D.fromChars path)
+                    , D.fromChars "file."
+                    , D.fromChars "I"
+                    , D.fromChars "do"
+                    , D.fromChars "not"
+                    , D.fromChars "have"
+                    , D.fromChars "a"
+                    , D.fromChars "way"
+                    , D.fromChars "to"
+                    , D.fromChars "choose"
+                    , D.fromChars "between"
+                    , D.fromChars "them."
+                    ]
+                , D.reflow
+                    "Try changing the name of the locally defined module to clear up the ambiguity?"
+                ]
+            )
+
+
+ambiguousLocalToReport : Code.Source -> Error -> String -> String -> List String -> Report.Report
+ambiguousLocalToReport source (Error region name _ _) path1 path2 paths =
+    Report.Report "AMBIGUOUS IMPORT" region [] <|
+        Code.toSnippet source
+            region
+            Nothing
+            ( D.reflow
+                ("You are trying to import a `" ++ name ++ "` module:")
+            , D.stack
+                [ D.reflow
+                    "But I found multiple files in your \"source-directories\" with that name:"
+                , D.dullyellow <|
+                    D.indent 4 <|
+                        D.vcat <|
+                            List.map D.fromChars (path1 :: path2 :: paths)
+                , D.reflow
+                    "Change the module names to be distinct!"
+                ]
+            )
+
+
+ambiguousForeignToReport : Code.Source -> Error -> Pkg.Name -> Pkg.Name -> List Pkg.Name -> Report.Report
+ambiguousForeignToReport source (Error region name _ _) pkg1 pkg2 pkgs =
+    Report.Report "AMBIGUOUS IMPORT" region [] <|
+        Code.toSnippet source
+            region
+            Nothing
+            ( D.reflow
+                ("You are trying to import a `" ++ name ++ "` module:")
+            , D.stack
+                [ D.reflow
+                    "But multiple packages in your \"dependencies\" that expose a module that name:"
+                , D.dullyellow <|
+                    D.indent 4 <|
+                        D.vcat <|
+                            List.map (D.fromChars << Pkg.toChars) (pkg1 :: pkg2 :: pkgs)
+                , D.reflow
+                    "There is no way to disambiguate in cases like this right now. Of the known name clashes, they are usually for packages with similar purposes, so the current recommendation is to pick just one of them."
+                , D.toSimpleNote
+                    "It seems possible to resolve this with new syntax in imports, but that is more complicated than it sounds. Right now, our module names are tied to GitHub repos, but we may want to get rid of that dependency for a variety of reasons. That would in turn have implications for our package infrastructure, hosting costs, and possibly on how package names are specified. The particular syntax chosen seems like it would interact with all these factors in ways that are difficult to predict, potentially leading to harder problems later on. So more design work and planning is needed on these topics."
+                ]
+            )
 
 
 toSuggestions : ModuleName.Raw -> EverySet String ModuleName.Raw -> List ModuleName.Raw
@@ -187,29 +253,57 @@ toSuggestions name unimportedModules =
 problemEncoder : Problem -> BE.Encoder
 problemEncoder problem =
     case problem of
-        NotFound ->
+        GuidaNotFound ->
             BE.unsignedInt8 0
 
-        Ambiguous path paths pkg pkgs ->
+        ElmNotFound ->
+            BE.unsignedInt8 1
+
+        GuidaAmbiguous path paths pkg pkgs ->
             BE.sequence
-                [ BE.unsignedInt8 1
+                [ BE.unsignedInt8 2
                 , BE.string path
                 , BE.list BE.string paths
                 , Pkg.nameEncoder pkg
                 , BE.list Pkg.nameEncoder pkgs
                 ]
 
-        AmbiguousLocal path1 path2 paths ->
+        ElmAmbiguous path paths pkg pkgs ->
             BE.sequence
-                [ BE.unsignedInt8 2
+                [ BE.unsignedInt8 3
+                , BE.string path
+                , BE.list BE.string paths
+                , Pkg.nameEncoder pkg
+                , BE.list Pkg.nameEncoder pkgs
+                ]
+
+        GuidaAmbiguousLocal path1 path2 paths ->
+            BE.sequence
+                [ BE.unsignedInt8 4
                 , BE.string path1
                 , BE.string path2
                 , BE.list BE.string paths
                 ]
 
-        AmbiguousForeign pkg1 pkg2 pkgs ->
+        ElmAmbiguousLocal path1 path2 paths ->
             BE.sequence
-                [ BE.unsignedInt8 3
+                [ BE.unsignedInt8 5
+                , BE.string path1
+                , BE.string path2
+                , BE.list BE.string paths
+                ]
+
+        GuidaAmbiguousForeign pkg1 pkg2 pkgs ->
+            BE.sequence
+                [ BE.unsignedInt8 6
+                , Pkg.nameEncoder pkg1
+                , Pkg.nameEncoder pkg2
+                , BE.list Pkg.nameEncoder pkgs
+                ]
+
+        ElmAmbiguousForeign pkg1 pkg2 pkgs ->
+            BE.sequence
+                [ BE.unsignedInt8 7
                 , Pkg.nameEncoder pkg1
                 , Pkg.nameEncoder pkg2
                 , BE.list Pkg.nameEncoder pkgs
@@ -223,23 +317,45 @@ problemDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.succeed NotFound
+                        BD.succeed GuidaNotFound
 
                     1 ->
-                        BD.map4 Ambiguous
+                        BD.succeed ElmNotFound
+
+                    2 ->
+                        BD.map4 GuidaAmbiguous
                             BD.string
                             (BD.list BD.string)
                             Pkg.nameDecoder
                             (BD.list Pkg.nameDecoder)
 
-                    2 ->
-                        BD.map3 AmbiguousLocal
+                    3 ->
+                        BD.map4 ElmAmbiguous
+                            BD.string
+                            (BD.list BD.string)
+                            Pkg.nameDecoder
+                            (BD.list Pkg.nameDecoder)
+
+                    4 ->
+                        BD.map3 GuidaAmbiguousLocal
                             BD.string
                             BD.string
                             (BD.list BD.string)
 
-                    3 ->
-                        BD.map3 AmbiguousForeign
+                    5 ->
+                        BD.map3 ElmAmbiguousLocal
+                            BD.string
+                            BD.string
+                            (BD.list BD.string)
+
+                    6 ->
+                        BD.map3 GuidaAmbiguousForeign
+                            Pkg.nameDecoder
+                            Pkg.nameDecoder
+                            (BD.list Pkg.nameDecoder)
+
+                    7 ->
+                        BD.map3 ElmAmbiguousForeign
                             Pkg.nameDecoder
                             Pkg.nameDecoder
                             (BD.list Pkg.nameDecoder)

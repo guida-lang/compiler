@@ -21,9 +21,9 @@ module Builder.Reporting exposing
 import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
 import System.Exit as Exit

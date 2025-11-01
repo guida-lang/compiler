@@ -1,4 +1,4 @@
-module Compiler.Elm.Licenses exposing
+module Compiler.Guida.Licenses exposing
     ( License
     , bsd3
     , decoder

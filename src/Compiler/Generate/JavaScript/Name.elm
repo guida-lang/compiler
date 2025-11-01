@@ -128,7 +128,7 @@ usd =
 
 reservedNames : EverySet String String
 reservedNames =
-    EverySet.union jsReservedWords elmReservedWords
+    EverySet.union jsReservedWords guidaReservedWords
 
 
 jsReservedWords : EverySet String String
@@ -204,8 +204,8 @@ jsReservedWords =
         ]
 
 
-elmReservedWords : EverySet String String
-elmReservedWords =
+guidaReservedWords : EverySet String String
+guidaReservedWords =
     EverySet.fromList identity
         [ "F2"
         , "F3"

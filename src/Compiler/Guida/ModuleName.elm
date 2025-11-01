@@ -1,4 +1,4 @@
-module Compiler.Elm.ModuleName exposing
+module Compiler.Guida.ModuleName exposing
     ( Raw
     , array
     , basics
@@ -36,7 +36,7 @@ module Compiler.Elm.ModuleName exposing
     )
 
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Package as Pkg
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P

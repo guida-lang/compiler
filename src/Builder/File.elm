@@ -79,7 +79,7 @@ readBinary decoder path =
                                                 , "|   Byte Offset: " ++ String.fromInt offset
                                                 , "|       Message: " ++ message
                                                 , "|"
-                                                , "| Please report this to https://github.com/elm/compiler/issues"
+                                                , "| Please report this to https://github.com/guida-lang/compiler/issues"
                                                 , "| Trying to continue anyway."
                                                 , "+-------------------------------------------------------------------------------"
                                                 ]
@@ -145,6 +145,7 @@ writeEntry destination root entry =
         String.startsWith "src/" path
             || (path == "LICENSE")
             || (path == "README.md")
+            || (path == "guida.json")
             || (path == "elm.json")
     then
         if not (String.isEmpty path) && String.endsWith "/" path then

@@ -11,7 +11,7 @@ module Compiler.Reporting.Render.Type.Localizer exposing
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)

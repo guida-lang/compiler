@@ -13,8 +13,8 @@ module Compiler.Parse.Module exposing
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
-import Compiler.Elm.Compiler.Imports as Imports
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Compiler.Imports as Imports
+import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Keyword as Keyword
 import Compiler.Parse.Primitives as P exposing (Col, Row)

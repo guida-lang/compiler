@@ -8,8 +8,9 @@ import Builder.BackgroundWriter as BW
 import Builder.Build as Build
 import Builder.Deps.Diff as DD exposing (Changes(..), ModuleChanges(..), PackageChanges(..))
 import Builder.Deps.Registry as Registry
-import Builder.Elm.Details as Details exposing (Details(..))
-import Builder.Elm.Outline as Outline
+import Builder.Deps.Website as Website
+import Builder.Guida.Details as Details exposing (Details(..))
+import Builder.Guida.Outline as Outline
 import Builder.Http as Http
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
@@ -18,11 +19,11 @@ import Builder.Stuff as Stuff
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Compiler.Type as Type
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Magnitude as M
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Compiler.Type as Type
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Magnitude as M
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
@@ -57,7 +58,7 @@ run args () =
 
 
 type Env
-    = Env (Maybe String) Stuff.PackageCache Http.Manager Registry.Registry
+    = Env (Maybe Stuff.Root) Stuff.PackageCache Http.Manager Registry.Registry
 
 
 getEnv : Task Exit.Diff Env
@@ -96,7 +97,11 @@ diff ((Env _ _ _ registry) as env) args =
                             )
 
                 Err suggestions ->
-                    Task.throw <| Exit.DiffUnknownPackage name suggestions
+                    Task.io Website.domain
+                        |> Task.bind
+                            (\registryDomain ->
+                                Task.throw (Exit.DiffUnknownPackage registryDomain name suggestions)
+                            )
 
         LocalInquiry v1 v2 ->
             readOutline env
@@ -173,10 +178,23 @@ readOutline (Env maybeRoot _ _ registry) =
 
                             Ok outline ->
                                 case outline of
-                                    Outline.App _ ->
-                                        Task.throw <| Exit.DiffApplication
+                                    Outline.App (Outline.GuidaAppOutline _ _ _ _ _ _) ->
+                                        Task.throw <| Exit.DiffGuidaApplication
 
-                                    Outline.Pkg (Outline.PkgOutline pkg _ _ _ _ _ _ _) ->
+                                    Outline.App (Outline.ElmAppOutline _ _ _ _ _ _) ->
+                                        Task.throw <| Exit.DiffElmApplication
+
+                                    Outline.Pkg pkgOutline ->
+                                        let
+                                            pkg : Pkg.Name
+                                            pkg =
+                                                case pkgOutline of
+                                                    Outline.GuidaPkgOutline guidaPkg _ _ _ _ _ _ _ ->
+                                                        guidaPkg
+
+                                                    Outline.ElmPkgOutline elmPkg _ _ _ _ _ _ _ ->
+                                                        elmPkg
+                                        in
                                         case Registry.getVersions pkg registry of
                                             Just vsns ->
                                                 Task.pure ( pkg, vsns )
@@ -203,12 +221,22 @@ generateDocs (Env maybeRoot _ _ _) =
                     (\((Details _ outline _ _ _ _) as details) ->
                         case outline of
                             Details.ValidApp _ ->
-                                Task.throw Exit.DiffApplication
+                                case root of
+                                    Stuff.GuidaRoot _ ->
+                                        Task.throw Exit.DiffGuidaApplication
+
+                                    Stuff.ElmRoot _ ->
+                                        Task.throw Exit.DiffElmApplication
 
                             Details.ValidPkg _ exposed _ ->
                                 case exposed of
                                     [] ->
-                                        Task.throw Exit.DiffNoExposed
+                                        case root of
+                                            Stuff.GuidaRoot _ ->
+                                                Task.throw Exit.DiffGuidaNoExposed
+
+                                            Stuff.ElmRoot _ ->
+                                                Task.throw Exit.DiffElmNoExposed
 
                                     e :: es ->
                                         Task.eio Exit.DiffBadBuild <|

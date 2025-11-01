@@ -18,9 +18,9 @@ module Builder.Build exposing
     )
 
 import Basics.Extra exposing (flip)
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
@@ -32,10 +32,10 @@ import Compiler.Data.Map.Utils as Map
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Elm.Docs as Docs
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
+import Compiler.Guida.Docs as Docs
+import Compiler.Guida.Interface as I
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
@@ -62,18 +62,18 @@ import Utils.Task.Extra as Task
 
 
 type Env
-    = Env Reporting.BKey String Parse.ProjectType (List AbsoluteSrcDir) Details.BuildID (Dict String ModuleName.Raw Details.Local) (Dict String ModuleName.Raw Details.Foreign)
+    = Env Reporting.BKey Stuff.Root Parse.ProjectType (List AbsoluteSrcDir) Details.BuildID (Dict String ModuleName.Raw Details.Local) (Dict String ModuleName.Raw Details.Foreign)
 
 
-makeEnv : Reporting.BKey -> FilePath -> Details.Details -> Task Never Env
+makeEnv : Reporting.BKey -> Stuff.Root -> Details.Details -> Task Never Env
 makeEnv key root (Details.Details _ validOutline buildID locals foreigns _) =
     case validOutline of
         Details.ValidApp givenSrcDirs ->
-            Utils.listTraverse (toAbsoluteSrcDir root) (NE.toList givenSrcDirs)
+            Utils.listTraverse (toAbsoluteSrcDir (Stuff.rootPath root)) (NE.toList givenSrcDirs)
                 |> Task.fmap (\srcDirs -> Env key root Parse.Application srcDirs buildID locals foreigns)
 
         Details.ValidPkg pkg _ _ ->
-            toAbsoluteSrcDir root (Outline.RelativeSrcDir "src")
+            toAbsoluteSrcDir (Stuff.rootPath root) (Outline.RelativeSrcDir "src")
                 |> Task.fmap (\srcDir -> Env key root (Parse.Package pkg) [ srcDir ] buildID locals foreigns)
 
 
@@ -131,14 +131,14 @@ forkWithKey toComparable keyComparison encoder func dict =
 -- FROM EXPOSED
 
 
-fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> FilePath -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
+fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> Stuff.Root -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style <|
         \key ->
             makeEnv key root details
                 |> Task.bind
                     (\env ->
-                        Details.loadInterfaces root details
+                        Details.loadInterfaces (Stuff.rootPath root) details
                             |> Task.bind
                                 (\dmvar ->
                                     -- crawl
@@ -183,10 +183,10 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                                                                                                                         Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
                                                                                                                                                             |> Task.bind
                                                                                                                                                                 (\results ->
-                                                                                                                                                                    writeDetails root details results
+                                                                                                                                                                    writeDetails (Stuff.rootPath root) details results
                                                                                                                                                                         |> Task.bind
                                                                                                                                                                             (\_ ->
-                                                                                                                                                                                finalizeExposed root docsGoal exposed results
+                                                                                                                                                                                finalizeExposed (Stuff.rootPath root) docsGoal exposed results
                                                                                                                                                                             )
                                                                                                                                                                 )
                                                                                                                                                     )
@@ -219,7 +219,7 @@ type alias Dependencies =
     Dict (List String) TypeCheck.Canonical I.DependencyInterface
 
 
-fromPaths : Reporting.Style -> FilePath -> Details.Details -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
+fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
 fromPaths style root details paths =
     Reporting.trackBuild artifactsDecoder artifactsEncoder style <|
         \key ->
@@ -235,7 +235,7 @@ fromPaths style root details paths =
 
                                         Ok lroots ->
                                             -- crawl
-                                            Details.loadInterfaces root details
+                                            Details.loadInterfaces (Stuff.rootPath root) details
                                                 |> Task.bind
                                                     (\dmvar ->
                                                         Utils.newMVar statusDictEncoder Dict.empty
@@ -274,7 +274,7 @@ fromPaths style root details paths =
                                                                                                                                                                             Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultsMVars
                                                                                                                                                                                 |> Task.bind
                                                                                                                                                                                     (\results ->
-                                                                                                                                                                                        writeDetails root details results
+                                                                                                                                                                                        writeDetails (Stuff.rootPath root) details results
                                                                                                                                                                                             |> Task.bind
                                                                                                                                                                                                 (\_ ->
                                                                                                                                                                                                     Task.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultDecoder) rrootMVars)
@@ -390,7 +390,17 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                     [ path ] ->
                         case Dict.get identity name foreigns of
                             Just (Details.Foreign dep deps) ->
-                                Task.pure <| SBadImport <| Import.Ambiguous path [] dep deps
+                                let
+                                    ambiguousProblem : String -> List String -> Pkg.Name -> List Pkg.Name -> Import.Problem
+                                    ambiguousProblem =
+                                        case root of
+                                            Stuff.GuidaRoot _ ->
+                                                Import.GuidaAmbiguous
+
+                                            Stuff.ElmRoot _ ->
+                                                Import.ElmAmbiguous
+                                in
+                                Task.pure <| SBadImport <| ambiguousProblem path [] dep deps
 
                             Nothing ->
                                 File.getTime path
@@ -409,7 +419,17 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         )
 
                     p1 :: p2 :: ps ->
-                        Task.pure <| SBadImport <| Import.AmbiguousLocal (Utils.fpMakeRelative root p1) (Utils.fpMakeRelative root p2) (List.map (Utils.fpMakeRelative root) ps)
+                        let
+                            ambiguousLocalProblem : FilePath -> FilePath -> List FilePath -> Import.Problem
+                            ambiguousLocalProblem =
+                                case root of
+                                    Stuff.GuidaRoot _ ->
+                                        Import.GuidaAmbiguousLocal
+
+                                    Stuff.ElmRoot _ ->
+                                        Import.ElmAmbiguousLocal
+                        in
+                        Task.pure <| SBadImport <| ambiguousLocalProblem (Utils.fpMakeRelative (Stuff.rootPath root) p1) (Utils.fpMakeRelative (Stuff.rootPath root) p2) (List.map (Utils.fpMakeRelative (Stuff.rootPath root)) ps)
 
                     [] ->
                         case Dict.get identity name foreigns of
@@ -419,7 +439,17 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         Task.pure <| SForeign dep
 
                                     d :: ds ->
-                                        Task.pure <| SBadImport <| Import.AmbiguousForeign dep d ds
+                                        let
+                                            ambiguousForeignProblem : Pkg.Name -> Pkg.Name -> List Pkg.Name -> Import.Problem
+                                            ambiguousForeignProblem =
+                                                case root of
+                                                    Stuff.GuidaRoot _ ->
+                                                        Import.GuidaAmbiguousForeign
+
+                                                    Stuff.ElmRoot _ ->
+                                                        Import.ElmAmbiguousForeign
+                                        in
+                                        Task.pure <| SBadImport <| ambiguousForeignProblem dep d ds
 
                             Nothing ->
                                 if Name.isKernel name && Parse.isKernel projectType then
@@ -430,17 +460,32 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                     SKernel
 
                                                 else
-                                                    SBadImport Import.NotFound
+                                                    SBadImport
+                                                        (case root of
+                                                            Stuff.GuidaRoot _ ->
+                                                                Import.GuidaNotFound
+
+                                                            Stuff.ElmRoot _ ->
+                                                                Import.ElmNotFound
+                                                        )
                                             )
 
                                 else
-                                    Task.pure <| SBadImport Import.NotFound
+                                    Task.pure <|
+                                        SBadImport
+                                            (case root of
+                                                Stuff.GuidaRoot _ ->
+                                                    Import.GuidaNotFound
+
+                                                Stuff.ElmRoot _ ->
+                                                    Import.ElmNotFound
+                                            )
             )
 
 
 crawlFile : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> Task Never Status
 crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
-    File.readUtf8 (Utils.fpCombine root path)
+    File.readUtf8 (Utils.fpCombine (Stuff.rootPath root) path)
         |> Task.bind
             (\source ->
                 case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
@@ -507,7 +552,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
             Utils.readMVar resultDictDecoder resultsMVar
                 |> Task.bind
                     (\results ->
-                        checkDeps root results deps lastCompile
+                        checkDeps (Stuff.rootPath root) results deps lastCompile
                             |> Task.bind
                                 (\depsStatus ->
                                     case depsStatus of
@@ -556,7 +601,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
             Utils.readMVar resultDictDecoder resultsMVar
                 |> Task.bind
                     (\results ->
-                        checkDeps root results deps lastCompile
+                        checkDeps (Stuff.rootPath root) results deps lastCompile
                             |> Task.bind
                                 (\depsStatus ->
                                     case depsStatus of
@@ -564,7 +609,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                             compile env docsNeed local source ifaces modul
 
                                         DepsSame same cached ->
-                                            loadInterfaces root same cached
+                                            loadInterfaces (Stuff.rootPath root) same cached
                                                 |> Task.bind
                                                     (\maybeLoaded ->
                                                         case maybeLoaded of
@@ -993,9 +1038,9 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
 
                                     guidai : String
                                     guidai =
-                                        Stuff.guidai root name
+                                        Stuff.guidai (Stuff.rootPath root) name
                                 in
-                                File.writeBinary Opt.localGraphEncoder (Stuff.guidao root name) objects
+                                File.writeBinary Opt.localGraphEncoder (Stuff.guidao (Stuff.rootPath root) name) objects
                                     |> Task.bind
                                         (\_ ->
                                             File.readBinary I.interfaceDecoder guidai
@@ -1289,7 +1334,7 @@ type ReplArtifacts
     = ReplArtifacts TypeCheck.Canonical (List Module) L.Localizer (Dict String Name.Name Can.Annotation)
 
 
-fromRepl : FilePath -> Details.Details -> String -> Task Never (Result Exit.Repl ReplArtifacts)
+fromRepl : Stuff.Root -> Details.Details -> String -> Task Never (Result Exit.Repl ReplArtifacts)
 fromRepl root details source =
     makeEnv Reporting.ignorer root details
         |> Task.bind
@@ -1299,7 +1344,7 @@ fromRepl root details source =
                         Task.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
                     Ok ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
-                        Details.loadInterfaces root details
+                        Details.loadInterfaces (Stuff.rootPath root) details
                             |> Task.bind
                                 (\dmvar ->
                                     let
@@ -1336,10 +1381,10 @@ fromRepl root details source =
                                                                                                                                 Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
                                                                                                                                     |> Task.bind
                                                                                                                                         (\results ->
-                                                                                                                                            writeDetails root details results
+                                                                                                                                            writeDetails (Stuff.rootPath root) details results
                                                                                                                                                 |> Task.bind
                                                                                                                                                     (\_ ->
-                                                                                                                                                        checkDeps root resultMVars deps 0
+                                                                                                                                                        checkDeps (Stuff.rootPath root) resultMVars deps 0
                                                                                                                                                             |> Task.bind
                                                                                                                                                                 (\depsStatus ->
                                                                                                                                                                     finalizeReplArtifacts env source modul depsStatus resultMVars results
@@ -1395,7 +1440,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
             compileInput ifaces
 
         DepsSame same cached ->
-            loadInterfaces root same cached
+            loadInterfaces (Stuff.rootPath root) same cached
                 |> Task.bind
                     (\maybeLoaded ->
                         case maybeLoaded of
@@ -1412,7 +1457,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
                     Task.pure <| Err <| Exit.ReplBlocked
 
                 e :: es ->
-                    Task.pure <| Err <| Exit.ReplBadLocalDeps root e es
+                    Task.pure <| Err <| Exit.ReplBadLocalDeps (Stuff.rootPath root) e es
 
         DepsNotFound problems ->
             Task.pure <|
@@ -1422,12 +1467,11 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
                             toImportErrors env resultMVars imports problems
 
 
+{-| AFTER THIS, EVERYTHING IS ABOUT HANDLING MODULES GIVEN BY FILEPATH
+-}
 
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
------- AFTER THIS, EVERYTHING IS ABOUT HANDLING MODULES GIVEN BY FILEPATH ------
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
+
+
 -- FIND ROOT
 
 
@@ -1676,7 +1720,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
             Task.pure (ROutsideErr err)
 
         SOutsideOk ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) ->
-            checkDeps root results deps lastCompile
+            checkDeps (Stuff.rootPath root) results deps lastCompile
                 |> Task.bind
                     (\depsStatus ->
                         case depsStatus of
@@ -1684,7 +1728,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
                                 compileOutside env local source ifaces modul
 
                             DepsSame same cached ->
-                                loadInterfaces root same cached
+                                loadInterfaces (Stuff.rootPath root) same cached
                                     |> Task.bind
                                         (\maybeLoaded ->
                                             case maybeLoaded of
@@ -1743,7 +1787,7 @@ toArtifacts : Env -> Dependencies -> Dict String ModuleName.Raw BResult -> NE.No
 toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
     case gatherProblemsOrMains results rootResults of
         Err (NE.Nonempty e es) ->
-            Err (Exit.BuildBadModules root e es)
+            Err (Exit.BuildBadModules (Stuff.rootPath root) e es)
 
         Ok roots ->
             Ok <|

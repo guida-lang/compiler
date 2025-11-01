@@ -2,18 +2,17 @@ module API.Uninstall exposing (run)
 
 import Builder.BackgroundWriter as BW
 import Builder.Deps.Solver as Solver
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
-import Compiler.Elm.Constraint as C
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Constraint as C
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Data.Map as Dict exposing (Dict)
 import System.IO as IO
 import Task exposing (Task)
-import Utils.Main exposing (FilePath)
 import Utils.Task.Extra as Task
 
 
@@ -41,7 +40,7 @@ run pkg =
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
-                                                                makeAppPlan env pkg outline
+                                                                makeAppPlan root env pkg outline
                                                                     |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
 
                                                             Outline.Pkg outline ->
@@ -63,7 +62,7 @@ type Changes vsn
     | Changes Outline.Outline
 
 
-attemptChanges : String -> Solver.Env -> Outline.Outline -> Changes a -> Task Exit.Uninstall ()
+attemptChanges : Stuff.Root -> Solver.Env -> Outline.Outline -> Changes a -> Task Exit.Uninstall ()
 attemptChanges root env oldOutline changes =
     case changes of
         AlreadyNotPresent ->
@@ -73,7 +72,7 @@ attemptChanges root env oldOutline changes =
             attemptChangesHelp root env oldOutline newOutline
 
 
-attemptChangesHelp : FilePath -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task Exit.Uninstall ()
+attemptChangesHelp : Stuff.Root -> Solver.Env -> Outline.Outline -> Outline.Outline -> Task Exit.Uninstall ()
 attemptChangesHelp root env oldOutline newOutline =
     Task.eio Exit.UninstallBadDetails <|
         BW.withScope
@@ -98,29 +97,54 @@ attemptChangesHelp root env oldOutline newOutline =
 -- MAKE APP PLAN
 
 
-makeAppPlan : Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Uninstall (Changes V.Version)
-makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline _ _ direct _ testDirect _) as outline) =
-    case Dict.get identity pkg (Dict.union direct testDirect) of
-        Just _ ->
-            Task.io (Solver.removeFromApp cache connection registry pkg outline)
-                |> Task.bind
-                    (\result ->
-                        case result of
-                            Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                Task.pure (Changes (Outline.App app))
+makeAppPlan : Stuff.Root -> Solver.Env -> Pkg.Name -> Outline.AppOutline -> Task Exit.Uninstall (Changes V.Version)
+makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
+    case outline of
+        Outline.GuidaAppOutline _ _ direct _ testDirect _ ->
+            case Dict.get identity pkg (Dict.union direct testDirect) of
+                Just _ ->
+                    Task.io (Solver.removeFromApp cache connection registry pkg outline)
+                        |> Task.bind
+                            (\result ->
+                                case result of
+                                    Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                        Task.pure (Changes (Outline.App app))
 
-                            Solver.NoSolution ->
-                                Task.throw (Exit.UninstallNoOnlineAppSolution pkg)
+                                    Solver.NoSolution ->
+                                        Task.throw (Exit.UninstallGuidaNoOnlineAppSolution pkg)
 
-                            Solver.NoOfflineSolution ->
-                                Task.throw (Exit.UninstallNoOfflineAppSolution pkg)
+                                    Solver.NoOfflineSolution ->
+                                        Task.throw (Exit.UninstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
-                            Solver.SolverErr exit ->
-                                Task.throw (Exit.UninstallHadSolverTrouble exit)
-                    )
+                                    Solver.SolverErr exit ->
+                                        Task.throw (Exit.UninstallHadSolverTrouble exit)
+                            )
 
-        Nothing ->
-            Task.pure AlreadyNotPresent
+                Nothing ->
+                    Task.pure AlreadyNotPresent
+
+        Outline.ElmAppOutline _ _ direct _ testDirect _ ->
+            case Dict.get identity pkg (Dict.union direct testDirect) of
+                Just _ ->
+                    Task.io (Solver.removeFromApp cache connection registry pkg outline)
+                        |> Task.bind
+                            (\result ->
+                                case result of
+                                    Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                        Task.pure (Changes (Outline.App app))
+
+                                    Solver.NoSolution ->
+                                        Task.throw (Exit.UninstallElmNoOnlineAppSolution pkg)
+
+                                    Solver.NoOfflineSolution ->
+                                        Task.throw (Exit.UninstallElmNoOfflineAppSolution (Stuff.rootPath root) pkg)
+
+                                    Solver.SolverErr exit ->
+                                        Task.throw (Exit.UninstallHadSolverTrouble exit)
+                            )
+
+                Nothing ->
+                    Task.pure AlreadyNotPresent
 
 
 
@@ -128,24 +152,48 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg ((Outline.AppOutline _ 
 
 
 makePkgPlan : Pkg.Name -> Outline.PkgOutline -> Task Exit.Uninstall (Changes C.Constraint)
-makePkgPlan pkg (Outline.PkgOutline name summary license version exposed deps test elmVersion) =
-    let
-        old : Dict ( String, String ) Pkg.Name C.Constraint
-        old =
-            Dict.union deps test
-    in
-    if Dict.member identity pkg old then
-        Task.pure <|
-            Changes <|
-                Outline.Pkg <|
-                    Outline.PkgOutline name
-                        summary
-                        license
-                        version
-                        exposed
-                        (Dict.remove identity pkg deps)
-                        (Dict.remove identity pkg test)
-                        elmVersion
+makePkgPlan pkg outline =
+    case outline of
+        Outline.GuidaPkgOutline name summary license version exposed deps test elmVersion ->
+            let
+                old : Dict ( String, String ) Pkg.Name C.Constraint
+                old =
+                    Dict.union deps test
+            in
+            if Dict.member identity pkg old then
+                Task.pure <|
+                    Changes <|
+                        Outline.Pkg <|
+                            Outline.GuidaPkgOutline name
+                                summary
+                                license
+                                version
+                                exposed
+                                (Dict.remove identity pkg deps)
+                                (Dict.remove identity pkg test)
+                                elmVersion
 
-    else
-        Task.pure AlreadyNotPresent
+            else
+                Task.pure AlreadyNotPresent
+
+        Outline.ElmPkgOutline name summary license version exposed deps test elmVersion ->
+            let
+                old : Dict ( String, String ) Pkg.Name C.Constraint
+                old =
+                    Dict.union deps test
+            in
+            if Dict.member identity pkg old then
+                Task.pure <|
+                    Changes <|
+                        Outline.Pkg <|
+                            Outline.ElmPkgOutline name
+                                summary
+                                license
+                                version
+                                exposed
+                                (Dict.remove identity pkg deps)
+                                (Dict.remove identity pkg test)
+                                elmVersion
+
+            else
+                Task.pure AlreadyNotPresent

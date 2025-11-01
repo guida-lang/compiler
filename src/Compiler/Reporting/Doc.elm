@@ -11,7 +11,7 @@ module Compiler.Reporting.Doc exposing
     , encode
     , stack, reflow, commaSep
     , toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
-    , link, fancyLink, reflowLink, makeLink, makeNakedLink
+    , link, elmLink, fancyLink, reflowLink, makeLink, makeNakedLink, makeCommandLink
     , args, moreArgs, ordinal, intToOrdinal, cycle
     )
 
@@ -29,15 +29,15 @@ module Compiler.Reporting.Doc exposing
 @docs encode
 @docs stack, reflow, commaSep
 @docs toSimpleNote, toFancyNote, toSimpleHint, toFancyHint
-@docs link, fancyLink, reflowLink, makeLink, makeNakedLink
+@docs link, elmLink, fancyLink, reflowLink, makeLink, makeNakedLink, makeCommandLink
 @docs args, moreArgs, ordinal, intToOrdinal, cycle
 
 -}
 
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
-import Compiler.Elm.Package as Pkg
-import Compiler.Elm.Version as V
+import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Version as V
 import Compiler.Json.Encode as E
 import Maybe.Extra as Maybe
 import Prelude
@@ -171,6 +171,15 @@ link word before fileName after =
             :: List.map P.text (String.words after)
 
 
+elmLink : String -> String -> String -> String -> Doc
+elmLink word before fileName after =
+    P.fillSep <|
+        P.append (P.underline (P.text word)) (P.text ":")
+            :: List.map P.text (String.words before)
+            ++ P.text (makeElmLink fileName)
+            :: List.map P.text (String.words after)
+
+
 fancyLink : String -> List Doc -> String -> List Doc -> Doc
 fancyLink word before fileName after =
     P.fillSep <|
@@ -180,13 +189,28 @@ fancyLink word before fileName after =
             :: after
 
 
+makeCommandLink : String -> String
+makeCommandLink command =
+    "<https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/commands/" ++ command ++ ">"
+
+
 makeLink : String -> String
 makeLink fileName =
     "<" ++ makeNakedLink fileName ++ ">"
 
 
+makeElmLink : String -> String
+makeElmLink fileName =
+    "<" ++ makeNakedElmLink fileName ++ ">"
+
+
 makeNakedLink : String -> String
 makeNakedLink fileName =
+    "https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/hints/" ++ fileName
+
+
+makeNakedElmLink : String -> String
+makeNakedElmLink fileName =
     "https://elm-lang.org/" ++ V.toChars V.elmCompiler ++ "/" ++ fileName
 
 

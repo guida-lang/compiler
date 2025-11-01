@@ -1,4 +1,4 @@
-module Compiler.Elm.Magnitude exposing
+module Compiler.Guida.Magnitude exposing
     ( Magnitude(..)
     , compare
     , toChars

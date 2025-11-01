@@ -9,7 +9,7 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Effects as Effects
 import Compiler.Data.Name as Name
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Optimize.Expression as Expr
 import Compiler.Optimize.Names as Names
 import Compiler.Optimize.Port as Port

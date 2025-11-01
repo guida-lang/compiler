@@ -6,20 +6,20 @@ module Builder.Generate exposing
     )
 
 import Builder.Build as Build
-import Builder.Elm.Details as Details
-import Builder.Elm.Outline as Outline
 import Builder.File as File
+import Builder.Guida.Details as Details
+import Builder.Guida.Outline as Outline
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.Compiler.Type.Extract as Extract
-import Compiler.Elm.Interface as I
-import Compiler.Elm.ModuleName as ModuleName
-import Compiler.Elm.Package as Pkg
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
+import Compiler.Guida.Compiler.Type.Extract as Extract
+import Compiler.Guida.Interface as I
+import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Nitpick.Debug as Nitpick
 import Data.Map as Dict exposing (Dict)
 import System.TypeCheck.IO as TypeCheck
@@ -36,12 +36,12 @@ import Utils.Task.Extra as Task
 -- GENERATORS
 
 
-debug : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+debug : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots modules) =
-    loadObjects root details modules
+    loadObjects (Stuff.rootPath root) details modules
         |> Task.bind
             (\loading ->
-                loadTypes root ifaces modules
+                loadTypes (Stuff.rootPath root) ifaces modules
                     |> Task.bind
                         (\types ->
                             finalizeObjects loading
@@ -67,9 +67,9 @@ debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots
             )
 
 
-dev : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+dev : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
-    Task.bind finalizeObjects (loadObjects root details modules)
+    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
         |> Task.bind
             (\objects ->
                 let
@@ -90,9 +90,9 @@ dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots module
             )
 
 
-prod : Bool -> Int -> FilePath -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+prod : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
-    Task.bind finalizeObjects (loadObjects root details modules)
+    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
         |> Task.bind
             (\objects ->
                 checkForDebugUses objects
@@ -117,7 +117,7 @@ prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modul
             )
 
 
-prepareSourceMaps : Bool -> FilePath -> Task Exit.Generate JS.SourceMaps
+prepareSourceMaps : Bool -> Stuff.Root -> Task Exit.Generate JS.SourceMaps
 prepareSourceMaps withSourceMaps root =
     if withSourceMaps then
         Outline.getAllModulePaths root

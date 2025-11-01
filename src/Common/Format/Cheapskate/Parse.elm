@@ -329,7 +329,7 @@ processElts refmap elts =
 
         (L _ lf) :: rest ->
             case lf of
-                -- Special handling of @docs lines in Elm:
+                -- Special handling of @docs lines in Guida:
                 TextLine t ->
                     case stripPrefix "@docs" t of
                         Just terms1 ->
@@ -359,7 +359,7 @@ processElts refmap elts =
                                         Just stripped ->
                                             stripped
                             in
-                            (ElmDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
+                            (GuidaDocs <| List.filter ((/=) []) <| List.map (List.filter ((/=) "") << List.map String.trim << String.split ",") docs)
                                 :: processElts refmap rest_
 
                         Nothing ->

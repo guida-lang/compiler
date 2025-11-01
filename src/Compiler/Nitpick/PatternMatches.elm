@@ -19,7 +19,7 @@ import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
 import List.Extra as List

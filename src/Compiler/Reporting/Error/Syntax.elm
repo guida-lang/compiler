@@ -39,7 +39,7 @@ module Compiler.Reporting.Error.Syntax exposing
     )
 
 import Compiler.Data.Name exposing (Name)
-import Compiler.Elm.ModuleName as ModuleName
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol as Symbol exposing (BadOperator(..))
 import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
@@ -618,7 +618,7 @@ toReport syntaxVersion source err =
                         [ D.reflow <|
                             "Switch to a normal module declaration."
                         , D.toSimpleNote <|
-                            "Effect modules are designed to allow certain core functionality to be defined separately from the compiler. So the @elm organization has access to this so that certain changes, extensions, and fixes can be introduced without needing to release new Elm binaries. For example, we want to make it possible to test effects, but this may require changes to the design of effect modules. By only having them defined in the @elm organization, that kind of design work can proceed much more smoothly."
+                            "Effect modules are designed to allow certain core functionality to be defined separately from the compiler. So the @elm organization has access to this so that certain changes, extensions, and fixes can be introduced without needing to release new Guida binaries. For example, we want to make it possible to test effects, but this may require changes to the design of effect modules. By only having them defined in the @elm organization, that kind of design work can proceed much more smoothly."
                         ]
                     )
 
@@ -630,7 +630,7 @@ noteForPortsInPackage : D.Doc
 noteForPortsInPackage =
     D.stack
         [ D.toSimpleNote <|
-            "One of the major goals of the package ecosystem is to be completely written in Elm. This means when you install an Elm package, you can be sure you are safe from security issues on install and that you are not going to get any runtime exceptions coming from your new dependency. This design also sets the ecosystem up to target other platforms more easily (like mobile phones, WebAssembly, etc.) since no community code explicitly depends on JavaScript even existing."
+            "One of the major goals of the package ecosystem is to be completely written in Guida. This means when you install a Guida package, you can be sure you are safe from security issues on install and that you are not going to get any runtime exceptions coming from your new dependency. This design also sets the ecosystem up to target other platforms more easily (like mobile phones, WebAssembly, etc.) since no community code explicitly depends on JavaScript even existing."
         , D.reflow <|
             "Given that overall goal, allowing ports in packages would lead to some pretty surprising behavior. If ports were allowed in packages, you could install a package but not realize that it brings in an indirect dependency that defines a port. Now you have a program that does not work and the fix is to realize that some JavaScript needs to be added for a dependency you did not even know about. That would be extremely frustrating! \"So why not allow the package author to include the necessary JS code as well?\" Now we are back in conflict with our overall goal to keep all community packages free from runtime exceptions."
         ]
@@ -856,7 +856,7 @@ toParseErrorReport syntaxVersion source modul =
                                 "I got stuck here:"
                             , D.stack
                                 [ D.reflow <|
-                                    "I am not sure what is going on, but I recommend starting an Elm file with the following lines:"
+                                    "I am not sure what is going on, but I recommend starting a Guida file with the following lines:"
                                 , D.indent 4 <|
                                     D.vcat <|
                                         [ D.fillSep [ D.cyan (D.fromChars "import"), D.fromChars "Html" ]
@@ -866,7 +866,7 @@ toParseErrorReport syntaxVersion source modul =
                                             |> D.a (D.dullyellow (D.fromChars "\"Hello!\""))
                                         ]
                                 , D.reflow <|
-                                    "You should be able to copy those lines directly into your file. Check out the examples at <https://elm-lang.org/examples> for more help getting started!"
+                                    "You should be able to copy those lines directly into your file. Check out the examples at <https://guida-lang.org/examples> for more help getting started!"
                                 , D.toSimpleNote <|
                                     "This can also happen when something is indented too much!"
                                 ]
@@ -1108,7 +1108,7 @@ toWeirdEndReport source row col =
                             ( D.reflow "I got stuck on this semicolon:"
                             , D.stack
                                 [ D.reflow "Try removing it?"
-                                , D.toSimpleNote "Some languages require semicolons at the end of each statement. These are often called C-like languages, and they usually share a lot of language design choices. (E.g. side-effects, for loops, etc.) Elm manages effects with commands and subscriptions instead, so there is no special syntax for \"statements\" and therefore no need to use semicolons to separate them. I think this will make more sense as you work through <https://guide.elm-lang.org> though!"
+                                , D.toSimpleNote "Some languages require semicolons at the end of each statement. These are often called C-like languages, and they usually share a lot of language design choices. (E.g. side-effects, for loops, etc.) Guida manages effects with commands and subscriptions instead, so there is no special syntax for \"statements\" and therefore no need to use semicolons to separate them. I think this will make more sense as you work through <https://guida-lang.org/docs> though!"
                                 ]
                             )
 
@@ -1127,7 +1127,7 @@ toWeirdEndReport source row col =
                         Code.toSnippet source region Nothing <|
                             ( D.reflow "I got stuck on this character:"
                             , D.stack
-                                [ D.reflow "It is not used for anything in Elm syntax. It is used for multi-line strings in some languages though, so if you want a string that spans multiple lines, you can use Elm's multi-line string syntax like this:"
+                                [ D.reflow "It is not used for anything in Guida syntax. It is used for multi-line strings in some languages though, so if you want a string that spans multiple lines, you can use Guida's multi-line string syntax like this:"
                                 , D.dullyellow <|
                                     D.indent 4 <|
                                         D.vcat
@@ -1148,7 +1148,7 @@ toWeirdEndReport source row col =
                     Report.Report "UNEXPECTED SYMBOL" region [] <|
                         Code.toSnippet source region Nothing <|
                             ( D.reflow "I got stuck on this dollar sign:"
-                            , D.reflow "It is not used for anything in Elm syntax. Are you coming from a language where dollar signs can be used in variable names? If so, try a name that (1) starts with a letter and (2) only contains letters, numbers, and underscores."
+                            , D.reflow "It is not used for anything in Guida syntax. Are you coming from a language where dollar signs can be used in variable names? If so, try a name that (1) starts with a letter and (2) only contains letters, numbers, and underscores."
                             )
 
                 Just c ->
@@ -1156,7 +1156,7 @@ toWeirdEndReport source row col =
                         Report.Report "UNEXPECTED SYMBOL" region [] <|
                             Code.toSnippet source region Nothing <|
                                 ( D.reflow "I got stuck on this symbol:"
-                                , D.reflow "It is not used for anything in Elm syntax. Try removing it?"
+                                , D.reflow "It is not used for anything in Guida syntax. Try removing it?"
                                 )
 
                     else
@@ -1615,7 +1615,7 @@ toSpaceReport source space row col =
             in
             Report.Report "NO TABS" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow "I ran into a tab, but tabs are not allowed in Elm files."
+                    ( D.reflow "I ran into a tab, but tabs are not allowed in Guida files."
                     , D.reflow "Replace the tab with spaces."
                     )
 
@@ -1631,7 +1631,7 @@ toSpaceReport source space row col =
                     , D.stack
                         -- "{-"
                         [ D.reflow "Add a -} somewhere after this to end the comment."
-                        , D.toSimpleHint "Multi-line comments can be nested in Elm, so {- {- -} -} is a comment that happens to contain another comment. Like parentheses and curly braces, the start and end markers must always be balanced. Maybe that is the problem?"
+                        , D.toSimpleHint "Multi-line comments can be nested in Guida, so {- {- -} -} is a comment that happens to contain another comment. Like parentheses and curly braces, the start and end markers must always be balanced. Maybe that is the problem?"
                         ]
                     )
 
@@ -2627,7 +2627,7 @@ toDeclDefReport syntaxVersion source name declDef startRow startCol =
                                 , D.fromChars "is"
                                 , D.fromChars "reserved"
                                 , D.fromChars "in"
-                                , D.fromChars "Elm,"
+                                , D.fromChars "Guida,"
                                 , D.fromChars "so"
                                 , D.fromChars "it"
                                 , D.fromChars "cannot"
@@ -2672,7 +2672,7 @@ toDeclDefReport syntaxVersion source name declDef startRow startCol =
                                         D.toSimpleNote <|
                                             "The `"
                                                 ++ keyword
-                                                ++ "` keyword has a special meaning in Elm, so it can only be used in certain situations."
+                                                ++ "` keyword has a special meaning in Guida, so it can only be used in certain situations."
                                 ]
                             )
 
@@ -2938,7 +2938,7 @@ declDefNote =
                     |> D.a (D.fromChars " ++ name ++ ")
                     |> D.a (D.dullyellow (D.fromChars "\"!\""))
                 ]
-        , D.reflow "The top line (called a \"type annotation\") is optional. You can leave it off if you want. As you get more comfortable with Elm and as your project grows, it becomes more and more valuable to add them though! They work great as compiler-verified documentation, and they often improve error messages!"
+        , D.reflow "The top line (called a \"type annotation\") is optional. You can leave it off if you want. As you get more comfortable with Guida and as your project grows, it becomes more and more valuable to add them though! They work great as compiler-verified documentation, and they often improve error messages!"
         ]
 
 
@@ -3363,7 +3363,7 @@ toCharReport source char row col =
                                 |> D.a (D.green (D.fromChars "\"this\""))
                             )
                         , D.toSimpleNote
-                            "Elm uses double quotes for strings like \"hello\", whereas it uses single quotes for individual characters like 'a' and 'ø'. This distinction helps with code like (String.any (\\c -> c == 'X') \"90210\") where you are inspecting individual characters."
+                            "Guida uses double quotes for strings like \"hello\", whereas it uses single quotes for individual characters like 'a' and 'ø'. This distinction helps with code like (String.any (\\c -> c == 'X') \"90210\") where you are inspecting individual characters."
                         ]
                     )
 
@@ -3674,7 +3674,7 @@ toNumberReport syntaxVersion source number row col =
                     ( D.reflow "I do not accept numbers with leading zeros:"
                     , D.stack
                         [ D.reflow "Just delete the leading zeros and it should work!"
-                        , D.toSimpleNote "Some languages let you to specify octal numbers by adding a leading zero. So in C, writing 0111 is the same as writing 73. Some people are used to that, but others probably want it to equal 111. Either path is going to surprise people from certain backgrounds, so Elm tries to avoid this whole situation."
+                        , D.toSimpleNote "Some languages let you to specify octal numbers by adding a leading zero. So in C, writing 0111 is the same as writing 73. Some people are used to that, but others probably want it to equal 111. Either path is going to surprise people from certain backgrounds, so Guida tries to avoid this whole situation."
                         ]
                     )
 
@@ -4167,7 +4167,7 @@ toLetDefReport syntaxVersion source name def startRow startCol =
                                 , D.fromChars "is"
                                 , D.fromChars "reserved"
                                 , D.fromChars "in"
-                                , D.fromChars "Elm,"
+                                , D.fromChars "Guida,"
                                 , D.fromChars "so"
                                 , D.fromChars "it"
                                 , D.fromChars "cannot"
@@ -4212,7 +4212,7 @@ toLetDefReport syntaxVersion source name def startRow startCol =
                                         D.toSimpleNote <|
                                             "The `"
                                                 ++ keyword
-                                                ++ "` keyword has a special meaning in Elm, so it can only be used in certain situations."
+                                                ++ "` keyword has a special meaning in Guida, so it can only be used in certain situations."
                                 ]
                             )
 
@@ -4436,7 +4436,7 @@ defNote =
                     |> D.a (D.fromChars " ++ name ++ ")
                     |> D.a (D.dullyellow (D.fromChars "\"!\""))
                 ]
-        , D.reflow "The top line (called a \"type annotation\") is optional. You can leave it off if you want. As you get more comfortable with Elm and as your project grows, it becomes more and more valuable to add them though! They work great as compiler-verified documentation, and they often improve error messages!"
+        , D.reflow "The top line (called a \"type annotation\") is optional. You can leave it off if you want. As you get more comfortable with Guida and as your project grows, it becomes more and more valuable to add them though! They work great as compiler-verified documentation, and they often improve error messages!"
         ]
 
 
@@ -5488,7 +5488,7 @@ noteForRecordError =
                 , D.fromChars ", height = " |> D.a (D.dullyellow (D.fromChars "1.75"))
                 , D.fromChars "}"
                 ]
-        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
         ]
 
 
@@ -5503,7 +5503,7 @@ noteForRecordIndentError =
                 , D.fromChars ", height = " |> D.a (D.dullyellow (D.fromChars "1.75"))
                 , D.fromChars "}"
                 ]
-        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem!"
+        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem!"
         ]
 
 
@@ -5834,7 +5834,7 @@ toListReport syntaxVersion source context list startRow startCol =
                                         , D.fromChars ", " |> D.a (D.dullyellow (D.fromChars "\"Chuck\""))
                                         , D.fromChars "]"
                                         ]
-                                , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+                                , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
                                 ]
                             )
 
@@ -5942,7 +5942,7 @@ toListReport syntaxVersion source context list startRow startCol =
                                 , D.fromChars ", " |> D.a (D.dullyellow (D.fromChars "\"Chuck\""))
                                 , D.fromChars "]"
                                 ]
-                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
                         ]
                     )
 
@@ -5986,7 +5986,7 @@ toListReport syntaxVersion source context list startRow startCol =
                                 , D.fromChars ", " |> D.a (D.dullyellow (D.fromChars "\"Chuck\""))
                                 , D.fromChars "]"
                                 ]
-                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
                         ]
                     )
 
@@ -6013,7 +6013,7 @@ toListReport syntaxVersion source context list startRow startCol =
                                 , D.fromChars ", " |> D.a (D.dullyellow (D.fromChars "\"Chuck\""))
                                 , D.fromChars "]"
                                 ]
-                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+                        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
                         ]
                     )
 
@@ -7749,15 +7749,14 @@ noteForRecordTypeError =
                 , D.fromChars "}"
                 ]
         , D.reflow
-            "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+            "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
         ]
 
 
 noteForRecordTypeIndentError : D.Doc
 noteForRecordTypeIndentError =
     D.stack
-        [ D.toSimpleNote
-            "I may be confused by indentation. For example, if you are trying to define a record type across multiple lines, I recommend using this format:"
+        [ D.toSimpleNote "I may be confused by indentation. For example, if you are trying to define a record type across multiple lines, I recommend using this format:"
         , D.indent 4 <|
             D.vcat
                 [ D.fromChars "{ name : String"
@@ -7765,8 +7764,7 @@ noteForRecordTypeIndentError =
                 , D.fromChars ", height : Float"
                 , D.fromChars "}"
                 ]
-        , D.reflow
-            "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Elm ecosystem."
+        , D.reflow "Notice that each line starts with some indentation. Usually two or four spaces. This is the stylistic convention in the Guida ecosystem."
         ]
 
 
