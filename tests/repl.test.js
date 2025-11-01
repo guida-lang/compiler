@@ -14,7 +14,8 @@ describe("repl", () => {
 const run = (input, output, done) => {
     const repl = child_process.spawn("./bin/index.js", ["repl"], {
         cwd: path.join(__dirname, ".."),
-        stdio: "pipe"
+        stdio: "pipe",
+        env: { ...process.env, GUIDA_REGISTRY: "https://package.elm-lang.org" }
     });
 
     repl.stdout.on("data", (data) => {
