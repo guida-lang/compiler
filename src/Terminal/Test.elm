@@ -109,10 +109,7 @@ runHelp root testFileGlobs flags =
                                                             case baseOutline of
                                                                 Outline.App (Outline.GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
                                                                     Outline.GuidaAppOutline guida (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
-                                                                        |> makeAppPlan env Pkg.core
-                                                                        |> Task.bind (makeAppPlan env Pkg.json)
-                                                                        |> Task.bind (makeAppPlan env Pkg.time)
-                                                                        |> Task.bind (makeAppPlan env Pkg.random)
+                                                                        |> makeAppPlan env Pkg.stdlib
                                                                         -- TODO changes should only be done to the `tests/guida.json` in case the top level `guida.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env)
 
@@ -259,7 +256,7 @@ testVariantDefinition : Regex
 testVariantDefinition =
     Maybe.withDefault Regex.never <|
         Regex.fromStringWith { caseInsensitive = False, multiline = True }
-            "^var\\s+\\$elm_explorations\\$test\\$Test\\$Internal\\$(?:ElmTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
+            "^var\\s+\\$guida_lang\\$test\\$Test\\$Internal\\$(?:GuidaTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
 
 
 checkDefinition : Regex
@@ -271,15 +268,15 @@ checkDefinition =
 
 addKernelTestChecking : String -> String
 addKernelTestChecking content =
-    "var __elmTestSymbol = Symbol(\"elmTestSymbol\");\n"
+    "var __guidaTestSymbol = Symbol(\"guidaTestSymbol\");\n"
         ++ (content
-                |> Regex.replace testVariantDefinition (\{ match } -> match ++ "__elmTestSymbol: __elmTestSymbol, ")
+                |> Regex.replace testVariantDefinition (\{ match } -> match ++ "__guidaTestSymbol: __guidaTestSymbol, ")
                 |> Regex.replaceAtMost 1
                     checkDefinition
                     (\{ submatches } ->
                         case submatches of
                             (Just firstSubmatch) :: _ ->
-                                firstSubmatch ++ " = value => value && value.__elmTestSymbol === __elmTestSymbol ? $elm$core$Maybe$Just(value) : $elm$core$Maybe$Nothing;"
+                                firstSubmatch ++ " = value => value && value.__guidaTestSymbol === __guidaTestSymbol ? $guida_lang$stdlib$Maybe$Just(value) : $guida_lang$stdlib$Maybe$Nothing;"
 
                             _ ->
                                 crash "addKernelTestChecking: no submatches found"

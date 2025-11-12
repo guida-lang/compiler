@@ -164,7 +164,8 @@ server.post("withFile", (request) => {
 });
 
 server.post("hFileSize", (request) => {
-  fs.fstat(request.body, (err, stats) => {
+  const fd = parseInt(request.body);
+  fs.fstat(fd, (err, stats) => {
     if (err) throw err;
     request.respond(200, null, stats.size);
   });

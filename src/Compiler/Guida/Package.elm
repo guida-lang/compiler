@@ -19,6 +19,7 @@ module Compiler.Guida.Package exposing
     , nearbyNames
     , parser
     , random
+    , stdlib
     , suggestions
     , test
     , time
@@ -82,7 +83,7 @@ type alias Project =
 
 isKernel : Name -> Bool
 isKernel ( author, _ ) =
-    author == elm || author == elmExplorations
+    author == elm || author == elmExplorations || author == guida
 
 
 toChars : Name -> String
@@ -116,7 +117,7 @@ dummyName =
 
 kernel : Name
 kernel =
-    toName elm "kernel"
+    toName guida "kernel"
 
 
 core : Name
@@ -179,6 +180,11 @@ test =
     toName elmExplorations "test"
 
 
+stdlib : Name
+stdlib =
+    toName guida "stdlib"
+
+
 elm : Author
 elm =
     "elm"
@@ -187,6 +193,11 @@ elm =
 elmExplorations : Author
 elmExplorations =
     "elm-explorations"
+
+
+guida : Author
+guida =
+    "guida-lang"
 
 
 

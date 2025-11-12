@@ -53,7 +53,7 @@ isCore : ProjectType -> Bool
 isCore projectType =
     case projectType of
         Package pkg ->
-            pkg == Pkg.core
+            pkg == Pkg.core || pkg == Pkg.stdlib
 
         Application ->
             False
@@ -82,13 +82,40 @@ type alias Module =
     }
 
 
+isCoreModule : Maybe Header -> Bool
+isCoreModule maybeHeader =
+    case maybeHeader of
+        Just header ->
+            let
+                ( _, A.At _ name ) =
+                    header.name
+            in
+            List.member name
+                [ Name.basics
+                , Name.bitwise
+                , Name.debug
+                , Name.list
+                , Name.maybe
+                , Name.result
+                , Name.string
+                , Name.char
+                , Name.tuple
+                , Name.platform
+                , "Platform.Cmd"
+                , "Platform.Sub"
+                ]
+
+        Nothing ->
+            False
+
+
 chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
 chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
             (\( ( initialComments, headerComments ), header ) ->
                 chompImports
-                    (if isCore projectType then
+                    (if isCore projectType && isCoreModule header then
                         []
 
                      else

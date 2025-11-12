@@ -235,7 +235,7 @@ read root =
                         case outline of
                             Pkg (GuidaPkgOutline pkg _ _ _ _ deps _ _) ->
                                 Task.pure <|
-                                    if not (Dict.member identity Pkg.core deps) && pkg /= Pkg.core then
+                                    if not (Dict.member identity Pkg.stdlib deps) && pkg /= Pkg.stdlib then
                                         Err Exit.OutlineNoGuidaPkgCore
 
                                     else
@@ -250,7 +250,7 @@ read root =
                                         Ok outline
 
                             App (GuidaAppOutline _ srcDirs direct indirect _ _) ->
-                                if not (Dict.member identity Pkg.core direct) then
+                                if not (Dict.member identity Pkg.stdlib direct) then
                                     Task.pure <| Err Exit.OutlineNoGuidaAppCore
 
                                 else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then

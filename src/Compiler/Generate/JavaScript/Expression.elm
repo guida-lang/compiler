@@ -458,7 +458,7 @@ generateCall : Mode.Mode -> IO.Canonical -> A.Position -> Opt.Expr -> List Opt.E
 generateCall mode parentModule pos func args =
     case func of
         Opt.VarGlobal _ ((Opt.Global (IO.Canonical pkg _) _) as global) ->
-            if pkg == Pkg.core then
+            if pkg == Pkg.core || pkg == Pkg.stdlib then
                 generateCoreCall mode parentModule pos global args
 
             else

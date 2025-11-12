@@ -740,9 +740,7 @@ getRoot =
 defaultDeps : Dict ( String, String ) Pkg.Name C.Constraint
 defaultDeps =
     Map.fromList identity
-        [ ( Pkg.core, C.anything )
-        , ( Pkg.json, C.anything )
-        , ( Pkg.html, C.anything )
+        [ ( Pkg.stdlib, C.anything )
         ]
 
 

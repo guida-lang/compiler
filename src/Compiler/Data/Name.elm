@@ -147,7 +147,7 @@ isCompappendType =
 
 prefixKernel : Name
 prefixKernel =
-    "Elm.Kernel."
+    "Guida.Kernel."
 
 
 prefixNumber : Name

@@ -196,67 +196,67 @@ toComparableCanonical (Canonical ( author, project ) name) =
 
 basics : Canonical
 basics =
-    Canonical Pkg.core Name.basics
+    Canonical Pkg.stdlib Name.basics
 
 
 char : Canonical
 char =
-    Canonical Pkg.core Name.char
+    Canonical Pkg.stdlib Name.char
 
 
 string : Canonical
 string =
-    Canonical Pkg.core Name.string
+    Canonical Pkg.stdlib Name.string
 
 
 maybe : Canonical
 maybe =
-    Canonical Pkg.core Name.maybe
+    Canonical Pkg.stdlib Name.maybe
 
 
 result : Canonical
 result =
-    Canonical Pkg.core Name.result
+    Canonical Pkg.stdlib Name.result
 
 
 list : Canonical
 list =
-    Canonical Pkg.core Name.list
+    Canonical Pkg.stdlib Name.list
 
 
 array : Canonical
 array =
-    Canonical Pkg.core Name.array
+    Canonical Pkg.stdlib Name.array
 
 
 dict : Canonical
 dict =
-    Canonical Pkg.core Name.dict
+    Canonical Pkg.stdlib Name.dict
 
 
 tuple : Canonical
 tuple =
-    Canonical Pkg.core Name.tuple
+    Canonical Pkg.stdlib Name.tuple
 
 
 platform : Canonical
 platform =
-    Canonical Pkg.core Name.platform
+    Canonical Pkg.stdlib Name.platform
 
 
 cmd : Canonical
 cmd =
-    Canonical Pkg.core "Platform.Cmd"
+    Canonical Pkg.stdlib "Platform.Cmd"
 
 
 sub : Canonical
 sub =
-    Canonical Pkg.core "Platform.Sub"
+    Canonical Pkg.stdlib "Platform.Sub"
 
 
 debug : Canonical
 debug =
-    Canonical Pkg.core Name.debug
+    Canonical Pkg.stdlib Name.debug
 
 
 

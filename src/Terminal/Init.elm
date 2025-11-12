@@ -237,30 +237,28 @@ verify cache connection registry constraints callback =
 defaults : Dict ( String, String ) Pkg.Name Con.Constraint
 defaults =
     Dict.fromList identity
-        [ ( Pkg.core, Con.anything )
-        , ( Pkg.browser, Con.anything )
-        , ( Pkg.html, Con.anything )
+        [ ( Pkg.stdlib, Con.anything )
         ]
 
 
 testDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
 testDefaults =
     Dict.fromList identity
-        [ ( Pkg.test, Con.anything )
+        [ ( Pkg.stdlib, Con.anything )
         ]
 
 
 packageDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
 packageDefaults =
     Dict.fromList identity
-        [ ( Pkg.core, Con.anything )
+        [ ( Pkg.stdlib, Con.anything )
         ]
 
 
 packageTestDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
 packageTestDefaults =
     Dict.fromList identity
-        [ ( Pkg.test, Con.anything )
+        [ ( Pkg.stdlib, Con.anything )
         ]
 
 
