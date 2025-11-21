@@ -1621,7 +1621,7 @@ installToReport exit =
                         ++ registryDomain
                         ++ " for packages with similar names and found these:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
+                , D.reflow "Maybe you want one of these instead?"
                 ]
 
         InstallUnknownPackageOffline registryDomain pkg suggestions ->
@@ -1642,10 +1642,9 @@ installToReport exit =
                     "I could not connect to "
                         ++ registryDomain
                         ++ " though, so new packages may have been published since I last updated my local cache of package names."
-                , D.reflow <|
-                    "Looking through the locally cached names, the closest ones are:"
+                , D.reflow "Looking through the locally cached names, the closest ones are:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
+                , D.reflow "Maybe you want one of these instead?"
                 ]
 
         InstallBadDetails details ->
@@ -1824,11 +1823,10 @@ type Outline
     | OutlineHasMissingElmSrcDirs FilePath (List FilePath)
     | OutlineHasDuplicateGuidaSrcDirs FilePath FilePath FilePath
     | OutlineHasDuplicateElmSrcDirs FilePath FilePath FilePath
-    | OutlineNoGuidaPkgCore
+    | OutlineNoGuidaPkgStdlib
     | OutlineNoElmPkgCore
-    | OutlineNoGuidaAppCore
+    | OutlineNoGuidaAppStdlib
     | OutlineNoElmAppCore
-    | OutlineNoGuidaAppJson
     | OutlineNoElmAppJson
 
 
@@ -1962,10 +1960,10 @@ toOutlineReport problem =
                         "Remove one of the redundant entries from your \"source-directories\" field."
                     ]
 
-        OutlineNoGuidaPkgCore ->
+        OutlineNoGuidaPkgStdlib ->
             Help.report "MISSING DEPENDENCY"
                 (Just "guida.json")
-                "I need to see an \"elm/core\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
+                "I need to see an \"guida-lang/stdlib\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
                 [ D.reflow <|
                     "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to find a working package and start fresh with their guida.json file."
                 ]
@@ -1978,10 +1976,10 @@ toOutlineReport problem =
                     "If you modified your elm.json by hand, try to change it back! And if you are having trouble getting back to a working elm.json, it may be easier to find a working package and start fresh with their elm.json file."
                 ]
 
-        OutlineNoGuidaAppCore ->
+        OutlineNoGuidaAppStdlib ->
             Help.report "MISSING DEPENDENCY"
                 (Just "guida.json")
-                "I need to see an \"elm/core\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
+                "I need to see an \"guida-lang/stdlib\" dependency your guida.json file. The default imports of `List` and `Maybe` do not work without it."
                 [ D.reflow <|
                     "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to delete it and use `guida init` to start fresh."
                 ]
@@ -1992,14 +1990,6 @@ toOutlineReport problem =
                 "I need to see an \"elm/core\" dependency your elm.json file. The default imports of `List` and `Maybe` do not work without it."
                 [ D.reflow <|
                     "If you modified your elm.json by hand, try to change it back! And if you are having trouble getting back to a working elm.json, it may be easier to delete it and use `elm init` to start fresh."
-                ]
-
-        OutlineNoGuidaAppJson ->
-            Help.report "MISSING DEPENDENCY"
-                (Just "guida.json")
-                "I need to see an \"elm/json\" dependency your guida.json file. It helps me handle flags and ports."
-                [ D.reflow <|
-                    "If you modified your guida.json by hand, try to change it back! And if you are having trouble getting back to a working guida.json, it may be easier to delete it and use `guida init` to start fresh."
                 ]
 
         OutlineNoElmAppJson ->
@@ -2892,6 +2882,10 @@ type Details
     | DetailsBadOutline Outline
     | DetailsCannotGetRegistry RegistryProblem
     | DetailsBadDeps FilePath (List DetailsBadDep)
+    | DetailsUnknownStdlibOnline String
+    | DetailsUnknownStdlibOffline String
+    | DetailsNoOnlineAppSolution Pkg.Name
+    | DetailsNoOfflineAppSolution String Pkg.Name
 
 
 type DetailsBadDep
@@ -3098,7 +3092,13 @@ toDetailsReport details =
                     , D.fromChars "you"
                     , D.fromChars "are"
                     , D.fromChars "using"
-                    , D.red (D.fromVersion V.compiler)
+                    , D.fromChars "a"
+                    , D.fromChars "version"
+                    , D.fromChars "of"
+                    , D.fromChars "Guida"
+                    , D.fromChars "compatible"
+                    , D.fromChars "with"
+                    , D.red (D.fromVersion V.elmCompiler)
                     , D.fromChars "right"
                     , D.fromChars "now."
                     ]
@@ -3225,6 +3225,68 @@ toDetailsReport details =
                                 , D.reflow <|
                                     "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
                                 ]
+
+        DetailsUnknownStdlibOnline registryDomain ->
+            Help.docReport "STDLIB PACKAGE"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "find"
+                    , D.fromChars "the"
+                    , D.red (D.fromChars "guida-lang/stdlib")
+                    , D.fromChars "package"
+                        |> D.a (D.fromChars ".")
+                    ]
+                )
+                [ D.reflow <|
+                    "I looked through "
+                        ++ registryDomain
+                        ++ " for the stdlib package and could not find it."
+                ]
+
+        DetailsUnknownStdlibOffline registryDomain ->
+            Help.docReport "STDLIB PACKAGE"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "find"
+                    , D.fromChars "the"
+                    , D.red (D.fromChars "guida-lang/stdlib")
+                    , D.fromChars "package"
+                        |> D.a (D.fromChars ".")
+                    ]
+                )
+                [ D.reflow <|
+                    "I could not connect to "
+                        ++ registryDomain
+                        ++ " though, so new packages may have been published since I last updated my local cache of package names."
+                ]
+
+        DetailsNoOnlineAppSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I checked all the published versions. When that failed, I tried to find any compatible combination of these packages, even if it meant changing all your existing dependencies! That did not work either!"
+                , D.reflow <|
+                    "This is most likely to happen when a package is not upgraded yet. Maybe a new version of Guida came out recently? Maybe a common package was changed recently? Maybe a better package came along, so there was no need to upgrade this one? Try asking around https://guida-lang.org/community to learn what might be going on with this package."
+                , D.toSimpleNote <|
+                    "Whatever the case, please be kind to the relevant package authors! Having friendly interactions with users is great motivation, and conversely, getting berated by strangers on the internet sucks your soul dry. Furthermore, package authors are humans with families, friends, jobs, vacations, responsibilities, goals, etc. They face obstacles outside of their technical work you will never know about, so please assume the best and try to be patient and supportive!"
+                ]
+
+        DetailsNoOfflineAppSolution registryDomain pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
 
 
 toBadDepRank : DetailsBadDep -> Int
@@ -4169,10 +4231,9 @@ testToReport test =
                         |> D.a (D.fromChars ".")
                     ]
                 )
-                [ D.reflow <|
-                    "I looked through https://package.elm-lang.org for packages with similar names and found these:"
+                [ D.reflow "I looked through https://package.elm-lang.org for packages with similar names and found these:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
+                , D.reflow "Maybe you want one of these instead?"
                 ]
 
         TestUnknownPackageOffline pkg suggestions ->
@@ -4189,12 +4250,10 @@ testToReport test =
                         |> D.a (D.fromChars ".")
                     ]
                 )
-                [ D.reflow <|
-                    "I could not connect to https://package.elm-lang.org though, so new packages may have been published since I last updated my local cache of package names."
-                , D.reflow <|
-                    "Looking through the locally cached names, the closest ones are:"
+                [ D.reflow "I could not connect to https://package.elm-lang.org though, so new packages may have been published since I last updated my local cache of package names."
+                , D.reflow "Looking through the locally cached names, the closest ones are:"
                 , D.indent 4 <| D.dullyellow <| D.vcat <| List.map D.fromPackage suggestions
-                , D.reflow <| "Maybe you want one of these instead?"
+                , D.reflow "Maybe you want one of these instead?"
                 ]
 
         TestBadDetails details ->

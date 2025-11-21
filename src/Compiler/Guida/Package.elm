@@ -7,6 +7,8 @@ module Compiler.Guida.Package exposing
     , core
     , decoder
     , dummyName
+    , elm
+    , elmExplorations
     , encode
     , html
     , isKernel

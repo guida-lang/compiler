@@ -8,6 +8,7 @@ module Compiler.Guida.Kernel exposing
     , fromByteString
     )
 
+import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Guida.ModuleName as ModuleName
@@ -94,9 +95,9 @@ type alias Foreigns =
     Dict String ModuleName.Raw Pkg.Name
 
 
-fromByteString : Pkg.Name -> Foreigns -> String -> Maybe Content
-fromByteString pkg foreigns bytes =
-    case P.fromByteString (parser pkg foreigns) toError bytes of
+fromByteString : Stuff.Root -> Pkg.Name -> Foreigns -> String -> Maybe Content
+fromByteString root pkg foreigns bytes =
+    case P.fromByteString (parser root pkg foreigns) toError bytes of
         Ok content ->
             Just content
 
@@ -104,8 +105,8 @@ fromByteString pkg foreigns bytes =
             Nothing
 
 
-parser : Pkg.Name -> Foreigns -> P.Parser () Content
-parser pkg foreigns =
+parser : Stuff.Root -> Pkg.Name -> Foreigns -> P.Parser () Content
+parser root pkg foreigns =
     P.word2 '/' '*' toError
         |> P.bind (\_ -> Space.chomp ignoreError)
         |> P.bind (\_ -> Space.checkFreshLine toError)
@@ -113,7 +114,7 @@ parser pkg foreigns =
         |> P.bind
             (\imports ->
                 P.word2 '*' '/' toError
-                    |> P.bind (\_ -> parseChunks (toVarTable pkg foreigns imports) Dict.empty Dict.empty)
+                    |> P.bind (\_ -> parseChunks (toVarTable root pkg foreigns imports) Dict.empty Dict.empty)
                     |> P.fmap (\chunks -> Content imports chunks)
             )
 
@@ -332,14 +333,14 @@ type alias VarTable =
     Dict String Name Chunk
 
 
-toVarTable : Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
-toVarTable pkg foreigns imports =
-    List.foldl (addImport pkg foreigns) Dict.empty imports
+toVarTable : Stuff.Root -> Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
+toVarTable root pkg foreigns imports =
+    List.foldl (addImport root pkg foreigns) Dict.empty imports
 
 
-addImport : Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
-addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
-    if Name.isKernel importName then
+addImport : Stuff.Root -> Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
+addImport root pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
+    if Name.isKernel (Stuff.isRootGuida root) importName then
         case maybeAlias of
             Just _ ->
                 crash ("cannot use `as` with kernel import of: " ++ importName)
@@ -348,7 +349,7 @@ addImport pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, 
                 let
                     home : Name
                     home =
-                        Name.getKernel importName
+                        Name.getKernel (Stuff.isRootGuida root) importName
 
                     add : Name -> Dict String Name Chunk -> Dict String Name Chunk
                     add name table =

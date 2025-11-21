@@ -236,7 +236,7 @@ read root =
                             Pkg (GuidaPkgOutline pkg _ _ _ _ deps _ _) ->
                                 Task.pure <|
                                     if not (Dict.member identity Pkg.stdlib deps) && pkg /= Pkg.stdlib then
-                                        Err Exit.OutlineNoGuidaPkgCore
+                                        Err Exit.OutlineNoGuidaPkgStdlib
 
                                     else
                                         Ok outline
@@ -249,12 +249,9 @@ read root =
                                     else
                                         Ok outline
 
-                            App (GuidaAppOutline _ srcDirs direct indirect _ _) ->
+                            App (GuidaAppOutline _ srcDirs direct _ _ _) ->
                                 if not (Dict.member identity Pkg.stdlib direct) then
-                                    Task.pure <| Err Exit.OutlineNoGuidaAppCore
-
-                                else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then
-                                    Task.pure <| Err Exit.OutlineNoGuidaAppJson
+                                    Task.pure <| Err Exit.OutlineNoGuidaAppStdlib
 
                                 else
                                     Utils.filterM (isSrcDirMissing root) (NE.toList srcDirs)

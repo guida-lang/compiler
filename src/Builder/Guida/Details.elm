@@ -199,14 +199,108 @@ generate style scope root time =
                                 Task.pure (Err exit)
 
                             Ok ( env, outline ) ->
-                                case outline of
-                                    Outline.Pkg pkg ->
-                                        Task.run (verifyPkg env time pkg)
+                                convertToGuidaOutline env outline
+                                    |> Task.bind
+                                        (\convertedOutline ->
+                                            case convertedOutline of
+                                                Outline.Pkg pkg ->
+                                                    verifyPkg env time pkg
 
-                                    Outline.App app ->
-                                        Task.run (verifyApp env time app)
+                                                Outline.App app ->
+                                                    verifyApp env time app
+                                        )
+                                    |> Task.run
                     )
         )
+
+
+convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outline
+convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
+    case outline of
+        Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ _ _ _) ->
+            Debug.todo "convertToGuidaOutline.ElmPkgOutline"
+
+        Outline.App ((Outline.ElmAppOutline _ _ _ _ _ _) as appOutline) ->
+            case Registry.getVersions_ Pkg.stdlib registry of
+                Err _ ->
+                    Task.io Website.domain
+                        |> Task.bind
+                            (\registryDomain ->
+                                case connection of
+                                    Solver.Online _ ->
+                                        Task.throw (Exit.DetailsUnknownStdlibOnline registryDomain)
+
+                                    Solver.Offline ->
+                                        Task.throw (Exit.DetailsUnknownStdlibOffline registryDomain)
+                            )
+
+                Ok _ ->
+                    uninstallAppDependencies env [ Pkg.core ] appOutline
+                        |> Task.bind
+                            (\cleanAppOutline ->
+                                Task.io (Solver.addToApp cache connection registry Pkg.stdlib cleanAppOutline False)
+                                    |> Task.bind
+                                        (\result ->
+                                            case result of
+                                                Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                                    Task.pure (Outline.App app)
+
+                                                Solver.NoSolution ->
+                                                    Task.throw (Exit.DetailsNoOnlineAppSolution Pkg.stdlib)
+
+                                                Solver.NoOfflineSolution ->
+                                                    Task.io Website.domain
+                                                        |> Task.bind
+                                                            (\registryDomain ->
+                                                                Task.throw (Exit.DetailsNoOfflineAppSolution registryDomain Pkg.stdlib)
+                                                            )
+
+                                                Solver.SolverErr exit ->
+                                                    Task.throw (Exit.DetailsSolverProblem exit)
+                                        )
+                            )
+
+        _ ->
+            Task.pure outline
+
+
+uninstallAppDependencies : Env -> List Pkg.Name -> Outline.AppOutline -> Task Exit.Details Outline.AppOutline
+uninstallAppDependencies ((Env _ _ _ cache _ connection registry) as env) packages appOutline =
+    case packages of
+        [] ->
+            Task.pure appOutline
+
+        pkg :: rest ->
+            case appOutline of
+                Outline.GuidaAppOutline _ _ _ _ _ _ ->
+                    Task.pure appOutline
+
+                Outline.ElmAppOutline _ _ direct _ _ _ ->
+                    case Dict.get identity pkg direct of
+                        Just _ ->
+                            Task.io (Solver.removeFromApp cache connection registry pkg appOutline)
+                                |> Task.bind
+                                    (\result ->
+                                        case result of
+                                            Solver.SolverOk (Solver.AppSolution _ _ app) ->
+                                                uninstallAppDependencies env rest app
+
+                                            Solver.NoSolution ->
+                                                Task.throw (Exit.DetailsNoOnlineAppSolution pkg)
+
+                                            Solver.NoOfflineSolution ->
+                                                Task.io Website.domain
+                                                    |> Task.bind
+                                                        (\registryDomain ->
+                                                            Task.throw (Exit.DetailsNoOfflineAppSolution registryDomain pkg)
+                                                        )
+
+                                            Solver.SolverErr exit ->
+                                                Task.throw (Exit.DetailsSolverProblem exit)
+                                    )
+
+                        Nothing ->
+                            Task.pure appOutline
 
 
 
@@ -687,7 +781,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                 Utils.newEmptyMVar
                                                                                     |> Task.bind
                                                                                         (\mvar ->
-                                                                                            Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                            Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule root foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                                 |> Task.bind
                                                                                                     (\mvars ->
                                                                                                         Utils.putMVar statusDictEncoder mvar mvars
@@ -714,7 +808,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                             Utils.newEmptyMVar
                                                                                                                                 |> Task.bind
                                                                                                                                     (\rmvar ->
-                                                                                                                                        Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile pkg rmvar) statuses
+                                                                                                                                        Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile root pkg rmvar) statuses
                                                                                                                                             |> Task.bind
                                                                                                                                                 (\rmvars ->
                                                                                                                                                     Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
@@ -748,7 +842,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 
                                                                                                                                                                             objects : Opt.GlobalGraph
                                                                                                                                                                             objects =
-                                                                                                                                                                                gatherObjects results
+                                                                                                                                                                                gatherObjects root results
 
                                                                                                                                                                             artifacts : Artifacts
                                                                                                                                                                             artifacts =
@@ -808,13 +902,13 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 -- GATHER
 
 
-gatherObjects : Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
-gatherObjects results =
-    Dict.foldr compare addLocalGraph Opt.empty results
+gatherObjects : Stuff.Root -> Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
+gatherObjects root results =
+    Dict.foldr compare (addLocalGraph root) Opt.empty results
 
 
-addLocalGraph : ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
-addLocalGraph name status graph =
+addLocalGraph : Stuff.Root -> ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
+addLocalGraph root name status graph =
     case status of
         RLocal _ objs _ ->
             Opt.addLocalGraph objs graph
@@ -823,7 +917,7 @@ addLocalGraph name status graph =
             graph
 
         RKernelLocal cs ->
-            Opt.addKernel (Name.getKernel name) cs graph
+            Opt.addKernel (Name.getKernel (Stuff.isRootGuida root) name) cs graph
 
         RKernelForeign ->
             graph
@@ -920,8 +1014,8 @@ type Status
     | SKernelForeign
 
 
-crawlModule : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
-crawlModule foreignDeps mvar pkg src docsStatus name =
+crawlModule : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
+crawlModule root foreignDeps mvar pkg src docsStatus name =
     let
         path : String -> FilePath
         path extension =
@@ -954,13 +1048,13 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
 
                                 Nothing ->
                                     if guidaExists then
-                                        crawlFile SV.Guida foreignDeps mvar pkg src docsStatus name guidaPath
+                                        crawlFile root SV.Guida foreignDeps mvar pkg src docsStatus name guidaPath
 
                                     else if elmExists then
-                                        crawlFile SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
+                                        crawlFile root SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
 
-                                    else if Pkg.isKernel pkg && Name.isKernel name then
-                                        crawlKernel foreignDeps mvar pkg src name
+                                    else if Pkg.isKernel pkg && Name.isKernel (Stuff.isRootGuida root) name then
+                                        crawlKernel root foreignDeps mvar pkg src name
 
                                     else
                                         Task.pure Nothing
@@ -968,15 +1062,15 @@ crawlModule foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
-crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
+crawlFile : Stuff.Root -> SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
+crawlFile root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> Task.bind
             (\bytes ->
                 case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
-                            crawlImports foreignDeps mvar pkg src imports
+                            crawlImports root foreignDeps mvar pkg src imports
                                 |> Task.fmap (\deps -> Just (SLocal docsStatus deps modul))
 
                         else
@@ -987,8 +1081,8 @@ crawlFile syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
             )
 
 
-crawlImports : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
-crawlImports foreignDeps mvar pkg src imports =
+crawlImports : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
+crawlImports root foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
         |> Task.bind
             (\statusDict ->
@@ -1001,7 +1095,7 @@ crawlImports foreignDeps mvar pkg src imports =
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule foreignDeps mvar pkg src DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule root foreignDeps mvar pkg src DocsNotNeeded) news
                     |> Task.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
@@ -1011,8 +1105,8 @@ crawlImports foreignDeps mvar pkg src imports =
             )
 
 
-crawlKernel : Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
-crawlKernel foreignDeps mvar pkg src name =
+crawlKernel : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
+crawlKernel root foreignDeps mvar pkg src name =
     let
         path : FilePath
         path =
@@ -1025,12 +1119,12 @@ crawlKernel foreignDeps mvar pkg src name =
                     File.readUtf8 path
                         |> Task.bind
                             (\bytes ->
-                                case Kernel.fromByteString pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
+                                case Kernel.fromByteString root pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
                                         Task.pure Nothing
 
                                     Just (Kernel.Content imports chunks) ->
-                                        crawlImports foreignDeps mvar pkg src (List.map Src.c1Value imports)
+                                        crawlImports root foreignDeps mvar pkg src (List.map Src.c1Value imports)
                                             |> Task.fmap (\_ -> Just (SKernelLocal chunks))
                             )
 
@@ -1060,8 +1154,8 @@ type DResult
     | RKernelForeign
 
 
-compile : Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
-compile pkg mvar status =
+compile : Stuff.Root -> Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
+compile root pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
@@ -1072,7 +1166,7 @@ compile pkg mvar status =
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                         Just results ->
-                                            Compile.compile pkg (Utils.mapMapMaybe identity compare getInterface results) modul
+                                            Compile.compile root pkg (Utils.mapMapMaybe identity compare getInterface results) modul
                                                 |> Task.fmap
                                                     (\result ->
                                                         case result of

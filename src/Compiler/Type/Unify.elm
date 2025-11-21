@@ -424,7 +424,7 @@ atomMatchesSuper super home name =
 
 isNumber : IO.Canonical -> Name.Name -> Bool
 isNumber home name =
-    (home == ModuleName.basics)
+    (home == ModuleName.basics || home == ModuleName.elmBasics)
         && (name == Name.int || name == Name.float)
 
 
@@ -439,7 +439,7 @@ unifyFlexSuperStructure context super flatType =
                 mismatch
 
         IO.App1 home name [ variable ] ->
-            if home == ModuleName.list && name == Name.list then
+            if (home == ModuleName.list || home == ModuleName.elmList) && name == Name.list then
                 case super of
                     IO.Number ->
                         mismatch

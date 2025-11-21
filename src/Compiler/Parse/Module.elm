@@ -53,9 +53,37 @@ isCore : ProjectType -> Bool
 isCore projectType =
     case projectType of
         Package pkg ->
-            pkg == Pkg.core || pkg == Pkg.stdlib
+            pkg == Pkg.core
 
         Application ->
+            False
+
+
+isStdlibCore : ProjectType -> Maybe Header -> Bool
+isStdlibCore projectType maybeHeader =
+    case ( projectType, maybeHeader ) of
+        ( Package pkg, Just header ) ->
+            let
+                ( _, A.At _ name ) =
+                    header.name
+            in
+            (pkg == Pkg.stdlib)
+                && List.member name
+                    [ Name.basics
+                    , Name.bitwise
+                    , Name.debug
+                    , Name.list
+                    , Name.maybe
+                    , Name.result
+                    , Name.string
+                    , Name.char
+                    , Name.tuple
+                    , Name.platform
+                    , "Platform.Cmd"
+                    , "Platform.Sub"
+                    ]
+
+        _ ->
             False
 
 
@@ -82,40 +110,13 @@ type alias Module =
     }
 
 
-isCoreModule : Maybe Header -> Bool
-isCoreModule maybeHeader =
-    case maybeHeader of
-        Just header ->
-            let
-                ( _, A.At _ name ) =
-                    header.name
-            in
-            List.member name
-                [ Name.basics
-                , Name.bitwise
-                , Name.debug
-                , Name.list
-                , Name.maybe
-                , Name.result
-                , Name.string
-                , Name.char
-                , Name.tuple
-                , Name.platform
-                , "Platform.Cmd"
-                , "Platform.Sub"
-                ]
-
-        Nothing ->
-            False
-
-
 chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
 chompModule syntaxVersion projectType =
     chompHeader
         |> P.bind
             (\( ( initialComments, headerComments ), header ) ->
                 chompImports
-                    (if isCore projectType && isCoreModule header then
+                    (if isCore projectType || isStdlibCore projectType header then
                         []
 
                      else

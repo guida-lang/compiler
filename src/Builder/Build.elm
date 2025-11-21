@@ -452,7 +452,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         Task.pure <| SBadImport <| ambiguousForeignProblem dep d ds
 
                             Nothing ->
-                                if Name.isKernel name && Parse.isKernel projectType then
+                                if Name.isKernel (Stuff.isRootGuida root) name && Parse.isKernel projectType then
                                     File.exists ("src/" ++ ModuleName.toFilePath name ++ ".js")
                                         |> Task.fmap
                                             (\exists ->
@@ -1015,7 +1015,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
         pkg =
             projectTypeToPkg projectType
     in
-    Compile.compile pkg ifaces modul
+    Compile.compile root pkg ifaces modul
         |> Task.bind
             (\result ->
                 case result of
@@ -1411,7 +1411,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
 
         compileInput : Dict String ModuleName.Raw I.Interface -> Task Never (Result Exit.Repl ReplArtifacts)
         compileInput ifaces =
-            Compile.compile pkg ifaces modul
+            Compile.compile root pkg ifaces modul
                 |> Task.fmap
                     (\result ->
                         case result of
@@ -1751,7 +1751,7 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
 
 
 compileOutside : Env -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never RootResult
-compileOutside (Env key _ projectType _ _ _ _) (Details.Local path time _ _ _ _) source ifaces modul =
+compileOutside (Env key root projectType _ _ _ _) (Details.Local path time _ _ _ _) source ifaces modul =
     let
         pkg : Pkg.Name
         pkg =
@@ -1761,7 +1761,7 @@ compileOutside (Env key _ projectType _ _ _ _) (Details.Local path time _ _ _ _)
         name =
             Src.getName modul
     in
-    Compile.compile pkg ifaces modul
+    Compile.compile root pkg ifaces modul
         |> Task.bind
             (\result ->
                 case result of

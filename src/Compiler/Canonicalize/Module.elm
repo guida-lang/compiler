@@ -1,5 +1,6 @@
 module Compiler.Canonicalize.Module exposing (MResult, canonicalize)
 
+import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Effects as Effects
@@ -38,8 +39,8 @@ type alias MResult i w a =
 -- MODULES
 
 
-canonicalize : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
-canonicalize pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values _ _ binops effects) as modul) =
+canonicalize : Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult i (List W.Warning) Can.Module
+canonicalize root pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values _ _ binops effects) as modul) =
     let
         home : IO.Canonical
         home =
@@ -49,11 +50,11 @@ canonicalize pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values
         cbinops =
             Dict.fromList identity (List.map canonicalizeBinop binops)
     in
-    Foreign.createInitialEnv home ifaces imports
+    Foreign.createInitialEnv root home ifaces imports
         |> R.bind (Local.add modul)
         |> R.bind
             (\( env, cunions, caliases ) ->
-                canonicalizeValues syntaxVersion env values
+                canonicalizeValues root syntaxVersion env values
                     |> R.bind
                         (\cvalues ->
                             Effects.canonicalize syntaxVersion env values cunions effects
@@ -88,9 +89,9 @@ canonicalizeBinop (A.At _ (Src.Infix ( _, op ) ( _, associativity ) ( _, precede
 --
 
 
-canonicalizeValues : SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
-canonicalizeValues syntaxVersion env values =
-    R.traverse (toNodeOne syntaxVersion env) values
+canonicalizeValues : Stuff.Root -> SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
+canonicalizeValues root syntaxVersion env values =
+    R.traverse (toNodeOne root syntaxVersion env) values
         |> R.bind (\nodes -> detectCycles (Graph.stronglyConnComp nodes))
 
 
@@ -171,8 +172,8 @@ type alias NodeTwo =
     ( Can.Def, Name, List Name )
 
 
-toNodeOne : SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
-toNodeOne syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) srcArgs ( _, body ) maybeType)) =
+toNodeOne : Stuff.Root -> SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
+toNodeOne root syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) srcArgs ( _, body ) maybeType)) =
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
@@ -182,7 +183,7 @@ toNodeOne syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) s
                         Env.addLocals argBindings env
                             |> R.bind
                                 (\newEnv ->
-                                    Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize syntaxVersion newEnv body)
+                                    Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize root syntaxVersion newEnv body)
                                         |> R.fmap
                                             (\( cbody, freeLocals ) ->
                                                 let
@@ -209,7 +210,7 @@ toNodeOne syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) s
                                     Env.addLocals argBindings env
                                         |> R.bind
                                             (\newEnv ->
-                                                Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize syntaxVersion newEnv body)
+                                                Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize root syntaxVersion newEnv body)
                                                     |> R.fmap
                                                         (\( cbody, freeLocals ) ->
                                                             let

@@ -27,7 +27,9 @@ const lockedFiles = {};
 const processes = {};
 
 const download = function (method, url) {
-  const req = https.request(url, { method }, (res) => {
+  const client = url.startsWith("https://") ? https : http;
+
+  const req = client.request(url, { method }, (res) => {
     if (res.statusCode >= 200 && res.statusCode < 300) {
       let chunks = [];
 

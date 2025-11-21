@@ -552,37 +552,37 @@ isSimilar (Diff _ _ status) =
 
 isBool : IO.Canonical -> Name -> Bool
 isBool home name =
-    home == ModuleName.basics && name == Name.bool
+    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.bool
 
 
 isInt : IO.Canonical -> Name -> Bool
 isInt home name =
-    home == ModuleName.basics && name == Name.int
+    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.int
 
 
 isFloat : IO.Canonical -> Name -> Bool
 isFloat home name =
-    home == ModuleName.basics && name == Name.float
+    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.float
 
 
 isString : IO.Canonical -> Name -> Bool
 isString home name =
-    home == ModuleName.string && name == Name.string
+    (home == ModuleName.string || home == ModuleName.elmString) && name == Name.string
 
 
 isChar : IO.Canonical -> Name -> Bool
 isChar home name =
-    home == ModuleName.char && name == Name.char
+    (home == ModuleName.char || home == ModuleName.elmChar) && name == Name.char
 
 
 isMaybe : IO.Canonical -> Name -> Bool
 isMaybe home name =
-    home == ModuleName.maybe && name == Name.maybe
+    (home == ModuleName.maybe || home == ModuleName.elmMaybe) && name == Name.maybe
 
 
 isList : IO.Canonical -> Name -> Bool
 isList home name =
-    home == ModuleName.list && name == Name.list
+    (home == ModuleName.list || home == ModuleName.elmList) && name == Name.list
 
 
 

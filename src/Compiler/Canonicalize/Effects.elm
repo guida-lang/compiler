@@ -265,31 +265,26 @@ checkFieldPayload (Can.FieldType _ tipe) =
 
 isIntFloatBool : IO.Canonical -> Name.Name -> Bool
 isIntFloatBool home name =
-    home
-        == ModuleName.basics
+    (home == ModuleName.basics || home == ModuleName.elmBasics)
         && (name == Name.int || name == Name.float || name == Name.bool)
 
 
 isString : IO.Canonical -> Name.Name -> Bool
 isString home name =
-    home
-        == ModuleName.string
-        && name
-        == Name.string
+    (home == ModuleName.string || home == ModuleName.elmString)
+        && (name == Name.string)
 
 
 isJson : IO.Canonical -> Name.Name -> Bool
 isJson home name =
-    (home == ModuleName.jsonEncode)
+    (home == ModuleName.jsonEncode || home == ModuleName.elmJsonEncode)
         && (name == Name.value)
 
 
 isList : IO.Canonical -> Name.Name -> Bool
 isList home name =
-    home
-        == ModuleName.list
-        && name
-        == Name.list
+    (home == ModuleName.list || home == ModuleName.elmList)
+        && (name == Name.list)
 
 
 isMaybe : IO.Canonical -> Name.Name -> Bool

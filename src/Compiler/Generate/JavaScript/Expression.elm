@@ -1343,7 +1343,7 @@ generateCaseTest mode root path exampleTest =
     in
     case exampleTest of
         DT.IsCtor home name _ _ opts ->
-            if name == Name.bool && home == ModuleName.basics then
+            if name == Name.bool && (home == ModuleName.basics || home == ModuleName.elmBasics) then
                 value
 
             else

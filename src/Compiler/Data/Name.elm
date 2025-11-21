@@ -107,10 +107,10 @@ splitDots =
 -- GET KERNEL
 
 
-getKernel : Name -> Name
-getKernel name =
-    if isKernel name then
-        String.dropLeft (String.length prefixKernel) name
+getKernel : Bool -> Name -> Name
+getKernel isRootGuida name =
+    if isKernel isRootGuida name then
+        String.dropLeft (String.length (prefixKernel isRootGuida)) name
 
     else
         crash "AssertionFailed"
@@ -120,9 +120,9 @@ getKernel name =
 -- STARTS WITH
 
 
-isKernel : Name -> Bool
-isKernel =
-    String.startsWith prefixKernel
+isKernel : Bool -> Name -> Bool
+isKernel isRootGuida =
+    String.startsWith (prefixKernel isRootGuida)
 
 
 isNumberType : Name -> Bool
@@ -145,9 +145,13 @@ isCompappendType =
     String.startsWith prefixCompappend
 
 
-prefixKernel : Name
-prefixKernel =
-    "Guida.Kernel."
+prefixKernel : Bool -> Name
+prefixKernel isRootGuida =
+    if isRootGuida then
+        "Guida.Kernel."
+
+    else
+        "Elm.Kernel."
 
 
 prefixNumber : Name

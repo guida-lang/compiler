@@ -149,7 +149,7 @@ canonicalizeCtor syntaxVersion env region name patterns ctor =
                     (\verifiedList ->
                         case verifiedList of
                             Index.LengthMatch cargs ->
-                                if tipe == Name.bool && home == ModuleName.basics then
+                                if tipe == Name.bool && (home == ModuleName.basics || home == ModuleName.elmBasics) then
                                     R.ok (Can.PBool union (name == Name.true))
 
                                 else

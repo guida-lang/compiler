@@ -10,6 +10,13 @@ module Compiler.Guida.ModuleName exposing
     , debug
     , decoder
     , dict
+    , elmBasics
+    , elmChar
+    , elmJsonDecode
+    , elmJsonEncode
+    , elmList
+    , elmMaybe
+    , elmString
     , encode
     , jsonDecode
     , jsonEncode
@@ -199,9 +206,19 @@ basics =
     Canonical Pkg.stdlib Name.basics
 
 
+elmBasics : Canonical
+elmBasics =
+    Canonical Pkg.core Name.basics
+
+
 char : Canonical
 char =
     Canonical Pkg.stdlib Name.char
+
+
+elmChar : Canonical
+elmChar =
+    Canonical Pkg.core Name.char
 
 
 string : Canonical
@@ -209,9 +226,19 @@ string =
     Canonical Pkg.stdlib Name.string
 
 
+elmString : Canonical
+elmString =
+    Canonical Pkg.core Name.string
+
+
 maybe : Canonical
 maybe =
     Canonical Pkg.stdlib Name.maybe
+
+
+elmMaybe : Canonical
+elmMaybe =
+    Canonical Pkg.core Name.maybe
 
 
 result : Canonical
@@ -222,6 +249,11 @@ result =
 list : Canonical
 list =
     Canonical Pkg.stdlib Name.list
+
+
+elmList : Canonical
+elmList =
+    Canonical Pkg.core Name.list
 
 
 array : Canonical
@@ -274,11 +306,21 @@ virtualDom =
 
 jsonDecode : Canonical
 jsonDecode =
+    Canonical Pkg.stdlib "Json.Decode"
+
+
+elmJsonDecode : Canonical
+elmJsonDecode =
     Canonical Pkg.json "Json.Decode"
 
 
 jsonEncode : Canonical
 jsonEncode =
+    Canonical Pkg.stdlib "Json.Encode"
+
+
+elmJsonEncode : Canonical
+elmJsonEncode =
     Canonical Pkg.json "Json.Encode"
 
 

@@ -10,6 +10,7 @@ module Builder.Stuff exposing
     , guidai
     , guidao
     , interfaces
+    , isRootGuida
     , objects
     , package
     , packageCacheDecoder
@@ -101,6 +102,16 @@ toArtifactPath root name ext =
 type Root
     = GuidaRoot String
     | ElmRoot String
+
+
+isRootGuida : Root -> Bool
+isRootGuida root =
+    case root of
+        GuidaRoot _ ->
+            True
+
+        ElmRoot _ ->
+            False
 
 
 rootProjectFilePath : Root -> Utils.FilePath

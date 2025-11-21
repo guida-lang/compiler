@@ -3,6 +3,7 @@ module Compiler.Compile exposing
     , compile
     )
 
+import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Source as Src
@@ -32,9 +33,9 @@ type Artifacts
     = Artifacts Can.Module (Dict String Name Can.Annotation) Opt.LocalGraph
 
 
-compile : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
-compile pkg ifaces modul =
-    Task.pure (canonicalize pkg ifaces modul)
+compile : Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
+compile root pkg ifaces modul =
+    Task.pure (canonicalize root pkg ifaces modul)
         |> Task.fmap
             (\canonicalResult ->
                 case canonicalResult of
@@ -57,9 +58,9 @@ compile pkg ifaces modul =
 -- PHASES
 
 
-canonicalize : Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Result E.Error Can.Module
-canonicalize pkg ifaces modul =
-    case Tuple.second (R.run (Canonicalize.canonicalize pkg ifaces modul)) of
+canonicalize : Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Result E.Error Can.Module
+canonicalize root pkg ifaces modul =
+    case Tuple.second (R.run (Canonicalize.canonicalize root pkg ifaces modul)) of
         Ok canonical ->
             Ok canonical
 
