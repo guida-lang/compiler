@@ -19,6 +19,7 @@ module Compiler.Guida.Package exposing
     , nameEncoder
     , nearbyNames
     , parser
+    , random
     , stdlib
     , suggestions
     , time
