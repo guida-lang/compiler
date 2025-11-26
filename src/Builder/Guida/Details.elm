@@ -217,8 +217,65 @@ generate style scope root time =
 convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outline
 convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
     case outline of
-        Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ _ _ _) ->
-            Debug.todo "convertToGuidaOutline.ElmPkgOutline"
+        Outline.Pkg (Outline.ElmPkgOutline name summary license version exposed deps test elmVersion) ->
+            case Registry.getVersions_ Pkg.stdlib registry of
+                Err _ ->
+                    Task.io Website.domain
+                        |> Task.bind
+                            (\registryDomain ->
+                                case connection of
+                                    Solver.Online _ ->
+                                        Task.throw (Exit.DetailsUnknownStdlibOnline registryDomain)
+
+                                    Solver.Offline ->
+                                        Task.throw (Exit.DetailsUnknownStdlibOffline registryDomain)
+                            )
+
+                Ok (Registry.KnownVersions _ _) ->
+                    let
+                        cons : Dict ( String, String ) Pkg.Name Con.Constraint
+                        cons =
+                            Dict.insert identity Pkg.stdlib Con.anything deps
+                    in
+                    Task.io (Solver.verify cache connection registry cons)
+                        |> Task.bind
+                            (\result ->
+                                case result of
+                                    Solver.SolverOk solution ->
+                                        let
+                                            (Solver.Details vsn _) =
+                                                Utils.find identity Pkg.stdlib solution
+
+                                            con : Con.Constraint
+                                            con =
+                                                Con.untilNextMajor vsn
+                                        in
+                                        Task.pure <|
+                                            Outline.Pkg <|
+                                                Outline.ElmPkgOutline name
+                                                    summary
+                                                    license
+                                                    version
+                                                    exposed
+                                                    (Dict.filter (\( author, _ ) _ -> author /= Pkg.elm || author /= Pkg.elmExplorations) deps
+                                                        |> Dict.insert identity Pkg.stdlib con
+                                                    )
+                                                    test
+                                                    elmVersion
+
+                                    Solver.NoSolution ->
+                                        Task.throw (Exit.DetailsNoOnlinePkgSolution Pkg.stdlib)
+
+                                    Solver.NoOfflineSolution ->
+                                        Task.io Website.domain
+                                            |> Task.bind
+                                                (\registryDomain ->
+                                                    Task.throw (Exit.DetailsNoOfflinePkgSolution registryDomain Pkg.stdlib)
+                                                )
+
+                                    Solver.SolverErr exit ->
+                                        Task.throw (Exit.DetailsSolverProblem exit)
+                            )
 
         Outline.App ((Outline.ElmAppOutline _ _ _ _ _ _) as appOutline) ->
             case Registry.getVersions_ Pkg.stdlib registry of
@@ -235,7 +292,7 @@ convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
                             )
 
                 Ok _ ->
-                    uninstallAppDependencies env [ Pkg.core ] appOutline
+                    uninstallAppDependencies env Pkg.elmKernelPackages appOutline
                         |> Task.bind
                             (\cleanAppOutline ->
                                 Task.io (Solver.addToApp cache connection registry Pkg.stdlib cleanAppOutline False)
@@ -300,7 +357,7 @@ uninstallAppDependencies ((Env _ _ _ cache _ connection registry) as env) packag
                                     )
 
                         Nothing ->
-                            Task.pure appOutline
+                            uninstallAppDependencies env rest appOutline
 
 
 

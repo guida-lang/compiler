@@ -125,7 +125,7 @@ object =
 
 string : String -> Value
 string str =
-    StringVal (escape str)
+    StringVal str
 
 
 name : String -> Value

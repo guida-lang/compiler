@@ -146,6 +146,8 @@ server.post("httpUpload", (request) => {
   form.pipe(req);
 
   req.on("response", (res) => {
+    res.on("data", () => { });
+
     res.on("end", () => {
       request.respond(200);
     });
@@ -449,7 +451,7 @@ server.setDefaultHandler((request) => {
 
   const req = client.request(url, {
     method: request.method,
-    headers: request.requestHeaders
+    headers: request.requestHeaders.getHash()
   }, (res) => {
     let chunks = [];
 

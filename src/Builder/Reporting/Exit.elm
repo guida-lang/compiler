@@ -2886,6 +2886,8 @@ type Details
     | DetailsUnknownStdlibOffline String
     | DetailsNoOnlineAppSolution Pkg.Name
     | DetailsNoOfflineAppSolution String Pkg.Name
+    | DetailsNoOnlinePkgSolution Pkg.Name
+    | DetailsNoOfflinePkgSolution String Pkg.Name
 
 
 type DetailsBadDep
@@ -3280,6 +3282,28 @@ toDetailsReport details =
             Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
                 (Just "elm.json")
                 ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing dependencies.")
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow <|
+                    "Try again later when you have internet!"
+                ]
+
+        DetailsNoOnlinePkgSolution pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
+                [ D.reflow <|
+                    "With applications, I try to broaden the constraints to see if anything works, but messing with package constraints is much more delicate business. E.g. making your constraints stricter may make it harder for applications to find compatible dependencies. So fixing something here may break it for a lot of other people!"
+                , D.reflow <|
+                    "So I recommend making an application with the same dependencies as your package. See if there is a solution at all. From there it may be easier to figure out how to proceed in a way that will disrupt your users as little as possible. And the solution may be to help other package authors to get their packages updated, or to drop a dependency entirely."
+                ]
+
+        DetailsNoOfflinePkgSolution registryDomain pkg ->
+            Help.report "CANNOT FIND COMPATIBLE VERSION LOCALLY"
+                (Just "elm.json")
+                ("I cannot find a version of " ++ Pkg.toChars pkg ++ " that is compatible with your existing constraints.")
                 [ D.reflow <|
                     "I was not able to connect to "
                         ++ registryDomain

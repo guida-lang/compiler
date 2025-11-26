@@ -2,15 +2,14 @@ module Compiler.Guida.Package exposing
     ( Author
     , Name
     , Project
-    , browser
     , compareName
     , core
     , decoder
     , dummyName
     , elm
     , elmExplorations
+    , elmKernelPackages
     , encode
-    , html
     , isKernel
     , json
     , kernel
@@ -20,10 +19,8 @@ module Compiler.Guida.Package exposing
     , nameEncoder
     , nearbyNames
     , parser
-    , random
     , stdlib
     , suggestions
-    , test
     , time
     , toChars
     , toJsonString
@@ -83,6 +80,30 @@ type alias Project =
 -- HELPERS
 
 
+elmKernelPackages : List Name
+elmKernelPackages =
+    [ core
+    , browser
+    , bytes
+    , file
+    , html
+    , http
+    , json
+    , parserPkg
+    , random
+    , regex
+    , svg
+    , time
+    , url
+    , virtualDom
+    , benchmark
+    , linearAlgebra
+    , markdown
+    , test
+    , webgl
+    ]
+
+
 isKernel : Name -> Bool
 isKernel ( author, _ ) =
     author == elm || author == elmExplorations || author == guida
@@ -132,9 +153,24 @@ browser =
     toName elm "browser"
 
 
+bytes : Name
+bytes =
+    toName elm "bytes"
+
+
+file : Name
+file =
+    toName elm "file"
+
+
 virtualDom : Name
 virtualDom =
     toName elm "virtual-dom"
+
+
+benchmark : Name
+benchmark =
+    toName elmExplorations "benchmark"
 
 
 html : Name
@@ -147,6 +183,11 @@ json =
     toName elm "json"
 
 
+parserPkg : Name
+parserPkg =
+    toName elm "parser"
+
+
 http : Name
 http =
     toName elm "http"
@@ -155,6 +196,16 @@ http =
 random : Name
 random =
     toName elm "random"
+
+
+regex : Name
+regex =
+    toName elm "regex"
+
+
+svg : Name
+svg =
+    toName elm "svg"
 
 
 time : Name
@@ -175,6 +226,11 @@ webgl =
 linearAlgebra : Name
 linearAlgebra =
     toName elmExplorations "linear-algebra"
+
+
+markdown : Name
+markdown =
+    toName elmExplorations "markdown"
 
 
 test : Name
@@ -208,11 +264,6 @@ guida =
 
 suggestions : Dict String String Name
 suggestions =
-    let
-        file : Name
-        file =
-            toName elm "file"
-    in
     Dict.fromList identity
         [ ( "Browser", browser )
         , ( "File", file )
