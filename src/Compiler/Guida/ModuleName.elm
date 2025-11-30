@@ -297,7 +297,7 @@ debug =
 
 virtualDom : Canonical
 virtualDom =
-    Canonical Pkg.virtualDom Name.virtualDom
+    Canonical Pkg.stdlib Name.virtualDom
 
 
 

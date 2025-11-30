@@ -20,6 +20,7 @@ module Compiler.Guida.Package exposing
     , nearbyNames
     , parser
     , random
+    , sanitizeElmDeps
     , stdlib
     , suggestions
     , time
@@ -31,6 +32,7 @@ module Compiler.Guida.Package exposing
     , webgl
     )
 
+import Compiler.Guida.Constraint as C
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P exposing (Col, Row)
@@ -103,6 +105,19 @@ elmKernelPackages =
     , test
     , webgl
     ]
+
+
+sanitizeElmDeps : Dict ( String, String ) Name C.Constraint -> Dict ( String, String ) Name C.Constraint
+sanitizeElmDeps deps =
+    let
+        filteredDeps =
+            Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
+    in
+    if deps == filteredDeps then
+        filteredDeps
+
+    else
+        Dict.insert identity stdlib C.anything filteredDeps
 
 
 isKernel : Name -> Bool

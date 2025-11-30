@@ -243,9 +243,7 @@ defaults =
 
 testDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
 testDefaults =
-    Dict.fromList identity
-        [ ( Pkg.stdlib, Con.anything )
-        ]
+    Dict.empty
 
 
 packageDefaults : Dict ( String, String ) Pkg.Name Con.Constraint

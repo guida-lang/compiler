@@ -215,7 +215,7 @@ generate style scope root time =
 
 
 convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outline
-convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
+convertToGuidaOutline (Env _ _ _ cache _ connection registry) outline =
     case outline of
         Outline.Pkg (Outline.ElmPkgOutline name summary license version exposed deps test elmVersion) ->
             case Registry.getVersions_ Pkg.stdlib registry of
@@ -277,7 +277,7 @@ convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
                                         Task.throw (Exit.DetailsSolverProblem exit)
                             )
 
-        Outline.App ((Outline.ElmAppOutline _ _ _ _ _ _) as appOutline) ->
+        Outline.App (Outline.ElmAppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) ->
             case Registry.getVersions_ Pkg.stdlib registry of
                 Err _ ->
                     Task.io Website.domain
@@ -291,73 +291,24 @@ convertToGuidaOutline ((Env _ _ _ cache _ connection registry) as env) outline =
                                         Task.throw (Exit.DetailsUnknownStdlibOffline registryDomain)
                             )
 
-                Ok _ ->
-                    uninstallAppDependencies env Pkg.elmKernelPackages appOutline
-                        |> Task.bind
-                            (\cleanAppOutline ->
-                                Task.io (Solver.addToApp cache connection registry Pkg.stdlib cleanAppOutline False)
-                                    |> Task.bind
-                                        (\result ->
-                                            case result of
-                                                Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                    Task.pure (Outline.App app)
-
-                                                Solver.NoSolution ->
-                                                    Task.throw (Exit.DetailsNoOnlineAppSolution Pkg.stdlib)
-
-                                                Solver.NoOfflineSolution ->
-                                                    Task.io Website.domain
-                                                        |> Task.bind
-                                                            (\registryDomain ->
-                                                                Task.throw (Exit.DetailsNoOfflineAppSolution registryDomain Pkg.stdlib)
-                                                            )
-
-                                                Solver.SolverErr exit ->
-                                                    Task.throw (Exit.DetailsSolverProblem exit)
-                                        )
+                Ok (Registry.KnownVersions v _) ->
+                    let
+                        filter =
+                            Dict.filter (\( author, _ ) _ -> author /= Pkg.elm && author /= Pkg.elmExplorations)
+                    in
+                    Task.pure
+                        (Outline.App
+                            (Outline.ElmAppOutline elmVersion
+                                sourceDirs
+                                (Dict.insert identity Pkg.stdlib v (filter direct))
+                                (filter indirect)
+                                (filter testDirect)
+                                (filter testIndirect)
                             )
+                        )
 
         _ ->
             Task.pure outline
-
-
-uninstallAppDependencies : Env -> List Pkg.Name -> Outline.AppOutline -> Task Exit.Details Outline.AppOutline
-uninstallAppDependencies ((Env _ _ _ cache _ connection registry) as env) packages appOutline =
-    case packages of
-        [] ->
-            Task.pure appOutline
-
-        pkg :: rest ->
-            case appOutline of
-                Outline.GuidaAppOutline _ _ _ _ _ _ ->
-                    Task.pure appOutline
-
-                Outline.ElmAppOutline _ _ direct _ _ _ ->
-                    case Dict.get identity pkg direct of
-                        Just _ ->
-                            Task.io (Solver.removeFromApp cache connection registry pkg appOutline)
-                                |> Task.bind
-                                    (\result ->
-                                        case result of
-                                            Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                uninstallAppDependencies env rest app
-
-                                            Solver.NoSolution ->
-                                                Task.throw (Exit.DetailsNoOnlineAppSolution pkg)
-
-                                            Solver.NoOfflineSolution ->
-                                                Task.io Website.domain
-                                                    |> Task.bind
-                                                        (\registryDomain ->
-                                                            Task.throw (Exit.DetailsNoOfflineAppSolution registryDomain pkg)
-                                                        )
-
-                                            Solver.SolverErr exit ->
-                                                Task.throw (Exit.DetailsSolverProblem exit)
-                                    )
-
-                        Nothing ->
-                            uninstallAppDependencies env rest appOutline
 
 
 
@@ -810,7 +761,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                     Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
                                         |> Task.bind
                                             (\allDeps ->
-                                                Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps deps)
+                                                Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps (Pkg.sanitizeElmDeps deps))
                                                     |> Task.bind
                                                         (\directDeps ->
                                                             case Utils.sequenceDictResult identity Pkg.compareName directDeps of

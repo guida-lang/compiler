@@ -54,7 +54,8 @@ type State
 
 
 type Constraints
-    = Constraints C.Constraint (Dict ( String, String ) Pkg.Name C.Constraint)
+    = GuidaConstraints C.Constraint (Dict ( String, String ) Pkg.Name C.Constraint)
+    | ElmConstraints C.Constraint (Dict ( String, String ) Pkg.Name C.Constraint)
 
 
 type Connection
@@ -104,7 +105,10 @@ verify cache connection registry constraints =
 addDeps : State -> Pkg.Name -> V.Version -> Details
 addDeps (State _ _ _ constraints) name vsn =
     case Dict.get (Tuple.mapSecond V.toComparable) ( name, vsn ) constraints of
-        Just (Constraints _ deps) ->
+        Just (GuidaConstraints _ deps) ->
+            Details vsn deps
+
+        Just (ElmConstraints _ deps) ->
             Details vsn deps
 
         Nothing ->
@@ -141,8 +145,13 @@ getTransitive constraints solution unvisited visited =
 
             else
                 let
-                    (Constraints _ newDeps) =
-                        Utils.find (Tuple.mapSecond V.toComparable) info constraints
+                    newDeps =
+                        case Utils.find (Tuple.mapSecond V.toComparable) info constraints of
+                            GuidaConstraints _ deps ->
+                                deps
+
+                            ElmConstraints _ deps ->
+                                deps
 
                     newUnvisited : List ( Pkg.Name, V.Version )
                     newUnvisited =
@@ -579,16 +588,29 @@ addVersion : Goals -> Pkg.Name -> V.Version -> Solver Goals
 addVersion (Goals pending solved) name version =
     getConstraints name version
         |> bind
-            (\(Constraints elm deps) ->
-                if C.goodElm elm then
-                    foldM (addConstraint solved) pending (Dict.toList compare deps)
-                        |> fmap
-                            (\newPending ->
-                                Goals newPending (Dict.insert identity name version solved)
-                            )
+            (\constraints ->
+                case constraints of
+                    GuidaConstraints guida deps ->
+                        if C.goodGuida guida then
+                            foldM (addConstraint solved) pending (Dict.toList compare deps)
+                                |> fmap
+                                    (\newPending ->
+                                        Goals newPending (Dict.insert identity name version solved)
+                                    )
 
-                else
-                    backtrack
+                        else
+                            backtrack
+
+                    ElmConstraints elm deps ->
+                        if C.goodElm elm then
+                            foldM (addConstraint solved) pending (Dict.toList compare (Pkg.sanitizeElmDeps deps))
+                                |> fmap
+                                    (\newPending ->
+                                        Goals newPending (Dict.insert identity name version solved)
+                                    )
+
+                        else
+                            backtrack
             )
 
 
@@ -797,11 +819,11 @@ constraintsDecoder =
         |> D.bind
             (\outline ->
                 case outline of
-                    Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps _ elmConstraint) ->
-                        D.pure (Constraints elmConstraint deps)
+                    Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps _ guidaConstraint) ->
+                        D.pure (GuidaConstraints guidaConstraint deps)
 
                     Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps _ elmConstraint) ->
-                        D.pure (Constraints elmConstraint deps)
+                        D.pure (ElmConstraints elmConstraint deps)
 
                     Outline.App _ ->
                         D.failure ()
