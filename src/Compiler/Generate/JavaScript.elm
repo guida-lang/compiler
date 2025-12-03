@@ -267,7 +267,30 @@ emptyState startingLine =
 
 stateToBuilder : State -> String
 stateToBuilder (State (JS.Builder revKernels code _ _ _) _) =
-    prependBuilders revKernels code
+    prependBuilders revKernels (bytesForPorts ++ code)
+
+
+bytesForPorts : String
+bytesForPorts =
+    """
+// BYTES FOR PORTS
+var _Json_decodeBytes = _Json_decodePrim(function(value) {
+    if (value instanceof Uint8Array) {
+        return $elm$core$Result$Ok(new DataView(value.buffer, value.byteOffset, value.byteLength));
+    }
+    if (value instanceof ArrayBuffer) {
+        return $elm$core$Result$Ok(new DataView(value));
+    }
+    if (value instanceof DataView) {
+        return $elm$core$Result$Ok(value);
+    }
+    return _Json_expecting('a BYTES value (Uint8Array, ArrayBuffer, or DataView)', value);
+});
+
+var _Json_encodeBytes = function(bytes) {
+    return _Json_wrap(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+};
+"""
 
 
 prependBuilders : List String -> String -> String

@@ -58,6 +58,9 @@ toEncoder tipe =
                     else if name == Name.value then
                         Names.registerGlobal A.zero ModuleName.basics Name.identity_
 
+                    else if name == Name.bytes then
+                        encodeBytes
+
                     else
                         crash "toEncoder: bad custom type"
 
@@ -271,6 +274,9 @@ toDecoder tipe =
                 ( "Value", [] ) ->
                     decode "value"
 
+                ( "Bytes", [] ) ->
+                    decodeBytes
+
                 ( "Maybe", [ arg ] ) ->
                     decodeMaybe arg
 
@@ -478,3 +484,17 @@ encode name =
 decode : Name -> Names.Tracker Opt.Expr
 decode name =
     Names.registerGlobal A.zero ModuleName.jsonDecode name
+
+
+
+-- BYTES HELPERS
+
+
+encodeBytes : Names.Tracker Opt.Expr
+encodeBytes =
+    Names.registerKernel Name.json (Opt.VarKernel A.zero Name.json "encodeBytes")
+
+
+decodeBytes : Names.Tracker Opt.Expr
+decodeBytes =
+    Names.registerKernel Name.json (Opt.VarKernel A.zero Name.json "decodeBytes")

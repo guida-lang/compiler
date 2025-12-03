@@ -207,7 +207,7 @@ checkPayload tipe =
         Can.TType home name args ->
             case args of
                 [] ->
-                    if isJson home name || isString home name || isIntFloatBool home name then
+                    if isJson home name || isString home name || isIntFloatBool home name || isBytes home name then
                         Ok ()
 
                     else
@@ -306,3 +306,11 @@ isArray home name =
         == ModuleName.array
         && name
         == Name.array
+
+
+isBytes : IO.Canonical -> Name.Name -> Bool
+isBytes home name =
+    home
+        == ModuleName.bytes
+        && name
+        == Name.bytes

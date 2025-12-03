@@ -2,6 +2,7 @@ module Compiler.Guida.ModuleName exposing
     ( Raw
     , array
     , basics
+    , bytes
     , canonicalDecoder
     , canonicalEncoder
     , char
@@ -280,6 +281,15 @@ jsonDecode =
 jsonEncode : Canonical
 jsonEncode =
     Canonical Pkg.json "Json.Encode"
+
+
+
+-- BYTES
+
+
+bytes : Canonical
+bytes =
+    Canonical Pkg.bytes "Bytes"
 
 
 
