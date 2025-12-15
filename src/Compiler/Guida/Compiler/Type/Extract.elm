@@ -15,6 +15,7 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Compiler.Type as T
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
@@ -135,20 +136,20 @@ fromDependencyInterface home di =
 -- EXTRACT MODEL, MSG, AND ANY TRANSITIVE DEPENDENCIES
 
 
-fromMsg : Types -> Can.Type -> T.DebugMetadata
-fromMsg types message =
+fromMsg : Target -> Types -> Can.Type -> T.DebugMetadata
+fromMsg target types message =
     let
         ( msgDeps, msgType ) =
             run (extract message)
 
         ( aliases, unions ) =
-            extractTransitive types noDeps msgDeps
+            extractTransitive target types noDeps msgDeps
     in
     T.DebugMetadata msgType aliases unions
 
 
-extractTransitive : Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
-extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnions) =
+extractTransitive : Target -> Types -> Deps -> Deps -> ( List T.Alias, List T.Union )
+extractTransitive target types (Deps seenAliases seenUnions) (Deps nextAliases nextUnions) =
     let
         aliases : EverySet (List String) Opt.Global
         aliases =
@@ -167,7 +168,7 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
                 run
                     (pure Tuple.pair
                         |> apply (traverse (extractAlias types) (EverySet.toList Opt.compareGlobal aliases))
-                        |> apply (traverse (extractUnion types) (EverySet.toList Opt.compareGlobal unions))
+                        |> apply (traverse (extractUnion target types) (EverySet.toList Opt.compareGlobal unions))
                     )
 
             oldDeps : Deps
@@ -175,7 +176,7 @@ extractTransitive types (Deps seenAliases seenUnions) (Deps nextAliases nextUnio
                 Deps (EverySet.union seenAliases nextAliases) (EverySet.union seenUnions nextUnions)
 
             ( remainingResultAlias, remainingResultUnion ) =
-                extractTransitive types oldDeps newDeps
+                extractTransitive target types oldDeps newDeps
         in
         ( resultAlias ++ remainingResultAlias, resultUnion ++ remainingResultUnion )
 
@@ -191,9 +192,9 @@ extractAlias (Types dict) (Opt.Global home name) =
     fmap (T.Alias (toPublicName home name) args) (extract aliasType)
 
 
-extractUnion : Types -> Opt.Global -> Extractor T.Union
-extractUnion (Types dict) (Opt.Global home name) =
-    if name == Name.list && home == ModuleName.list then
+extractUnion : Target -> Types -> Opt.Global -> Extractor T.Union
+extractUnion target (Types dict) (Opt.Global home name) =
+    if name == Name.list && home == ModuleName.list target then
         pure <| T.Union (toPublicName home name) [ "a" ] []
 
     else

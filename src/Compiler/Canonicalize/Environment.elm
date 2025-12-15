@@ -22,6 +22,7 @@ import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Data.OneOrMore as OneOrMore
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -137,13 +138,13 @@ type Binop
 -- VARIABLE -- ADD LOCALS
 
 
-addLocals : Dict String Name.Name A.Region -> Env -> EResult i w Env
-addLocals names env =
+addLocals : Target -> Dict String Name.Name A.Region -> Env -> EResult i w Env
+addLocals target names env =
     R.fmap (\newVars -> { env | vars = newVars })
         (Dict.merge compare
             (\name region -> R.fmap (Dict.insert identity name (addLocalLeft name region)))
             (\name region var acc ->
-                addLocalBoth name region var
+                addLocalBoth target name region var
                     |> R.bind (\var_ -> R.fmap (Dict.insert identity name var_) acc)
             )
             (\name var -> R.fmap (Dict.insert identity name var))
@@ -158,8 +159,8 @@ addLocalLeft _ region =
     Local region
 
 
-addLocalBoth : Name.Name -> A.Region -> Var -> EResult i w Var
-addLocalBoth name region var =
+addLocalBoth : Target -> Name.Name -> A.Region -> Var -> EResult i w Var
+addLocalBoth target name region var =
     case var of
         Foreign _ _ ->
             R.ok (Local region)
@@ -168,31 +169,31 @@ addLocalBoth name region var =
             R.ok (Local region)
 
         Local parentRegion ->
-            R.throw (Error.Shadowing name parentRegion region)
+            R.throw (Error.Shadowing target name parentRegion region)
 
         TopLevel parentRegion ->
-            R.throw (Error.Shadowing name parentRegion region)
+            R.throw (Error.Shadowing target name parentRegion region)
 
 
 
 -- FIND TYPE
 
 
-findType : A.Region -> Env -> Name.Name -> EResult i w Type
-findType region { types, q_types } name =
+findType : Target -> A.Region -> Env -> Name.Name -> EResult i w Type
+findType target region { types, q_types } name =
     case Dict.get identity name types of
         Just (Specific _ tipe) ->
             R.ok tipe
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousType region Nothing name h hs)
+            R.throw (Error.AmbiguousType target region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundType region Nothing name (toPossibleNames types q_types))
+            R.throw (Error.NotFoundType target region Nothing name (toPossibleNames types q_types))
 
 
-findTypeQual : A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Type
-findTypeQual region { types, q_types } prefix name =
+findTypeQual : Target -> A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Type
+findTypeQual target region { types, q_types } prefix name =
     case Dict.get identity prefix q_types of
         Just qualified ->
             case Dict.get identity name qualified of
@@ -200,34 +201,34 @@ findTypeQual region { types, q_types } prefix name =
                     R.ok tipe
 
                 Just (Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousType region (Just prefix) name h hs)
+                    R.throw (Error.AmbiguousType target region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundType region (Just prefix) name (toPossibleNames types q_types))
+                    R.throw (Error.NotFoundType target region (Just prefix) name (toPossibleNames types q_types))
 
         Nothing ->
-            R.throw (Error.NotFoundType region (Just prefix) name (toPossibleNames types q_types))
+            R.throw (Error.NotFoundType target region (Just prefix) name (toPossibleNames types q_types))
 
 
 
 -- FIND CTOR
 
 
-findCtor : A.Region -> Env -> Name.Name -> EResult i w Ctor
-findCtor region { ctors, q_ctors } name =
+findCtor : Target -> A.Region -> Env -> Name.Name -> EResult i w Ctor
+findCtor target region { ctors, q_ctors } name =
     case Dict.get identity name ctors of
         Just (Specific _ ctor) ->
             R.ok ctor
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousVariant region Nothing name h hs)
+            R.throw (Error.AmbiguousVariant target region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundVariant region Nothing name (toPossibleNames ctors q_ctors))
+            R.throw (Error.NotFoundVariant target region Nothing name (toPossibleNames ctors q_ctors))
 
 
-findCtorQual : A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Ctor
-findCtorQual region { ctors, q_ctors } prefix name =
+findCtorQual : Target -> A.Region -> Env -> Name.Name -> Name.Name -> EResult i w Ctor
+findCtorQual target region { ctors, q_ctors } prefix name =
     case Dict.get identity prefix q_ctors of
         Just qualified ->
             case Dict.get identity name qualified of
@@ -235,27 +236,27 @@ findCtorQual region { ctors, q_ctors } prefix name =
                     R.ok pattern
 
                 Just (Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousVariant region (Just prefix) name h hs)
+                    R.throw (Error.AmbiguousVariant target region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
+                    R.throw (Error.NotFoundVariant target region (Just prefix) name (toPossibleNames ctors q_ctors))
 
         Nothing ->
-            R.throw (Error.NotFoundVariant region (Just prefix) name (toPossibleNames ctors q_ctors))
+            R.throw (Error.NotFoundVariant target region (Just prefix) name (toPossibleNames ctors q_ctors))
 
 
 
 -- FIND BINOP
 
 
-findBinop : A.Region -> Env -> Name.Name -> EResult i w Binop
-findBinop region { binops } name =
+findBinop : Target -> A.Region -> Env -> Name.Name -> EResult i w Binop
+findBinop target region { binops } name =
     case Dict.get identity name binops of
         Just (Specific _ binop) ->
             R.ok binop
 
         Just (Ambiguous h hs) ->
-            R.throw (Error.AmbiguousBinop region name h hs)
+            R.throw (Error.AmbiguousBinop target region name h hs)
 
         Nothing ->
             R.throw (Error.NotFoundBinop region name (EverySet.fromList identity (Dict.keys compare binops)))

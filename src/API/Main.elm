@@ -5,6 +5,7 @@ import API.Install as Install
 import API.Make as Make
 import API.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as M
@@ -71,7 +72,8 @@ app =
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
 
                     DiagnosticsArgs (DiagnosticsSourceContent src) ->
-                        case P.fromByteString (M.chompModule SV.Guida M.Application) E.ModuleBadEnd src of
+                        -- FIXME target
+                        case P.fromByteString (M.chompModule Target.GuidaTarget SV.Guida M.Application) E.ModuleBadEnd src of
                             Ok _ ->
                                 exitWithResponse Encode.null
 
@@ -83,7 +85,7 @@ app =
 
                                     error : Encode.Value
                                     error =
-                                        E.encodeUgly (Error.reportToJson (E.toReport SV.Guida source (E.ParseError err)))
+                                        E.encodeUgly (Error.reportToJson (E.toReport source (E.ParseError err)))
                                             |> Decode.decodeString Decode.value
                                             |> Result.withDefault Encode.null
                                 in

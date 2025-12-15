@@ -10,6 +10,7 @@ module Compiler.Reporting.Error.Docs exposing
 
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol as Symbol exposing (BadOperator)
 import Compiler.Reporting.Annotation as A
@@ -41,12 +42,12 @@ type SyntaxProblem
 type NameProblem
     = NameDuplicate Name.Name A.Region A.Region
     | NameOnlyInDocs Name.Name A.Region
-    | NameOnlyInExports Name.Name A.Region
+    | NameOnlyInExports Target Name.Name A.Region
 
 
 type DefProblem
-    = NoComment Name.Name A.Region
-    | NoAnnotation Name.Name A.Region
+    = NoComment Target Name.Name A.Region
+    | NoAnnotation Target Name.Name A.Region
 
 
 toReports : Code.Source -> Error -> NE.Nonempty Report.Report
@@ -159,7 +160,7 @@ toNameProblemReport source problem =
                     , D.reflow ("Does it need to be added to the `exposing` list as well? Or maybe you removed `" ++ name ++ "` and forgot to delete it here?")
                     )
 
-        NameOnlyInExports name region ->
+        NameOnlyInExports target name region ->
             Report.Report "DOCS MISTAKE" region [] <|
                 Code.toSnippet source
                     region
@@ -167,7 +168,7 @@ toNameProblemReport source problem =
                     ( D.reflow ("I do not see `" ++ name ++ "` in your module documentation, but it is in your `exposing` list:")
                     , D.stack
                         [ D.reflow ("Add a line like `@docs " ++ name ++ "` to your module documentation!")
-                        , D.link "Note" "See" "docs" "for more guidance on writing high quality docs."
+                        , D.link target "Note" "See" "docs" "for more guidance on writing high quality docs."
                         ]
                     )
 
@@ -175,7 +176,7 @@ toNameProblemReport source problem =
 toDefProblemReport : Code.Source -> DefProblem -> Report.Report
 toDefProblemReport source problem =
     case problem of
-        NoComment name region ->
+        NoComment target name region ->
             Report.Report "NO DOCS" region [] <|
                 Code.toSnippet source
                     region
@@ -183,11 +184,11 @@ toDefProblemReport source problem =
                     ( D.reflow ("The `" ++ name ++ "` definition does not have a documentation comment.")
                     , D.stack
                         [ D.reflow "Add documentation with nice examples of how to use it!"
-                        , D.link "Note" "Read" "docs" "for more advice on writing great docs. There are a couple important tricks!"
+                        , D.link target "Note" "Read" "docs" "for more advice on writing great docs. There are a couple important tricks!"
                         ]
                     )
 
-        NoAnnotation name region ->
+        NoAnnotation target name region ->
             Report.Report "NO TYPE ANNOTATION" region [] <|
                 Code.toSnippet source
                     region
@@ -195,7 +196,7 @@ toDefProblemReport source problem =
                     ( D.reflow ("The `" ++ name ++ "` definition does not have a type annotation.")
                     , D.stack
                         [ D.reflow "I use the type variable names from your annotations when generating docs. So if you say `Html msg` in your type annotation, I can use `msg` in the docs and make them a bit clearer. So add an annotation and try to use nice type variables!"
-                        , D.link "Note" "Read" "docs" "for more advice on writing great docs. There are a couple important tricks!"
+                        , D.link target "Note" "Read" "docs" "for more advice on writing great docs. There are a couple important tricks!"
                         ]
                     )
 
@@ -373,9 +374,10 @@ nameProblemEncoder nameProblem =
                 , A.regionEncoder region
                 ]
 
-        NameOnlyInExports name region ->
+        NameOnlyInExports target name region ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , Target.encoder target
                 , BE.string name
                 , A.regionEncoder region
                 ]
@@ -399,7 +401,8 @@ nameProblemDecoder =
                             A.regionDecoder
 
                     2 ->
-                        BD.map2 NameOnlyInExports
+                        BD.map3 NameOnlyInExports
+                            Target.decoder
                             BD.string
                             A.regionDecoder
 
@@ -411,16 +414,18 @@ nameProblemDecoder =
 defProblemEncoder : DefProblem -> BE.Encoder
 defProblemEncoder defProblem =
     case defProblem of
-        NoComment name region ->
+        NoComment target name region ->
             BE.sequence
                 [ BE.unsignedInt8 0
+                , Target.encoder target
                 , BE.string name
                 , A.regionEncoder region
                 ]
 
-        NoAnnotation name region ->
+        NoAnnotation target name region ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Target.encoder target
                 , BE.string name
                 , A.regionEncoder region
                 ]
@@ -433,12 +438,14 @@ defProblemDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map2 NoComment
+                        BD.map3 NoComment
+                            Target.decoder
                             BD.string
                             A.regionDecoder
 
                     1 ->
-                        BD.map2 NoAnnotation
+                        BD.map3 NoAnnotation
+                            Target.decoder
                             BD.string
                             A.regionDecoder
 

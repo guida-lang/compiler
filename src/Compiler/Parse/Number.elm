@@ -160,7 +160,7 @@ chompInt syntaxVersion src pos end n =
             chompUnderscore_ syntaxVersion src pos end n
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos (E.NumberEnd syntaxVersion)
 
         else
             OkInt pos n
@@ -303,7 +303,7 @@ chompFractionHelp syntaxVersion src pos end =
             chompExponent syntaxVersion src (pos + 1) end
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos (E.NumberEnd syntaxVersion)
 
         else
             OkFloat pos
@@ -316,7 +316,7 @@ chompFractionHelp syntaxVersion src pos end =
 chompExponent : SyntaxVersion -> String -> Int -> Int -> Outcome
 chompExponent syntaxVersion src pos end =
     if pos >= end then
-        Err_ pos E.NumberEnd
+        Err_ pos (E.NumberEnd syntaxVersion)
 
     else
         let
@@ -347,10 +347,10 @@ chompExponent syntaxVersion src pos end =
                 chompExponentHelp syntaxVersion src (pos + 2) end
 
             else
-                Err_ pos E.NumberEnd
+                Err_ pos (E.NumberEnd syntaxVersion)
 
         else
-            Err_ pos E.NumberEnd
+            Err_ pos (E.NumberEnd syntaxVersion)
 
 
 chompExponentHelp : SyntaxVersion -> String -> Int -> Int -> Outcome
@@ -407,7 +407,7 @@ chompZero syntaxVersion src pos end =
             Err_ pos E.NumberNoLeadingZero
 
         else if isDirtyEnd src pos end word then
-            Err_ pos E.NumberEnd
+            Err_ pos (E.NumberEnd syntaxVersion)
 
         else
             OkInt pos 0

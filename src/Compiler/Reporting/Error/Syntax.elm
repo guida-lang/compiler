@@ -39,6 +39,7 @@ module Compiler.Reporting.Error.Syntax exposing
     )
 
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol as Symbol exposing (BadOperator(..))
@@ -59,7 +60,7 @@ import Utils.Bytes.Encode as BE
 type Error
     = ModuleNameUnspecified ModuleName.Raw
     | ModuleNameMismatch ModuleName.Raw (A.Located ModuleName.Raw)
-    | UnexpectedPort A.Region
+    | UnexpectedPort Target A.Region
     | NoPorts A.Region
     | NoPortsInPackage (A.Located Name)
     | NoPortModulesInPackage A.Region
@@ -75,7 +76,7 @@ type Module
     | ModuleName Row Col
     | ModuleExposing Exposing Row Col
       --
-    | PortModuleProblem Row Col
+    | PortModuleProblem Target Row Col
     | PortModuleName Row Col
     | PortModuleExposing Exposing Row Col
       --
@@ -83,16 +84,16 @@ type Module
       --
     | FreshLine Row Col
       --
-    | ImportStart Row Col
-    | ImportName Row Col
-    | ImportAs Row Col
-    | ImportAlias Row Col
-    | ImportExposing Row Col
+    | ImportStart Target Row Col
+    | ImportName Target Row Col
+    | ImportAs Target Row Col
+    | ImportAlias Target Row Col
+    | ImportExposing Target Row Col
     | ImportExposingList Exposing Row Col
-    | ImportEnd Row Col -- different based on col=1 or if greater
+    | ImportEnd Target Row Col -- different based on col=1 or if greater
       --
-    | ImportIndentName Row Col
-    | ImportIndentAlias Row Col
+    | ImportIndentName Target Row Col
+    | ImportIndentAlias Target Row Col
     | ImportIndentExposingList Row Col
       --
     | Infix Row Col
@@ -458,7 +459,7 @@ type Escape
 
 
 type Number
-    = NumberEnd
+    = NumberEnd SyntaxVersion
     | NumberDot Int
     | NumberHexDigit
     | NumberBinDigit
@@ -483,8 +484,8 @@ type Space
 -- TO REPORT
 
 
-toReport : SyntaxVersion -> Code.Source -> Error -> Report.Report
-toReport syntaxVersion source err =
+toReport : Code.Source -> Error -> Report.Report
+toReport source err =
     case err of
         ModuleNameUnspecified name ->
             let
@@ -527,11 +528,10 @@ toReport syntaxVersion source err =
                         ]
                     )
 
-        UnexpectedPort region ->
+        UnexpectedPort target region ->
             Report.Report "UNEXPECTED PORTS" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "You are declaring ports in a normal module."
+                    ( D.reflow "You are declaring ports in a normal module."
                     , D.stack
                         [ D.fillSep
                             [ D.fromChars "Switch"
@@ -548,7 +548,8 @@ toReport syntaxVersion source err =
                             , D.fromChars "port"
                             , D.fromChars "declarations."
                             ]
-                        , D.link "Note"
+                        , D.link target
+                            "Note"
                             "Ports are not a traditional FFI for calling JS functions directly. They need a different mindset! Read"
                             "ports"
                             "to learn the syntax and how to use it effectively."
@@ -623,7 +624,7 @@ toReport syntaxVersion source err =
                     )
 
         ParseError modul ->
-            toParseErrorReport syntaxVersion source modul
+            toParseErrorReport source modul
 
 
 noteForPortsInPackage : D.Doc
@@ -636,8 +637,8 @@ noteForPortsInPackage =
         ]
 
 
-toParseErrorReport : SyntaxVersion -> Code.Source -> Module -> Report.Report
-toParseErrorReport syntaxVersion source modul =
+toParseErrorReport : Code.Source -> Module -> Report.Report
+toParseErrorReport source modul =
     case modul of
         ModuleSpace space row col ->
             toSpaceReport source space row col
@@ -657,11 +658,9 @@ toParseErrorReport syntaxVersion source modul =
             in
             Report.Report "UNFINISHED MODULE DECLARATION" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "I am parsing an `module` declaration, but I got stuck here:"
+                    ( D.reflow "I am parsing an `module` declaration, but I got stuck here:"
                     , D.stack
-                        [ D.reflow <|
-                            "Here are some examples of valid `module` declarations:"
+                        [ D.reflow "Here are some examples of valid `module` declarations:"
                         , D.indent 4 <|
                             D.vcat <|
                                 [ D.fillSep
@@ -677,8 +676,7 @@ toParseErrorReport syntaxVersion source modul =
                                     , D.fromChars "(Dict, empty, get)"
                                     ]
                                 ]
-                        , D.reflow <|
-                            "I generally recommend using an explicit exposing list. I can skip compiling a bunch of files when the public interface of a module stays the same, so exposing fewer values can help improve compile times!"
+                        , D.reflow "I generally recommend using an explicit exposing list. I can skip compiling a bunch of files when the public interface of a module stays the same, so exposing fewer values can help improve compile times!"
                         ]
                     )
 
@@ -690,11 +688,9 @@ toParseErrorReport syntaxVersion source modul =
             in
             Report.Report "EXPECTING MODULE NAME" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "I was parsing an `module` declaration until I got stuck here:"
+                    ( D.reflow "I was parsing an `module` declaration until I got stuck here:"
                     , D.stack
-                        [ D.reflow <|
-                            "I was expecting to see the module name next, like in these examples:"
+                        [ D.reflow "I was expecting to see the module name next, like in these examples:"
                         , D.indent 4 <|
                             D.vcat <|
                                 [ D.fillSep
@@ -722,15 +718,14 @@ toParseErrorReport syntaxVersion source modul =
                                     , D.fromChars "(..)"
                                     ]
                                 ]
-                        , D.reflow <|
-                            "Notice that the module names all start with capital letters. That is required!"
+                        , D.reflow "Notice that the module names all start with capital letters. That is required!"
                         ]
                     )
 
         ModuleExposing exposing_ row col ->
             toExposingReport source exposing_ row col
 
-        PortModuleProblem row col ->
+        PortModuleProblem target row col ->
             let
                 region : A.Region
                 region =
@@ -738,11 +733,9 @@ toParseErrorReport syntaxVersion source modul =
             in
             Report.Report "UNFINISHED PORT MODULE DECLARATION" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "I am parsing an `port module` declaration, but I got stuck here:"
+                    ( D.reflow "I am parsing an `port module` declaration, but I got stuck here:"
                     , D.stack
-                        [ D.reflow <|
-                            "Here are some examples of valid `port module` declarations:"
+                        [ D.reflow "Here are some examples of valid `port module` declarations:"
                         , D.indent 4 <|
                             D.vcat <|
                                 [ D.fillSep
@@ -760,7 +753,7 @@ toParseErrorReport syntaxVersion source modul =
                                     , D.fromChars "(Location, goto)"
                                     ]
                                 ]
-                        , D.link "Note" "Read" "ports" "for more help."
+                        , D.link target "Note" "Read" "ports" "for more help."
                         ]
                     )
 
@@ -772,11 +765,9 @@ toParseErrorReport syntaxVersion source modul =
             in
             Report.Report "EXPECTING MODULE NAME" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "I was parsing an `module` declaration until I got stuck here:"
+                    ( D.reflow "I was parsing an `module` declaration until I got stuck here:"
                     , D.stack
-                        [ D.reflow <|
-                            "I was expecting to see the module name next, like in these examples:"
+                        [ D.reflow "I was expecting to see the module name next, like in these examples:"
                         , D.indent 4 <|
                             D.vcat <|
                                 [ D.fillSep
@@ -794,8 +785,7 @@ toParseErrorReport syntaxVersion source modul =
                                     , D.fromChars "(Location, goto)"
                                     ]
                                 ]
-                        , D.reflow <|
-                            "Notice that the module names start with capital letters. That is required!"
+                        , D.reflow "Notice that the module names start with capital letters. That is required!"
                         ]
                     )
 
@@ -810,10 +800,8 @@ toParseErrorReport syntaxVersion source modul =
             in
             Report.Report "BAD MODULE DECLARATION" region [] <|
                 Code.toSnippet source region Nothing <|
-                    ( D.reflow <|
-                        "I cannot parse this module declaration:"
-                    , D.reflow <|
-                        "This type of module is reserved for the @elm organization. It is used to define certain effects, avoiding building them into the compiler."
+                    ( D.reflow "I cannot parse this module declaration:"
+                    , D.reflow "This type of module is reserved for the @elm organization. It is used to define certain effects, avoiding building them into the compiler."
                     )
 
         FreshLine row col ->
@@ -872,10 +860,10 @@ toParseErrorReport syntaxVersion source modul =
                                 ]
                             )
 
-        ImportStart row col ->
-            toImportReport source row col
+        ImportStart target row col ->
+            toImportReport target source row col
 
-        ImportName row col ->
+        ImportName target row col ->
             let
                 region : A.Region
                 region =
@@ -913,14 +901,14 @@ toParseErrorReport syntaxVersion source modul =
                                 ]
                         , D.reflow <|
                             "Notice that the module names all start with capital letters. That is required!"
-                        , D.reflowLink "Read" "imports" "to learn more."
+                        , D.reflowLink target "Read" "imports" "to learn more."
                         ]
                     )
 
-        ImportAs row col ->
-            toImportReport source row col
+        ImportAs target row col ->
+            toImportReport target source row col
 
-        ImportAlias row col ->
+        ImportAlias target row col ->
             let
                 region : A.Region
                 region =
@@ -956,24 +944,24 @@ toParseErrorReport syntaxVersion source modul =
                                 ]
                         , D.reflow <|
                             "Notice that the alias always starts with a capital letter. That is required!"
-                        , D.reflowLink "Read" "imports" "to learn more."
+                        , D.reflowLink target "Read" "imports" "to learn more."
                         ]
                     )
 
-        ImportExposing row col ->
-            toImportReport source row col
+        ImportExposing target row col ->
+            toImportReport target source row col
 
         ImportExposingList exposing_ row col ->
             toExposingReport source exposing_ row col
 
-        ImportEnd row col ->
-            toImportReport source row col
+        ImportEnd target row col ->
+            toImportReport target source row col
 
-        ImportIndentName row col ->
-            toImportReport source row col
+        ImportIndentName target row col ->
+            toImportReport target source row col
 
-        ImportIndentAlias row col ->
-            toImportReport source row col
+        ImportIndentAlias target row col ->
+            toImportReport target source row col
 
         ImportIndentExposingList row col ->
             let
@@ -1023,7 +1011,7 @@ toParseErrorReport syntaxVersion source modul =
                     )
 
         Declarations decl _ _ ->
-            toDeclarationsReport syntaxVersion source decl
+            toDeclarationsReport source decl
 
 
 
@@ -1179,8 +1167,8 @@ toWeirdEndSyntaxProblemReport source region =
 -- IMPORTS
 
 
-toImportReport : Code.Source -> Row -> Col -> Report.Report
-toImportReport source row col =
+toImportReport : Target -> Code.Source -> Row -> Col -> Report.Report
+toImportReport target source row col =
     let
         region : A.Region
         region =
@@ -1219,7 +1207,7 @@ toImportReport source row col =
                             ]
                         ]
                 , D.reflow "You are probably trying to import a different module, but try to make it look like one of these examples!"
-                , D.reflowLink "Read" "imports" "to learn more."
+                , D.reflowLink target "Read" "imports" "to learn more."
                 ]
             )
 
@@ -1664,8 +1652,8 @@ toKeywordRegion row col keyword =
         (A.Position row (col + String.length keyword))
 
 
-toDeclarationsReport : SyntaxVersion -> Code.Source -> Decl -> Report.Report
-toDeclarationsReport syntaxVersion source decl =
+toDeclarationsReport : Code.Source -> Decl -> Report.Report
+toDeclarationsReport source decl =
     case decl of
         DeclStart row col ->
             toDeclStartReport source row col
@@ -1680,7 +1668,7 @@ toDeclarationsReport syntaxVersion source decl =
             toDeclTypeReport source declType row col
 
         DeclDef name declDef row col ->
-            toDeclDefReport syntaxVersion source name declDef row col
+            toDeclDefReport source name declDef row col
 
         DeclFreshLineAfterDocComment row col ->
             let
@@ -2598,8 +2586,8 @@ customTypeNote =
 -- DECL DEF
 
 
-toDeclDefReport : SyntaxVersion -> Code.Source -> Name -> DeclDef -> Row -> Col -> Report.Report
-toDeclDefReport syntaxVersion source name declDef startRow startCol =
+toDeclDefReport : Code.Source -> Name -> DeclDef -> Row -> Col -> Report.Report
+toDeclDefReport source name declDef startRow startCol =
     case declDef of
         DeclDefSpace space row col ->
             toSpaceReport source space row col
@@ -2802,10 +2790,10 @@ toDeclDefReport syntaxVersion source name declDef startRow startCol =
             toTypeReport source (TC_Annotation name) tipe row col
 
         DeclDefArg pattern row col ->
-            toPatternReport syntaxVersion source PArg pattern row col
+            toPatternReport source PArg pattern row col
 
         DeclDefBody expr row col ->
-            toExprReport syntaxVersion source (InDef name startRow startCol) expr row col
+            toExprReport source (InDef name startRow startCol) expr row col
 
         DeclDefNameRepeat row col ->
             let
@@ -2994,29 +2982,29 @@ isWithin desiredNode context =
 -- EXPR REPORTS
 
 
-toExprReport : SyntaxVersion -> Code.Source -> Context -> Expr -> Row -> Col -> Report.Report
-toExprReport syntaxVersion source context expr startRow startCol =
+toExprReport : Code.Source -> Context -> Expr -> Row -> Col -> Report.Report
+toExprReport source context expr startRow startCol =
     case expr of
         Let let_ row col ->
-            toLetReport syntaxVersion source context let_ row col
+            toLetReport source context let_ row col
 
         Case case_ row col ->
-            toCaseReport syntaxVersion source context case_ row col
+            toCaseReport source context case_ row col
 
         If if_ row col ->
-            toIfReport syntaxVersion source context if_ row col
+            toIfReport source context if_ row col
 
         List list row col ->
-            toListReport syntaxVersion source context list row col
+            toListReport source context list row col
 
         Record record row col ->
-            toRecordReport syntaxVersion source context record row col
+            toRecordReport source context record row col
 
         Tuple tuple row col ->
-            toTupleReport syntaxVersion source context tuple row col
+            toTupleReport source context tuple row col
 
         Func func row col ->
-            toFuncReport syntaxVersion source context func row col
+            toFuncReport source context func row col
 
         Dot row col ->
             let
@@ -3245,7 +3233,7 @@ toExprReport syntaxVersion source context expr startRow startCol =
             toStringReport source string row col
 
         Number number row col ->
-            toNumberReport syntaxVersion source number row col
+            toNumberReport source number row col
 
         Space space row col ->
             toSpaceReport source space row col
@@ -3585,15 +3573,15 @@ toEscapeReport source escape row col =
 -- NUMBERS
 
 
-toNumberReport : SyntaxVersion -> Code.Source -> Number -> Row -> Col -> Report.Report
-toNumberReport syntaxVersion source number row col =
+toNumberReport : Code.Source -> Number -> Row -> Col -> Report.Report
+toNumberReport source number row col =
     let
         region : A.Region
         region =
             toRegion row col
     in
     case number of
-        NumberEnd ->
+        NumberEnd syntaxVersion ->
             Report.Report "WEIRD NUMBER" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.reflow "I thought I was reading a number, but I ran into some weird stuff here:"
@@ -3887,8 +3875,8 @@ toOperatorReport source context operator row col =
 -- CASE
 
 
-toLetReport : SyntaxVersion -> Code.Source -> Context -> Let -> Row -> Col -> Report.Report
-toLetReport syntaxVersion source context let_ startRow startCol =
+toLetReport : Code.Source -> Context -> Let -> Row -> Col -> Report.Report
+toLetReport source context let_ startRow startCol =
     case let_ of
         LetSpace space row col ->
             toSpaceReport source space row col
@@ -3999,13 +3987,13 @@ toLetReport syntaxVersion source context let_ startRow startCol =
                             "I was expecting the name of a definition next."
 
         LetDef name def row col ->
-            toLetDefReport syntaxVersion source name def row col
+            toLetDefReport source name def row col
 
         LetDestruct destruct row col ->
-            toLetDestructReport syntaxVersion source destruct row col
+            toLetDestructReport source destruct row col
 
         LetBody expr row col ->
-            toExprReport syntaxVersion source context expr row col
+            toExprReport source context expr row col
 
         LetIndentDef row col ->
             toUnfinishLetReport source row col startRow startCol <|
@@ -4089,8 +4077,8 @@ toUnfinishLetReport source row col startRow startCol message =
             )
 
 
-toLetDefReport : SyntaxVersion -> Code.Source -> Name -> Def -> Row -> Col -> Report.Report
-toLetDefReport syntaxVersion source name def startRow startCol =
+toLetDefReport : Code.Source -> Name -> Def -> Row -> Col -> Report.Report
+toLetDefReport source name def startRow startCol =
     case def of
         DefSpace space row col ->
             toSpaceReport source space row col
@@ -4142,7 +4130,7 @@ toLetDefReport syntaxVersion source name def startRow startCol =
                     )
 
         DefArg pattern row col ->
-            toPatternReport syntaxVersion source PArg pattern row col
+            toPatternReport source PArg pattern row col
 
         DefEquals row col ->
             case Code.whatIsNext source row col of
@@ -4330,7 +4318,7 @@ toLetDefReport syntaxVersion source name def startRow startCol =
                             )
 
         DefBody expr row col ->
-            toExprReport syntaxVersion source (InDef name startRow startCol) expr row col
+            toExprReport source (InDef name startRow startCol) expr row col
 
         DefIndentEquals row col ->
             let
@@ -4440,14 +4428,14 @@ defNote =
         ]
 
 
-toLetDestructReport : SyntaxVersion -> Code.Source -> Destruct -> Row -> Col -> Report.Report
-toLetDestructReport syntaxVersion source destruct startRow startCol =
+toLetDestructReport : Code.Source -> Destruct -> Row -> Col -> Report.Report
+toLetDestructReport source destruct startRow startCol =
     case destruct of
         DestructSpace space row col ->
             toSpaceReport source space row col
 
         DestructPattern pattern row col ->
-            toPatternReport syntaxVersion source PLet pattern row col
+            toPatternReport source PLet pattern row col
 
         DestructEquals row col ->
             let
@@ -4474,7 +4462,7 @@ toLetDestructReport syntaxVersion source destruct startRow startCol =
                     )
 
         DestructBody expr row col ->
-            toExprReport syntaxVersion source (InDestruct startRow startCol) expr row col
+            toExprReport source (InDestruct startRow startCol) expr row col
 
         DestructIndentEquals row col ->
             let
@@ -4513,8 +4501,8 @@ toLetDestructReport syntaxVersion source destruct startRow startCol =
 -- CASE
 
 
-toCaseReport : SyntaxVersion -> Code.Source -> Context -> Case -> Row -> Col -> Report.Report
-toCaseReport syntaxVersion source context case_ startRow startCol =
+toCaseReport : Code.Source -> Context -> Case -> Row -> Col -> Report.Report
+toCaseReport source context case_ startRow startCol =
     case case_ of
         CaseSpace space row col ->
             toSpaceReport source space row col
@@ -4539,7 +4527,7 @@ toCaseReport syntaxVersion source context case_ startRow startCol =
                 )
 
         CasePattern pattern row col ->
-            toPatternReport syntaxVersion source PCase pattern row col
+            toPatternReport source PCase pattern row col
 
         CaseArrow row col ->
             case Code.whatIsNext source row col of
@@ -4642,10 +4630,10 @@ toCaseReport syntaxVersion source context case_ startRow startCol =
                         )
 
         CaseExpr expr row col ->
-            toExprReport syntaxVersion source (InNode NCase startRow startCol context) expr row col
+            toExprReport source (InNode NCase startRow startCol context) expr row col
 
         CaseBranch expr row col ->
-            toExprReport syntaxVersion source (InNode NBranch startRow startCol context) expr row col
+            toExprReport source (InNode NBranch startRow startCol context) expr row col
 
         CaseIndentOf row col ->
             toUnfinishCaseReport source
@@ -4780,8 +4768,8 @@ noteForCaseIndentError =
 -- IF
 
 
-toIfReport : SyntaxVersion -> Code.Source -> Context -> If -> Row -> Col -> Report.Report
-toIfReport syntaxVersion source context if_ startRow startCol =
+toIfReport : Code.Source -> Context -> If -> Row -> Col -> Report.Report
+toIfReport source context if_ startRow startCol =
     case if_ of
         IfSpace space row col ->
             toSpaceReport source space row col
@@ -4855,13 +4843,13 @@ toIfReport syntaxVersion source context if_ startRow startCol =
                     )
 
         IfCondition expr row col ->
-            toExprReport syntaxVersion source (InNode NCond startRow startCol context) expr row col
+            toExprReport source (InNode NCond startRow startCol context) expr row col
 
         IfThenBranch expr row col ->
-            toExprReport syntaxVersion source (InNode NThen startRow startCol context) expr row col
+            toExprReport source (InNode NThen startRow startCol context) expr row col
 
         IfElseBranch expr row col ->
-            toExprReport syntaxVersion source (InNode NElse startRow startCol context) expr row col
+            toExprReport source (InNode NElse startRow startCol context) expr row col
 
         IfIndentCondition row col ->
             let
@@ -5049,8 +5037,8 @@ toIfReport syntaxVersion source context if_ startRow startCol =
 -- RECORD
 
 
-toRecordReport : SyntaxVersion -> Code.Source -> Context -> Record -> Row -> Col -> Report.Report
-toRecordReport syntaxVersion source context record startRow startCol =
+toRecordReport : Code.Source -> Context -> Record -> Row -> Col -> Report.Report
+toRecordReport source context record startRow startCol =
     case record of
         RecordOpen row col ->
             case Code.whatIsNext source row col of
@@ -5299,7 +5287,7 @@ toRecordReport syntaxVersion source context record startRow startCol =
                     )
 
         RecordExpr expr row col ->
-            toExprReport syntaxVersion source (InNode NRecord startRow startCol context) expr row col
+            toExprReport source (InNode NRecord startRow startCol context) expr row col
 
         RecordSpace space row col ->
             toSpaceReport source space row col
@@ -5511,11 +5499,11 @@ noteForRecordIndentError =
 -- TUPLE
 
 
-toTupleReport : SyntaxVersion -> Code.Source -> Context -> Tuple -> Row -> Col -> Report.Report
-toTupleReport syntaxVersion source context tuple startRow startCol =
+toTupleReport : Code.Source -> Context -> Tuple -> Row -> Col -> Report.Report
+toTupleReport source context tuple startRow startCol =
     case tuple of
         TupleExpr expr row col ->
-            toExprReport syntaxVersion source (InNode NParens startRow startCol context) expr row col
+            toExprReport source (InNode NParens startRow startCol context) expr row col
 
         TupleSpace space row col ->
             toSpaceReport source space row col
@@ -5761,8 +5749,8 @@ toTupleReport syntaxVersion source context tuple startRow startCol =
                     )
 
 
-toListReport : SyntaxVersion -> Code.Source -> Context -> List_ -> Row -> Col -> Report.Report
-toListReport syntaxVersion source context list startRow startCol =
+toListReport : Code.Source -> Context -> List_ -> Row -> Col -> Report.Report
+toListReport source context list startRow startCol =
     case list of
         ListSpace space row col ->
             toSpaceReport source space row col
@@ -5839,7 +5827,7 @@ toListReport syntaxVersion source context list startRow startCol =
                             )
 
                 _ ->
-                    toExprReport syntaxVersion source (InNode NList startRow startCol context) expr row col
+                    toExprReport source (InNode NList startRow startCol context) expr row col
 
         ListEnd row col ->
             let
@@ -6018,17 +6006,17 @@ toListReport syntaxVersion source context list startRow startCol =
                     )
 
 
-toFuncReport : SyntaxVersion -> Code.Source -> Context -> Func -> Row -> Col -> Report.Report
-toFuncReport syntaxVersion source context func startRow startCol =
+toFuncReport : Code.Source -> Context -> Func -> Row -> Col -> Report.Report
+toFuncReport source context func startRow startCol =
     case func of
         FuncSpace space row col ->
             toSpaceReport source space row col
 
         FuncArg pattern row col ->
-            toPatternReport syntaxVersion source PArg pattern row col
+            toPatternReport source PArg pattern row col
 
         FuncBody expr row col ->
-            toExprReport syntaxVersion source (InNode NFunc startRow startCol context) expr row col
+            toExprReport source (InNode NFunc startRow startCol context) expr row col
 
         FuncArrow row col ->
             case Code.whatIsNext source row col of
@@ -6204,17 +6192,17 @@ type PContext
     | PLet
 
 
-toPatternReport : SyntaxVersion -> Code.Source -> PContext -> Pattern -> Row -> Col -> Report.Report
-toPatternReport syntaxVersion source context pattern startRow startCol =
+toPatternReport : Code.Source -> PContext -> Pattern -> Row -> Col -> Report.Report
+toPatternReport source context pattern startRow startCol =
     case pattern of
         PRecord record row col ->
             toPRecordReport source record row col
 
         PTuple tuple row col ->
-            toPTupleReport syntaxVersion source context tuple row col
+            toPTupleReport source context tuple row col
 
         PList list row col ->
-            toPListReport syntaxVersion source context list row col
+            toPListReport source context list row col
 
         PStart row col ->
             case Code.whatIsNext source row col of
@@ -6319,7 +6307,7 @@ toPatternReport syntaxVersion source context pattern startRow startCol =
             toStringReport source string row col
 
         PNumber number row col ->
-            toNumberReport syntaxVersion source number row col
+            toNumberReport source number row col
 
         PFloat width row col ->
             let
@@ -6727,8 +6715,8 @@ toUnfinishRecordPatternReport source row col startRow startCol message =
             )
 
 
-toPTupleReport : SyntaxVersion -> Code.Source -> PContext -> PTuple -> Row -> Col -> Report.Report
-toPTupleReport syntaxVersion source context tuple startRow startCol =
+toPTupleReport : Code.Source -> PContext -> PTuple -> Row -> Col -> Report.Report
+toPTupleReport source context tuple startRow startCol =
     case tuple of
         PTupleOpen row col ->
             case Code.whatIsNext source row col of
@@ -6892,7 +6880,7 @@ toPTupleReport syntaxVersion source context tuple startRow startCol =
                             )
 
         PTupleExpr pattern row col ->
-            toPatternReport syntaxVersion source context pattern row col
+            toPatternReport source context pattern row col
 
         PTupleSpace space row col ->
             toSpaceReport source space row col
@@ -7011,8 +6999,8 @@ toPTupleReport syntaxVersion source context tuple startRow startCol =
                     )
 
 
-toPListReport : SyntaxVersion -> Code.Source -> PContext -> PList -> Row -> Col -> Report.Report
-toPListReport syntaxVersion source context list startRow startCol =
+toPListReport : Code.Source -> PContext -> PList -> Row -> Col -> Report.Report
+toPListReport source context list startRow startCol =
     case list of
         PListOpen row col ->
             case Code.whatIsNext source row col of
@@ -7085,7 +7073,7 @@ toPListReport syntaxVersion source context list startRow startCol =
                     )
 
         PListExpr pattern row col ->
-            toPatternReport syntaxVersion source context pattern row col
+            toPatternReport source context pattern row col
 
         PListSpace space row col ->
             toSpaceReport source space row col
@@ -7987,9 +7975,10 @@ errorEncoder error =
                 , A.locatedEncoder ModuleName.rawEncoder actualName
                 ]
 
-        UnexpectedPort region ->
+        UnexpectedPort target region ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , Target.encoder target
                 , A.regionEncoder region
                 ]
 
@@ -8039,7 +8028,9 @@ errorDecoder =
                             (A.locatedDecoder ModuleName.rawDecoder)
 
                     2 ->
-                        BD.map UnexpectedPort A.regionDecoder
+                        BD.map2 UnexpectedPort
+                            Target.decoder
+                            A.regionDecoder
 
                     3 ->
                         BD.map NoPorts A.regionDecoder
@@ -8130,9 +8121,10 @@ moduleEncoder modul =
                 , BE.int col
                 ]
 
-        PortModuleProblem row col ->
+        PortModuleProblem target row col ->
             BE.sequence
                 [ BE.unsignedInt8 5
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
@@ -8166,37 +8158,42 @@ moduleEncoder modul =
                 , BE.int col
                 ]
 
-        ImportStart row col ->
+        ImportStart target row col ->
             BE.sequence
                 [ BE.unsignedInt8 10
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportName row col ->
+        ImportName target row col ->
             BE.sequence
                 [ BE.unsignedInt8 11
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportAs row col ->
+        ImportAs target row col ->
             BE.sequence
                 [ BE.unsignedInt8 12
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportAlias row col ->
+        ImportAlias target row col ->
             BE.sequence
                 [ BE.unsignedInt8 13
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportExposing row col ->
+        ImportExposing target row col ->
             BE.sequence
                 [ BE.unsignedInt8 14
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
@@ -8209,23 +8206,26 @@ moduleEncoder modul =
                 , BE.int col
                 ]
 
-        ImportEnd row col ->
+        ImportEnd target row col ->
             BE.sequence
                 [ BE.unsignedInt8 16
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportIndentName row col ->
+        ImportIndentName target row col ->
             BE.sequence
                 [ BE.unsignedInt8 17
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
 
-        ImportIndentAlias row col ->
+        ImportIndentAlias target row col ->
             BE.sequence
                 [ BE.unsignedInt8 18
+                , Target.encoder target
                 , BE.int row
                 , BE.int col
                 ]
@@ -8287,7 +8287,8 @@ moduleDecoder =
                             BD.int
 
                     5 ->
-                        BD.map2 PortModuleProblem
+                        BD.map3 PortModuleProblem
+                            Target.decoder
                             BD.int
                             BD.int
 
@@ -8313,27 +8314,32 @@ moduleDecoder =
                             BD.int
 
                     10 ->
-                        BD.map2 ImportStart
+                        BD.map3 ImportStart
+                            Target.decoder
                             BD.int
                             BD.int
 
                     11 ->
-                        BD.map2 ImportName
+                        BD.map3 ImportName
+                            Target.decoder
                             BD.int
                             BD.int
 
                     12 ->
-                        BD.map2 ImportAs
+                        BD.map3 ImportAs
+                            Target.decoder
                             BD.int
                             BD.int
 
                     13 ->
-                        BD.map2 ImportAlias
+                        BD.map3 ImportAlias
+                            Target.decoder
                             BD.int
                             BD.int
 
                     14 ->
-                        BD.map2 ImportExposing
+                        BD.map3 ImportExposing
+                            Target.decoder
                             BD.int
                             BD.int
 
@@ -8344,17 +8350,20 @@ moduleDecoder =
                             BD.int
 
                     16 ->
-                        BD.map2 ImportEnd
+                        BD.map3 ImportEnd
+                            Target.decoder
                             BD.int
                             BD.int
 
                     17 ->
-                        BD.map2 ImportIndentName
+                        BD.map3 ImportIndentName
+                            Target.decoder
                             BD.int
                             BD.int
 
                     18 ->
-                        BD.map2 ImportIndentAlias
+                        BD.map3 ImportIndentAlias
+                            Target.decoder
                             BD.int
                             BD.int
 
@@ -10542,8 +10551,11 @@ stringDecoder =
 numberEncoder : Number -> BE.Encoder
 numberEncoder number =
     case number of
-        NumberEnd ->
-            BE.unsignedInt8 0
+        NumberEnd syntaxVersion ->
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , SV.encoder syntaxVersion
+                ]
 
         NumberDot n ->
             BE.sequence
@@ -10583,7 +10595,7 @@ numberDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.succeed NumberEnd
+                        BD.map NumberEnd SV.decoder
 
                     1 ->
                         BD.map NumberDot BD.int

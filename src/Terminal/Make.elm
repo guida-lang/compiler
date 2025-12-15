@@ -104,7 +104,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                                 toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
                                                                                     |> Task.bind
                                                                                         (\builder ->
-                                                                                            generate style "index.html" (Html.sandwich name builder) (NE.Nonempty name [])
+                                                                                            generate style "index.html" (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
                                                                                         )
 
                                                                             name :: names ->
@@ -136,7 +136,7 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                                                     toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
                                                                                         |> Task.bind
                                                                                             (\builder ->
-                                                                                                generate style target (Html.sandwich name builder) (NE.Nonempty name [])
+                                                                                                generate style target (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
                                                                                             )
                                                                                 )
                                                             )
@@ -190,7 +190,7 @@ getExposed root (Details.Details _ validOutline _ _ _ _) =
                             Stuff.GuidaRoot _ ->
                                 Exit.MakeGuidaPkgNeedsExposing
 
-                            Stuff.ElmRoot _ ->
+                            Stuff.ElmRoot _ _ ->
                                 Exit.MakeElmPkgNeedsExposing
                         )
 

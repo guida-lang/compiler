@@ -18,6 +18,7 @@ module Compiler.Type.Error exposing
 
 import Compiler.Data.Bag as Bag
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as RT
@@ -75,14 +76,14 @@ iteratedDealias tipe =
 -- TO DOC
 
 
-toDoc : L.Localizer -> RT.Context -> Type -> D.Doc
-toDoc localizer ctx tipe =
+toDoc : Target -> L.Localizer -> RT.Context -> Type -> D.Doc
+toDoc target localizer ctx tipe =
     case tipe of
         Lambda a b cs ->
             RT.lambda ctx
-                (toDoc localizer RT.Func a)
-                (toDoc localizer RT.Func b)
-                (List.map (toDoc localizer RT.Func) cs)
+                (toDoc target localizer RT.Func a)
+                (toDoc target localizer RT.Func b)
+                (List.map (toDoc target localizer RT.Func) cs)
 
         Infinite ->
             D.fromChars "∞"
@@ -104,39 +105,39 @@ toDoc localizer ctx tipe =
 
         Type home name args ->
             RT.apply ctx
-                (L.toDoc localizer home name)
-                (List.map (toDoc localizer RT.App) args)
+                (L.toDoc target localizer home name)
+                (List.map (toDoc target localizer RT.App) args)
 
         Record fields ext ->
-            RT.record (fieldsToDocs localizer fields) (extToDoc ext)
+            RT.record (fieldsToDocs target localizer fields) (extToDoc ext)
 
         Unit ->
             D.fromChars "()"
 
         Tuple a b cs ->
             RT.tuple
-                (toDoc localizer RT.None a)
-                (toDoc localizer RT.None b)
-                (List.map (toDoc localizer RT.None) cs)
+                (toDoc target localizer RT.None a)
+                (toDoc target localizer RT.None b)
+                (List.map (toDoc target localizer RT.None) cs)
 
         Alias home name args _ ->
-            aliasToDoc localizer ctx home name args
+            aliasToDoc target localizer ctx home name args
 
 
-aliasToDoc : L.Localizer -> RT.Context -> IO.Canonical -> Name -> List ( Name, Type ) -> D.Doc
-aliasToDoc localizer ctx home name args =
+aliasToDoc : Target -> L.Localizer -> RT.Context -> IO.Canonical -> Name -> List ( Name, Type ) -> D.Doc
+aliasToDoc target localizer ctx home name args =
     RT.apply ctx
-        (L.toDoc localizer home name)
-        (List.map (toDoc localizer RT.App << Tuple.second) args)
+        (L.toDoc target localizer home name)
+        (List.map (toDoc target localizer RT.App << Tuple.second) args)
 
 
-fieldsToDocs : L.Localizer -> Dict String Name Type -> List ( D.Doc, D.Doc )
-fieldsToDocs localizer fields =
-    Dict.foldr compare (addField localizer) [] fields
+fieldsToDocs : Target -> L.Localizer -> Dict String Name Type -> List ( D.Doc, D.Doc )
+fieldsToDocs target localizer fields =
+    Dict.foldr compare (addField target localizer) [] fields
 
 
-addField : L.Localizer -> Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
-addField localizer fieldName fieldType docs =
+addField : Target -> L.Localizer -> Name -> Type -> List ( D.Doc, D.Doc ) -> List ( D.Doc, D.Doc )
+addField target localizer fieldName fieldType docs =
     let
         f : D.Doc
         f =
@@ -144,7 +145,7 @@ addField localizer fieldName fieldType docs =
 
         t : D.Doc
         t =
-            toDoc localizer RT.None fieldType
+            toDoc target localizer RT.None fieldType
     in
     ( f, t ) :: docs
 
@@ -176,7 +177,7 @@ type Status
 
 
 type Problem
-    = IntFloat
+    = IntFloat Target
     | StringFromInt
     | StringFromFloat
     | StringToInt
@@ -184,9 +185,9 @@ type Problem
     | AnythingToBool
     | AnythingFromMaybe
     | ArityMismatch Int Int
-    | BadFlexSuper Direction Super Type
-    | BadRigidVar Name Type
-    | BadRigidSuper Super Name Type
+    | BadFlexSuper Target Direction Super Type
+    | BadRigidVar Target Name Type
+    | BadRigidSuper Target Super Name Type
     | FieldTypo Name (List Name)
     | FieldsMissing (List Name)
 
@@ -235,9 +236,9 @@ merge status1 status2 =
 -- COMPARISON
 
 
-toComparison : L.Localizer -> Type -> Type -> ( D.Doc, D.Doc, List Problem )
-toComparison localizer tipe1 tipe2 =
-    case toDiff localizer RT.None tipe1 tipe2 of
+toComparison : Target -> L.Localizer -> Type -> Type -> ( D.Doc, D.Doc, List Problem )
+toComparison target localizer tipe1 tipe2 =
+    case toDiff target localizer RT.None tipe1 tipe2 of
         Diff doc1 doc2 Similar ->
             ( doc1, doc2, [] )
 
@@ -245,73 +246,73 @@ toComparison localizer tipe1 tipe2 =
             ( doc1, doc2, Bag.toList problems )
 
 
-toDiff : L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
-toDiff localizer ctx tipe1 tipe2 =
+toDiff : Target -> L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+toDiff target localizer ctx tipe1 tipe2 =
     case ( tipe1, tipe2 ) of
         ( Unit, Unit ) ->
-            same localizer ctx tipe1
+            same target localizer ctx tipe1
 
         ( Error, Error ) ->
-            same localizer ctx tipe1
+            same target localizer ctx tipe1
 
         ( Infinite, Infinite ) ->
-            same localizer ctx tipe1
+            same target localizer ctx tipe1
 
         ( FlexVar x, FlexVar y ) ->
             if x == y then
-                same localizer ctx tipe1
+                same target localizer ctx tipe1
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( FlexSuper _ x, FlexSuper _ y ) ->
             if x == y then
-                same localizer ctx tipe1
+                same target localizer ctx tipe1
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( RigidVar x, RigidVar y ) ->
             if x == y then
-                same localizer ctx tipe1
+                same target localizer ctx tipe1
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( RigidSuper _ x, RigidSuper _ y ) ->
             if x == y then
-                same localizer ctx tipe1
+                same target localizer ctx tipe1
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( FlexVar _, _ ) ->
-            similar localizer ctx tipe1 tipe2
+            similar target localizer ctx tipe1 tipe2
 
         ( _, FlexVar _ ) ->
-            similar localizer ctx tipe1 tipe2
+            similar target localizer ctx tipe1 tipe2
 
         ( FlexSuper s _, t ) ->
-            if isSuper s t then
-                similar localizer ctx tipe1 tipe2
+            if isSuper target s t then
+                similar target localizer ctx tipe1 tipe2
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( t, FlexSuper s _ ) ->
-            if isSuper s t then
-                similar localizer ctx tipe1 tipe2
+            if isSuper target s t then
+                similar target localizer ctx tipe1 tipe2
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( Lambda a b cs, Lambda x y zs ) ->
             if List.length cs == List.length zs then
-                toDiff localizer RT.Func a x
+                toDiff target localizer RT.Func a x
                     |> fmapDiff (RT.lambda ctx)
-                    |> applyDiff (toDiff localizer RT.Func b y)
+                    |> applyDiff (toDiff target localizer RT.Func b y)
                     |> applyDiff
-                        (List.map2 (toDiff localizer RT.Func) cs zs
+                        (List.map2 (toDiff target localizer RT.Func) cs zs
                             |> List.foldr (liftA2 (::)) (pureDiff [])
                         )
 
@@ -319,7 +320,7 @@ toDiff localizer ctx tipe1 tipe2 =
                 let
                     f : Type -> D.Doc
                     f =
-                        toDoc localizer RT.Func
+                        toDoc target localizer RT.Func
                 in
                 different
                     (D.dullyellow (RT.lambda ctx (f a) (f b) (List.map f cs)))
@@ -327,182 +328,182 @@ toDiff localizer ctx tipe1 tipe2 =
                     (Bag.one (ArityMismatch (2 + List.length cs) (2 + List.length zs)))
 
         ( Tuple a b cs, Tuple x y zs ) as pair ->
-            toDiffTuple localizer ctx pair ( a, b, cs ) ( x, y, zs ) (pureDiff [])
+            toDiffTuple target localizer ctx pair ( a, b, cs ) ( x, y, zs ) (pureDiff [])
 
         ( Record fields1 ext1, Record fields2 ext2 ) ->
-            diffRecord localizer fields1 ext1 fields2 ext2
+            diffRecord target localizer fields1 ext1 fields2 ext2
 
         ( Type home1 name1 args1, Type home2 name2 args2 ) ->
             if home1 == home2 && name1 == name2 then
-                List.map2 (toDiff localizer RT.App) args1 args2
+                List.map2 (toDiff target localizer RT.App) args1 args2
                     |> List.foldr (liftA2 (::)) (pureDiff [])
-                    |> fmapDiff (RT.apply ctx (L.toDoc localizer home1 name1))
+                    |> fmapDiff (RT.apply ctx (L.toDoc target localizer home1 name1))
 
-            else if L.toChars localizer home1 name1 == L.toChars localizer home2 name2 then
+            else if L.toChars target localizer home1 name1 == L.toChars target localizer home2 name2 then
                 -- start trying to find specific problems (this used to be down on the list)
                 different
-                    (nameClashToDoc ctx localizer home1 name1 args1)
-                    (nameClashToDoc ctx localizer home2 name2 args2)
+                    (nameClashToDoc target ctx localizer home1 name1 args1)
+                    (nameClashToDoc target ctx localizer home2 name2 args2)
                     Bag.empty
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( Alias home1 name1 args1 _, Alias home2 name2 args2 _ ) ->
             if home1 == home2 && name1 == name2 then
-                List.map2 (toDiff localizer RT.App) (List.map Tuple.second args1) (List.map Tuple.second args2)
+                List.map2 (toDiff target localizer RT.App) (List.map Tuple.second args1) (List.map Tuple.second args2)
                     |> List.foldr (liftA2 (::)) (pureDiff [])
-                    |> fmapDiff (RT.apply ctx (L.toDoc localizer home1 name1))
+                    |> fmapDiff (RT.apply ctx (L.toDoc target localizer home1 name1))
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         -- start trying to find specific problems (moved first check above)
         ( Type home name [ t1 ], t2 ) ->
-            if isMaybe home name && isSimilar (toDiff localizer ctx t1 t2) then
+            if isMaybe target home name && isSimilar (toDiff target localizer ctx t1 t2) then
                 different
-                    (RT.apply ctx (D.dullyellow (L.toDoc localizer home name)) [ toDoc localizer RT.App t1 ])
-                    (toDoc localizer ctx t2)
+                    (RT.apply ctx (D.dullyellow (L.toDoc target localizer home name)) [ toDoc target localizer RT.App t1 ])
+                    (toDoc target localizer ctx t2)
                     (Bag.one AnythingFromMaybe)
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( t1, Type home name [ t2 ] ) ->
-            if isList home name && isSimilar (toDiff localizer ctx t1 t2) then
+            if isList target home name && isSimilar (toDiff target localizer ctx t1 t2) then
                 different
-                    (toDoc localizer ctx t1)
-                    (RT.apply ctx (D.dullyellow (L.toDoc localizer home name)) [ toDoc localizer RT.App t2 ])
+                    (toDoc target localizer ctx t1)
+                    (RT.apply ctx (D.dullyellow (L.toDoc target localizer home name)) [ toDoc target localizer RT.App t2 ])
                     Bag.empty
 
             else
-                toDiffOtherwise localizer ctx ( tipe1, tipe2 )
+                toDiffOtherwise target localizer ctx ( tipe1, tipe2 )
 
         ( Alias home1 name1 args1 t1, t2 ) ->
-            case diffAliasedRecord localizer t1 t2 of
+            case diffAliasedRecord target localizer t1 t2 of
                 Just (Diff _ doc2 status) ->
-                    Diff (D.dullyellow (aliasToDoc localizer ctx home1 name1 args1)) doc2 status
+                    Diff (D.dullyellow (aliasToDoc target localizer ctx home1 name1 args1)) doc2 status
 
                 Nothing ->
                     case tipe2 of
                         Type home2 name2 args2 ->
-                            if L.toChars localizer home1 name1 == L.toChars localizer home2 name2 then
+                            if L.toChars target localizer home1 name1 == L.toChars target localizer home2 name2 then
                                 different
-                                    (nameClashToDoc ctx localizer home1 name1 (List.map Tuple.second args1))
-                                    (nameClashToDoc ctx localizer home2 name2 args2)
+                                    (nameClashToDoc target ctx localizer home1 name1 (List.map Tuple.second args1))
+                                    (nameClashToDoc target ctx localizer home2 name2 args2)
                                     Bag.empty
 
                             else
                                 different
-                                    (D.dullyellow (toDoc localizer ctx tipe1))
-                                    (D.dullyellow (toDoc localizer ctx tipe2))
+                                    (D.dullyellow (toDoc target localizer ctx tipe1))
+                                    (D.dullyellow (toDoc target localizer ctx tipe2))
                                     Bag.empty
 
                         _ ->
                             different
-                                (D.dullyellow (toDoc localizer ctx tipe1))
-                                (D.dullyellow (toDoc localizer ctx tipe2))
+                                (D.dullyellow (toDoc target localizer ctx tipe1))
+                                (D.dullyellow (toDoc target localizer ctx tipe2))
                                 Bag.empty
 
         ( _, Alias home2 name2 args2 _ ) ->
-            case diffAliasedRecord localizer tipe1 tipe2 of
+            case diffAliasedRecord target localizer tipe1 tipe2 of
                 Just (Diff doc1 _ status) ->
-                    Diff doc1 (D.dullyellow (aliasToDoc localizer ctx home2 name2 args2)) status
+                    Diff doc1 (D.dullyellow (aliasToDoc target localizer ctx home2 name2 args2)) status
 
                 Nothing ->
                     case tipe1 of
                         Type home1 name1 args1 ->
-                            if L.toChars localizer home1 name1 == L.toChars localizer home2 name2 then
+                            if L.toChars target localizer home1 name1 == L.toChars target localizer home2 name2 then
                                 different
-                                    (nameClashToDoc ctx localizer home1 name1 args1)
-                                    (nameClashToDoc ctx localizer home2 name2 (List.map Tuple.second args2))
+                                    (nameClashToDoc target ctx localizer home1 name1 args1)
+                                    (nameClashToDoc target ctx localizer home2 name2 (List.map Tuple.second args2))
                                     Bag.empty
 
                             else
                                 different
-                                    (D.dullyellow (toDoc localizer ctx tipe1))
-                                    (D.dullyellow (toDoc localizer ctx tipe2))
+                                    (D.dullyellow (toDoc target localizer ctx tipe1))
+                                    (D.dullyellow (toDoc target localizer ctx tipe2))
                                     Bag.empty
 
                         _ ->
                             different
-                                (D.dullyellow (toDoc localizer ctx tipe1))
-                                (D.dullyellow (toDoc localizer ctx tipe2))
+                                (D.dullyellow (toDoc target localizer ctx tipe1))
+                                (D.dullyellow (toDoc target localizer ctx tipe2))
                                 Bag.empty
 
         pair ->
-            toDiffOtherwise localizer ctx pair
+            toDiffOtherwise target localizer ctx pair
 
 
-toDiffTuple : L.Localizer -> RT.Context -> ( Type, Type ) -> ( Type, Type, List Type ) -> ( Type, Type, List Type ) -> Diff (List D.Doc) -> Diff D.Doc
-toDiffTuple localizer ctx pair ( a, b, cs ) ( x, y, zs ) diffCs =
+toDiffTuple : Target -> L.Localizer -> RT.Context -> ( Type, Type ) -> ( Type, Type, List Type ) -> ( Type, Type, List Type ) -> Diff (List D.Doc) -> Diff D.Doc
+toDiffTuple target localizer ctx pair ( a, b, cs ) ( x, y, zs ) diffCs =
     case ( cs, zs ) of
         ( [], [] ) ->
-            toDiff localizer RT.None a x
+            toDiff target localizer RT.None a x
                 |> fmapDiff RT.tuple
-                |> applyDiff (toDiff localizer RT.None b y)
+                |> applyDiff (toDiff target localizer RT.None b y)
                 |> applyDiff diffCs
 
         ( c :: restCs, z :: restZs ) ->
-            fmapDiff (::) (toDiff localizer RT.None c z)
+            fmapDiff (::) (toDiff target localizer RT.None c z)
                 |> applyDiff diffCs
-                |> toDiffTuple localizer ctx pair ( a, b, restCs ) ( x, y, restZs )
+                |> toDiffTuple target localizer ctx pair ( a, b, restCs ) ( x, y, restZs )
 
         _ ->
-            toDiffOtherwise localizer ctx pair
+            toDiffOtherwise target localizer ctx pair
 
 
-toDiffOtherwise : L.Localizer -> RT.Context -> ( Type, Type ) -> Diff D.Doc
-toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
+toDiffOtherwise : Target -> L.Localizer -> RT.Context -> ( Type, Type ) -> Diff D.Doc
+toDiffOtherwise target localizer ctx (( tipe1, tipe2 ) as pair) =
     let
         doc1 : D.Doc
         doc1 =
-            D.dullyellow (toDoc localizer ctx tipe1)
+            D.dullyellow (toDoc target localizer ctx tipe1)
 
         doc2 : D.Doc
         doc2 =
-            D.dullyellow (toDoc localizer ctx tipe2)
+            D.dullyellow (toDoc target localizer ctx tipe2)
     in
     different doc1 doc2 <|
         case pair of
             ( RigidVar x, other ) ->
-                Bag.one <| BadRigidVar x other
+                Bag.one <| BadRigidVar target x other
 
             ( FlexSuper s _, other ) ->
-                Bag.one <| BadFlexSuper Have s other
+                Bag.one <| BadFlexSuper target Have s other
 
             ( RigidSuper s x, other ) ->
-                Bag.one <| BadRigidSuper s x other
+                Bag.one <| BadRigidSuper target s x other
 
             ( other, RigidVar x ) ->
-                Bag.one <| BadRigidVar x other
+                Bag.one <| BadRigidVar target x other
 
             ( other, FlexSuper s _ ) ->
-                Bag.one <| BadFlexSuper Need s other
+                Bag.one <| BadFlexSuper target Need s other
 
             ( other, RigidSuper s x ) ->
-                Bag.one <| BadRigidSuper s x other
+                Bag.one <| BadRigidSuper target s x other
 
             ( Type home1 name1 [], Type home2 name2 [] ) ->
-                if isInt home1 name1 && isFloat home2 name2 then
-                    Bag.one <| IntFloat
+                if isInt target home1 name1 && isFloat target home2 name2 then
+                    Bag.one <| IntFloat target
 
-                else if isFloat home1 name1 && isInt home2 name2 then
-                    Bag.one <| IntFloat
+                else if isFloat target home1 name1 && isInt target home2 name2 then
+                    Bag.one <| IntFloat target
 
-                else if isInt home1 name1 && isString home2 name2 then
+                else if isInt target home1 name1 && isString target home2 name2 then
                     Bag.one <| StringFromInt
 
-                else if isFloat home1 name1 && isString home2 name2 then
+                else if isFloat target home1 name1 && isString target home2 name2 then
                     Bag.one <| StringFromFloat
 
-                else if isString home1 name1 && isInt home2 name2 then
+                else if isString target home1 name1 && isInt target home2 name2 then
                     Bag.one <| StringToInt
 
-                else if isString home1 name1 && isFloat home2 name2 then
+                else if isString target home1 name1 && isFloat target home2 name2 then
                     Bag.one <| StringToFloat
 
-                else if isBool home2 name2 then
+                else if isBool target home2 name2 then
                     Bag.one <| AnythingToBool
 
                 else
@@ -516,19 +517,19 @@ toDiffOtherwise localizer ctx (( tipe1, tipe2 ) as pair) =
 -- DIFF HELPERS
 
 
-same : L.Localizer -> RT.Context -> Type -> Diff D.Doc
-same localizer ctx tipe =
+same : Target -> L.Localizer -> RT.Context -> Type -> Diff D.Doc
+same target localizer ctx tipe =
     let
         doc : D.Doc
         doc =
-            toDoc localizer ctx tipe
+            toDoc target localizer ctx tipe
     in
     Diff doc doc Similar
 
 
-similar : L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
-similar localizer ctx t1 t2 =
-    Diff (toDoc localizer ctx t1) (toDoc localizer ctx t2) Similar
+similar : Target -> L.Localizer -> RT.Context -> Type -> Type -> Diff D.Doc
+similar target localizer ctx t1 t2 =
+    Diff (toDoc target localizer ctx t1) (toDoc target localizer ctx t2) Similar
 
 
 different : a -> a -> Bag.Bag Problem -> Diff a
@@ -550,61 +551,61 @@ isSimilar (Diff _ _ status) =
 -- IS TYPE?
 
 
-isBool : IO.Canonical -> Name -> Bool
-isBool home name =
-    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.bool
+isBool : Target -> IO.Canonical -> Name -> Bool
+isBool target home name =
+    (home == ModuleName.basics target) && name == Name.bool
 
 
-isInt : IO.Canonical -> Name -> Bool
-isInt home name =
-    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.int
+isInt : Target -> IO.Canonical -> Name -> Bool
+isInt target home name =
+    (home == ModuleName.basics target) && name == Name.int
 
 
-isFloat : IO.Canonical -> Name -> Bool
-isFloat home name =
-    (home == ModuleName.basics || home == ModuleName.elmBasics) && name == Name.float
+isFloat : Target -> IO.Canonical -> Name -> Bool
+isFloat target home name =
+    (home == ModuleName.basics target) && name == Name.float
 
 
-isString : IO.Canonical -> Name -> Bool
-isString home name =
-    (home == ModuleName.string || home == ModuleName.elmString) && name == Name.string
+isString : Target -> IO.Canonical -> Name -> Bool
+isString target home name =
+    (home == ModuleName.string target) && name == Name.string
 
 
-isChar : IO.Canonical -> Name -> Bool
-isChar home name =
-    (home == ModuleName.char || home == ModuleName.elmChar) && name == Name.char
+isChar : Target -> IO.Canonical -> Name -> Bool
+isChar target home name =
+    (home == ModuleName.char target) && name == Name.char
 
 
-isMaybe : IO.Canonical -> Name -> Bool
-isMaybe home name =
-    (home == ModuleName.maybe || home == ModuleName.elmMaybe) && name == Name.maybe
+isMaybe : Target -> IO.Canonical -> Name -> Bool
+isMaybe target home name =
+    (home == ModuleName.maybe target) && name == Name.maybe
 
 
-isList : IO.Canonical -> Name -> Bool
-isList home name =
-    (home == ModuleName.list || home == ModuleName.elmList) && name == Name.list
+isList : Target -> IO.Canonical -> Name -> Bool
+isList target home name =
+    (home == ModuleName.list target) && name == Name.list
 
 
 
 -- IS SUPER?
 
 
-isSuper : Super -> Type -> Bool
-isSuper super tipe =
+isSuper : Target -> Super -> Type -> Bool
+isSuper target super tipe =
     case iteratedDealias tipe of
         Type h n args ->
             case super of
                 Number ->
-                    isInt h n || isFloat h n
+                    isInt target h n || isFloat target h n
 
                 Comparable ->
-                    isInt h n || isFloat h n || isString h n || isChar h n || isList h n && isSuper super (Prelude.head args)
+                    isInt target h n || isFloat target h n || isString target h n || isChar target h n || isList target h n && isSuper target super (Prelude.head args)
 
                 Appendable ->
-                    isString h n || isList h n
+                    isString target h n || isList target h n
 
                 CompAppend ->
-                    isString h n || isList h n && isSuper Comparable (Prelude.head args)
+                    isString target h n || isList target h n && isSuper target Comparable (Prelude.head args)
 
         Tuple a b cs ->
             case super of
@@ -612,7 +613,7 @@ isSuper super tipe =
                     False
 
                 Comparable ->
-                    List.all (isSuper super) (a :: b :: cs)
+                    List.all (isSuper target super) (a :: b :: cs)
 
                 Appendable ->
                     False
@@ -628,22 +629,22 @@ isSuper super tipe =
 -- NAME CLASH
 
 
-nameClashToDoc : RT.Context -> L.Localizer -> IO.Canonical -> Name -> List Type -> D.Doc
-nameClashToDoc ctx localizer (IO.Canonical _ home) name args =
+nameClashToDoc : Target -> RT.Context -> L.Localizer -> IO.Canonical -> Name -> List Type -> D.Doc
+nameClashToDoc target ctx localizer (IO.Canonical _ home) name args =
     RT.apply ctx
         (D.yellow (D.fromName home) |> D.a (D.dullyellow (D.fromChars "." |> D.a (D.fromName name))))
-        (List.map (toDoc localizer RT.App) args)
+        (List.map (toDoc target localizer RT.App) args)
 
 
 
 -- DIFF ALIASED RECORD
 
 
-diffAliasedRecord : L.Localizer -> Type -> Type -> Maybe (Diff D.Doc)
-diffAliasedRecord localizer t1 t2 =
+diffAliasedRecord : Target -> L.Localizer -> Type -> Type -> Maybe (Diff D.Doc)
+diffAliasedRecord target localizer t1 t2 =
     case ( iteratedDealias t1, iteratedDealias t2 ) of
         ( Record fields1 ext1, Record fields2 ext2 ) ->
-            Just (diffRecord localizer fields1 ext1 fields2 ext2)
+            Just (diffRecord target localizer fields1 ext1 fields2 ext2)
 
         _ ->
             Nothing
@@ -653,16 +654,16 @@ diffAliasedRecord localizer t1 t2 =
 -- RECORD DIFFS
 
 
-diffRecord : L.Localizer -> Dict String Name Type -> Extension -> Dict String Name Type -> Extension -> Diff D.Doc
-diffRecord localizer fields1 ext1 fields2 ext2 =
+diffRecord : Target -> L.Localizer -> Dict String Name Type -> Extension -> Dict String Name Type -> Extension -> Diff D.Doc
+diffRecord target localizer fields1 ext1 fields2 ext2 =
     let
         toUnknownDocs : Name -> Type -> ( D.Doc, D.Doc )
         toUnknownDocs field tipe =
-            ( D.dullyellow (D.fromName field), toDoc localizer RT.None tipe )
+            ( D.dullyellow (D.fromName field), toDoc target localizer RT.None tipe )
 
         toOverlapDocs : Name -> Type -> Type -> Diff ( D.Doc, D.Doc )
         toOverlapDocs field t1 t2 =
-            fmapDiff (Tuple.pair (D.fromName field)) <| toDiff localizer RT.None t1 t2
+            fmapDiff (Tuple.pair (D.fromName field)) <| toDiff target localizer RT.None t1 t2
 
         left : Dict String Name ( D.Doc, D.Doc )
         left =
@@ -705,7 +706,7 @@ diffRecord localizer fields1 ext1 fields2 ext2 =
         (Diff doc1 doc2 status) =
             fieldsDiff
                 |> fmapDiff RT.record
-                |> applyDiff (extToDiff ext1 ext2)
+                |> applyDiff (extToDiff target ext1 ext2)
     in
     Diff doc1 doc2 <|
         merge status <|
@@ -780,12 +781,12 @@ hasFixedFields ext =
 -- DIFF RECORD EXTENSION
 
 
-extToDiff : Extension -> Extension -> Diff (Maybe D.Doc)
-extToDiff ext1 ext2 =
+extToDiff : Target -> Extension -> Extension -> Diff (Maybe D.Doc)
+extToDiff target ext1 ext2 =
     let
         status : Status
         status =
-            extToStatus ext1 ext2
+            extToStatus target ext1 ext2
 
         extDoc1 : Maybe D.Doc
         extDoc1 =
@@ -803,8 +804,8 @@ extToDiff ext1 ext2 =
             Diff (Maybe.map D.dullyellow extDoc1) (Maybe.map D.dullyellow extDoc2) status
 
 
-extToStatus : Extension -> Extension -> Status
-extToStatus ext1 ext2 =
+extToStatus : Target -> Extension -> Extension -> Status
+extToStatus target ext1 ext2 =
     case ext1 of
         Closed ->
             case ext2 of
@@ -833,7 +834,7 @@ extToStatus ext1 ext2 =
                         Similar
 
                     else
-                        Different (Bag.one (BadRigidVar x (RigidVar y)))
+                        Different (Bag.one (BadRigidVar target x (RigidVar y)))
 
 
 

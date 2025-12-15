@@ -36,7 +36,7 @@ type Flags
 
 run : Args -> Flags -> Task Never ()
 run args (Flags autoYes) =
-    Reporting.attempt Exit.uninstallToReport
+    Reporting.attempt Exit.uninstallToReport <|
         (Stuff.findRoot
             |> Task.bind
                 (\maybeRoot ->

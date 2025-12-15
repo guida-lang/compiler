@@ -9,6 +9,7 @@ import Compiler.AST.Optimized as Opt
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Module as Canonicalize
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
@@ -41,11 +42,11 @@ compile root pkg ifaces modul =
                 case canonicalResult of
                     Ok canonical ->
                         Result.map2 (\annotations () -> annotations)
-                            (typeCheck modul canonical)
-                            (nitpick canonical)
+                            (typeCheck (Stuff.rootToTarget root) modul canonical)
+                            (nitpick (Stuff.rootToTarget root) canonical)
                             |> Result.andThen
                                 (\annotations ->
-                                    optimize modul annotations canonical
+                                    optimize (Stuff.rootToTarget root) modul annotations canonical
                                         |> Result.map (\objects -> Artifacts canonical annotations objects)
                                 )
 
@@ -68,9 +69,9 @@ canonicalize root pkg ifaces modul =
             Err (E.BadNames errors)
 
 
-typeCheck : Src.Module -> Can.Module -> Result E.Error (Dict String Name Can.Annotation)
-typeCheck modul canonical =
-    case TypeCheck.unsafePerformIO (TypeCheck.bind Type.run (Type.constrain canonical)) of
+typeCheck : Target -> Src.Module -> Can.Module -> Result E.Error (Dict String Name Can.Annotation)
+typeCheck target modul canonical =
+    case TypeCheck.unsafePerformIO (TypeCheck.bind (Type.run target) (Type.constrain target canonical)) of
         Ok annotations ->
             Ok annotations
 
@@ -78,9 +79,9 @@ typeCheck modul canonical =
             Err (E.BadTypes (Localizer.fromModule modul) errors)
 
 
-nitpick : Can.Module -> Result E.Error ()
-nitpick canonical =
-    case PatternMatches.check canonical of
+nitpick : Target -> Can.Module -> Result E.Error ()
+nitpick target canonical =
+    case PatternMatches.check target canonical of
         Ok () ->
             Ok ()
 
@@ -88,9 +89,9 @@ nitpick canonical =
             Err (E.BadPatterns errors)
 
 
-optimize : Src.Module -> Dict String Name.Name Can.Annotation -> Can.Module -> Result E.Error Opt.LocalGraph
-optimize modul annotations canonical =
-    case Tuple.second (R.run (Optimize.optimize annotations canonical)) of
+optimize : Target -> Src.Module -> Dict String Name.Name Can.Annotation -> Can.Module -> Result E.Error Opt.LocalGraph
+optimize target modul annotations canonical =
+    case Tuple.second (R.run (Optimize.optimize target annotations canonical)) of
         Ok localGraph ->
             Ok localGraph
 

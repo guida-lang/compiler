@@ -20,6 +20,7 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -78,20 +79,20 @@ registerGlobal region home name =
             TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarGlobal region global)
 
 
-registerDebug : Name -> IO.Canonical -> A.Region -> Tracker Opt.Expr
-registerDebug name home region =
+registerDebug : Target -> Name -> IO.Canonical -> A.Region -> Tracker Opt.Expr
+registerDebug target name home region =
     Tracker <|
         \uid deps fields ->
             let
                 global : Opt.Global
                 global =
-                    Opt.Global ModuleName.debug name
+                    Opt.Global (ModuleName.debug target) name
             in
             TResult uid (EverySet.insert Opt.toComparableGlobal global deps) fields (Opt.VarDebug region name home Nothing)
 
 
-registerCtor : A.Region -> IO.Canonical -> A.Located Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
-registerCtor region home (A.At _ name) index opts =
+registerCtor : Target -> A.Region -> IO.Canonical -> A.Located Name -> Index.ZeroBased -> Can.CtorOpts -> Tracker Opt.Expr
+registerCtor target region home (A.At _ name) index opts =
     Tracker <|
         \uid deps fields ->
             let
@@ -111,14 +112,14 @@ registerCtor region home (A.At _ name) index opts =
                     TResult uid newDeps fields <|
                         case name of
                             "True" ->
-                                if home == ModuleName.basics then
+                                if home == ModuleName.basics target then
                                     Opt.Bool region True
 
                                 else
                                     Opt.VarEnum region global index
 
                             "False" ->
-                                if home == ModuleName.basics then
+                                if home == ModuleName.basics target then
                                     Opt.Bool region False
 
                                 else
@@ -128,12 +129,12 @@ registerCtor region home (A.At _ name) index opts =
                                 Opt.VarEnum region global index
 
                 Can.Unbox ->
-                    TResult uid (EverySet.insert Opt.toComparableGlobal identity newDeps) fields (Opt.VarBox region global)
+                    TResult uid (EverySet.insert Opt.toComparableGlobal (identity target) newDeps) fields (Opt.VarBox region global)
 
 
-identity : Opt.Global
-identity =
-    Opt.Global ModuleName.basics Name.identity_
+identity : Target -> Opt.Global
+identity target =
+    Opt.Global (ModuleName.basics target) Name.identity_
 
 
 registerField : Name -> a -> Tracker a

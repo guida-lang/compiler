@@ -9,6 +9,7 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
@@ -31,20 +32,14 @@ type alias EResult i w a =
 -- CANONICALIZE
 
 
-canonicalize :
-    SyntaxVersion
-    -> Env.Env
-    -> List (A.Located Src.Value)
-    -> Dict String Name.Name union
-    -> Src.Effects
-    -> EResult i w Can.Effects
-canonicalize syntaxVersion env values unions effects =
+canonicalize : Target -> SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> Dict String Name.Name union -> Src.Effects -> EResult i w Can.Effects
+canonicalize target syntaxVersion env values unions effects =
     case effects of
         Src.NoEffects ->
             R.ok Can.NoEffects
 
         Src.Ports ports ->
-            R.traverse (canonicalizePort syntaxVersion env) ports
+            R.traverse (canonicalizePort target syntaxVersion env) ports
                 |> R.fmap (Can.Ports << Dict.fromList identity)
 
         Src.Manager region manager ->
@@ -94,22 +89,22 @@ canonicalize syntaxVersion env values unions effects =
 -- CANONICALIZE PORT
 
 
-canonicalizePort : SyntaxVersion -> Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
-canonicalizePort syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe) =
-    Type.toAnnotation syntaxVersion env tipe
+canonicalizePort : Target -> SyntaxVersion -> Env.Env -> Src.Port -> EResult i w ( Name.Name, Can.Port )
+canonicalizePort target syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe) =
+    Type.toAnnotation target syntaxVersion env tipe
         |> R.bind
             (\(Can.Forall freeVars ctipe) ->
                 case List.reverse (Type.delambda (Type.deepDealias ctipe)) of
                     (Can.TType home name [ msg ]) :: revArgs ->
-                        if home == ModuleName.cmd && name == Name.cmd then
+                        if home == ModuleName.cmd target && name == Name.cmd then
                             case revArgs of
                                 [] ->
-                                    R.throw (Error.PortTypeInvalid region portName Error.CmdNoArg)
+                                    R.throw (Error.PortTypeInvalid target region portName Error.CmdNoArg)
 
                                 [ outgoingType ] ->
                                     case msg of
                                         Can.TVar _ ->
-                                            case checkPayload outgoingType of
+                                            case checkPayload target outgoingType of
                                                 Ok () ->
                                                     R.ok
                                                         ( portName
@@ -121,21 +116,21 @@ canonicalizePort syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe)
                                                         )
 
                                                 Err ( badType, err ) ->
-                                                    R.throw (Error.PortPayloadInvalid region portName badType err)
+                                                    R.throw (Error.PortPayloadInvalid target region portName badType err)
 
                                         _ ->
-                                            R.throw (Error.PortTypeInvalid region portName Error.CmdBadMsg)
+                                            R.throw (Error.PortTypeInvalid target region portName Error.CmdBadMsg)
 
                                 _ ->
-                                    R.throw (Error.PortTypeInvalid region portName (Error.CmdExtraArgs (List.length revArgs)))
+                                    R.throw (Error.PortTypeInvalid target region portName (Error.CmdExtraArgs (List.length revArgs)))
 
-                        else if home == ModuleName.sub && name == Name.sub then
+                        else if home == ModuleName.sub target && name == Name.sub then
                             case revArgs of
                                 [ Can.TLambda incomingType (Can.TVar msg1) ] ->
                                     case msg of
                                         Can.TVar msg2 ->
                                             if msg1 == msg2 then
-                                                case checkPayload incomingType of
+                                                case checkPayload target incomingType of
                                                     Ok () ->
                                                         R.ok
                                                             ( portName
@@ -147,22 +142,22 @@ canonicalizePort syntaxVersion env (Src.Port _ ( _, A.At region portName ) tipe)
                                                             )
 
                                                     Err ( badType, err ) ->
-                                                        R.throw (Error.PortPayloadInvalid region portName badType err)
+                                                        R.throw (Error.PortPayloadInvalid target region portName badType err)
 
                                             else
-                                                R.throw (Error.PortTypeInvalid region portName Error.SubBad)
+                                                R.throw (Error.PortTypeInvalid target region portName Error.SubBad)
 
                                         _ ->
-                                            R.throw (Error.PortTypeInvalid region portName Error.SubBad)
+                                            R.throw (Error.PortTypeInvalid target region portName Error.SubBad)
 
                                 _ ->
-                                    R.throw (Error.PortTypeInvalid region portName Error.SubBad)
+                                    R.throw (Error.PortTypeInvalid target region portName Error.SubBad)
 
                         else
-                            R.throw (Error.PortTypeInvalid region portName Error.NotCmdOrSub)
+                            R.throw (Error.PortTypeInvalid target region portName Error.NotCmdOrSub)
 
                     _ ->
-                        R.throw (Error.PortTypeInvalid region portName Error.NotCmdOrSub)
+                        R.throw (Error.PortTypeInvalid target region portName Error.NotCmdOrSub)
             )
 
 
@@ -198,24 +193,24 @@ verifyManager tagRegion values name =
 -- CHECK PAYLOAD TYPES
 
 
-checkPayload : Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkPayload tipe =
+checkPayload : Target -> Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayload target tipe =
     case tipe of
         Can.TAlias _ _ args aliasedType ->
-            checkPayload (Type.dealias args aliasedType)
+            checkPayload target (Type.dealias args aliasedType)
 
         Can.TType home name args ->
             case args of
                 [] ->
-                    if isJson home name || isString home name || isIntFloatBool home name then
+                    if isJson target home name || isString target home name || isIntFloatBool target home name then
                         Ok ()
 
                     else
                         Err ( tipe, Error.UnsupportedType name )
 
                 [ arg ] ->
-                    if isList home name || isMaybe home name || isArray home name then
-                        checkPayload arg
+                    if isList target home name || isMaybe target home name || isArray target home name then
+                        checkPayload target arg
 
                     else
                         Err ( tipe, Error.UnsupportedType name )
@@ -227,9 +222,9 @@ checkPayload tipe =
             Ok ()
 
         Can.TTuple a b cs ->
-            checkPayload a
-                |> Result.andThen (\_ -> checkPayload b)
-                |> Result.andThen (\_ -> checkPayloadTupleCs cs)
+            checkPayload target a
+                |> Result.andThen (\_ -> checkPayload target b)
+                |> Result.andThen (\_ -> checkPayloadTupleCs target cs)
 
         Can.TVar name ->
             Err ( tipe, Error.TypeVariable name )
@@ -242,62 +237,56 @@ checkPayload tipe =
 
         Can.TRecord fields Nothing ->
             Dict.foldl compare
-                (\_ field acc -> Result.andThen (\_ -> checkFieldPayload field) acc)
+                (\_ field acc -> Result.andThen (\_ -> checkFieldPayload target field) acc)
                 (Ok ())
                 fields
 
 
-checkPayloadTupleCs : List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkPayloadTupleCs types =
+checkPayloadTupleCs : Target -> List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayloadTupleCs target types =
     case types of
         [] ->
             Ok ()
 
         tipe :: rest ->
-            checkPayload tipe
-                |> Result.andThen (\_ -> checkPayloadTupleCs rest)
+            checkPayload target tipe
+                |> Result.andThen (\_ -> checkPayloadTupleCs target rest)
 
 
-checkFieldPayload : Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkFieldPayload (Can.FieldType _ tipe) =
-    checkPayload tipe
+checkFieldPayload : Target -> Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkFieldPayload target (Can.FieldType _ tipe) =
+    checkPayload target tipe
 
 
-isIntFloatBool : IO.Canonical -> Name.Name -> Bool
-isIntFloatBool home name =
-    (home == ModuleName.basics || home == ModuleName.elmBasics)
+isIntFloatBool : Target -> IO.Canonical -> Name.Name -> Bool
+isIntFloatBool target home name =
+    (home == ModuleName.basics target)
         && (name == Name.int || name == Name.float || name == Name.bool)
 
 
-isString : IO.Canonical -> Name.Name -> Bool
-isString home name =
-    (home == ModuleName.string || home == ModuleName.elmString)
+isString : Target -> IO.Canonical -> Name.Name -> Bool
+isString target home name =
+    (home == ModuleName.string target)
         && (name == Name.string)
 
 
-isJson : IO.Canonical -> Name.Name -> Bool
-isJson home name =
-    (home == ModuleName.jsonEncode || home == ModuleName.elmJsonEncode)
+isJson : Target -> IO.Canonical -> Name.Name -> Bool
+isJson target home name =
+    (home == ModuleName.jsonEncode target)
         && (name == Name.value)
 
 
-isList : IO.Canonical -> Name.Name -> Bool
-isList home name =
-    (home == ModuleName.list || home == ModuleName.elmList)
+isList : Target -> IO.Canonical -> Name.Name -> Bool
+isList target home name =
+    (home == ModuleName.list target)
         && (name == Name.list)
 
 
-isMaybe : IO.Canonical -> Name.Name -> Bool
-isMaybe home name =
-    home
-        == ModuleName.maybe
-        && name
-        == Name.maybe
+isMaybe : Target -> IO.Canonical -> Name.Name -> Bool
+isMaybe target home name =
+    home == ModuleName.maybe target && name == Name.maybe
 
 
-isArray : IO.Canonical -> Name.Name -> Bool
-isArray home name =
-    home
-        == ModuleName.array
-        && name
-        == Name.array
+isArray : Target -> IO.Canonical -> Name.Name -> Bool
+isArray target home name =
+    home == ModuleName.array target && name == Name.array

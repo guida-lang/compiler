@@ -5,6 +5,7 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
@@ -23,7 +24,7 @@ type alias FResult i w a =
 
 createInitialEnv : Stuff.Root -> IO.Canonical -> Dict String ModuleName.Raw I.Interface -> List Src.Import -> FResult i w Env.Env
 createInitialEnv root home ifaces imports =
-    Utils.foldM (addImport ifaces) emptyState (toSafeImports root home imports)
+    Utils.foldM (addImport ifaces) (emptyState (Stuff.rootToTarget root)) (toSafeImports root home imports)
         |> R.fmap
             (\{ vars, types, ctors, binops, q_vars, q_types, q_ctors } ->
                 Env.Env home
@@ -62,14 +63,14 @@ type alias State =
     }
 
 
-emptyState : State
-emptyState =
-    State Dict.empty emptyTypes Dict.empty Dict.empty Dict.empty Dict.empty Dict.empty
+emptyState : Target -> State
+emptyState target =
+    State Dict.empty (emptyTypes target) Dict.empty Dict.empty Dict.empty Dict.empty Dict.empty
 
 
-emptyTypes : Env.Exposed Env.Type
-emptyTypes =
-    Dict.fromList identity [ ( "List", Env.Specific ModuleName.list (Env.Union 1 ModuleName.list) ) ]
+emptyTypes : Target -> Env.Exposed Env.Type
+emptyTypes target =
+    Dict.fromList identity [ ( "List", Env.Specific (ModuleName.list target) (Env.Union 1 (ModuleName.list target)) ) ]
 
 
 
@@ -87,7 +88,7 @@ toSafeImports root (IO.Canonical package _) imports =
 
 isNormal : Stuff.Root -> Src.Import -> Bool
 isNormal root (Src.Import ( _, A.At _ name ) maybeAlias _) =
-    if Name.isKernel (Stuff.isRootGuida root) name then
+    if Name.isKernel (Stuff.rootToTarget root) name then
         case maybeAlias of
             Nothing ->
                 False

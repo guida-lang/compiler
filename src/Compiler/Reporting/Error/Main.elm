@@ -7,6 +7,7 @@ module Compiler.Reporting.Error.Main exposing
 
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Canonicalize as E
@@ -23,7 +24,7 @@ import Utils.Bytes.Encode as BE
 
 
 type Error
-    = BadType A.Region Can.Type
+    = BadType Target A.Region Can.Type
     | BadCycle A.Region Name (List Name)
     | BadFlags A.Region Can.Type E.InvalidPayload
 
@@ -35,13 +36,13 @@ type Error
 toReport : L.Localizer -> Code.Source -> Error -> Report.Report
 toReport localizer source err =
     case err of
-        BadType region tipe ->
+        BadType target region tipe ->
             Report.Report "BAD MAIN TYPE" region [] <|
                 Code.toSnippet source region Nothing <|
                     ( D.fromChars "I cannot handle this type of `main` value:"
                     , D.stack
                         [ D.fromChars "The type of `main` value I am seeing is:"
-                        , D.indent 4 <| D.dullyellow <| RT.canToDoc localizer RT.None tipe
+                        , D.indent 4 <| D.dullyellow <| RT.canToDoc target localizer RT.None tipe
                         , D.reflow "I only know how to handle Html, Svg, and Programs though. Modify `main` to be one of those types of values!"
                         ]
                     )
@@ -101,9 +102,10 @@ toReport localizer source err =
 errorEncoder : Error -> BE.Encoder
 errorEncoder error =
     case error of
-        BadType region tipe ->
+        BadType target region tipe ->
             BE.sequence
                 [ BE.unsignedInt8 0
+                , Target.encoder target
                 , A.regionEncoder region
                 , Can.typeEncoder tipe
                 ]
@@ -132,7 +134,8 @@ errorDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map2 BadType
+                        BD.map3 BadType
+                            Target.decoder
                             A.regionDecoder
                             Can.typeDecoder
 

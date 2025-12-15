@@ -33,6 +33,7 @@ import Compiler.Compile as Compile
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Constraint as Con
 import Compiler.Guida.Docs as Docs
 import Compiler.Guida.Interface as I
@@ -199,17 +200,22 @@ generate style scope root time =
                                 Task.pure (Err exit)
 
                             Ok ( env, outline ) ->
-                                convertToGuidaOutline env outline
-                                    |> Task.bind
-                                        (\convertedOutline ->
-                                            case convertedOutline of
-                                                Outline.Pkg pkg ->
-                                                    verifyPkg env time pkg
+                                -- convertToGuidaOutline env outline
+                                --     |> Task.bind
+                                --         (\convertedOutline ->
+                                --             case convertedOutline of
+                                --                 Outline.Pkg pkg ->
+                                --                     verifyPkg env time pkg
+                                --                 Outline.App app ->
+                                --                     verifyApp env time app
+                                --         )
+                                --     |> Task.run
+                                case outline of
+                                    Outline.Pkg pkg ->
+                                        Task.run (verifyPkg env time pkg)
 
-                                                Outline.App app ->
-                                                    verifyApp env time app
-                                        )
-                                    |> Task.run
+                                    Outline.App app ->
+                                        Task.run (verifyApp env time app)
                     )
         )
 
@@ -479,7 +485,7 @@ verifyConstraints (Env _ _ root cache _ connection registry) constraints =
                                 Stuff.GuidaRoot _ ->
                                     Exit.DetailsNoGuidaSolution
 
-                                Stuff.ElmRoot _ ->
+                                Stuff.ElmRoot _ _ ->
                                     Exit.DetailsNoElmSolution
                             )
 
@@ -492,7 +498,7 @@ verifyConstraints (Env _ _ root cache _ connection registry) constraints =
                                             Stuff.GuidaRoot _ ->
                                                 Exit.DetailsNoGuidaOfflineSolution registryDomain
 
-                                            Stuff.ElmRoot _ ->
+                                            Stuff.ElmRoot _ _ ->
                                                 Exit.DetailsNoElmOfflineSolution registryDomain
                                         )
                                 )
@@ -806,8 +812,8 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                         Stuff.GuidaRoot _ ->
                                                                                                                                             Exit.BD_BadGuidaBuild
 
-                                                                                                                                        Stuff.ElmRoot _ ->
-                                                                                                                                            Exit.BD_BadElmBuild
+                                                                                                                                        Stuff.ElmRoot _ _ ->
+                                                                                                                                            Debug.log "1" Exit.BD_BadElmBuild
                                                                                                                             in
                                                                                                                             Reporting.report key Reporting.DBroken
                                                                                                                                 |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
@@ -832,8 +838,8 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                                                     Stuff.GuidaRoot _ ->
                                                                                                                                                                                         Exit.BD_BadGuidaBuild
 
-                                                                                                                                                                                    Stuff.ElmRoot _ ->
-                                                                                                                                                                                        Exit.BD_BadElmBuild
+                                                                                                                                                                                    Stuff.ElmRoot _ _ ->
+                                                                                                                                                                                        Debug.log "2" Exit.BD_BadElmBuild
                                                                                                                                                                         in
                                                                                                                                                                         Reporting.report key Reporting.DBroken
                                                                                                                                                                             |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
@@ -883,8 +889,8 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                 Stuff.GuidaRoot _ ->
                                                     Exit.BD_BadGuidaBuild
 
-                                                Stuff.ElmRoot _ ->
-                                                    Exit.BD_BadElmBuild
+                                                Stuff.ElmRoot _ _ ->
+                                                    Debug.log "3" Exit.BD_BadElmBuild
                                     in
                                     Reporting.report key Reporting.DBroken
                                         |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
@@ -895,7 +901,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 
                                 Ok (Outline.App (Outline.ElmAppOutline _ _ _ _ _ _)) ->
                                     Reporting.report key Reporting.DBroken
-                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadElmBuild pkg vsn f)))
+                                        |> Task.fmap (\_ -> Err (Just (Debug.log "4" (Exit.BD_BadElmBuild pkg vsn f))))
 
                                 Ok (Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ exposed deps _ _)) ->
                                     pkgBuild exposed deps
@@ -925,7 +931,7 @@ addLocalGraph root name status graph =
             graph
 
         RKernelLocal cs ->
-            Opt.addKernel (Name.getKernel (Stuff.isRootGuida root) name) cs graph
+            Opt.addKernel (Name.getKernel (Stuff.rootToTarget root) name) cs graph
 
         RKernelForeign ->
             graph
@@ -1061,7 +1067,7 @@ crawlModule root foreignDeps mvar pkg src docsStatus name =
                                     else if elmExists then
                                         crawlFile root SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
 
-                                    else if Pkg.isKernel pkg && Name.isKernel (Stuff.isRootGuida root) name then
+                                    else if Pkg.isKernel pkg && Name.isKernel (Stuff.rootToTarget root) name then
                                         crawlKernel root foreignDeps mvar pkg src name
 
                                     else
@@ -1075,7 +1081,7 @@ crawlFile root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName pa
     File.readUtf8 path
         |> Task.bind
             (\bytes ->
-                case Parse.fromByteString syntaxVersion (Parse.Package pkg) bytes of
+                case Parse.fromByteString (Stuff.rootToTarget root) syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
                             crawlImports root foreignDeps mvar pkg src imports
@@ -1127,7 +1133,7 @@ crawlKernel root foreignDeps mvar pkg src name =
                     File.readUtf8 path
                         |> Task.bind
                             (\bytes ->
-                                case Kernel.fromByteString root pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
+                                case Kernel.fromByteString (Stuff.rootToTarget root) pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
                                         Task.pure Nothing
 
@@ -1189,7 +1195,7 @@ compile root pkg mvar status =
 
                                                                     docs : Maybe Docs.Module
                                                                     docs =
-                                                                        makeDocs docsStatus canonical
+                                                                        makeDocs (Stuff.rootToTarget root) docsStatus canonical
                                                                 in
                                                                 Just (RLocal ifaces objects docs)
                                                     )
@@ -1247,11 +1253,11 @@ getDocsStatus cache pkg vsn =
             )
 
 
-makeDocs : DocsStatus -> Can.Module -> Maybe Docs.Module
-makeDocs status modul =
+makeDocs : Target -> DocsStatus -> Can.Module -> Maybe Docs.Module
+makeDocs target status modul =
     case status of
         DocsNeeded ->
-            case Docs.fromModule modul of
+            case Docs.fromModule target modul of
                 Ok docs ->
                     Just docs
 

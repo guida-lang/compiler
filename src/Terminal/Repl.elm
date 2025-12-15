@@ -18,6 +18,7 @@ import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as N
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Licenses as Licenses
 import Compiler.Guida.ModuleName as ModuleName
@@ -319,7 +320,7 @@ attemptImport lines =
 
         parser : P.Parser () (Src.C1 Src.Import)
         parser =
-            P.specialize (\_ _ _ -> ()) PM.chompImport
+            P.specialize (\_ _ _ -> ()) (PM.chompImport Target.GuidaTarget)
     in
     case P.fromByteString parser (\_ _ -> ()) src of
         Ok ( _, Src.Import ( _, A.At _ name ) _ _ ) ->
@@ -468,7 +469,7 @@ toDeclPosition src decl r c =
 
         report : Report.Report
         report =
-            ES.toReport SV.Guida (Code.toSource src) err
+            ES.toReport (Code.toSource src) err
 
         (Report.Report _ (A.Region (A.Position row col) _) _ _) =
             report

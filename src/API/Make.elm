@@ -93,7 +93,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
 
                                                             [ name ] ->
                                                                 toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                    |> Task.bind (Task.pure << Html.sandwich name)
+                                                                    |> Task.bind (Task.pure << Html.sandwich (Stuff.rootToTarget root) name)
 
                                                             _ ->
                                                                 crash "TODO"

@@ -11,6 +11,7 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Generate.JavaScript.Name as JsName
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Optimize.Names as Names
 import Compiler.Reporting.Annotation as A
@@ -22,11 +23,11 @@ import Utils.Crash exposing (crash)
 -- ENCODE
 
 
-toEncoder : Can.Type -> Names.Tracker Opt.Expr
-toEncoder tipe =
+toEncoder : Target -> Can.Type -> Names.Tracker Opt.Expr
+toEncoder target tipe =
     case tipe of
         Can.TAlias _ _ args alias ->
-            toEncoder (Type.dealias args alias)
+            toEncoder target (Type.dealias args alias)
 
         Can.TLambda _ _ ->
             crash "toEncoder: function"
@@ -35,41 +36,41 @@ toEncoder tipe =
             crash "toEncoder: type variable"
 
         Can.TUnit ->
-            Names.fmap (Opt.Function [ Name.dollar ]) (encode "null")
+            Names.fmap (Opt.Function [ Name.dollar ]) (encode target "null")
 
         Can.TTuple a b cs ->
-            encodeTuple a b cs
+            encodeTuple target a b cs
 
         Can.TType _ name args ->
             case args of
                 [] ->
                     if name == Name.float then
-                        encode "float"
+                        encode target "float"
 
                     else if name == Name.int then
-                        encode "int"
+                        encode target "int"
 
                     else if name == Name.bool then
-                        encode "bool"
+                        encode target "bool"
 
                     else if name == Name.string then
-                        encode "string"
+                        encode target "string"
 
                     else if name == Name.value then
-                        Names.registerGlobal A.zero ModuleName.basics Name.identity_
+                        Names.registerGlobal A.zero (ModuleName.basics target) Name.identity_
 
                     else
                         crash "toEncoder: bad custom type"
 
                 [ arg ] ->
                     if name == Name.maybe then
-                        encodeMaybe arg
+                        encodeMaybe target arg
 
                     else if name == Name.list then
-                        encodeList arg
+                        encodeList target arg
 
                     else if name == Name.array then
-                        encodeArray arg
+                        encodeArray target arg
 
                     else
                         crash "toEncoder: bad custom type"
@@ -84,7 +85,7 @@ toEncoder tipe =
             let
                 encodeField : ( Name, Can.FieldType ) -> Names.Tracker Opt.Expr
                 encodeField ( name, Can.FieldType _ fieldType ) =
-                    toEncoder fieldType
+                    toEncoder target fieldType
                         |> Names.fmap
                             (\encoder ->
                                 let
@@ -95,7 +96,7 @@ toEncoder tipe =
                                 Opt.Tuple A.zero (Opt.Str A.zero (Name.toElmString name)) value []
                             )
             in
-            encode "object"
+            encode target "object"
                 |> Names.bind
                     (\object ->
                         Names.traverse encodeField (Dict.toList compare fields)
@@ -111,15 +112,15 @@ toEncoder tipe =
 -- ENCODE HELPERS
 
 
-encodeMaybe : Can.Type -> Names.Tracker Opt.Expr
-encodeMaybe tipe =
-    encode "null"
+encodeMaybe : Target -> Can.Type -> Names.Tracker Opt.Expr
+encodeMaybe target tipe =
+    encode target "null"
         |> Names.bind
             (\null ->
-                toEncoder tipe
+                toEncoder target tipe
                     |> Names.bind
                         (\encoder ->
-                            Names.registerGlobal A.zero ModuleName.maybe "destruct"
+                            Names.registerGlobal A.zero (ModuleName.maybe target) "destruct"
                                 |> Names.fmap
                                     (\destruct ->
                                         Opt.Function [ Name.dollar ]
@@ -135,28 +136,28 @@ encodeMaybe tipe =
             )
 
 
-encodeList : Can.Type -> Names.Tracker Opt.Expr
-encodeList tipe =
-    encode "list"
+encodeList : Target -> Can.Type -> Names.Tracker Opt.Expr
+encodeList target tipe =
+    encode target "list"
         |> Names.bind
             (\list ->
-                toEncoder tipe
+                toEncoder target tipe
                     |> Names.fmap (Opt.Call A.zero list << List.singleton)
             )
 
 
-encodeArray : Can.Type -> Names.Tracker Opt.Expr
-encodeArray tipe =
-    encode "array"
+encodeArray : Target -> Can.Type -> Names.Tracker Opt.Expr
+encodeArray target tipe =
+    encode target "array"
         |> Names.bind
             (\array ->
-                toEncoder tipe
+                toEncoder target tipe
                     |> Names.fmap (Opt.Call A.zero array << List.singleton)
             )
 
 
-encodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
-encodeTuple a b cs =
+encodeTuple : Target -> Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+encodeTuple target a b cs =
     let
         let_ : Name -> Index.ZeroBased -> Opt.Expr -> Opt.Expr
         let_ arg index body =
@@ -168,13 +169,13 @@ encodeTuple a b cs =
 
         encodeArg : Name -> Can.Type -> Names.Tracker Opt.Expr
         encodeArg arg tipe =
-            toEncoder tipe
+            toEncoder target tipe
                 |> Names.fmap (\encoder -> Opt.Call A.zero encoder [ Opt.VarLocal arg ])
     in
-    encode "list"
+    encode target "list"
         |> Names.bind
             (\list ->
-                Names.registerGlobal A.zero ModuleName.basics Name.identity_
+                Names.registerGlobal A.zero (ModuleName.basics target) Name.identity_
                     |> Names.bind
                         (\identity ->
                             Names.bind
@@ -221,23 +222,23 @@ encodeTuple a b cs =
 -- FLAGS DECODER
 
 
-toFlagsDecoder : Can.Type -> Names.Tracker Opt.Expr
-toFlagsDecoder tipe =
+toFlagsDecoder : Target -> Can.Type -> Names.Tracker Opt.Expr
+toFlagsDecoder target tipe =
     case tipe of
         Can.TUnit ->
             Names.fmap (\succeed -> Opt.Call A.zero succeed [ Opt.Unit ])
-                (decode "succeed")
+                (decode target "succeed")
 
         _ ->
-            toDecoder tipe
+            toDecoder target tipe
 
 
 
 -- DECODE
 
 
-toDecoder : Can.Type -> Names.Tracker Opt.Expr
-toDecoder tipe =
+toDecoder : Target -> Can.Type -> Names.Tracker Opt.Expr
+toDecoder target tipe =
     case tipe of
         Can.TLambda _ _ ->
             crash "functions should not be allowed through input ports"
@@ -246,39 +247,39 @@ toDecoder tipe =
             crash "type variables should not be allowed through input ports"
 
         Can.TAlias _ _ args alias ->
-            toDecoder (Type.dealias args alias)
+            toDecoder target (Type.dealias args alias)
 
         Can.TUnit ->
-            decodeTuple0
+            decodeTuple0 target
 
         Can.TTuple a b cs ->
-            decodeTuple a b cs
+            decodeTuple target a b cs
 
         Can.TType _ name args ->
             case ( name, args ) of
                 ( "Float", [] ) ->
-                    decode "float"
+                    decode target "float"
 
                 ( "Int", [] ) ->
-                    decode "int"
+                    decode target "int"
 
                 ( "Bool", [] ) ->
-                    decode "bool"
+                    decode target "bool"
 
                 ( "String", [] ) ->
-                    decode "string"
+                    decode target "string"
 
                 ( "Value", [] ) ->
-                    decode "value"
+                    decode target "value"
 
                 ( "Maybe", [ arg ] ) ->
-                    decodeMaybe arg
+                    decodeMaybe target arg
 
                 ( "List", [ arg ] ) ->
-                    decodeList arg
+                    decodeList target arg
 
                 ( "Array", [ arg ] ) ->
-                    decodeArray arg
+                    decodeArray target arg
 
                 _ ->
                     crash "toDecoder: bad type"
@@ -287,15 +288,15 @@ toDecoder tipe =
             crash "toDecoder: bad record"
 
         Can.TRecord fields Nothing ->
-            decodeRecord fields
+            decodeRecord target fields
 
 
 
 -- DECODE MAYBE
 
 
-decodeMaybe : Can.Type -> Names.Tracker Opt.Expr
-decodeMaybe tipe =
+decodeMaybe : Target -> Can.Type -> Names.Tracker Opt.Expr
+decodeMaybe target tipe =
     Names.bind
         (\nothing ->
             Names.bind
@@ -316,59 +317,59 @@ decodeMaybe tipe =
                                                             ]
                                                         ]
                                                 )
-                                                (toDecoder tipe)
+                                                (toDecoder target tipe)
                                         )
-                                        (decode "map")
+                                        (decode target "map")
                                 )
-                                (decode "null")
+                                (decode target "null")
                         )
-                        (decode "oneOf")
+                        (decode target "oneOf")
                 )
-                (Names.registerGlobal A.zero ModuleName.maybe "Just")
+                (Names.registerGlobal A.zero (ModuleName.maybe target) "Just")
         )
-        (Names.registerGlobal A.zero ModuleName.maybe "Nothing")
+        (Names.registerGlobal A.zero (ModuleName.maybe target) "Nothing")
 
 
 
 -- DECODE LIST
 
 
-decodeList : Can.Type -> Names.Tracker Opt.Expr
-decodeList tipe =
+decodeList : Target -> Can.Type -> Names.Tracker Opt.Expr
+decodeList target tipe =
     Names.bind
         (\list ->
             Names.fmap (Opt.Call A.zero list << List.singleton)
-                (toDecoder tipe)
+                (toDecoder target tipe)
         )
-        (decode "list")
+        (decode target "list")
 
 
 
 -- DECODE ARRAY
 
 
-decodeArray : Can.Type -> Names.Tracker Opt.Expr
-decodeArray tipe =
+decodeArray : Target -> Can.Type -> Names.Tracker Opt.Expr
+decodeArray target tipe =
     Names.bind
         (\array ->
             Names.fmap (Opt.Call A.zero array << List.singleton)
-                (toDecoder tipe)
+                (toDecoder target tipe)
         )
-        (decode "array")
+        (decode target "array")
 
 
 
 -- DECODE TUPLES
 
 
-decodeTuple0 : Names.Tracker Opt.Expr
-decodeTuple0 =
+decodeTuple0 : Target -> Names.Tracker Opt.Expr
+decodeTuple0 target =
     Names.fmap (\null -> Opt.Call A.zero null [ Opt.Unit ])
-        (decode "null")
+        (decode target "null")
 
 
-decodeTuple : Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
-decodeTuple a b cs =
+decodeTuple : Target -> Can.Type -> Can.Type -> List Can.Type -> Names.Tracker Opt.Expr
+decodeTuple target a b cs =
     Names.bind
         (\succeed ->
             let
@@ -384,11 +385,11 @@ decodeTuple a b cs =
                 tuple =
                     Opt.Tuple A.zero (toLocal 0) (toLocal 1) (List.indexedMap (\i _ -> toLocal (i + 2)) cs)
             in
-            List.foldr (\( i, c ) -> Names.bind (indexAndThen i c))
-                (indexAndThen (List.length cs + 1) lastElem (Opt.Call A.zero succeed [ tuple ]))
+            List.foldr (\( i, c ) -> Names.bind (indexAndThen target i c))
+                (indexAndThen target (List.length cs + 1) lastElem (Opt.Call A.zero succeed [ tuple ]))
                 (List.indexedMap Tuple.pair allElems)
         )
-        (decode "succeed")
+        (decode target "succeed")
 
 
 toLocal : Int -> Opt.Expr
@@ -396,8 +397,8 @@ toLocal index =
     Opt.VarLocal (Name.fromVarIndex index)
 
 
-indexAndThen : Int -> Can.Type -> Opt.Expr -> Names.Tracker Opt.Expr
-indexAndThen i tipe decoder =
+indexAndThen : Target -> Int -> Can.Type -> Opt.Expr -> Names.Tracker Opt.Expr
+indexAndThen target i tipe decoder =
     Names.bind
         (\andThen ->
             Names.bind
@@ -410,19 +411,19 @@ indexAndThen i tipe decoder =
                                 , Opt.Call A.zero index [ Opt.Int A.zero i, typeDecoder ]
                                 ]
                         )
-                        (toDecoder tipe)
+                        (toDecoder target tipe)
                 )
-                (decode "index")
+                (decode target "index")
         )
-        (decode "andThen")
+        (decode target "andThen")
 
 
 
 -- DECODE RECORDS
 
 
-decodeRecord : Dict String Name.Name Can.FieldType -> Names.Tracker Opt.Expr
-decodeRecord fields =
+decodeRecord : Target -> Dict String Name.Name Can.FieldType -> Names.Tracker Opt.Expr
+decodeRecord target fields =
     let
         toFieldExpr : Name -> b -> Opt.Expr
         toFieldExpr name _ =
@@ -437,16 +438,16 @@ decodeRecord fields =
             Names.registerFieldDict fields (Dict.toList compare fields)
                 |> Names.bind
                     (\fieldDecoders ->
-                        List.foldl (\fieldDecoder -> Names.bind (\optCall -> fieldAndThen optCall fieldDecoder))
+                        List.foldl (\fieldDecoder -> Names.bind (\optCall -> fieldAndThen target optCall fieldDecoder))
                             (Names.pure (Opt.Call A.zero succeed [ record ]))
                             fieldDecoders
                     )
         )
-        (decode "succeed")
+        (decode target "succeed")
 
 
-fieldAndThen : Opt.Expr -> ( Name.Name, Can.FieldType ) -> Names.Tracker Opt.Expr
-fieldAndThen decoder ( key, Can.FieldType _ tipe ) =
+fieldAndThen : Target -> Opt.Expr -> ( Name.Name, Can.FieldType ) -> Names.Tracker Opt.Expr
+fieldAndThen target decoder ( key, Can.FieldType _ tipe ) =
     Names.bind
         (\andThen ->
             Names.bind
@@ -459,22 +460,22 @@ fieldAndThen decoder ( key, Can.FieldType _ tipe ) =
                                 , Opt.Call A.zero field [ Opt.Str A.zero (Name.toElmString key), typeDecoder ]
                                 ]
                         )
-                        (toDecoder tipe)
+                        (toDecoder target tipe)
                 )
-                (decode "field")
+                (decode target "field")
         )
-        (decode "andThen")
+        (decode target "andThen")
 
 
 
 -- GLOBALS HELPERS
 
 
-encode : Name -> Names.Tracker Opt.Expr
-encode name =
-    Names.registerGlobal A.zero ModuleName.jsonEncode name
+encode : Target -> Name -> Names.Tracker Opt.Expr
+encode target name =
+    Names.registerGlobal A.zero (ModuleName.jsonEncode target) name
 
 
-decode : Name -> Names.Tracker Opt.Expr
-decode name =
-    Names.registerGlobal A.zero ModuleName.jsonDecode name
+decode : Target -> Name -> Names.Tracker Opt.Expr
+decode target name =
+    Names.registerGlobal A.zero (ModuleName.jsonDecode target) name

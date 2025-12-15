@@ -10,6 +10,7 @@ module Builder.Reporting.Exit.Help exposing
     , toStdout
     )
 
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Json.Encode as E
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error as Error

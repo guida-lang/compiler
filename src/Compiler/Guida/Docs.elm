@@ -28,6 +28,7 @@ import Compiler.AST.Utils.Binop as Binop
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Compiler.Type as Type
 import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Guida.ModuleName as ModuleName
@@ -321,8 +322,8 @@ precDecoder =
 -- FROM MODULE
 
 
-fromModule : Can.Module -> Result E.Error Module
-fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
+fromModule : Target -> Can.Module -> Result E.Error Module
+fromModule target ((Can.Module _ exports docs _ _ _ _ _) as modul) =
     case exports of
         Can.ExportEverything region ->
             Err (E.ImplicitExposing region)
@@ -334,8 +335,8 @@ fromModule ((Can.Module _ exports docs _ _ _ _ _) as modul) =
 
                 Src.YesDocs overview comments ->
                     parseOverview overview
-                        |> Result.andThen (checkNames exportDict)
-                        |> Result.andThen (\_ -> checkDefs exportDict overview (Dict.fromList identity comments) modul)
+                        |> Result.andThen (checkNames target exportDict)
+                        |> Result.andThen (\_ -> checkDefs target exportDict overview (Dict.fromList identity comments) modul)
 
 
 
@@ -495,8 +496,8 @@ untilDocs src pos end row col =
 -- CHECK NAMES
 
 
-checkNames : Dict String Name (A.Located Can.Export) -> List (A.Located Name) -> Result E.Error ()
-checkNames exports names =
+checkNames : Target -> Dict String Name (A.Located Can.Export) -> List (A.Located Name) -> Result E.Error ()
+checkNames target exports names =
     let
         docs : DocNameRegions
         docs =
@@ -504,7 +505,7 @@ checkNames exports names =
 
         loneExport : Name -> A.Located Can.Export -> Result.RResult i w E.NameProblem A.Region -> Result.RResult i w E.NameProblem A.Region
         loneExport name export_ _ =
-            onlyInExports name export_
+            onlyInExports target name export_
 
         checkBoth : Name -> A.Located Can.Export -> OneOrMore.OneOrMore A.Region -> Result.RResult i w E.NameProblem A.Region -> Result.RResult i w E.NameProblem A.Region
         checkBoth n _ r _ =
@@ -554,17 +555,17 @@ onlyInDocs name regions =
             )
 
 
-onlyInExports : Name -> A.Located Can.Export -> Result.RResult i w E.NameProblem a
-onlyInExports name (A.At region _) =
-    Result.throw (E.NameOnlyInExports name region)
+onlyInExports : Target -> Name -> A.Located Can.Export -> Result.RResult i w E.NameProblem a
+onlyInExports target name (A.At region _) =
+    Result.throw (E.NameOnlyInExports target name region)
 
 
 
 -- CHECK DEFS
 
 
-checkDefs : Dict String Name (A.Located Can.Export) -> Src.Comment -> Dict String Name Src.Comment -> Can.Module -> Result E.Error Module
-checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases infixes effects) =
+checkDefs : Target -> Dict String Name (A.Located Can.Export) -> Src.Comment -> Dict String Name Src.Comment -> Can.Module -> Result E.Error Module
+checkDefs target exportDict overview comments (Can.Module name _ _ decls unions aliases infixes effects) =
     let
         types : Types
         types =
@@ -574,7 +575,7 @@ checkDefs exportDict overview comments (Can.Module name _ _ decls unions aliases
         info =
             Info comments types unions aliases infixes effects
     in
-    case Result.run (Result.mapTraverseWithKey identity compare (checkExport info) exportDict) of
+    case Result.run (Result.mapTraverseWithKey identity compare (checkExport target info) exportDict) of
         ( _, Err problems ) ->
             Err (E.DefProblems (OneOrMore.destruct NE.Nonempty problems))
 
@@ -591,14 +592,14 @@ type Info
     = Info (Dict String Name.Name Src.Comment) (Dict String Name.Name (Result A.Region Can.Type)) (Dict String Name.Name Can.Union) (Dict String Name.Name Can.Alias) (Dict String Name.Name Can.Binop) Can.Effects
 
 
-checkExport : Info -> Name -> A.Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
-checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region export) =
+checkExport : Target -> Info -> Name -> A.Located Can.Export -> Result.RResult i w E.DefProblem (Module -> Module)
+checkExport target ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region export) =
     case export of
         Can.ExportValue ->
-            getType name info
+            getType target name info
                 |> Result.bind
                     (\tipe ->
-                        getComment region name info
+                        getComment target region name info
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
@@ -619,10 +620,10 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                 (Can.Binop_ assoc prec realName) =
                     Utils.find identity name iBinops
             in
-            getType realName info
+            getType target realName info
                 |> Result.bind
                     (\tipe ->
-                        getComment region realName info
+                        getComment target region realName info
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
@@ -643,7 +644,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                 (Can.Alias tvars tipe) =
                     Utils.find identity name iAliases
             in
-            getComment region name info
+            getComment target region name info
                 |> Result.bind
                     (\comment ->
                         Result.ok
@@ -662,7 +663,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                 (Can.Union tvars ctors _ _) =
                     Utils.find identity name iUnions
             in
-            getComment region name info
+            getComment target region name info
                 |> Result.bind
                     (\comment ->
                         Result.ok
@@ -681,7 +682,7 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                 (Can.Union tvars _ _ _) =
                     Utils.find identity name iUnions
             in
-            getComment region name info
+            getComment target region name info
                 |> Result.bind
                     (\comment ->
                         Result.ok
@@ -696,10 +697,10 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                     )
 
         Can.ExportPort ->
-            getType name info
+            getType target name info
                 |> Result.bind
                     (\tipe ->
-                        getComment region name info
+                        getComment target region name info
                             |> Result.bind
                                 (\comment ->
                                     Result.ok
@@ -715,21 +716,21 @@ checkExport ((Info _ _ iUnions iAliases iBinops _) as info) name (A.At region ex
                     )
 
 
-getComment : A.Region -> Name.Name -> Info -> Result.RResult i w E.DefProblem Comment
-getComment region name (Info iComments _ _ _ _ _) =
+getComment : Target -> A.Region -> Name.Name -> Info -> Result.RResult i w E.DefProblem Comment
+getComment target region name (Info iComments _ _ _ _ _) =
     case Dict.get identity name iComments of
         Nothing ->
-            Result.throw (E.NoComment name region)
+            Result.throw (E.NoComment target name region)
 
         Just (Src.Comment snippet) ->
             Result.ok (Json.fromComment snippet)
 
 
-getType : Name.Name -> Info -> Result.RResult i w E.DefProblem Type.Type
-getType name (Info _ iValues _ _ _ _) =
+getType : Target -> Name.Name -> Info -> Result.RResult i w E.DefProblem Type.Type
+getType target name (Info _ iValues _ _ _ _) =
     case Utils.find identity name iValues of
         Err region ->
-            Result.throw (E.NoAnnotation name region)
+            Result.throw (E.NoAnnotation target name region)
 
         Ok tipe ->
             Result.ok (Extract.fromType tipe)

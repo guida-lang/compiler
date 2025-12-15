@@ -46,6 +46,7 @@ import Builder.Http as Http
 import Builder.Reporting.Exit.Help as Help
 import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Magnitude as M
 import Compiler.Guida.ModuleName as ModuleName
@@ -3809,7 +3810,7 @@ type BuildProjectProblem
     | BP_RootNameDuplicate ModuleName.Raw FilePath FilePath
     | BP_RootNameInvalid FilePath FilePath (List String)
     | BP_CannotLoadDependencies
-    | BP_Cycle ModuleName.Raw (List ModuleName.Raw)
+    | BP_Cycle Target ModuleName.Raw (List ModuleName.Raw)
     | BP_MissingExposed (NE.Nonempty ( ModuleName.Raw, Import.Problem ))
 
 
@@ -3901,14 +3902,14 @@ toProjectProblemReport projectProblem =
         BP_CannotLoadDependencies ->
             corruptCacheReport
 
-        BP_Cycle name names ->
+        BP_Cycle target name names ->
             Help.report "IMPORT CYCLE"
                 Nothing
                 "Your module imports form a cycle:"
                 [ D.cycle 4 name names
                 , D.reflow <|
                     "Learn more about why this is disallowed and how to break cycles here:"
-                        ++ D.makeLink "import-cycles"
+                        ++ D.makeLink target "import-cycles"
                 ]
 
         BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
@@ -4438,9 +4439,10 @@ buildProjectProblemEncoder buildProjectProblem =
         BP_CannotLoadDependencies ->
             BE.unsignedInt8 6
 
-        BP_Cycle name names ->
+        BP_Cycle target name names ->
             BE.sequence
                 [ BE.unsignedInt8 7
+                , Target.encoder target
                 , ModuleName.rawEncoder name
                 , BE.list ModuleName.rawEncoder names
                 ]
@@ -4491,7 +4493,8 @@ buildProjectProblemDecoder =
                         BD.succeed BP_CannotLoadDependencies
 
                     7 ->
-                        BD.map2 BP_Cycle
+                        BD.map3 BP_Cycle
+                            Target.decoder
                             ModuleName.rawDecoder
                             (BD.list ModuleName.rawDecoder)
 

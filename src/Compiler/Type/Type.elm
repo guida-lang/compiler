@@ -31,6 +31,7 @@ module Compiler.Type.Type exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Type as E
@@ -139,63 +140,63 @@ funType =
 -- PRIMITIVE TYPES
 
 
-int : Type
-int =
-    AppN ModuleName.basics "Int" []
+int : Target -> Type
+int target =
+    AppN (ModuleName.basics target) "Int" []
 
 
-float : Type
-float =
-    AppN ModuleName.basics "Float" []
+float : Target -> Type
+float target =
+    AppN (ModuleName.basics target) "Float" []
 
 
-char : Type
-char =
-    AppN ModuleName.char "Char" []
+char : Target -> Type
+char target =
+    AppN (ModuleName.char target) "Char" []
 
 
-string : Type
-string =
-    AppN ModuleName.string "String" []
+string : Target -> Type
+string target =
+    AppN (ModuleName.string target) "String" []
 
 
-bool : Type
-bool =
-    AppN ModuleName.basics "Bool" []
+bool : Target -> Type
+bool target =
+    AppN (ModuleName.basics target) "Bool" []
 
 
-never : Type
-never =
-    AppN ModuleName.basics "Never" []
+never : Target -> Type
+never target =
+    AppN (ModuleName.basics target) "Never" []
 
 
 
 -- WEBGL TYPES
 
 
-vec2 : Type
-vec2 =
-    AppN ModuleName.vector2 "Vec2" []
+vec2 : Target -> Type
+vec2 target =
+    AppN (ModuleName.vector2 target) "Vec2" []
 
 
-vec3 : Type
-vec3 =
-    AppN ModuleName.vector3 "Vec3" []
+vec3 : Target -> Type
+vec3 target =
+    AppN (ModuleName.vector3 target) "Vec3" []
 
 
-vec4 : Type
-vec4 =
-    AppN ModuleName.vector4 "Vec4" []
+vec4 : Target -> Type
+vec4 target =
+    AppN (ModuleName.vector4 target) "Vec4" []
 
 
-mat4 : Type
-mat4 =
-    AppN ModuleName.matrix4 "Mat4" []
+mat4 : Target -> Type
+mat4 target =
+    AppN (ModuleName.matrix4 target) "Mat4" []
 
 
-texture : Type
-texture =
-    AppN ModuleName.texture "Texture" []
+texture : Target -> Type
+texture target =
+    AppN (ModuleName.texture target) "Texture" []
 
 
 

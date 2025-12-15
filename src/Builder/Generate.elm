@@ -16,6 +16,7 @@ import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
@@ -61,7 +62,7 @@ debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots
                                                 gatherMains pkg objects roots
                                         in
                                         prepareSourceMaps withSourceMaps root
-                                            |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
+                                            |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
                                     )
                         )
             )
@@ -86,7 +87,7 @@ dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots module
                         gatherMains pkg objects roots
                 in
                 prepareSourceMaps withSourceMaps root
-                    |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
+                    |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
             )
 
 
@@ -112,7 +113,7 @@ prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modul
                                     gatherMains pkg objects roots
                             in
                             prepareSourceMaps withSourceMaps root
-                                |> Task.fmap (\sourceMaps -> JS.generate sourceMaps leadingLines mode graph mains)
+                                |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
                         )
             )
 
@@ -139,7 +140,7 @@ repl root details ansi (Build.ReplArtifacts home modules localizer annotations) 
                     graph =
                         objectsToGlobalGraph objects
                 in
-                JS.generateForRepl ansi localizer graph home name (Utils.find identity name annotations)
+                JS.generateForRepl Target.GuidaTarget ansi localizer graph home name (Utils.find identity name annotations)
             )
 
 

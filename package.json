@@ -28,11 +28,14 @@
     "indexeddb-fs": "^2.1.5",
     "jszip": "^3.10.1",
     "mock-xmlhttprequest": "^8.4.1",
+    "package-registry": "file:../package-registry",
     "tmp": "^0.2.3",
     "which": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.10.1",
     "elm": "^0.19.1-6",
     "elm-format": "^0.8.7",
     "elm-review": "^2.13.2",

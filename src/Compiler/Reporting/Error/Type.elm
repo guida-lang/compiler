@@ -18,6 +18,7 @@ module Compiler.Reporting.Error.Type exposing
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -37,8 +38,8 @@ import Utils.Bytes.Encode as BE
 
 type Error
     = BadExpr A.Region Category T.Type (Expected T.Type)
-    | BadPattern A.Region PCategory T.Type (PExpected T.Type)
-    | InfiniteType A.Region Name T.Type
+    | BadPattern Target A.Region PCategory T.Type (PExpected T.Type)
+    | InfiniteType Target A.Region Name T.Type
 
 
 
@@ -46,9 +47,9 @@ type Error
 
 
 type Expected tipe
-    = NoExpectation tipe
-    | FromContext A.Region Context tipe
-    | FromAnnotation Name Int SubContext tipe
+    = NoExpectation Target tipe
+    | FromContext Target A.Region Context tipe
+    | FromAnnotation Target Name Int SubContext tipe
 
 
 type Context
@@ -137,14 +138,14 @@ type PCategory
 typeReplace : Expected a -> b -> Expected b
 typeReplace expectation tipe =
     case expectation of
-        NoExpectation _ ->
-            NoExpectation tipe
+        NoExpectation target _ ->
+            NoExpectation target tipe
 
-        FromContext region context _ ->
-            FromContext region context tipe
+        FromContext target region context _ ->
+            FromContext target region context tipe
 
-        FromAnnotation name arity context _ ->
-            FromAnnotation name arity context tipe
+        FromAnnotation target name arity context _ ->
+            FromAnnotation target name arity context tipe
 
 
 ptypeReplace : PExpected a -> b -> PExpected b
@@ -167,25 +168,26 @@ toReport source localizer err =
         BadExpr region category actualType expected ->
             toExprReport source localizer region category actualType expected
 
-        BadPattern region category tipe expected ->
-            toPatternReport source localizer region category tipe expected
+        BadPattern target region category tipe expected ->
+            toPatternReport target source localizer region category tipe expected
 
-        InfiniteType region name overallType ->
-            toInfiniteReport source localizer region name overallType
+        InfiniteType target region name overallType ->
+            toInfiniteReport target source localizer region name overallType
 
 
 
 -- TO PATTERN REPORT
 
 
-toPatternReport : Code.Source -> L.Localizer -> A.Region -> PCategory -> T.Type -> PExpected T.Type -> Report.Report
-toPatternReport source localizer patternRegion category tipe expected =
+toPatternReport : Target -> Code.Source -> L.Localizer -> A.Region -> PCategory -> T.Type -> PExpected T.Type -> Report.Report
+toPatternReport target source localizer patternRegion category tipe expected =
     Report.Report "TYPE MISMATCH" patternRegion [] <|
         case expected of
             PNoExpectation expectedType ->
                 Code.toSnippet source patternRegion Nothing <|
                     ( D.fromChars "This pattern is being used in an unexpected way:"
-                    , patternTypeComparison localizer
+                    , patternTypeComparison target
+                        localizer
                         tipe
                         expectedType
                         (addPatternCategory "It is" category)
@@ -203,7 +205,8 @@ toPatternReport source localizer patternRegion category tipe expected =
                                     ++ " argument to `"
                                     ++ name
                                     ++ "` is weird."
-                            , patternTypeComparison localizer
+                            , patternTypeComparison target
+                                localizer
                                 tipe
                                 expectedType
                                 (addPatternCategory "The argument is a pattern that matches" category)
@@ -220,7 +223,8 @@ toPatternReport source localizer patternRegion category tipe expected =
                             if index == Index.first then
                                 ( D.reflow <|
                                     "The 1st pattern in this `case` causing a mismatch:"
-                                , patternTypeComparison localizer
+                                , patternTypeComparison target
+                                    localizer
                                     tipe
                                     expectedType
                                     (addPatternCategory "The first pattern is trying to match" category)
@@ -235,12 +239,14 @@ toPatternReport source localizer patternRegion category tipe expected =
                                     "The "
                                         ++ D.ordinal index
                                         ++ " pattern in this `case` does not match the previous ones."
-                                , patternTypeComparison localizer
+                                , patternTypeComparison target
+                                    localizer
                                     tipe
                                     expectedType
                                     (addPatternCategory ("The " ++ D.ordinal index ++ " pattern is trying to match") category)
                                     "But all the previous patterns match:"
-                                    [ D.link "Note"
+                                    [ D.link target
+                                        "Note"
                                         "A `case` expression can only handle one type of value, so you may want to use"
                                         "custom-types"
                                         "to handle “mixing” types."
@@ -254,7 +260,8 @@ toPatternReport source localizer patternRegion category tipe expected =
                                     ++ " argument to `"
                                     ++ name
                                     ++ "` is weird."
-                            , patternTypeComparison localizer
+                            , patternTypeComparison target
+                                localizer
                                 tipe
                                 expectedType
                                 (addPatternCategory "It is trying to match" category)
@@ -272,12 +279,14 @@ toPatternReport source localizer patternRegion category tipe expected =
                                 "The "
                                     ++ D.ordinal index
                                     ++ " pattern in this list does not match all the previous ones:"
-                            , patternTypeComparison localizer
+                            , patternTypeComparison target
+                                localizer
                                 tipe
                                 expectedType
                                 (addPatternCategory ("The " ++ D.ordinal index ++ " pattern is trying to match") category)
                                 "But all the previous patterns in the list are:"
-                                [ D.link "Hint"
+                                [ D.link target
+                                    "Hint"
                                     "Everything in a list must be the same type of value. This way, we never run into unexpected values partway through a List.map, List.foldl, etc. Read"
                                     "custom-types"
                                     "to learn how to “mix” types."
@@ -287,7 +296,8 @@ toPatternReport source localizer patternRegion category tipe expected =
                         PTail ->
                             ( D.reflow <|
                                 "The pattern after (::) is causing issues."
-                            , patternTypeComparison localizer
+                            , patternTypeComparison target
+                                localizer
                                 tipe
                                 expectedType
                                 (addPatternCategory "The pattern after (::) is trying to match" category)
@@ -300,11 +310,11 @@ toPatternReport source localizer patternRegion category tipe expected =
 -- PATTERN HELPERS
 
 
-patternTypeComparison : L.Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
-patternTypeComparison localizer actual expected iAmSeeing insteadOf contextHints =
+patternTypeComparison : Target -> L.Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
+patternTypeComparison target localizer actual expected iAmSeeing insteadOf contextHints =
     let
         ( actualDoc, expectedDoc, problems ) =
-            T.toComparison localizer actual expected
+            T.toComparison target localizer actual expected
     in
     D.stack <|
         [ D.reflow iAmSeeing
@@ -353,11 +363,11 @@ addPatternCategory iAmTryingToMatch category =
 -- EXPR HELPERS
 
 
-typeComparison : L.Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
-typeComparison localizer actual expected iAmSeeing insteadOf contextHints =
+typeComparison : Target -> L.Localizer -> T.Type -> T.Type -> String -> String -> List D.Doc -> D.Doc
+typeComparison target localizer actual expected iAmSeeing insteadOf contextHints =
     let
         ( actualDoc, expectedDoc, problems ) =
-            T.toComparison localizer actual expected
+            T.toComparison target localizer actual expected
     in
     D.stack <|
         [ D.reflow iAmSeeing
@@ -369,11 +379,11 @@ typeComparison localizer actual expected iAmSeeing insteadOf contextHints =
             ++ problemsToHint problems
 
 
-loneType : L.Localizer -> T.Type -> T.Type -> D.Doc -> List D.Doc -> D.Doc
-loneType localizer actual expected iAmSeeing furtherDetails =
+loneType : Target -> L.Localizer -> T.Type -> T.Type -> D.Doc -> List D.Doc -> D.Doc
+loneType target localizer actual expected iAmSeeing furtherDetails =
     let
         ( actualDoc, _, problems ) =
-            T.toComparison localizer actual expected
+            T.toComparison target localizer actual expected
     in
     D.stack <|
         [ iAmSeeing
@@ -465,8 +475,9 @@ problemsToHint problems =
 problemToHint : T.Problem -> List D.Doc
 problemToHint problem =
     case problem of
-        T.IntFloat ->
-            [ D.fancyLink "Note"
+        T.IntFloat target ->
+            [ D.fancyLink target
+                "Note"
                 [ D.fromChars "Read" ]
                 "implicit-casts"
                 [ D.fromChars "to"
@@ -597,10 +608,10 @@ problemToHint problem =
                     "It looks like it takes too many arguments. I see " ++ String.fromInt (x - y) ++ " extra."
             ]
 
-        T.BadFlexSuper direction super tipe ->
+        T.BadFlexSuper target direction super tipe ->
             case tipe of
                 T.Lambda _ _ _ ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
                 T.Infinite ->
                     []
@@ -615,30 +626,30 @@ problemToHint problem =
                     badFlexFlexSuper super s
 
                 T.RigidVar y ->
-                    badRigidVar y (toASuperThing super)
+                    badRigidVar target y (toASuperThing super)
 
                 T.RigidSuper s _ ->
-                    badRigidSuper s (toASuperThing super)
+                    badRigidSuper target s (toASuperThing super)
 
                 T.Type _ _ _ ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
                 T.Record _ _ ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
                 T.Unit ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
                 T.Tuple _ _ _ ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
                 T.Alias _ _ _ _ ->
-                    badFlexSuper direction super tipe
+                    badFlexSuper target direction super tipe
 
-        T.BadRigidVar x tipe ->
+        T.BadRigidVar target x tipe ->
             case tipe of
                 T.Lambda _ _ _ ->
-                    badRigidVar x "a function"
+                    badRigidVar target x "a function"
 
                 T.Infinite ->
                     []
@@ -650,33 +661,33 @@ problemToHint problem =
                     []
 
                 T.FlexSuper s _ ->
-                    badRigidVar x (toASuperThing s)
+                    badRigidVar target x (toASuperThing s)
 
                 T.RigidVar y ->
-                    badDoubleRigid x y
+                    badDoubleRigid target x y
 
                 T.RigidSuper _ y ->
-                    badDoubleRigid x y
+                    badDoubleRigid target x y
 
                 T.Type _ n _ ->
-                    badRigidVar x ("a `" ++ n ++ "` value")
+                    badRigidVar target x ("a `" ++ n ++ "` value")
 
                 T.Record _ _ ->
-                    badRigidVar x "a record"
+                    badRigidVar target x "a record"
 
                 T.Unit ->
-                    badRigidVar x "a unit value"
+                    badRigidVar target x "a unit value"
 
                 T.Tuple _ _ _ ->
-                    badRigidVar x "a tuple"
+                    badRigidVar target x "a tuple"
 
                 T.Alias _ n _ _ ->
-                    badRigidVar x ("a `" ++ n ++ "` value")
+                    badRigidVar target x ("a `" ++ n ++ "` value")
 
-        T.BadRigidSuper super x tipe ->
+        T.BadRigidSuper target super x tipe ->
             case tipe of
                 T.Lambda _ _ _ ->
-                    badRigidSuper super "a function"
+                    badRigidSuper target super "a function"
 
                 T.Infinite ->
                     []
@@ -688,28 +699,28 @@ problemToHint problem =
                     []
 
                 T.FlexSuper s _ ->
-                    badRigidSuper super (toASuperThing s)
+                    badRigidSuper target super (toASuperThing s)
 
                 T.RigidVar y ->
-                    badDoubleRigid x y
+                    badDoubleRigid target x y
 
                 T.RigidSuper _ y ->
-                    badDoubleRigid x y
+                    badDoubleRigid target x y
 
                 T.Type _ n _ ->
-                    badRigidSuper super ("a `" ++ n ++ "` value")
+                    badRigidSuper target super ("a `" ++ n ++ "` value")
 
                 T.Record _ _ ->
-                    badRigidSuper super "a record"
+                    badRigidSuper target super "a record"
 
                 T.Unit ->
-                    badRigidSuper super "a unit value"
+                    badRigidSuper target super "a unit value"
 
                 T.Tuple _ _ _ ->
-                    badRigidSuper super "a tuple"
+                    badRigidSuper target super "a tuple"
 
                 T.Alias _ n _ _ ->
-                    badRigidSuper super ("a `" ++ n ++ "` value")
+                    badRigidSuper target super ("a `" ++ n ++ "` value")
 
         T.FieldsMissing fields ->
             case List.map (D.green << D.fromName) fields of
@@ -766,27 +777,27 @@ problemToHint problem =
 -- BAD RIGID HINTS
 
 
-badRigidVar : Name -> String -> List D.Doc
-badRigidVar name aThing =
+badRigidVar : Target -> Name -> String -> List D.Doc
+badRigidVar target name aThing =
     [ D.toSimpleHint <|
         "Your type annotation uses type variable `"
             ++ name
             ++ "` which means ANY type of value can flow through, but your code is saying it specifically wants "
             ++ aThing
             ++ ". Maybe change your type annotation to be more specific? Maybe change the code to be more general?"
-    , D.reflowLink "Read" "type-annotations" "for more advice!"
+    , D.reflowLink target "Read" "type-annotations" "for more advice!"
     ]
 
 
-badDoubleRigid : Name -> Name -> List D.Doc
-badDoubleRigid x y =
+badDoubleRigid : Target -> Name -> Name -> List D.Doc
+badDoubleRigid target x y =
     [ D.toSimpleHint <|
         "Your type annotation uses `"
             ++ x
             ++ "` and `"
             ++ y
             ++ "` as separate type variables. Your code seems to be saying they are the same though. Maybe they should be the same in your type annotation? Maybe your code uses them in a weird way?"
-    , D.reflowLink "Read" "type-annotations" "for more advice!"
+    , D.reflowLink target "Read" "type-annotations" "for more advice!"
     ]
 
 
@@ -810,13 +821,14 @@ toASuperThing super =
 -- BAD SUPER HINTS
 
 
-badFlexSuper : T.Direction -> T.Super -> T.Type -> List D.Doc
-badFlexSuper direction super tipe =
+badFlexSuper : Target -> T.Direction -> T.Super -> T.Type -> List D.Doc
+badFlexSuper target direction super tipe =
     case super of
         T.Comparable ->
             case tipe of
                 T.Record _ _ ->
-                    [ D.link "Hint"
+                    [ D.link target
+                        "Hint"
                         "I do not know how to compare records. I can only compare ints, floats, chars, strings, lists of comparable values, and tuples of comparable values. Check out"
                         "comparing-records"
                         "for ideas on how to proceed."
@@ -827,7 +839,7 @@ badFlexSuper direction super tipe =
                         "I do not know how to compare `"
                             ++ name
                             ++ "` values. I can only compare ints, floats, chars, strings, lists of comparable values, and tuples of comparable values."
-                    , D.reflowLink
+                    , D.reflowLink target
                         "Check out"
                         "comparing-custom-types"
                         "for ideas on how to proceed."
@@ -849,7 +861,7 @@ badFlexSuper direction super tipe =
         T.Number ->
             case tipe of
                 T.Type home name _ ->
-                    if T.isString home name then
+                    if T.isString target home name then
                         case direction of
                             T.Have ->
                                 [ D.toFancyHint
@@ -901,8 +913,8 @@ badFlexSuperNumber =
     ]
 
 
-badRigidSuper : T.Super -> String -> List D.Doc
-badRigidSuper super aThing =
+badRigidSuper : Target -> T.Super -> String -> List D.Doc
+badRigidSuper target super aThing =
     let
         ( superType, manyThings ) =
             case super of
@@ -926,7 +938,7 @@ badRigidSuper super aThing =
             ++ " can flow through, but your code is saying it specifically wants "
             ++ aThing
             ++ ". Maybe change your type annotation to be more specific? Maybe change the code to be more general?"
-    , D.reflowLink "Read" "type-annotations" "for more advice!"
+    , D.reflowLink target "Read" "type-annotations" "for more advice!"
     ]
 
 
@@ -964,13 +976,14 @@ badFlexFlexSuper s1 s2 =
 toExprReport : Code.Source -> L.Localizer -> A.Region -> Category -> T.Type -> Expected T.Type -> Report.Report
 toExprReport source localizer exprRegion category tipe expected =
     case expected of
-        NoExpectation expectedType ->
+        NoExpectation target expectedType ->
             Report.Report "TYPE MISMATCH" exprRegion [] <|
                 Code.toSnippet source
                     exprRegion
                     Nothing
                     ( D.fromChars "This expression is being used in an unexpected way:"
-                    , typeComparison localizer
+                    , typeComparison target
+                        localizer
                         tipe
                         expectedType
                         (addCategory "It is" category)
@@ -978,7 +991,7 @@ toExprReport source localizer exprRegion category tipe expected =
                         []
                     )
 
-        FromAnnotation name _ subContext expectedType ->
+        FromAnnotation target name _ subContext expectedType ->
             let
                 thing : String
                 thing =
@@ -1007,7 +1020,8 @@ toExprReport source localizer exprRegion category tipe expected =
             Report.Report "TYPE MISMATCH" exprRegion [] <|
                 Code.toSnippet source exprRegion Nothing <|
                     ( D.reflow ("Something is off with the " ++ thing)
-                    , typeComparison localizer
+                    , typeComparison target
+                        localizer
                         tipe
                         expectedType
                         (addCategory itIs category)
@@ -1015,7 +1029,7 @@ toExprReport source localizer exprRegion category tipe expected =
                         []
                     )
 
-        FromContext region context expectedType ->
+        FromContext target region context expectedType ->
             let
                 mismatch : ( ( Maybe A.Region, String ), ( String, String, List D.Doc ) ) -> Report.Report
                 mismatch ( ( maybeHighlight, problem ), ( thisIs, insteadOf, furtherDetails ) ) =
@@ -1024,7 +1038,7 @@ toExprReport source localizer exprRegion category tipe expected =
                             region
                             maybeHighlight
                             ( D.reflow problem
-                            , typeComparison localizer tipe expectedType (addCategory thisIs category) insteadOf furtherDetails
+                            , typeComparison target localizer tipe expectedType (addCategory thisIs category) insteadOf furtherDetails
                             )
 
                 badType : ( ( Maybe A.Region, String ), ( String, List D.Doc ) ) -> Report.Report
@@ -1034,7 +1048,7 @@ toExprReport source localizer exprRegion category tipe expected =
                             region
                             maybeHighlight
                             ( D.reflow problem
-                            , loneType localizer tipe expectedType (D.reflow (addCategory thisIs category)) furtherDetails
+                            , loneType target localizer tipe expectedType (D.reflow (addCategory thisIs category)) furtherDetails
                             )
 
                 custom : Maybe A.Region -> ( D.Doc, D.Doc ) -> Report.Report
@@ -1055,7 +1069,8 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         , ( "The " ++ ith ++ " element is"
                           , "But all the previous elements in the list are:"
-                          , [ D.link "Hint"
+                          , [ D.link target
+                                "Hint"
                                 "Everything in a list must be the same type of value. This way, we never run into unexpected values partway through a List.map, List.foldl, etc. Read"
                                 "custom-types"
                                 "to learn how to “mix” types."
@@ -1088,10 +1103,10 @@ toExprReport source localizer exprRegion category tipe expected =
 
                 OpLeft op ->
                     custom (Just exprRegion) <|
-                        opLeftToDocs localizer category op tipe expectedType
+                        opLeftToDocs target localizer category op tipe expectedType
 
                 OpRight op ->
-                    case opRightToDocs localizer category op tipe expectedType of
+                    case opRightToDocs target localizer category op tipe expectedType of
                         EmphBoth details ->
                             custom Nothing details
 
@@ -1133,7 +1148,8 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         , ( "The " ++ ith ++ " branch is"
                           , "But all the previous branches result in:"
-                          , [ D.link "Hint"
+                          , [ D.link target
+                                "Hint"
                                 "All branches in an `if` must produce the same type of values. This way, no matter which branch we take, the result is always a consistent shape. Read"
                                 "custom-types"
                                 "to learn how to “mix” types."
@@ -1153,7 +1169,8 @@ toExprReport source localizer exprRegion category tipe expected =
                           )
                         , ( "The " ++ ith ++ " branch is"
                           , "But all the previous branches result in:"
-                          , [ D.link "Hint"
+                          , [ D.link target
+                                "Hint"
                                 "All branches in a `case` must produce the same type of values. This way, no matter which branch we take, the result is always a consistent shape. Read"
                                 "custom-types"
                                 "to learn how to “mix” types."
@@ -1264,7 +1281,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                                 "This is usually a typo. Here are the "
                                                     ++ Maybe.withDefault "" (Maybe.map (\n -> "`" ++ n ++ "`") maybeName)
                                                     ++ " fields that are most similar:"
-                                            , toNearbyRecord localizer f fs ext
+                                            , toNearbyRecord target localizer f fs ext
                                             , D.fillSep
                                                 [ D.fromChars "So"
                                                 , D.fromChars "maybe"
@@ -1334,7 +1351,7 @@ toExprReport source localizer exprRegion category tipe expected =
                                                 D.stack
                                                     [ D.reflow <|
                                                         "This is usually a typo. Here are the record fields that are most similar:"
-                                                    , toNearbyRecord localizer f fs ext
+                                                    , toNearbyRecord target localizer f fs ext
                                                     , D.fillSep
                                                         [ D.fromChars "So"
                                                         , D.fromChars "maybe"
@@ -1401,20 +1418,20 @@ countArgs tipe =
 -- FIELD NAME HELPERS
 
 
-toNearbyRecord : L.Localizer -> ( Name, T.Type ) -> List ( Name, T.Type ) -> T.Extension -> D.Doc
-toNearbyRecord localizer f fs ext =
+toNearbyRecord : Target -> L.Localizer -> ( Name, T.Type ) -> List ( Name, T.Type ) -> T.Extension -> D.Doc
+toNearbyRecord target localizer f fs ext =
     D.indent 4 <|
         if List.length fs <= 3 then
-            RT.vrecord (List.map (fieldToDocs localizer) (f :: fs)) (extToDoc ext)
+            RT.vrecord (List.map (fieldToDocs target localizer) (f :: fs)) (extToDoc ext)
 
         else
-            RT.vrecordSnippet (fieldToDocs localizer f) (List.map (fieldToDocs localizer) (List.take 3 fs))
+            RT.vrecordSnippet (fieldToDocs target localizer f) (List.map (fieldToDocs target localizer) (List.take 3 fs))
 
 
-fieldToDocs : L.Localizer -> ( Name, T.Type ) -> ( D.Doc, D.Doc )
-fieldToDocs localizer ( name, tipe ) =
+fieldToDocs : Target -> L.Localizer -> ( Name, T.Type ) -> ( D.Doc, D.Doc )
+fieldToDocs target localizer ( name, tipe ) =
     ( D.fromName name
-    , T.toDoc localizer RT.None tipe
+    , T.toDoc target localizer RT.None tipe
     )
 
 
@@ -1435,62 +1452,63 @@ extToDoc ext =
 -- OP LEFT
 
 
-opLeftToDocs : L.Localizer -> Category -> Name -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-opLeftToDocs localizer category op tipe expected =
+opLeftToDocs : Target -> L.Localizer -> Category -> Name -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+opLeftToDocs target localizer category op tipe expected =
     case op of
         "+" ->
-            if isString tipe then
+            if isString target tipe then
                 badStringAdd
 
-            else if isList tipe then
-                badListAdd localizer category "left" tipe expected
+            else if isList target tipe then
+                badListAdd target localizer category "left" tipe expected
 
             else
-                badMath localizer category "Addition" "left" "+" tipe expected []
+                badMath target localizer category "Addition" "left" "+" tipe expected []
 
         "*" ->
-            if isList tipe then
-                badListMul localizer category "left" tipe expected
+            if isList target tipe then
+                badListMul target localizer category "left" tipe expected
 
             else
-                badMath localizer category "Multiplication" "left" "*" tipe expected []
+                badMath target localizer category "Multiplication" "left" "*" tipe expected []
 
         "-" ->
-            badMath localizer category "Subtraction" "left" "-" tipe expected []
+            badMath target localizer category "Subtraction" "left" "-" tipe expected []
 
         "^" ->
-            badMath localizer category "Exponentiation" "left" "^" tipe expected []
+            badMath target localizer category "Exponentiation" "left" "^" tipe expected []
 
         "/" ->
-            badFDiv localizer (D.fromChars "left") tipe expected
+            badFDiv target localizer (D.fromChars "left") tipe expected
 
         "//" ->
-            badIDiv localizer (D.fromChars "left") tipe expected
+            badIDiv target localizer (D.fromChars "left") tipe expected
 
         "&&" ->
-            badBool localizer (D.fromChars "&&") (D.fromChars "left") tipe expected
+            badBool target localizer (D.fromChars "&&") (D.fromChars "left") tipe expected
 
         "||" ->
-            badBool localizer (D.fromChars "||") (D.fromChars "left") tipe expected
+            badBool target localizer (D.fromChars "||") (D.fromChars "left") tipe expected
 
         "<" ->
-            badCompLeft localizer category "<" "left" tipe expected
+            badCompLeft target localizer category "<" "left" tipe expected
 
         ">" ->
-            badCompLeft localizer category ">" "left" tipe expected
+            badCompLeft target localizer category ">" "left" tipe expected
 
         "<=" ->
-            badCompLeft localizer category "<=" "left" tipe expected
+            badCompLeft target localizer category "<=" "left" tipe expected
 
         ">=" ->
-            badCompLeft localizer category ">=" "left" tipe expected
+            badCompLeft target localizer category ">=" "left" tipe expected
 
         "++" ->
-            badAppendLeft localizer category tipe expected
+            badAppendLeft target localizer category tipe expected
 
         "<|" ->
             ( D.fromChars "The left side of (<|) needs to be a function so I can pipe arguments to it!"
-            , loneType localizer
+            , loneType target
+                localizer
                 tipe
                 expected
                 (D.reflow (addCategory "I am seeing" category))
@@ -1499,7 +1517,8 @@ opLeftToDocs localizer category op tipe expected =
 
         _ ->
             ( D.reflow ("The left argument of (" ++ op ++ ") is causing problems:")
-            , typeComparison localizer
+            , typeComparison target
+                localizer
                 tipe
                 expected
                 (addCategory "The left argument is" category)
@@ -1517,98 +1536,99 @@ type RightDocs
     | EmphRight ( D.Doc, D.Doc )
 
 
-opRightToDocs : L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
-opRightToDocs localizer category op tipe expected =
+opRightToDocs : Target -> L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
+opRightToDocs target localizer category op tipe expected =
     case op of
         "+" ->
-            if isFloat expected && isInt tipe then
-                badCast op FloatInt
+            if isFloat target expected && isInt target tipe then
+                badCast target op FloatInt
 
-            else if isInt expected && isFloat tipe then
-                badCast op IntFloat
+            else if isInt target expected && isFloat target tipe then
+                badCast target op IntFloat
 
-            else if isString tipe then
+            else if isString target tipe then
                 EmphRight badStringAdd
 
-            else if isList tipe then
-                EmphRight (badListAdd localizer category "right" tipe expected)
+            else if isList target tipe then
+                EmphRight (badListAdd target localizer category "right" tipe expected)
 
             else
-                EmphRight (badMath localizer category "Addition" "right" "+" tipe expected [])
+                EmphRight (badMath target localizer category "Addition" "right" "+" tipe expected [])
 
         "*" ->
-            if isFloat expected && isInt tipe then
-                badCast op FloatInt
+            if isFloat target expected && isInt target tipe then
+                badCast target op FloatInt
 
-            else if isInt expected && isFloat tipe then
-                badCast op IntFloat
+            else if isInt target expected && isFloat target tipe then
+                badCast target op IntFloat
 
-            else if isList tipe then
-                EmphRight (badListMul localizer category "right" tipe expected)
+            else if isList target tipe then
+                EmphRight (badListMul target localizer category "right" tipe expected)
 
             else
-                EmphRight (badMath localizer category "Multiplication" "right" "*" tipe expected [])
+                EmphRight (badMath target localizer category "Multiplication" "right" "*" tipe expected [])
 
         "-" ->
-            if isFloat expected && isInt tipe then
-                badCast op FloatInt
+            if isFloat target expected && isInt target tipe then
+                badCast target op FloatInt
 
-            else if isInt expected && isFloat tipe then
-                badCast op IntFloat
+            else if isInt target expected && isFloat target tipe then
+                badCast target op IntFloat
 
             else
-                EmphRight (badMath localizer category "Subtraction" "right" "-" tipe expected [])
+                EmphRight (badMath target localizer category "Subtraction" "right" "-" tipe expected [])
 
         "^" ->
-            if isFloat expected && isInt tipe then
-                badCast op FloatInt
+            if isFloat target expected && isInt target tipe then
+                badCast target op FloatInt
 
-            else if isInt expected && isFloat tipe then
-                badCast op IntFloat
+            else if isInt target expected && isFloat target tipe then
+                badCast target op IntFloat
 
             else
-                EmphRight (badMath localizer category "Exponentiation" "right" "^" tipe expected [])
+                EmphRight (badMath target localizer category "Exponentiation" "right" "^" tipe expected [])
 
         "/" ->
-            EmphRight (badFDiv localizer (D.fromChars "right") tipe expected)
+            EmphRight (badFDiv target localizer (D.fromChars "right") tipe expected)
 
         "//" ->
-            EmphRight (badIDiv localizer (D.fromChars "right") tipe expected)
+            EmphRight (badIDiv target localizer (D.fromChars "right") tipe expected)
 
         "&&" ->
-            EmphRight (badBool localizer (D.fromChars "&&") (D.fromChars "right") tipe expected)
+            EmphRight (badBool target localizer (D.fromChars "&&") (D.fromChars "right") tipe expected)
 
         "||" ->
-            EmphRight (badBool localizer (D.fromChars "||") (D.fromChars "right") tipe expected)
+            EmphRight (badBool target localizer (D.fromChars "||") (D.fromChars "right") tipe expected)
 
         "<" ->
-            badCompRight localizer "<" tipe expected
+            badCompRight target localizer "<" tipe expected
 
         ">" ->
-            badCompRight localizer ">" tipe expected
+            badCompRight target localizer ">" tipe expected
 
         "<=" ->
-            badCompRight localizer "<=" tipe expected
+            badCompRight target localizer "<=" tipe expected
 
         ">=" ->
-            badCompRight localizer ">=" tipe expected
+            badCompRight target localizer ">=" tipe expected
 
         "==" ->
-            badEquality localizer "==" tipe expected
+            badEquality target localizer "==" tipe expected
 
         "/=" ->
-            badEquality localizer "/=" tipe expected
+            badEquality target localizer "/=" tipe expected
 
         "::" ->
-            badConsRight localizer category tipe expected
+            badConsRight target localizer category tipe expected
 
         "++" ->
-            badAppendRight localizer category tipe expected
+            badAppendRight target localizer category tipe expected
 
         "<|" ->
             EmphRight
                 ( D.reflow "I cannot send this through the (<|) pipe:"
-                , typeComparison localizer
+                , typeComparison target
+                    localizer
                     tipe
                     expected
                     "The argument is:"
@@ -1621,7 +1641,8 @@ opRightToDocs localizer category op tipe expected =
                 ( T.Lambda expectedArgType _ _, T.Lambda argType _ _ ) ->
                     EmphRight
                         ( D.reflow "This function cannot handle the argument sent through the (|>) pipe:"
-                        , typeComparison localizer
+                        , typeComparison target
+                            localizer
                             argType
                             expectedArgType
                             "The argument is:"
@@ -1632,7 +1653,8 @@ opRightToDocs localizer category op tipe expected =
                 _ ->
                     EmphRight
                         ( D.reflow "The right side of (|>) needs to be a function so I can pipe arguments to it!"
-                        , loneType localizer
+                        , loneType target
+                            localizer
                             tipe
                             expected
                             (D.reflow (addCategory "But instead of a function, I am seeing" category))
@@ -1640,14 +1662,15 @@ opRightToDocs localizer category op tipe expected =
                         )
 
         _ ->
-            badOpRightFallback localizer category op tipe expected
+            badOpRightFallback target localizer category op tipe expected
 
 
-badOpRightFallback : L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
-badOpRightFallback localizer category op tipe expected =
+badOpRightFallback : Target -> L.Localizer -> Category -> Name -> T.Type -> T.Type -> RightDocs
+badOpRightFallback target localizer category op tipe expected =
     EmphRight
         ( D.reflow ("The right argument of (" ++ op ++ ") is causing problems.")
-        , typeComparison localizer
+        , typeComparison target
+            localizer
             tipe
             expected
             (addCategory "The right argument is" category)
@@ -1660,41 +1683,41 @@ badOpRightFallback localizer category op tipe expected =
         )
 
 
-isInt : T.Type -> Bool
-isInt tipe =
+isInt : Target -> T.Type -> Bool
+isInt target tipe =
     case tipe of
         T.Type home name [] ->
-            T.isInt home name
+            T.isInt target home name
 
         _ ->
             False
 
 
-isFloat : T.Type -> Bool
-isFloat tipe =
+isFloat : Target -> T.Type -> Bool
+isFloat target tipe =
     case tipe of
         T.Type home name [] ->
-            T.isFloat home name
+            T.isFloat target home name
 
         _ ->
             False
 
 
-isString : T.Type -> Bool
-isString tipe =
+isString : Target -> T.Type -> Bool
+isString target tipe =
     case tipe of
         T.Type home name [] ->
-            T.isString home name
+            T.isString target home name
 
         _ ->
             False
 
 
-isList : T.Type -> Bool
-isList tipe =
+isList : Target -> T.Type -> Bool
+isList target tipe =
     case tipe of
         T.Type home name [ _ ] ->
-            T.isList home name
+            T.isList target home name
 
         _ ->
             False
@@ -1704,24 +1727,25 @@ isList tipe =
 -- BAD CONS
 
 
-badConsRight : L.Localizer -> Category -> T.Type -> T.Type -> RightDocs
-badConsRight localizer category tipe expected =
+badConsRight : Target -> L.Localizer -> Category -> T.Type -> T.Type -> RightDocs
+badConsRight target localizer category tipe expected =
     case tipe of
         T.Type home1 name1 [ actualElement ] ->
-            if T.isList home1 name1 then
+            if T.isList target home1 name1 then
                 case expected of
                     T.Type home2 name2 [ expectedElement ] ->
-                        if T.isList home2 name2 then
+                        if T.isList target home2 name2 then
                             EmphBoth
                                 ( D.reflow "I am having trouble with this (::) operator:"
-                                , typeComparison localizer
+                                , typeComparison target
+                                    localizer
                                     expectedElement
                                     actualElement
                                     "The left side of (::) is:"
                                     "But you are trying to put that into a list filled with:"
                                     (case expectedElement of
                                         T.Type home name [ _ ] ->
-                                            if T.isList home name then
+                                            if T.isList target home name then
                                                 [ D.toSimpleHint
                                                     "Are you trying to append two lists? The (++) operator appends lists, whereas the (::) operator is only for adding ONE element to a list."
                                                 ]
@@ -1739,15 +1763,16 @@ badConsRight localizer category tipe expected =
                                 )
 
                         else
-                            badOpRightFallback localizer category "::" tipe expected
+                            badOpRightFallback target localizer category "::" tipe expected
 
                     _ ->
-                        badOpRightFallback localizer category "::" tipe expected
+                        badOpRightFallback target localizer category "::" tipe expected
 
             else
                 EmphRight
                     ( D.reflow "The (::) operator can only add elements onto lists."
-                    , loneType localizer
+                    , loneType target
+                        localizer
                         tipe
                         expected
                         (D.reflow (addCategory "The right side is" category))
@@ -1767,7 +1792,8 @@ badConsRight localizer category tipe expected =
         _ ->
             EmphRight
                 ( D.reflow "The (::) operator can only add elements onto lists."
-                , loneType localizer
+                , loneType target
+                    localizer
                     tipe
                     expected
                     (D.reflow (addCategory "The right side is" category))
@@ -1796,20 +1822,20 @@ type AppendType
     | AOther
 
 
-toAppendType : T.Type -> AppendType
-toAppendType tipe =
+toAppendType : Target -> T.Type -> AppendType
+toAppendType target tipe =
     case tipe of
         T.Type home name _ ->
-            if T.isInt home name then
+            if T.isInt target home name then
                 ANumber (D.fromChars "Int") (D.fromChars "String.fromInt")
 
-            else if T.isFloat home name then
+            else if T.isFloat target home name then
                 ANumber (D.fromChars "Float") (D.fromChars "String.fromFloat")
 
-            else if T.isString home name then
+            else if T.isString target home name then
                 AString
 
-            else if T.isList home name then
+            else if T.isList target home name then
                 AList
 
             else
@@ -1822,9 +1848,9 @@ toAppendType tipe =
             AOther
 
 
-badAppendLeft : L.Localizer -> Category -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badAppendLeft localizer category tipe expected =
-    case toAppendType tipe of
+badAppendLeft : Target -> L.Localizer -> Category -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badAppendLeft target localizer category tipe expected =
+    case toAppendType target tipe of
         ANumber thing stringFromThing ->
             ( D.fillSep
                 [ D.fromChars "The"
@@ -1874,7 +1900,8 @@ badAppendLeft localizer category tipe expected =
 
         _ ->
             ( D.reflow "The (++) operator cannot append this type of value:"
-            , loneType localizer
+            , loneType target
+                localizer
                 tipe
                 expected
                 (D.reflow (addCategory "I am seeing" category))
@@ -1907,9 +1934,9 @@ badAppendLeft localizer category tipe expected =
             )
 
 
-badAppendRight : L.Localizer -> Category -> T.Type -> T.Type -> RightDocs
-badAppendRight localizer category tipe expected =
-    case ( toAppendType expected, toAppendType tipe ) of
+badAppendRight : Target -> L.Localizer -> Category -> T.Type -> T.Type -> RightDocs
+badAppendRight target localizer category tipe expected =
+    case ( toAppendType target expected, toAppendType target tipe ) of
         ( AString, ANumber thing stringFromThing ) ->
             EmphRight
                 ( D.fillSep
@@ -2033,7 +2060,8 @@ badAppendRight localizer category tipe expected =
         _ ->
             EmphBoth
                 ( D.reflow "The (++) operator cannot append these two values:"
-                , typeComparison localizer
+                , typeComparison target
+                    localizer
                     expected
                     tipe
                     "I already figured out that the left side of (++) is:"
@@ -2051,8 +2079,8 @@ type ThisThenThat
     | IntFloat
 
 
-badCast : Name -> ThisThenThat -> RightDocs
-badCast op thisThenThat =
+badCast : Target -> Name -> ThisThenThat -> RightDocs
+badCast target op thisThenThat =
     EmphBoth
         ( D.reflow <|
             "I need both sides of ("
@@ -2077,15 +2105,15 @@ badCast op thisThenThat =
           in
           case thisThenThat of
             FloatInt ->
-                badCastHelp aFloat anInt round toFloat
+                badCastHelp target aFloat anInt round toFloat
 
             IntFloat ->
-                badCastHelp anInt aFloat toFloat round
+                badCastHelp target anInt aFloat toFloat round
         )
 
 
-badCastHelp : List D.Doc -> List D.Doc -> D.Doc -> D.Doc -> D.Doc
-badCastHelp anInt aFloat toFloat round =
+badCastHelp : Target -> List D.Doc -> List D.Doc -> D.Doc -> D.Doc -> D.Doc
+badCastHelp target anInt aFloat toFloat round =
     D.stack
         [ D.fillSep <|
             [ D.fromChars "But"
@@ -2120,7 +2148,7 @@ badCastHelp anInt aFloat toFloat round =
             , D.fromChars "sides"
             , D.fromChars "match!"
             ]
-        , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
+        , D.link target "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
         ]
 
 
@@ -2165,10 +2193,11 @@ badStringAdd =
     )
 
 
-badListAdd : L.Localizer -> Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badListAdd localizer category direction tipe expected =
+badListAdd : Target -> L.Localizer -> Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badListAdd target localizer category direction tipe expected =
     ( D.fromChars "I cannot do addition with lists:"
-    , loneType localizer
+    , loneType target
+        localizer
         tipe
         expected
         (D.reflow (addCategory ("The " ++ direction ++ " side of (+) is") category))
@@ -2197,9 +2226,9 @@ badListAdd localizer category direction tipe expected =
     )
 
 
-badListMul : L.Localizer -> Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badListMul localizer category direction tipe expected =
-    badMath localizer category "Multiplication" direction "*" tipe expected <|
+badListMul : Target -> L.Localizer -> Category -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badListMul target localizer category direction tipe expected =
+    badMath target localizer category "Multiplication" direction "*" tipe expected <|
         [ D.toFancyHint
             [ D.fromChars "Maybe"
             , D.fromChars "you"
@@ -2216,12 +2245,13 @@ badListMul localizer category direction tipe expected =
         ]
 
 
-badMath : L.Localizer -> Category -> String -> String -> String -> T.Type -> T.Type -> List D.Doc -> ( D.Doc, D.Doc )
-badMath localizer category operation direction op tipe expected otherHints =
+badMath : Target -> L.Localizer -> Category -> String -> String -> String -> T.Type -> T.Type -> List D.Doc -> ( D.Doc, D.Doc )
+badMath target localizer category operation direction op tipe expected otherHints =
     ( D.reflow <|
         operation
             ++ " does not work with this value:"
-    , loneType localizer
+    , loneType target
+        localizer
         tipe
         expected
         (D.reflow (addCategory ("The " ++ direction ++ " side of (" ++ op ++ ") is") category))
@@ -2241,10 +2271,10 @@ badMath localizer category operation direction op tipe expected otherHints =
     )
 
 
-badFDiv : L.Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badFDiv localizer direction tipe expected =
+badFDiv : Target -> L.Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badFDiv target localizer direction tipe expected =
     ( D.reflow "The (/) operator is specifically for floating-point division:"
-    , if isInt tipe then
+    , if isInt target tipe then
         D.stack
             [ D.fillSep
                 [ D.fromChars "The"
@@ -2273,11 +2303,12 @@ badFDiv localizer direction tipe expected =
                     |> D.a (D.fromChars " for integer division         ")
                     |> D.a (D.black (D.fromChars "(5 // 2)        == 2"))
                 ]
-            , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
+            , D.link target "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
             ]
 
       else
-        loneType localizer
+        loneType target
+            localizer
             tipe
             expected
             (D.fillSep
@@ -2301,10 +2332,10 @@ badFDiv localizer direction tipe expected =
     )
 
 
-badIDiv : L.Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badIDiv localizer direction tipe expected =
+badIDiv : Target -> L.Localizer -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badIDiv target localizer direction tipe expected =
     ( D.reflow "The (//) operator is specifically for integer division:"
-    , if isFloat tipe then
+    , if isFloat target tipe then
         D.stack
             [ D.fillSep
                 [ D.fromChars "The"
@@ -2340,11 +2371,12 @@ badIDiv localizer direction tipe expected =
                 , D.green (D.fromChars "ceiling") |> D.a (D.fromChars " 3.5   == 4")
                 , D.green (D.fromChars "truncate") |> D.a (D.fromChars " 3.5  == 3")
                 ]
-            , D.link "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
+            , D.link target "Note" "Read" "implicit-casts" "to learn why Guida does not implicitly convert Ints to Floats."
             ]
 
       else
-        loneType localizer
+        loneType target
+            localizer
             tipe
             expected
             (D.fillSep
@@ -2372,10 +2404,11 @@ badIDiv localizer direction tipe expected =
 -- BAD BOOLS
 
 
-badBool : L.Localizer -> D.Doc -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badBool localizer op direction tipe expected =
+badBool : Target -> L.Localizer -> D.Doc -> D.Doc -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badBool target localizer op direction tipe expected =
     ( D.reflow "I am struggling with this boolean operation:"
-    , loneType localizer
+    , loneType target
+        localizer
         tipe
         expected
         (D.fillSep
@@ -2402,10 +2435,11 @@ badBool localizer op direction tipe expected =
 -- BAD COMPARISON
 
 
-badCompLeft : L.Localizer -> Category -> String -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
-badCompLeft localizer category op direction tipe expected =
+badCompLeft : Target -> L.Localizer -> Category -> String -> String -> T.Type -> T.Type -> ( D.Doc, D.Doc )
+badCompLeft target localizer category op direction tipe expected =
     ( D.reflow "I cannot do a comparison with this value:"
-    , loneType localizer
+    , loneType target
+        localizer
         tipe
         expected
         (D.reflow (addCategory ("The " ++ direction ++ " side of (" ++ op ++ ") is") category))
@@ -2448,12 +2482,13 @@ badCompLeft localizer category op direction tipe expected =
     )
 
 
-badCompRight : L.Localizer -> String -> T.Type -> T.Type -> RightDocs
-badCompRight localizer op tipe expected =
+badCompRight : Target -> L.Localizer -> String -> T.Type -> T.Type -> RightDocs
+badCompRight target localizer op tipe expected =
     EmphBoth
         ( D.reflow <|
             ("I need both sides of (" ++ op ++ ") to be the same type:")
-        , typeComparison localizer
+        , typeComparison target
+            localizer
             expected
             tipe
             ("The left side of (" ++ op ++ ") is:")
@@ -2468,17 +2503,18 @@ badCompRight localizer op tipe expected =
 -- BAD EQUALITY
 
 
-badEquality : L.Localizer -> String -> T.Type -> T.Type -> RightDocs
-badEquality localizer op tipe expected =
+badEquality : Target -> L.Localizer -> String -> T.Type -> T.Type -> RightDocs
+badEquality target localizer op tipe expected =
     EmphBoth
         ( D.reflow <|
             ("I need both sides of (" ++ op ++ ") to be the same type:")
-        , typeComparison localizer
+        , typeComparison target
+            localizer
             expected
             tipe
             ("The left side of (" ++ op ++ ") is:")
             "But the right side is:"
-            [ if isFloat tipe || isFloat expected then
+            [ if isFloat target tipe || isFloat target expected then
                 D.toSimpleNote <|
                     "Equality on floats is not 100% reliable due to the design of IEEE 754. I recommend a check like (abs (x - y) < 0.0001) instead."
 
@@ -2492,8 +2528,8 @@ badEquality localizer op tipe expected =
 -- INFINITE TYPES
 
 
-toInfiniteReport : Code.Source -> L.Localizer -> A.Region -> Name -> T.Type -> Report.Report
-toInfiniteReport source localizer region name overallType =
+toInfiniteReport : Target -> Code.Source -> L.Localizer -> A.Region -> Name -> T.Type -> Report.Report
+toInfiniteReport target source localizer region name overallType =
     Report.Report "INFINITE TYPE" region [] <|
         Code.toSnippet source region Nothing <|
             ( D.reflow <|
@@ -2501,8 +2537,8 @@ toInfiniteReport source localizer region name overallType =
             , D.stack
                 [ D.reflow <|
                     "Here is my best effort at writing down the type. You will see ∞ for parts of the type that repeat something already printed out infinitely."
-                , D.indent 4 (D.dullyellow (T.toDoc localizer RT.None overallType))
-                , D.reflowLink
+                , D.indent 4 (D.dullyellow (T.toDoc target localizer RT.None overallType))
+                , D.reflowLink target
                     "Staring at this type is usually not so helpful, so I recommend reading the hints at"
                     "infinite-type"
                     "to get unstuck!"
@@ -2526,18 +2562,20 @@ errorEncoder error =
                 , expectedEncoder T.typeEncoder expected
                 ]
 
-        BadPattern region category tipe expected ->
+        BadPattern target region category tipe expected ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Target.encoder target
                 , A.regionEncoder region
                 , pCategoryEncoder category
                 , T.typeEncoder tipe
                 , pExpectedEncoder T.typeEncoder expected
                 ]
 
-        InfiniteType region name overallType ->
+        InfiniteType target region name overallType ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string name
                 , T.typeEncoder overallType
@@ -2558,14 +2596,16 @@ errorDecoder =
                             (expectedDecoder T.typeDecoder)
 
                     1 ->
-                        BD.map4 BadPattern
+                        BD.map5 BadPattern
+                            Target.decoder
                             A.regionDecoder
                             pCategoryDecoder
                             T.typeDecoder
                             (pExpectedDecoder T.typeDecoder)
 
                     2 ->
-                        BD.map3 InfiniteType
+                        BD.map4 InfiniteType
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             T.typeDecoder
@@ -2716,23 +2756,26 @@ categoryDecoder =
 expectedEncoder : (a -> BE.Encoder) -> Expected a -> BE.Encoder
 expectedEncoder encoder expected =
     case expected of
-        NoExpectation expectedType ->
+        NoExpectation target expectedType ->
             BE.sequence
                 [ BE.unsignedInt8 0
+                , Target.encoder target
                 , encoder expectedType
                 ]
 
-        FromContext region context expectedType ->
+        FromContext target region context expectedType ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Target.encoder target
                 , A.regionEncoder region
                 , contextEncoder context
                 , encoder expectedType
                 ]
 
-        FromAnnotation name arity subContext expectedType ->
+        FromAnnotation target name arity subContext expectedType ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , Target.encoder target
                 , BE.string name
                 , BE.int arity
                 , subContextEncoder subContext
@@ -2747,17 +2790,20 @@ expectedDecoder decoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map NoExpectation
+                        BD.map2 NoExpectation
+                            Target.decoder
                             decoder
 
                     1 ->
-                        BD.map3 FromContext
+                        BD.map4 FromContext
+                            Target.decoder
                             A.regionDecoder
                             contextDecoder
                             decoder
 
                     2 ->
-                        BD.map4 FromAnnotation
+                        BD.map5 FromAnnotation
+                            Target.decoder
                             BD.string
                             BD.int
                             subContextDecoder

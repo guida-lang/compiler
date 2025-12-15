@@ -36,6 +36,7 @@ module Compiler.Reporting.Doc exposing
 
 import Compiler.Data.Index as Index
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Compiler.Json.Encode as E
@@ -162,12 +163,12 @@ toFancyHint chunks =
 -- LINKS
 
 
-link : String -> String -> String -> String -> Doc
-link word before fileName after =
+link : Target -> String -> String -> String -> String -> Doc
+link target word before fileName after =
     P.fillSep <|
         P.append (P.underline (P.text word)) (P.text ":")
             :: List.map P.text (String.words before)
-            ++ P.text (makeLink fileName)
+            ++ P.text (makeLink target fileName)
             :: List.map P.text (String.words after)
 
 
@@ -180,12 +181,12 @@ elmLink word before fileName after =
             :: List.map P.text (String.words after)
 
 
-fancyLink : String -> List Doc -> String -> List Doc -> Doc
-fancyLink word before fileName after =
+fancyLink : Target -> String -> List Doc -> String -> List Doc -> Doc
+fancyLink target word before fileName after =
     P.fillSep <|
         P.append (P.underline (P.text word)) (P.text ":")
             :: before
-            ++ P.text (makeLink fileName)
+            ++ P.text (makeLink target fileName)
             :: after
 
 
@@ -194,9 +195,9 @@ makeCommandLink command =
     "<https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/commands/" ++ command ++ ">"
 
 
-makeLink : String -> String
-makeLink fileName =
-    "<" ++ makeNakedLink fileName ++ ">"
+makeLink : Target -> String -> String
+makeLink target fileName =
+    "<" ++ makeNakedLink target fileName ++ ">"
 
 
 makeElmLink : String -> String
@@ -204,9 +205,14 @@ makeElmLink fileName =
     "<" ++ makeNakedElmLink fileName ++ ">"
 
 
-makeNakedLink : String -> String
-makeNakedLink fileName =
-    "https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/hints/" ++ fileName
+makeNakedLink : Target -> String -> String
+makeNakedLink target fileName =
+    case target of
+        Target.GuidaTarget ->
+            "https://guida-lang.org/docs/" ++ V.toChars V.compiler ++ "/hints/" ++ fileName
+
+        Target.ElmTarget ->
+            makeNakedElmLink fileName
 
 
 makeNakedElmLink : String -> String
@@ -214,11 +220,11 @@ makeNakedElmLink fileName =
     "https://elm-lang.org/" ++ V.toChars V.elmCompiler ++ "/" ++ fileName
 
 
-reflowLink : String -> String -> String -> Doc
-reflowLink before fileName after =
+reflowLink : Target -> String -> String -> String -> Doc
+reflowLink target before fileName after =
     P.fillSep <|
         List.map P.text (String.words before)
-            ++ P.text (makeLink fileName)
+            ++ P.text (makeLink target fileName)
             :: List.map P.text (String.words after)
 
 

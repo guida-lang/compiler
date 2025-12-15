@@ -7,6 +7,7 @@ module Compiler.Reporting.Warning exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -34,8 +35,8 @@ type Context
 -- TO REPORT
 
 
-toReport : L.Localizer -> Code.Source -> Warning -> Report
-toReport localizer source warning =
+toReport : Target -> L.Localizer -> Code.Source -> Warning -> Report
+toReport target localizer source warning =
     case warning of
         UnusedImport region moduleName ->
             Report "unused import" region [] <|
@@ -84,7 +85,7 @@ toReport localizer source warning =
                             D.hang 4 <|
                                 D.sep
                                     [ D.fromName name |> D.a (D.fromChars " :")
-                                    , RT.canToDoc localizer RT.None inferredType
+                                    , RT.canToDoc target localizer RT.None inferredType
                                     ]
                         ]
                     )

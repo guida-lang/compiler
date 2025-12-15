@@ -13,6 +13,7 @@ module Compiler.Reporting.Render.Type exposing
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type.Localizer as L
@@ -213,38 +214,38 @@ collectSrcArgs tipe =
 -- CANONICAL TYPE TO DOC
 
 
-canToDoc : L.Localizer -> Context -> Can.Type -> D.Doc
-canToDoc localizer context tipe =
+canToDoc : Target -> L.Localizer -> Context -> Can.Type -> D.Doc
+canToDoc target localizer context tipe =
     case tipe of
         Can.TLambda arg1 result ->
             let
                 ( arg2, rest ) =
                     collectArgs result
             in
-            lambda context (canToDoc localizer Func arg1) (canToDoc localizer Func arg2) (List.map (canToDoc localizer Func) rest)
+            lambda context (canToDoc target localizer Func arg1) (canToDoc target localizer Func arg2) (List.map (canToDoc target localizer Func) rest)
 
         Can.TVar name ->
             D.fromName name
 
         Can.TType home name args ->
-            apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App) args)
+            apply context (L.toDoc target localizer home name) (List.map (canToDoc target localizer App) args)
 
         Can.TRecord fields ext ->
-            record (List.map (canFieldToDoc localizer) (Can.fieldsToList fields)) (Maybe.map D.fromName ext)
+            record (List.map (canFieldToDoc target localizer) (Can.fieldsToList fields)) (Maybe.map D.fromName ext)
 
         Can.TUnit ->
             D.fromChars "()"
 
         Can.TTuple a b cs ->
-            tuple (canToDoc localizer None a) (canToDoc localizer None b) (List.map (canToDoc localizer None) cs)
+            tuple (canToDoc target localizer None a) (canToDoc target localizer None b) (List.map (canToDoc target localizer None) cs)
 
         Can.TAlias home name args _ ->
-            apply context (L.toDoc localizer home name) (List.map (canToDoc localizer App << Tuple.second) args)
+            apply context (L.toDoc target localizer home name) (List.map (canToDoc target localizer App << Tuple.second) args)
 
 
-canFieldToDoc : L.Localizer -> ( Name.Name, Can.Type ) -> ( D.Doc, D.Doc )
-canFieldToDoc localizer ( name, tipe ) =
-    ( D.fromName name, canToDoc localizer None tipe )
+canFieldToDoc : Target -> L.Localizer -> ( Name.Name, Can.Type ) -> ( D.Doc, D.Doc )
+canFieldToDoc target localizer ( name, tipe ) =
+    ( D.fromName name, canToDoc target localizer None tipe )
 
 
 collectArgs : Can.Type -> ( Can.Type, List Can.Type )

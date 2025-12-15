@@ -13,6 +13,7 @@ import Compiler.Canonicalize.Pattern as Pattern
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
@@ -51,13 +52,13 @@ canonicalize root pkg ifaces ((Src.Module syntaxVersion _ exports docs imports v
             Dict.fromList identity (List.map canonicalizeBinop binops)
     in
     Foreign.createInitialEnv root home ifaces imports
-        |> R.bind (Local.add modul)
+        |> R.bind (Local.add (Stuff.rootToTarget root) modul)
         |> R.bind
             (\( env, cunions, caliases ) ->
                 canonicalizeValues root syntaxVersion env values
                     |> R.bind
                         (\cvalues ->
-                            Effects.canonicalize syntaxVersion env values cunions effects
+                            Effects.canonicalize (Stuff.rootToTarget root) syntaxVersion env values cunions effects
                                 |> R.bind
                                     (\ceffects ->
                                         canonicalizeExports values cunions caliases cbinops ceffects exports
@@ -92,11 +93,11 @@ canonicalizeBinop (A.At _ (Src.Infix ( _, op ) ( _, associativity ) ( _, precede
 canonicalizeValues : Stuff.Root -> SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
 canonicalizeValues root syntaxVersion env values =
     R.traverse (toNodeOne root syntaxVersion env) values
-        |> R.bind (\nodes -> detectCycles (Graph.stronglyConnComp nodes))
+        |> R.bind (\nodes -> detectCycles (Stuff.rootToTarget root) (Graph.stronglyConnComp nodes))
 
 
-detectCycles : List (Graph.SCC NodeTwo) -> MResult i w Can.Decls
-detectCycles sccs =
+detectCycles : Target -> List (Graph.SCC NodeTwo) -> MResult i w Can.Decls
+detectCycles target sccs =
     case sccs of
         [] ->
             R.ok Can.SaveTheEnvironment
@@ -104,23 +105,23 @@ detectCycles sccs =
         scc :: otherSccs ->
             case scc of
                 Graph.AcyclicSCC ( def, _, _ ) ->
-                    R.fmap (Can.Declare def) (detectCycles otherSccs)
+                    R.fmap (Can.Declare def) (detectCycles target otherSccs)
 
                 Graph.CyclicSCC subNodes ->
-                    R.traverse detectBadCycles (Graph.stronglyConnComp subNodes)
+                    R.traverse (detectBadCycles target) (Graph.stronglyConnComp subNodes)
                         |> R.bind
                             (\defs ->
                                 case defs of
                                     [] ->
-                                        detectCycles otherSccs
+                                        detectCycles target otherSccs
 
                                     d :: ds ->
-                                        R.fmap (Can.DeclareRec d ds) (detectCycles otherSccs)
+                                        R.fmap (Can.DeclareRec d ds) (detectCycles target otherSccs)
                             )
 
 
-detectBadCycles : Graph.SCC Can.Def -> MResult i w Can.Def
-detectBadCycles scc =
+detectBadCycles : Target -> Graph.SCC Can.Def -> MResult i w Can.Def
+detectBadCycles target scc =
     case scc of
         Graph.AcyclicSCC def ->
             R.ok def
@@ -137,7 +138,7 @@ detectBadCycles scc =
                 names =
                     List.map (A.toValue << extractDefName) defs
             in
-            R.throw (Error.RecursiveDecl region name names)
+            R.throw (Error.RecursiveDecl target region name names)
 
 
 extractDefName : Can.Def -> A.Located Name
@@ -177,10 +178,10 @@ toNodeOne root syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as anam
     case maybeType of
         Nothing ->
             Pattern.verify (Error.DPFuncArgs name)
-                (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
+                (R.traverse (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env) (List.map Src.c1Value srcArgs))
                 |> R.bind
                     (\( args, argBindings ) ->
-                        Env.addLocals argBindings env
+                        Env.addLocals (Stuff.rootToTarget root) argBindings env
                             |> R.bind
                                 (\newEnv ->
                                     Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize root syntaxVersion newEnv body)
@@ -200,14 +201,14 @@ toNodeOne root syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as anam
                     )
 
         Just ( _, ( _, srcType ) ) ->
-            Type.toAnnotation syntaxVersion env srcType
+            Type.toAnnotation (Stuff.rootToTarget root) syntaxVersion env srcType
                 |> R.bind
                     (\(Can.Forall freeVars tipe) ->
                         Pattern.verify (Error.DPFuncArgs name)
-                            (Expr.gatherTypedArgs syntaxVersion env name (List.map Src.c1Value srcArgs) tipe Index.first [])
+                            (Expr.gatherTypedArgs (Stuff.rootToTarget root) syntaxVersion env name (List.map Src.c1Value srcArgs) tipe Index.first [])
                             |> R.bind
                                 (\( ( args, resultType ), argBindings ) ->
-                                    Env.addLocals argBindings env
+                                    Env.addLocals (Stuff.rootToTarget root) argBindings env
                                         |> R.bind
                                             (\newEnv ->
                                                 Expr.verifyBindings W.Pattern argBindings (Expr.canonicalize root syntaxVersion newEnv body)

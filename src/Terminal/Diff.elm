@@ -45,12 +45,11 @@ type Args
 
 run : Args -> () -> Task Never ()
 run args () =
-    Reporting.attempt Exit.diffToReport
-        (Task.run
+    Reporting.attempt Exit.diffToReport <|
+        Task.run
             (getEnv
                 |> Task.bind (\env -> diff env args)
             )
-        )
 
 
 
@@ -225,7 +224,7 @@ generateDocs (Env maybeRoot _ _ _) =
                                     Stuff.GuidaRoot _ ->
                                         Task.throw Exit.DiffGuidaApplication
 
-                                    Stuff.ElmRoot _ ->
+                                    Stuff.ElmRoot _ _ ->
                                         Task.throw Exit.DiffElmApplication
 
                             Details.ValidPkg _ exposed _ ->
@@ -235,7 +234,7 @@ generateDocs (Env maybeRoot _ _ _) =
                                             Stuff.GuidaRoot _ ->
                                                 Task.throw Exit.DiffGuidaNoExposed
 
-                                            Stuff.ElmRoot _ ->
+                                            Stuff.ElmRoot _ _ ->
                                                 Task.throw Exit.DiffElmNoExposed
 
                                     e :: es ->

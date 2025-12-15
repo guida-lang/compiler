@@ -18,6 +18,7 @@ import Compiler.AST.Source as Src
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -38,10 +39,10 @@ import Utils.Bytes.Encode as BE
 
 type Error
     = AnnotationTooShort A.Region Name Index.ZeroBased Int
-    | AmbiguousVar A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
-    | AmbiguousType A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
-    | AmbiguousVariant A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
-    | AmbiguousBinop A.Region Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousVar Target A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousType Target A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousVariant Target A.Region (Maybe Name) Name IO.Canonical (OneOrMore IO.Canonical)
+    | AmbiguousBinop Target A.Region Name IO.Canonical (OneOrMore IO.Canonical)
     | BadArity A.Region BadArityContext Name Int Int
     | Binop A.Region Name Name
     | DuplicateDecl Name A.Region A.Region
@@ -61,17 +62,17 @@ type Error
     | ImportNotFound A.Region Name (List IO.Canonical)
     | ImportOpenAlias A.Region Name
     | ImportExposingNotFound A.Region IO.Canonical Name (List Name)
-    | NotFoundVar A.Region (Maybe Name) Name PossibleNames
-    | NotFoundType A.Region (Maybe Name) Name PossibleNames
-    | NotFoundVariant A.Region (Maybe Name) Name PossibleNames
+    | NotFoundVar Target A.Region (Maybe Name) Name PossibleNames
+    | NotFoundType Target A.Region (Maybe Name) Name PossibleNames
+    | NotFoundVariant Target A.Region (Maybe Name) Name PossibleNames
     | NotFoundBinop A.Region Name (EverySet String Name)
     | PatternHasRecordCtor A.Region Name
-    | PortPayloadInvalid A.Region Name Can.Type InvalidPayload
-    | PortTypeInvalid A.Region Name PortProblem
-    | RecursiveAlias A.Region Name (List Name) Src.Type (List Name)
-    | RecursiveDecl A.Region Name (List Name)
-    | RecursiveLet (A.Located Name) (List Name)
-    | Shadowing Name A.Region A.Region
+    | PortPayloadInvalid Target A.Region Name Can.Type InvalidPayload
+    | PortTypeInvalid Target A.Region Name PortProblem
+    | RecursiveAlias Target A.Region Name (List Name) Src.Type (List Name)
+    | RecursiveDecl Target A.Region Name (List Name)
+    | RecursiveLet Target (A.Located Name) (List Name)
+    | Shadowing Target Name A.Region A.Region
     | TupleLargerThanThree A.Region
     | TypeVarsUnboundInUnion A.Region Name (List Name) ( Name, A.Region ) (List ( Name, A.Region ))
     | TypeVarsMessedUpInAlias A.Region Name (List Name) (List ( Name, A.Region )) (List ( Name, A.Region ))
@@ -200,17 +201,17 @@ toReport source err =
                         )
                     )
 
-        AmbiguousVar region maybePrefix name h hs ->
-            ambiguousName source region maybePrefix name h hs "variable"
+        AmbiguousVar target region maybePrefix name h hs ->
+            ambiguousName target source region maybePrefix name h hs "variable"
 
-        AmbiguousType region maybePrefix name h hs ->
-            ambiguousName source region maybePrefix name h hs "type"
+        AmbiguousType target region maybePrefix name h hs ->
+            ambiguousName target source region maybePrefix name h hs "type"
 
-        AmbiguousVariant region maybePrefix name h hs ->
-            ambiguousName source region maybePrefix name h hs "variant"
+        AmbiguousVariant target region maybePrefix name h hs ->
+            ambiguousName target source region maybePrefix name h hs "variant"
 
-        AmbiguousBinop region name h hs ->
-            ambiguousName source region Nothing name h hs "operator"
+        AmbiguousBinop target region name h hs ->
+            ambiguousName target source region Nothing name h hs "operator"
 
         BadArity region badArityContext name expected actual ->
             let
@@ -542,14 +543,14 @@ toReport source err =
                                 ]
                     )
 
-        NotFoundVar region prefix name possibleNames ->
-            notFound source region prefix name "variable" possibleNames
+        NotFoundVar target region prefix name possibleNames ->
+            notFound target source region prefix name "variable" possibleNames
 
-        NotFoundType region prefix name possibleNames ->
-            notFound source region prefix name "type" possibleNames
+        NotFoundType target region prefix name possibleNames ->
+            notFound target source region prefix name "type" possibleNames
 
-        NotFoundVariant region prefix name possibleNames ->
-            notFound source region prefix name "variant" possibleNames
+        NotFoundVariant target region prefix name possibleNames ->
+            notFound target source region prefix name "variant" possibleNames
 
         NotFoundBinop region op locals ->
             if op == "===" then
@@ -660,7 +661,7 @@ toReport source err =
                         "I recommend matching the record as a variable and unpacking it later."
                     )
 
-        PortPayloadInvalid region portName _ invalidPayload ->
+        PortPayloadInvalid target region portName _ invalidPayload ->
             let
                 formatDetails : ( String, D.Doc ) -> Report.Report
                 formatDetails ( aBadKindOfThing, elaboration ) =
@@ -672,7 +673,8 @@ toReport source err =
                                 ("The `" ++ portName ++ "` port is trying to transmit " ++ aBadKindOfThing ++ ":")
                             , D.stack
                                 [ elaboration
-                                , D.link "Hint"
+                                , D.link target
+                                    "Hint"
                                     "Ports are not a traditional FFI, so if you have tons of annoying ports, definitely read"
                                     "ports"
                                     "to learn how they are meant to work. They require a different mindset!"
@@ -710,7 +712,7 @@ toReport source err =
                             ]
                         )
 
-        PortTypeInvalid region name portProblem ->
+        PortTypeInvalid target region name portProblem ->
             let
                 formatDetails : ( String, D.Doc ) -> Report.Report
                 formatDetails ( before, after ) =
@@ -721,7 +723,8 @@ toReport source err =
                             ( D.reflow before
                             , D.stack
                                 [ after
-                                , D.link "Hint"
+                                , D.link target
+                                    "Hint"
                                     "Read"
                                     "ports"
                                     "for more advice. For example, do not end up with one port per JS function!"
@@ -776,10 +779,10 @@ toReport source err =
                             "Ports need to produce a command (Cmd) or a subscription (Sub) but this is neither. I do not know how to handle this."
                         )
 
-        RecursiveAlias region name args tipe others ->
-            aliasRecursionReport source region name args tipe others
+        RecursiveAlias target region name args tipe others ->
+            aliasRecursionReport target source region name args tipe others
 
-        RecursiveDecl region name names ->
+        RecursiveDecl target region name names ->
             let
                 makeTheory : String -> String -> D.Doc
                 makeTheory question details =
@@ -793,7 +796,7 @@ toReport source err =
                             , D.stack
                                 [ makeTheory "Are you trying to mutate a variable?" <| "Guida does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
                                 , makeTheory "Maybe you DO want a recursive value?" <| "To define " ++ name ++ " we need to know what " ++ name ++ " is, so let’s expand it. Wait, but now we need to know what " ++ name ++ " is, so let’s expand it... This will keep going infinitely!"
-                                , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
+                                , D.link target "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
                                 ]
                             )
 
@@ -802,11 +805,11 @@ toReport source err =
                             , D.stack
                                 [ D.reflow <| "The `" ++ name ++ "` value depends on itself through the following chain of definitions:"
                                 , D.cycle 4 name names
-                                , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do want mutually recursive values."
+                                , D.link target "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do want mutually recursive values."
                                 ]
                             )
 
-        RecursiveLet (A.At region name) names ->
+        RecursiveLet target (A.At region name) names ->
             Report.Report "CYCLIC VALUE" region [] <|
                 Code.toSnippet source region Nothing <|
                     case names of
@@ -820,7 +823,7 @@ toReport source err =
                             , D.stack
                                 [ makeTheory "Are you trying to mutate a variable?" <| "Guida does not have mutation, so when I see " ++ name ++ " defined in terms of " ++ name ++ ", I treat it as a recursive definition. Try giving the new value a new name!"
                                 , makeTheory "Maybe you DO want a recursive value?" <| "To define " ++ name ++ " we need to know what " ++ name ++ " is, so let’s expand it. Wait, but now we need to know what " ++ name ++ " is, so let’s expand it... This will keep going infinitely!"
-                                , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
+                                , D.link target "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do need a recursive value."
                                 ]
                             )
 
@@ -829,17 +832,17 @@ toReport source err =
                             , D.stack
                                 [ D.reflow <| "The `" ++ name ++ "` value depends on itself through the following chain of definitions:"
                                 , D.cycle 4 name names
-                                , D.link "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do want mutually recursive values."
+                                , D.link target "Hint" "The root problem is often a typo in some variable name, but I recommend reading" "bad-recursion" "for more detailed advice, especially if you actually do want mutually recursive values."
                                 ]
                             )
 
-        Shadowing name r1 r2 ->
+        Shadowing target name r1 r2 ->
             let
                 advice : D.Doc
                 advice =
                     D.stack
                         [ D.reflow <| "Think of a more helpful name for one of them and you should be all set!"
-                        , D.link "Note" "Linters advise against shadowing, so Guida makes “best practices” the default. Read" "shadowing" "for more details on this choice."
+                        , D.link target "Note" "Linters advise against shadowing, so Guida makes “best practices” the default. Read" "shadowing" "for more details on this choice."
                         ]
             in
             Report.Report "SHADOWING" r2 [] <|
@@ -1106,8 +1109,8 @@ nameClash source r1 r2 messageThatEndsWithPunctuation =
             )
 
 
-ambiguousName : Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> IO.Canonical -> OneOrMore.OneOrMore IO.Canonical -> String -> Report.Report
-ambiguousName source region maybePrefix name h hs thing =
+ambiguousName : Target -> Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> IO.Canonical -> OneOrMore.OneOrMore IO.Canonical -> String -> Report.Report
+ambiguousName target source region maybePrefix name h hs thing =
     let
         possibleHomes : List IO.Canonical
         possibleHomes =
@@ -1134,7 +1137,7 @@ ambiguousName source region maybePrefix name h hs thing =
                                 ++ " of your imports, so I am not sure which one to use:"
                         , D.indent 4 <| D.vcat (List.map homeToYellowDoc possibleHomes)
                         , D.reflow "I recommend using qualified names for imported values. I also recommend having at most one `exposing (..)` per file to make name clashes like this less common in the long run."
-                        , D.link "Note" "Check out" "imports" "for more info on the import syntax."
+                        , D.link target "Note" "Check out" "imports" "for more info on the import syntax."
                         ]
                     )
 
@@ -1169,13 +1172,13 @@ ambiguousName source region maybePrefix name h hs thing =
                                 ++ eitherOrAny
                                 ++ " of these imports:"
                         , D.indent 4 <| D.vcat (List.map homeToYellowDoc possibleHomes)
-                        , D.reflowLink "Read" "imports" "to learn how to clarify which one you want."
+                        , D.reflowLink target "Read" "imports" "to learn how to clarify which one you want."
                         ]
                     )
 
 
-notFound : Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> String -> PossibleNames -> Report.Report
-notFound source region maybePrefix name thing { locals, quals } =
+notFound : Target -> Code.Source -> A.Region -> Maybe Name.Name -> Name.Name -> String -> PossibleNames -> Report.Report
+notFound target source region maybePrefix name thing { locals, quals } =
     let
         givenName : Name
         givenName =
@@ -1200,14 +1203,14 @@ notFound source region maybePrefix name thing { locals, quals } =
                 [] ->
                     D.stack
                         [ D.reflow noSuggestionDetails
-                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
+                        , D.link target "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
                         ]
 
                 suggestions ->
                     D.stack
                         [ D.reflow yesSuggestionDetails
                         , D.indent 4 <| D.vcat (List.map D.dullyellow (List.map D.fromChars suggestions))
-                        , D.link "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
+                        , D.link target "Hint" "Read" "imports" "to see how `import` declarations work in Guida."
                         ]
     in
     Report.Report "NAMING ERROR" region nearbyNames <|
@@ -1244,8 +1247,8 @@ toQualString prefix name =
 -- BAD ALIAS RECURSION
 
 
-aliasRecursionReport : Code.Source -> A.Region -> Name -> List Name -> Src.Type -> List Name -> Report.Report
-aliasRecursionReport source region name args tipe others =
+aliasRecursionReport : Target -> Code.Source -> A.Region -> Name -> List Name -> Src.Type -> List Name -> Report.Report
+aliasRecursionReport target source region name args tipe others =
     case others of
         [] ->
             Report.Report "ALIAS PROBLEM" region [] <|
@@ -1256,7 +1259,7 @@ aliasRecursionReport source region name args tipe others =
                     , D.stack
                         [ D.reflow "When I expand a recursive type alias, it just keeps getting bigger and bigger. So dealiasing results in an infinitely large type! Try this instead:"
                         , D.indent 4 <| aliasToUnionDoc name args tipe
-                        , D.link "Hint" "This is kind of a subtle distinction. I suggested the naive fix, but I recommend reading" "recursive-alias" "for ideas on how to do better."
+                        , D.link target "Hint" "This is kind of a subtle distinction. I suggested the naive fix, but I recommend reading" "recursive-alias" "for ideas on how to do better."
                         ]
                     )
 
@@ -1270,7 +1273,7 @@ aliasRecursionReport source region name args tipe others =
                         [ D.fromChars "It is part of this cycle of type aliases:"
                         , D.cycle 4 name others
                         , D.reflow "You need to convert at least one of these type aliases into a `type`."
-                        , D.link "Note" "Read" "recursive-alias" "to learn why this `type` vs `type alias` distinction matters. It is subtle but important!"
+                        , D.link target "Note" "Read" "recursive-alias" "to learn why this `type` vs `type alias` distinction matters. It is subtle but important!"
                         ]
                     )
 
@@ -1304,9 +1307,10 @@ errorEncoder error =
                 , BE.int leftovers
                 ]
 
-        AmbiguousVar region maybePrefix name h hs ->
+        AmbiguousVar target region maybePrefix name h hs ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1314,9 +1318,10 @@ errorEncoder error =
                 , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
-        AmbiguousType region maybePrefix name h hs ->
+        AmbiguousType target region maybePrefix name h hs ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1324,9 +1329,10 @@ errorEncoder error =
                 , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
-        AmbiguousVariant region maybePrefix name h hs ->
+        AmbiguousVariant target region maybePrefix name h hs ->
             BE.sequence
                 [ BE.unsignedInt8 3
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string maybePrefix
                 , BE.string name
@@ -1334,9 +1340,10 @@ errorEncoder error =
                 , BE.oneOrMore ModuleName.canonicalEncoder hs
                 ]
 
-        AmbiguousBinop region name h hs ->
+        AmbiguousBinop target region name h hs ->
             BE.sequence
                 [ BE.unsignedInt8 4
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string name
                 , ModuleName.canonicalEncoder h
@@ -1498,27 +1505,30 @@ errorEncoder error =
                 , BE.list BE.string possibleNames
                 ]
 
-        NotFoundVar region prefix name possibleNames ->
+        NotFoundVar target region prefix name possibleNames ->
             BE.sequence
                 [ BE.unsignedInt8 24
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
                 , possibleNamesEncoder possibleNames
                 ]
 
-        NotFoundType region prefix name possibleNames ->
+        NotFoundType target region prefix name possibleNames ->
             BE.sequence
                 [ BE.unsignedInt8 25
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
                 , possibleNamesEncoder possibleNames
                 ]
 
-        NotFoundVariant region prefix name possibleNames ->
+        NotFoundVariant target region prefix name possibleNames ->
             BE.sequence
                 [ BE.unsignedInt8 26
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.maybe BE.string prefix
                 , BE.string name
@@ -1540,26 +1550,29 @@ errorEncoder error =
                 , BE.string name
                 ]
 
-        PortPayloadInvalid region portName badType invalidPayload ->
+        PortPayloadInvalid target region portName badType invalidPayload ->
             BE.sequence
                 [ BE.unsignedInt8 29
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string portName
                 , Can.typeEncoder badType
                 , invalidPayloadEncoder invalidPayload
                 ]
 
-        PortTypeInvalid region name portProblem ->
+        PortTypeInvalid target region name portProblem ->
             BE.sequence
                 [ BE.unsignedInt8 30
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string name
                 , portProblemEncoder portProblem
                 ]
 
-        RecursiveAlias region name args tipe others ->
+        RecursiveAlias target region name args tipe others ->
             BE.sequence
                 [ BE.unsignedInt8 31
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string name
                 , BE.list BE.string args
@@ -1567,24 +1580,27 @@ errorEncoder error =
                 , BE.list BE.string others
                 ]
 
-        RecursiveDecl region name names ->
+        RecursiveDecl target region name names ->
             BE.sequence
                 [ BE.unsignedInt8 32
+                , Target.encoder target
                 , A.regionEncoder region
                 , BE.string name
                 , BE.list BE.string names
                 ]
 
-        RecursiveLet name names ->
+        RecursiveLet target name names ->
             BE.sequence
                 [ BE.unsignedInt8 33
+                , Target.encoder target
                 , A.locatedEncoder BE.string name
                 , BE.list BE.string names
                 ]
 
-        Shadowing name r1 r2 ->
+        Shadowing target name r1 r2 ->
             BE.sequence
                 [ BE.unsignedInt8 34
+                , Target.encoder target
                 , BE.string name
                 , A.regionEncoder r1
                 , A.regionEncoder r2
@@ -1631,7 +1647,8 @@ errorDecoder =
                             BD.int
 
                     1 ->
-                        BD.map5 AmbiguousVar
+                        BD.map6 AmbiguousVar
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
@@ -1639,7 +1656,8 @@ errorDecoder =
                             (BD.oneOrMore ModuleName.canonicalDecoder)
 
                     2 ->
-                        BD.map5 AmbiguousType
+                        BD.map6 AmbiguousType
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
@@ -1647,7 +1665,8 @@ errorDecoder =
                             (BD.oneOrMore ModuleName.canonicalDecoder)
 
                     3 ->
-                        BD.map5 AmbiguousVariant
+                        BD.map6 AmbiguousVariant
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
@@ -1655,7 +1674,8 @@ errorDecoder =
                             (BD.oneOrMore ModuleName.canonicalDecoder)
 
                     4 ->
-                        BD.map4 AmbiguousBinop
+                        BD.map5 AmbiguousBinop
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             ModuleName.canonicalDecoder
@@ -1779,21 +1799,24 @@ errorDecoder =
                             (BD.list BD.string)
 
                     24 ->
-                        BD.map4 NotFoundVar
+                        BD.map5 NotFoundVar
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
                             possibleNamesDecoder
 
                     25 ->
-                        BD.map4 NotFoundType
+                        BD.map5 NotFoundType
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
                             possibleNamesDecoder
 
                     26 ->
-                        BD.map4 NotFoundVariant
+                        BD.map5 NotFoundVariant
+                            Target.decoder
                             A.regionDecoder
                             (BD.maybe BD.string)
                             BD.string
@@ -1811,20 +1834,23 @@ errorDecoder =
                             BD.string
 
                     29 ->
-                        BD.map4 PortPayloadInvalid
+                        BD.map5 PortPayloadInvalid
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             Can.typeDecoder
                             invalidPayloadDecoder
 
                     30 ->
-                        BD.map3 PortTypeInvalid
+                        BD.map4 PortTypeInvalid
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             portProblemDecoder
 
                     31 ->
-                        BD.map5 RecursiveAlias
+                        BD.map6 RecursiveAlias
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             (BD.list BD.string)
@@ -1832,18 +1858,21 @@ errorDecoder =
                             (BD.list BD.string)
 
                     32 ->
-                        BD.map3 RecursiveDecl
+                        BD.map4 RecursiveDecl
+                            Target.decoder
                             A.regionDecoder
                             BD.string
                             (BD.list BD.string)
 
                     33 ->
-                        BD.map2 RecursiveLet
+                        BD.map3 RecursiveLet
+                            Target.decoder
                             (A.locatedDecoder BD.string)
                             (BD.list BD.string)
 
                     34 ->
-                        BD.map3 Shadowing
+                        BD.map4 Shadowing
+                            Target.decoder
                             BD.string
                             A.regionDecoder
                             A.regionDecoder

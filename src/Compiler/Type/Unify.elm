@@ -4,6 +4,7 @@ module Compiler.Type.Unify exposing
     )
 
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Type.Error as Error
 import Compiler.Type.Occurs as Occurs
@@ -23,9 +24,9 @@ type Answer
     | AnswerErr (List IO.Variable) Error.Type Error.Type
 
 
-unify : IO.Variable -> IO.Variable -> IO Answer
-unify v1 v2 =
-    case guardedUnify v1 v2 of
+unify : Target -> IO.Variable -> IO.Variable -> IO Answer
+unify target v1 v2 =
+    case guardedUnify target v1 v2 of
         Unify k ->
             k []
                 |> IO.bind
@@ -165,8 +166,8 @@ fresh (Context _ (IO.Descriptor _ rank1 _ _) _ (IO.Descriptor _ rank2 _ _)) cont
 -- ACTUALLY UNIFY THINGS
 
 
-guardedUnify : IO.Variable -> IO.Variable -> Unify ()
-guardedUnify left right =
+guardedUnify : Target -> IO.Variable -> IO.Variable -> Unify ()
+guardedUnify target left right =
     Unify
         (\vars ->
             UF.equivalent left right
@@ -182,7 +183,7 @@ guardedUnify left right =
                                         UF.get right
                                             |> IO.bind
                                                 (\rightDesc ->
-                                                    case actuallyUnify (Context left leftDesc right rightDesc) of
+                                                    case actuallyUnify target (Context left leftDesc right rightDesc) of
                                                         Unify k ->
                                                             k vars
                                                 )
@@ -191,33 +192,33 @@ guardedUnify left right =
         )
 
 
-subUnify : IO.Variable -> IO.Variable -> Unify ()
-subUnify var1 var2 =
-    guardedUnify var1 var2
+subUnify : Target -> IO.Variable -> IO.Variable -> Unify ()
+subUnify target var1 var2 =
+    guardedUnify target var1 var2
 
 
-subUnifyTuple : List IO.Variable -> List IO.Variable -> Context -> IO.Content -> Unify ()
-subUnifyTuple cs zs context otherContent =
+subUnifyTuple : Target -> List IO.Variable -> List IO.Variable -> Context -> IO.Content -> Unify ()
+subUnifyTuple target cs zs context otherContent =
     case ( cs, zs ) of
         ( [], [] ) ->
             merge context otherContent
 
         ( c :: restCs, z :: restZs ) ->
-            subUnify c z
-                |> bind (\_ -> subUnifyTuple restCs restZs context otherContent)
+            subUnify target c z
+                |> bind (\_ -> subUnifyTuple target restCs restZs context otherContent)
 
         _ ->
             mismatch
 
 
-actuallyUnify : Context -> Unify ()
-actuallyUnify ((Context _ (IO.Descriptor firstContent _ _ _) _ (IO.Descriptor secondContent _ _ _)) as context) =
+actuallyUnify : Target -> Context -> Unify ()
+actuallyUnify target ((Context _ (IO.Descriptor firstContent _ _ _) _ (IO.Descriptor secondContent _ _ _)) as context) =
     case firstContent of
         IO.FlexVar _ ->
             unifyFlex context firstContent secondContent
 
         IO.FlexSuper super _ ->
-            unifyFlexSuper context super firstContent secondContent
+            unifyFlexSuper target context super firstContent secondContent
 
         IO.RigidVar _ ->
             unifyRigid context Nothing firstContent secondContent
@@ -226,10 +227,10 @@ actuallyUnify ((Context _ (IO.Descriptor firstContent _ _ _) _ (IO.Descriptor se
             unifyRigid context (Just super) firstContent secondContent
 
         IO.Alias home name args realVar ->
-            unifyAlias context home name args realVar secondContent
+            unifyAlias target context home name args realVar secondContent
 
         IO.Structure flatType ->
-            unifyStructure context flatType firstContent secondContent
+            unifyStructure target context flatType firstContent secondContent
 
         IO.Error ->
             -- If there was an error, just pretend it is okay. This lets us avoid
@@ -314,11 +315,11 @@ unifyRigid context maybeSuper content otherContent =
 -- UNIFY SUPER VARIABLES
 
 
-unifyFlexSuper : Context -> IO.SuperType -> IO.Content -> IO.Content -> Unify ()
-unifyFlexSuper ((Context first _ _ _) as context) super content otherContent =
+unifyFlexSuper : Target -> Context -> IO.SuperType -> IO.Content -> IO.Content -> Unify ()
+unifyFlexSuper target ((Context first _ _ _) as context) super content otherContent =
     case otherContent of
         IO.Structure flatType ->
-            unifyFlexSuperStructure context super flatType
+            unifyFlexSuperStructure target context super flatType
 
         IO.RigidVar _ ->
             mismatch
@@ -392,7 +393,7 @@ unifyFlexSuper ((Context first _ _ _) as context) super content otherContent =
                             mismatch
 
         IO.Alias _ _ _ realVar ->
-            subUnify first realVar
+            subUnify target first realVar
 
         IO.Error ->
             merge context IO.Error
@@ -406,40 +407,40 @@ combineRigidSupers rigid flex =
         || (rigid == IO.CompAppend && (flex == IO.Comparable || flex == IO.Appendable))
 
 
-atomMatchesSuper : IO.SuperType -> IO.Canonical -> Name.Name -> Bool
-atomMatchesSuper super home name =
+atomMatchesSuper : Target -> IO.SuperType -> IO.Canonical -> Name.Name -> Bool
+atomMatchesSuper target super home name =
     case super of
         IO.Number ->
-            isNumber home name
+            isNumber target home name
 
         IO.Comparable ->
-            isNumber home name || Error.isString home name || Error.isChar home name
+            isNumber target home name || Error.isString target home name || Error.isChar target home name
 
         IO.Appendable ->
-            Error.isString home name
+            Error.isString target home name
 
         IO.CompAppend ->
-            Error.isString home name
+            Error.isString target home name
 
 
-isNumber : IO.Canonical -> Name.Name -> Bool
-isNumber home name =
-    (home == ModuleName.basics || home == ModuleName.elmBasics)
+isNumber : Target -> IO.Canonical -> Name.Name -> Bool
+isNumber target home name =
+    (home == ModuleName.basics target)
         && (name == Name.int || name == Name.float)
 
 
-unifyFlexSuperStructure : Context -> IO.SuperType -> IO.FlatType -> Unify ()
-unifyFlexSuperStructure context super flatType =
+unifyFlexSuperStructure : Target -> Context -> IO.SuperType -> IO.FlatType -> Unify ()
+unifyFlexSuperStructure target context super flatType =
     case flatType of
         IO.App1 home name [] ->
-            if atomMatchesSuper super home name then
+            if atomMatchesSuper target super home name then
                 merge context (IO.Structure flatType)
 
             else
                 mismatch
 
         IO.App1 home name [ variable ] ->
-            if (home == ModuleName.list || home == ModuleName.elmList) && name == Name.list then
+            if (home == ModuleName.list target) && name == Name.list then
                 case super of
                     IO.Number ->
                         mismatch
@@ -449,12 +450,12 @@ unifyFlexSuperStructure context super flatType =
 
                     IO.Comparable ->
                         comparableOccursCheck context
-                            |> bind (\_ -> unifyComparableRecursive variable)
+                            |> bind (\_ -> unifyComparableRecursive target variable)
                             |> bind (\_ -> merge context (IO.Structure flatType))
 
                     IO.CompAppend ->
                         comparableOccursCheck context
-                            |> bind (\_ -> unifyComparableRecursive variable)
+                            |> bind (\_ -> unifyComparableRecursive target variable)
                             |> bind (\_ -> merge context (IO.Structure flatType))
 
             else
@@ -469,7 +470,7 @@ unifyFlexSuperStructure context super flatType =
                     mismatch
 
                 IO.Comparable ->
-                    List.foldl (\var _ -> unifyComparableRecursive var) (comparableOccursCheck context) (a :: b :: cs)
+                    List.foldl (\var _ -> unifyComparableRecursive target var) (comparableOccursCheck context) (a :: b :: cs)
                         |> bind (\_ -> merge context (IO.Structure flatType))
 
                 IO.CompAppend ->
@@ -500,8 +501,8 @@ comparableOccursCheck (Context _ _ var _) =
         )
 
 
-unifyComparableRecursive : IO.Variable -> Unify ()
-unifyComparableRecursive var =
+unifyComparableRecursive : Target -> IO.Variable -> Unify ()
+unifyComparableRecursive target var =
     register
         (UF.get var
             |> IO.bind
@@ -509,33 +510,33 @@ unifyComparableRecursive var =
                     UF.fresh (IO.Descriptor (Type.unnamedFlexSuper IO.Comparable) rank Type.noMark Nothing)
                 )
         )
-        |> bind (\compVar -> guardedUnify compVar var)
+        |> bind (\compVar -> guardedUnify target compVar var)
 
 
 
 -- UNIFY ALIASES
 
 
-unifyAlias : Context -> IO.Canonical -> Name.Name -> List ( Name.Name, IO.Variable ) -> IO.Variable -> IO.Content -> Unify ()
-unifyAlias ((Context _ _ second _) as context) home name args realVar otherContent =
+unifyAlias : Target -> Context -> IO.Canonical -> Name.Name -> List ( Name.Name, IO.Variable ) -> IO.Variable -> IO.Content -> Unify ()
+unifyAlias target ((Context _ _ second _) as context) home name args realVar otherContent =
     case otherContent of
         IO.FlexVar _ ->
             merge context (IO.Alias home name args realVar)
 
         IO.FlexSuper _ _ ->
-            subUnify realVar second
+            subUnify target realVar second
 
         IO.RigidVar _ ->
-            subUnify realVar second
+            subUnify target realVar second
 
         IO.RigidSuper _ _ ->
-            subUnify realVar second
+            subUnify target realVar second
 
         IO.Alias otherHome otherName otherArgs otherRealVar ->
             if name == otherName && home == otherHome then
                 Unify
                     (\vars ->
-                        unifyAliasArgs vars args otherArgs
+                        unifyAliasArgs target vars args otherArgs
                             |> IO.bind
                                 (\res ->
                                     case res of
@@ -550,32 +551,32 @@ unifyAlias ((Context _ _ second _) as context) home name args realVar otherConte
                     )
 
             else
-                subUnify realVar otherRealVar
+                subUnify target realVar otherRealVar
 
         IO.Structure _ ->
-            subUnify realVar second
+            subUnify target realVar second
 
         IO.Error ->
             merge context IO.Error
 
 
-unifyAliasArgs : List IO.Variable -> List ( Name.Name, IO.Variable ) -> List ( Name.Name, IO.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
-unifyAliasArgs vars args1 args2 =
+unifyAliasArgs : Target -> List IO.Variable -> List ( Name.Name, IO.Variable ) -> List ( Name.Name, IO.Variable ) -> IO (Result UnifyErr (UnifyOk ()))
+unifyAliasArgs target vars args1 args2 =
     case args1 of
         ( _, arg1 ) :: others1 ->
             case args2 of
                 ( _, arg2 ) :: others2 ->
-                    case subUnify arg1 arg2 of
+                    case subUnify target arg1 arg2 of
                         Unify k ->
                             k vars
                                 |> IO.bind
                                     (\res1 ->
                                         case res1 of
                                             Ok (UnifyOk vs ()) ->
-                                                unifyAliasArgs vs others1 others2
+                                                unifyAliasArgs target vs others1 others2
 
                                             Err (UnifyErr vs ()) ->
-                                                unifyAliasArgs vs others1 others2
+                                                unifyAliasArgs target vs others1 others2
                                                     |> IO.fmap
                                                         (\res2 ->
                                                             case res2 of
@@ -603,14 +604,14 @@ unifyAliasArgs vars args1 args2 =
 -- UNIFY STRUCTURES
 
 
-unifyStructure : Context -> IO.FlatType -> IO.Content -> IO.Content -> Unify ()
-unifyStructure ((Context first _ second _) as context) flatType content otherContent =
+unifyStructure : Target -> Context -> IO.FlatType -> IO.Content -> IO.Content -> Unify ()
+unifyStructure target ((Context first _ second _) as context) flatType content otherContent =
     case otherContent of
         IO.FlexVar _ ->
             merge context content
 
         IO.FlexSuper super _ ->
-            unifyFlexSuperStructure (reorient context) super flatType
+            unifyFlexSuperStructure target (reorient context) super flatType
 
         IO.RigidVar _ ->
             mismatch
@@ -619,7 +620,7 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
             mismatch
 
         IO.Alias _ _ _ realVar ->
-            subUnify first realVar
+            subUnify target first realVar
 
         IO.Structure otherFlatType ->
             case ( flatType, otherFlatType ) of
@@ -627,7 +628,7 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                     if home == otherHome && name == otherName then
                         Unify
                             (\vars ->
-                                unifyArgs vars args otherArgs
+                                unifyArgs target vars args otherArgs
                                     |> IO.bind
                                         (\unifiedArgs ->
                                             case unifiedArgs of
@@ -645,8 +646,8 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                         mismatch
 
                 ( IO.Fun1 arg1 res1, IO.Fun1 arg2 res2 ) ->
-                    subUnify arg1 arg2
-                        |> bind (\_ -> subUnify res1 res2)
+                    subUnify target arg1 arg2
+                        |> bind (\_ -> subUnify target res1 res2)
                         |> bind (\_ -> merge context otherContent)
 
                 ( IO.EmptyRecord1, IO.EmptyRecord1 ) ->
@@ -654,14 +655,14 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
 
                 ( IO.Record1 fields ext, IO.EmptyRecord1 ) ->
                     if Dict.isEmpty fields then
-                        subUnify ext second
+                        subUnify target ext second
 
                     else
                         mismatch
 
                 ( IO.EmptyRecord1, IO.Record1 fields ext ) ->
                     if Dict.isEmpty fields then
-                        subUnify first ext
+                        subUnify target first ext
 
                     else
                         mismatch
@@ -675,7 +676,7 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                                         gatherFields fields2 ext2
                                             |> IO.bind
                                                 (\structure2 ->
-                                                    case unifyRecord context structure1 structure2 of
+                                                    case unifyRecord target context structure1 structure2 of
                                                         Unify k ->
                                                             k vars
                                                 )
@@ -683,9 +684,9 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
                         )
 
                 ( IO.Tuple1 a b cs, IO.Tuple1 x y zs ) ->
-                    subUnify a x
-                        |> bind (\_ -> subUnify b y)
-                        |> bind (\_ -> subUnifyTuple cs zs context otherContent)
+                    subUnify target a x
+                        |> bind (\_ -> subUnify target b y)
+                        |> bind (\_ -> subUnifyTuple target cs zs context otherContent)
 
                 ( IO.Unit1, IO.Unit1 ) ->
                     merge context otherContent
@@ -701,23 +702,23 @@ unifyStructure ((Context first _ second _) as context) flatType content otherCon
 -- UNIFY ARGS
 
 
-unifyArgs : List IO.Variable -> List IO.Variable -> List IO.Variable -> IO (Result UnifyErr (UnifyOk ()))
-unifyArgs vars args1 args2 =
+unifyArgs : Target -> List IO.Variable -> List IO.Variable -> List IO.Variable -> IO (Result UnifyErr (UnifyOk ()))
+unifyArgs target vars args1 args2 =
     case args1 of
         arg1 :: others1 ->
             case args2 of
                 arg2 :: others2 ->
-                    case subUnify arg1 arg2 of
+                    case subUnify target arg1 arg2 of
                         Unify k ->
                             k vars
                                 |> IO.bind
                                     (\result ->
                                         case result of
                                             Ok (UnifyOk vs ()) ->
-                                                unifyArgs vs others1 others2
+                                                unifyArgs target vs others1 others2
 
                                             Err (UnifyErr vs ()) ->
-                                                unifyArgs vs others1 others2
+                                                unifyArgs target vs others1 others2
                                                     |> IO.fmap
                                                         (Result.andThen
                                                             (\(UnifyOk vs_ ()) ->
@@ -742,8 +743,8 @@ unifyArgs vars args1 args2 =
 -- UNIFY RECORDS
 
 
-unifyRecord : Context -> RecordStructure -> RecordStructure -> Unify ()
-unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2) =
+unifyRecord : Target -> Context -> RecordStructure -> RecordStructure -> Unify ()
+unifyRecord target context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2) =
     let
         sharedFields : Dict String Name.Name ( IO.Variable, IO.Variable )
         sharedFields =
@@ -759,23 +760,23 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
     in
     if Dict.isEmpty uniqueFields1 then
         if Dict.isEmpty uniqueFields2 then
-            subUnify ext1 ext2
-                |> bind (\_ -> unifySharedFields context sharedFields Dict.empty ext1)
+            subUnify target ext1 ext2
+                |> bind (\_ -> unifySharedFields target context sharedFields Dict.empty ext1)
 
         else
             fresh context (IO.Structure (IO.Record1 uniqueFields2 ext2))
                 |> bind
                     (\subRecord ->
-                        subUnify ext1 subRecord
-                            |> bind (\_ -> unifySharedFields context sharedFields Dict.empty subRecord)
+                        subUnify target ext1 subRecord
+                            |> bind (\_ -> unifySharedFields target context sharedFields Dict.empty subRecord)
                     )
 
     else if Dict.isEmpty uniqueFields2 then
         fresh context (IO.Structure (IO.Record1 uniqueFields1 ext1))
             |> bind
                 (\subRecord ->
-                    subUnify subRecord ext2
-                        |> bind (\_ -> unifySharedFields context sharedFields Dict.empty subRecord)
+                    subUnify target subRecord ext2
+                        |> bind (\_ -> unifySharedFields target context sharedFields Dict.empty subRecord)
                 )
 
     else
@@ -793,17 +794,17 @@ unifyRecord context (RecordStructure fields1 ext1) (RecordStructure fields2 ext2
                                 fresh context (IO.Structure (IO.Record1 uniqueFields2 ext))
                                     |> bind
                                         (\sub2 ->
-                                            subUnify ext1 sub2
-                                                |> bind (\_ -> subUnify sub1 ext2)
-                                                |> bind (\_ -> unifySharedFields context sharedFields otherFields ext)
+                                            subUnify target ext1 sub2
+                                                |> bind (\_ -> subUnify target sub1 ext2)
+                                                |> bind (\_ -> unifySharedFields target context sharedFields otherFields ext)
                                         )
                             )
                 )
 
 
-unifySharedFields : Context -> Dict String Name.Name ( IO.Variable, IO.Variable ) -> Dict String Name.Name IO.Variable -> IO.Variable -> Unify ()
-unifySharedFields context sharedFields otherFields ext =
-    traverseMaybe identity compare unifyField sharedFields
+unifySharedFields : Target -> Context -> Dict String Name.Name ( IO.Variable, IO.Variable ) -> Dict String Name.Name IO.Variable -> IO.Variable -> Unify ()
+unifySharedFields target context sharedFields otherFields ext =
+    traverseMaybe identity compare (unifyField target) sharedFields
         |> bind
             (\matchingFields ->
                 if Dict.size sharedFields == Dict.size matchingFields then
@@ -832,11 +833,11 @@ traverseMaybe toComparable keyComparison func =
         (pure Dict.empty)
 
 
-unifyField : Name.Name -> ( IO.Variable, IO.Variable ) -> Unify (Maybe IO.Variable)
-unifyField _ ( actual, expected ) =
+unifyField : Target -> Name.Name -> ( IO.Variable, IO.Variable ) -> Unify (Maybe IO.Variable)
+unifyField target _ ( actual, expected ) =
     Unify
         (\vars ->
-            case subUnify actual expected of
+            case subUnify target actual expected of
                 Unify k ->
                     k vars
                         |> IO.fmap

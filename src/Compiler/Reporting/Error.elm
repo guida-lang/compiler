@@ -14,7 +14,6 @@ import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Json.Encode as E
 import Compiler.Nitpick.PatternMatches as P
-import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Error.Canonicalize as Canonicalize
@@ -64,11 +63,11 @@ type Error
 -- TO REPORT
 
 
-toReports : SyntaxVersion -> Code.Source -> Error -> NE.Nonempty Report.Report
-toReports syntaxVersion source err =
+toReports : Code.Source -> Error -> NE.Nonempty Report.Report
+toReports source err =
     case err of
         BadSyntax syntaxError ->
-            NE.singleton (Syntax.toReport syntaxVersion source syntaxError)
+            NE.singleton (Syntax.toReport source syntaxError)
 
         BadImports errs ->
             NE.map (Import.toReport source) errs
@@ -154,7 +153,7 @@ moduleToDoc root { absolutePath, source, error } =
     let
         reports : NE.Nonempty Report.Report
         reports =
-            toReports (SV.fileSyntaxVersion absolutePath) (Code.toSource source) error
+            toReports (Code.toSource source) error
 
         relativePath : Utils.FilePath
         relativePath =
@@ -199,7 +198,7 @@ toJson { name, absolutePath, source, error } =
     let
         reports : NE.Nonempty Report.Report
         reports =
-            toReports (SV.fileSyntaxVersion absolutePath) (Code.toSource source) error
+            toReports (Code.toSource source) error
     in
     E.object
         [ ( "path", E.string absolutePath )

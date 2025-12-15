@@ -9,6 +9,7 @@ import Basics.Extra exposing (flip)
 import Common.Format.Bimap as Bimap exposing (Bimap)
 import Common.Format.KnownContents as KnownContents exposing (KnownContents)
 import Compiler.AST.Source as Src
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Compiler.Imports as Imports
 import Compiler.Parse.Module as M
 import Compiler.Reporting.Annotation as A
@@ -69,7 +70,7 @@ fromImports knownContents rawImports =
             --         False
             --   )
             -- ]
-            importsToDict (List.map Src.c1Value Imports.defaults)
+            importsToDict (List.map Src.c1Value (Imports.defaults Target.GuidaTarget))
 
         imports : Dict String String Src.Import
         imports =

@@ -10,13 +10,6 @@ module Compiler.Guida.ModuleName exposing
     , debug
     , decoder
     , dict
-    , elmBasics
-    , elmChar
-    , elmJsonDecode
-    , elmJsonEncode
-    , elmList
-    , elmMaybe
-    , elmString
     , encode
     , jsonDecode
     , jsonEncode
@@ -43,6 +36,7 @@ module Compiler.Guida.ModuleName exposing
     )
 
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target(..))
 import Compiler.Guida.Package as Pkg
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
@@ -201,161 +195,236 @@ toComparableCanonical (Canonical ( author, project ) name) =
 -- CORE
 
 
-basics : Canonical
-basics =
-    Canonical Pkg.stdlib Name.basics
+basics : Target -> Canonical
+basics target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.basics
+
+        ElmTarget ->
+            Canonical Pkg.core Name.basics
 
 
-elmBasics : Canonical
-elmBasics =
-    Canonical Pkg.core Name.basics
+char : Target -> Canonical
+char target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.char
+
+        ElmTarget ->
+            Canonical Pkg.core Name.char
 
 
-char : Canonical
-char =
-    Canonical Pkg.stdlib Name.char
+string : Target -> Canonical
+string target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.string
+
+        ElmTarget ->
+            Canonical Pkg.core Name.string
 
 
-elmChar : Canonical
-elmChar =
-    Canonical Pkg.core Name.char
+maybe : Target -> Canonical
+maybe target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.maybe
+
+        ElmTarget ->
+            Canonical Pkg.core Name.maybe
 
 
-string : Canonical
-string =
-    Canonical Pkg.stdlib Name.string
+result : Target -> Canonical
+result target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.result
+
+        ElmTarget ->
+            Canonical Pkg.core Name.result
 
 
-elmString : Canonical
-elmString =
-    Canonical Pkg.core Name.string
+list : Target -> Canonical
+list target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.list
+
+        ElmTarget ->
+            Canonical Pkg.core Name.list
 
 
-maybe : Canonical
-maybe =
-    Canonical Pkg.stdlib Name.maybe
+array : Target -> Canonical
+array target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.array
+
+        ElmTarget ->
+            Canonical Pkg.core Name.array
 
 
-elmMaybe : Canonical
-elmMaybe =
-    Canonical Pkg.core Name.maybe
+dict : Target -> Canonical
+dict target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.dict
+
+        ElmTarget ->
+            Canonical Pkg.core Name.dict
 
 
-result : Canonical
-result =
-    Canonical Pkg.stdlib Name.result
+tuple : Target -> Canonical
+tuple target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.tuple
+
+        ElmTarget ->
+            Canonical Pkg.core Name.tuple
 
 
-list : Canonical
-list =
-    Canonical Pkg.stdlib Name.list
+platform : Target -> Canonical
+platform target =
+    case Debug.log "platform.target" target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.platform
+
+        ElmTarget ->
+            Canonical Pkg.core Name.platform
 
 
-elmList : Canonical
-elmList =
-    Canonical Pkg.core Name.list
+cmd : Target -> Canonical
+cmd target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.platformCmd
+
+        ElmTarget ->
+            Canonical Pkg.core Name.platformCmd
 
 
-array : Canonical
-array =
-    Canonical Pkg.stdlib Name.array
+sub : Target -> Canonical
+sub target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.platformSub
+
+        ElmTarget ->
+            Canonical Pkg.core Name.platformSub
 
 
-dict : Canonical
-dict =
-    Canonical Pkg.stdlib Name.dict
+debug : Target -> Canonical
+debug target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.debug
 
-
-tuple : Canonical
-tuple =
-    Canonical Pkg.stdlib Name.tuple
-
-
-platform : Canonical
-platform =
-    Canonical Pkg.stdlib Name.platform
-
-
-cmd : Canonical
-cmd =
-    Canonical Pkg.stdlib "Platform.Cmd"
-
-
-sub : Canonical
-sub =
-    Canonical Pkg.stdlib "Platform.Sub"
-
-
-debug : Canonical
-debug =
-    Canonical Pkg.stdlib Name.debug
+        ElmTarget ->
+            Canonical Pkg.core Name.debug
 
 
 
 -- HTML
 
 
-virtualDom : Canonical
-virtualDom =
-    Canonical Pkg.stdlib Name.virtualDom
+virtualDom : Target -> Canonical
+virtualDom target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.virtualDom
+
+        ElmTarget ->
+            Canonical Pkg.virtualDom Name.virtualDom
 
 
 
 -- JSON
 
 
-jsonDecode : Canonical
-jsonDecode =
-    Canonical Pkg.stdlib "Json.Decode"
+jsonDecode : Target -> Canonical
+jsonDecode target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Json.Decode"
+
+        ElmTarget ->
+            Canonical Pkg.json "Json.Decode"
 
 
-elmJsonDecode : Canonical
-elmJsonDecode =
-    Canonical Pkg.json "Json.Decode"
+jsonEncode : Target -> Canonical
+jsonEncode target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Json.Encode"
 
-
-jsonEncode : Canonical
-jsonEncode =
-    Canonical Pkg.stdlib "Json.Encode"
-
-
-elmJsonEncode : Canonical
-elmJsonEncode =
-    Canonical Pkg.json "Json.Encode"
+        ElmTarget ->
+            Canonical Pkg.json "Json.Encode"
 
 
 
 -- WEBGL
 
 
-webgl : Canonical
-webgl =
-    Canonical Pkg.webgl "WebGL"
+webgl : Target -> Canonical
+webgl target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "WebGL"
+
+        ElmTarget ->
+            Canonical Pkg.webgl "WebGL"
 
 
-texture : Canonical
-texture =
-    Canonical Pkg.webgl "WebGL.Texture"
+texture : Target -> Canonical
+texture target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "WebGL.Texture"
+
+        ElmTarget ->
+            Canonical Pkg.webgl "WebGL.Texture"
 
 
-vector2 : Canonical
-vector2 =
-    Canonical Pkg.linearAlgebra "Math.Vector2"
+vector2 : Target -> Canonical
+vector2 target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Math.Vector2"
+
+        ElmTarget ->
+            Canonical Pkg.linearAlgebra "Math.Vector2"
 
 
-vector3 : Canonical
-vector3 =
-    Canonical Pkg.linearAlgebra "Math.Vector3"
+vector3 : Target -> Canonical
+vector3 target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Math.Vector3"
+
+        ElmTarget ->
+            Canonical Pkg.linearAlgebra "Math.Vector3"
 
 
-vector4 : Canonical
-vector4 =
-    Canonical Pkg.linearAlgebra "Math.Vector4"
+vector4 : Target -> Canonical
+vector4 target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Math.Vector4"
+
+        ElmTarget ->
+            Canonical Pkg.linearAlgebra "Math.Vector4"
 
 
-matrix4 : Canonical
-matrix4 =
-    Canonical Pkg.linearAlgebra "Math.Matrix4"
+matrix4 : Target -> Canonical
+matrix4 target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib "Math.Matrix4"
+
+        ElmTarget ->
+            Canonical Pkg.linearAlgebra "Math.Matrix4"
 
 
 

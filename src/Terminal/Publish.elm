@@ -263,7 +263,7 @@ verifyLicense root =
                                 Stuff.GuidaRoot _ ->
                                     Exit.PublishGuidaNoLicense
 
-                                Stuff.ElmRoot _ ->
+                                Stuff.ElmRoot _ _ ->
                                     Exit.PublishElmNoLicense
                             )
                 )
@@ -294,7 +294,7 @@ verifyBuild root =
                                                 Stuff.GuidaRoot _ ->
                                                     Exit.PublishGuidaNoExposed
 
-                                                Stuff.ElmRoot _ ->
+                                                Stuff.ElmRoot _ _ ->
                                                     Exit.PublishElmNoExposed
                                             )
 
@@ -521,7 +521,7 @@ verifyVersion ((Env root _ _ _ _) as env) pkg vsn newDocs publishedVersions =
                                 Stuff.GuidaRoot _ ->
                                     Exit.PublishGuidaNotInitialVersion vsn
 
-                                Stuff.ElmRoot _ ->
+                                Stuff.ElmRoot _ _ ->
                                     Exit.PublishElmNotInitialVersion vsn
 
             Just ((Registry.KnownVersions latest previous) as knownVersions) ->
@@ -542,7 +542,7 @@ verifyBump (Env root cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions
                         Stuff.GuidaRoot _ ->
                             Exit.PublishGuidaInvalidBump vsn latest
 
-                        Stuff.ElmRoot _ ->
+                        Stuff.ElmRoot _ _ ->
                             Exit.PublishElmInvalidBump vsn latest
 
         Just ( old, new, magnitude ) ->
@@ -572,7 +572,7 @@ verifyBump (Env root cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions
                                             Stuff.GuidaRoot _ ->
                                                 Exit.PublishGuidaBadBump old new magnitude realNew (Diff.toMagnitude changes)
 
-                                            Stuff.ElmRoot _ ->
+                                            Stuff.ElmRoot _ _ ->
                                                 Exit.PublishElmBadBump old new magnitude realNew (Diff.toMagnitude changes)
                     )
 

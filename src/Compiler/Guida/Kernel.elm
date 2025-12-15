@@ -8,9 +8,9 @@ module Compiler.Guida.Kernel exposing
     , fromByteString
     )
 
-import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Module as Module
@@ -95,9 +95,9 @@ type alias Foreigns =
     Dict String ModuleName.Raw Pkg.Name
 
 
-fromByteString : Stuff.Root -> Pkg.Name -> Foreigns -> String -> Maybe Content
-fromByteString root pkg foreigns bytes =
-    case P.fromByteString (parser root pkg foreigns) toError bytes of
+fromByteString : Target -> Pkg.Name -> Foreigns -> String -> Maybe Content
+fromByteString target pkg foreigns bytes =
+    case P.fromByteString (parser target pkg foreigns) toError bytes of
         Ok content ->
             Just content
 
@@ -105,16 +105,16 @@ fromByteString root pkg foreigns bytes =
             Nothing
 
 
-parser : Stuff.Root -> Pkg.Name -> Foreigns -> P.Parser () Content
-parser root pkg foreigns =
+parser : Target -> Pkg.Name -> Foreigns -> P.Parser () Content
+parser target pkg foreigns =
     P.word2 '/' '*' toError
         |> P.bind (\_ -> Space.chomp ignoreError)
         |> P.bind (\_ -> Space.checkFreshLine toError)
-        |> P.bind (\_ -> P.specialize ignoreError (Module.chompImports []))
+        |> P.bind (\_ -> P.specialize ignoreError (Module.chompImports target []))
         |> P.bind
             (\imports ->
                 P.word2 '*' '/' toError
-                    |> P.bind (\_ -> parseChunks (toVarTable root pkg foreigns imports) Dict.empty Dict.empty)
+                    |> P.bind (\_ -> parseChunks (toVarTable target pkg foreigns imports) Dict.empty Dict.empty)
                     |> P.fmap (\chunks -> Content imports chunks)
             )
 
@@ -333,14 +333,14 @@ type alias VarTable =
     Dict String Name Chunk
 
 
-toVarTable : Stuff.Root -> Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
-toVarTable root pkg foreigns imports =
-    List.foldl (addImport root pkg foreigns) Dict.empty imports
+toVarTable : Target -> Pkg.Name -> Foreigns -> List (Src.C1 Src.Import) -> VarTable
+toVarTable target pkg foreigns imports =
+    List.foldl (addImport target pkg foreigns) Dict.empty imports
 
 
-addImport : Stuff.Root -> Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
-addImport root pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
-    if Name.isKernel (Stuff.isRootGuida root) importName then
+addImport : Target -> Pkg.Name -> Foreigns -> Src.C1 Src.Import -> VarTable -> VarTable
+addImport target pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias ( _, exposing_ ) ) vtable =
+    if Name.isKernel target importName then
         case maybeAlias of
             Just _ ->
                 crash ("cannot use `as` with kernel import of: " ++ importName)
@@ -349,7 +349,7 @@ addImport root pkg foreigns ( _, Src.Import ( _, A.At _ importName ) maybeAlias 
                 let
                     home : Name
                     home =
-                        Name.getKernel (Stuff.isRootGuida root) importName
+                        Name.getKernel target importName
 
                     add : Name -> Dict String Name Chunk -> Dict String Name Chunk
                     add name table =

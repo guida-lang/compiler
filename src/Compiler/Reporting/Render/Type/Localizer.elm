@@ -11,6 +11,7 @@ module Compiler.Reporting.Render.Type.Localizer exposing
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -49,13 +50,13 @@ empty =
 -- LOCALIZE
 
 
-toDoc : Localizer -> IO.Canonical -> Name -> D.Doc
-toDoc localizer home name =
-    D.fromChars (toChars localizer home name)
+toDoc : Target -> Localizer -> IO.Canonical -> Name -> D.Doc
+toDoc target localizer home name =
+    D.fromChars (toChars target localizer home name)
 
 
-toChars : Localizer -> IO.Canonical -> Name -> String
-toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
+toChars : Target -> Localizer -> IO.Canonical -> Name -> String
+toChars target (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
     case Dict.get identity home localizer of
         Nothing ->
             home ++ "." ++ name
@@ -69,7 +70,7 @@ toChars (Localizer localizer) ((IO.Canonical _ home) as moduleName) name =
                     if EverySet.member identity name set then
                         name
 
-                    else if name == Name.list && moduleName == ModuleName.list then
+                    else if name == Name.list && moduleName == ModuleName.list target then
                         "List"
 
                     else

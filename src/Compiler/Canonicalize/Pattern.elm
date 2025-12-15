@@ -12,6 +12,7 @@ import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Environment.Dups as Dups
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
@@ -64,8 +65,8 @@ type alias DupsDict =
     Dups.Tracker A.Region
 
 
-canonicalize : SyntaxVersion -> Env.Env -> Src.Pattern -> PResult DupsDict w Can.Pattern
-canonicalize syntaxVersion env (A.At region pattern) =
+canonicalize : Target -> SyntaxVersion -> Env.Env -> Src.Pattern -> PResult DupsDict w Can.Pattern
+canonicalize target syntaxVersion env (A.At region pattern) =
     case pattern of
         Src.PAnything _ ->
             R.ok Can.PAnything
@@ -89,32 +90,32 @@ canonicalize syntaxVersion env (A.At region pattern) =
                 |> R.fmap (A.At region)
 
         Src.PTuple ( _, a ) ( _, b ) cs ->
-            R.fmap Can.PTuple (canonicalize syntaxVersion env a)
-                |> R.apply (canonicalize syntaxVersion env b)
-                |> R.apply (canonicalizeTuple syntaxVersion region env (List.map Src.c2Value cs))
+            R.fmap Can.PTuple (canonicalize target syntaxVersion env a)
+                |> R.apply (canonicalize target syntaxVersion env b)
+                |> R.apply (canonicalizeTuple target syntaxVersion region env (List.map Src.c2Value cs))
                 |> R.fmap (A.At region)
 
         Src.PCtor nameRegion name patterns ->
-            Env.findCtor nameRegion env name
-                |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+            Env.findCtor target nameRegion env name
+                |> R.bind (canonicalizeCtor target syntaxVersion env region name (List.map Src.c1Value patterns))
                 |> R.fmap (A.At region)
 
         Src.PCtorQual nameRegion home name patterns ->
-            Env.findCtorQual nameRegion env home name
-                |> R.bind (canonicalizeCtor syntaxVersion env region name (List.map Src.c1Value patterns))
+            Env.findCtorQual target nameRegion env home name
+                |> R.bind (canonicalizeCtor target syntaxVersion env region name (List.map Src.c1Value patterns))
                 |> R.fmap (A.At region)
 
         Src.PList ( _, patterns ) ->
-            R.fmap Can.PList (canonicalizeList syntaxVersion env (List.map Src.c2Value patterns))
+            R.fmap Can.PList (canonicalizeList target syntaxVersion env (List.map Src.c2Value patterns))
                 |> R.fmap (A.At region)
 
         Src.PCons ( _, first ) ( _, rest ) ->
-            R.fmap Can.PCons (canonicalize syntaxVersion env first)
-                |> R.apply (canonicalize syntaxVersion env rest)
+            R.fmap Can.PCons (canonicalize target syntaxVersion env first)
+                |> R.apply (canonicalize target syntaxVersion env rest)
                 |> R.fmap (A.At region)
 
         Src.PAlias ( _, ptrn ) ( _, A.At reg name ) ->
-            canonicalize syntaxVersion env ptrn
+            canonicalize target syntaxVersion env ptrn
                 |> R.bind (\cpattern -> logVar name reg (Can.PAlias cpattern name))
                 |> R.fmap (A.At region)
 
@@ -131,25 +132,25 @@ canonicalize syntaxVersion env (A.At region pattern) =
                 |> R.fmap (A.At region)
 
         Src.PParens ( _, pattern_ ) ->
-            canonicalize syntaxVersion env pattern_
+            canonicalize target syntaxVersion env pattern_
 
 
-canonicalizeCtor : SyntaxVersion -> Env.Env -> A.Region -> Name.Name -> List Src.Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
-canonicalizeCtor syntaxVersion env region name patterns ctor =
+canonicalizeCtor : Target -> SyntaxVersion -> Env.Env -> A.Region -> Name.Name -> List Src.Pattern -> Env.Ctor -> PResult DupsDict w Can.Pattern_
+canonicalizeCtor target syntaxVersion env region name patterns ctor =
     case ctor of
         Env.Ctor home tipe union index args ->
             let
                 toCanonicalArg : Index.ZeroBased -> Src.Pattern -> Can.Type -> R.RResult DupsDict w Error.Error Can.PatternCtorArg
                 toCanonicalArg argIndex argPattern argTipe =
                     R.fmap (Can.PatternCtorArg argIndex argTipe)
-                        (canonicalize syntaxVersion env argPattern)
+                        (canonicalize target syntaxVersion env argPattern)
             in
             Utils.indexedZipWithA toCanonicalArg patterns args
                 |> R.bind
                     (\verifiedList ->
                         case verifiedList of
                             Index.LengthMatch cargs ->
-                                if tipe == Name.bool && (home == ModuleName.basics || home == ModuleName.elmBasics) then
+                                if tipe == Name.bool && (home == ModuleName.basics target) then
                                     R.ok (Can.PBool union (name == Name.true))
 
                                 else
@@ -163,14 +164,14 @@ canonicalizeCtor syntaxVersion env region name patterns ctor =
             R.throw (Error.PatternHasRecordCtor region name)
 
 
-canonicalizeTuple : SyntaxVersion -> A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
-canonicalizeTuple syntaxVersion tupleRegion env extras =
+canonicalizeTuple : Target -> SyntaxVersion -> A.Region -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeTuple target syntaxVersion tupleRegion env extras =
     case extras of
         [] ->
             R.ok []
 
         [ three ] ->
-            R.fmap List.singleton (canonicalize syntaxVersion env three)
+            R.fmap List.singleton (canonicalize target syntaxVersion env three)
 
         _ ->
             case syntaxVersion of
@@ -178,18 +179,18 @@ canonicalizeTuple syntaxVersion tupleRegion env extras =
                     R.throw (Error.TupleLargerThanThree tupleRegion)
 
                 SV.Guida ->
-                    R.traverse (canonicalize syntaxVersion env) extras
+                    R.traverse (canonicalize target syntaxVersion env) extras
 
 
-canonicalizeList : SyntaxVersion -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
-canonicalizeList syntaxVersion env list =
+canonicalizeList : Target -> SyntaxVersion -> Env.Env -> List Src.Pattern -> PResult DupsDict w (List Can.Pattern)
+canonicalizeList target syntaxVersion env list =
     case list of
         [] ->
             R.ok []
 
         pattern :: otherPatterns ->
-            R.fmap (::) (canonicalize syntaxVersion env pattern)
-                |> R.apply (canonicalizeList syntaxVersion env otherPatterns)
+            R.fmap (::) (canonicalize target syntaxVersion env pattern)
+                |> R.apply (canonicalizeList target syntaxVersion env otherPatterns)
 
 
 

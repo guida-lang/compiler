@@ -182,31 +182,31 @@ suite =
             , Test.test "Int with one underscore 1_000" <|
                 \_ ->
                     singleNumber SV.Elm "1_000"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscore before decimal point 111_000.602" <|
                 \_ ->
                     singleNumber SV.Elm "111_000.602"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscore after decimal point 1000.4_205" <|
                 \_ ->
                     singleNumber SV.Elm "1000.4_205"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscore before and after decimal point 1_000.4_205" <|
                 \_ ->
                     singleNumber SV.Elm "1_000.4_205"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscore before decimal point and exponent 60_000.022e3" <|
                 \_ ->
                     singleNumber SV.Elm "60_000.022e3"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscore after decimal point and exponent 6.022e2_3" <|
                 \_ ->
                     singleNumber SV.Elm "6.022e2_3"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "Float with underscores before and after decimal point and exponent and '+' 6_000.0_22e+3_6" <|
                 \_ ->
                     singleNumber SV.Elm "6_000.0_22e+3_6"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             , Test.test "0xDE_AD_BE_EF" <|
                 \_ ->
                     singleNumber SV.Elm "0xDE_AD_BE_EF"
@@ -214,14 +214,14 @@ suite =
             , Test.test "0b1010" <|
                 \_ ->
                     singleNumber SV.Elm "0b1010"
-                        |> Expect.equal (Err E.NumberEnd)
+                        |> Expect.equal (Err (E.NumberEnd SV.Elm))
             ]
         ]
 
 
 singleNumber : SyntaxVersion -> String -> Result E.Number N.Number
 singleNumber syntaxVersion =
-    P.fromByteString (N.number syntaxVersion (\_ _ -> E.NumberEnd) (\x _ _ -> x)) (\_ _ -> E.NumberEnd)
+    P.fromByteString (N.number syntaxVersion (\_ _ -> E.NumberEnd syntaxVersion) (\x _ _ -> x)) (\_ _ -> E.NumberEnd syntaxVersion)
 
 
 singleNumberAt : SyntaxVersion -> String -> Result ( E.Number, Int, Int ) N.Number
@@ -229,10 +229,10 @@ singleNumberAt syntaxVersion =
     P.fromByteString
         (N.number
             syntaxVersion
-            (\row col -> ( E.NumberEnd, row, col ))
+            (\row col -> ( E.NumberEnd syntaxVersion, row, col ))
             (\problem row col -> ( problem, row, col ))
         )
-        (\row col -> ( E.NumberEnd, row, col ))
+        (\row col -> ( E.NumberEnd syntaxVersion, row, col ))
 
 
 expectErrAtPosition :

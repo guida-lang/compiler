@@ -19,6 +19,7 @@ import Compiler.Canonicalize.Pattern as Pattern
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
@@ -75,24 +76,24 @@ canonicalize root syntaxVersion env (A.At region expression) =
             Src.Var varType name ->
                 case varType of
                     Src.LowVar ->
-                        findVar region env name
+                        findVar (Stuff.rootToTarget root) region env name
 
                     Src.CapVar ->
-                        R.fmap (toVarCtor name) (Env.findCtor region env name)
+                        R.fmap (toVarCtor name) (Env.findCtor (Stuff.rootToTarget root) region env name)
 
             Src.VarQual varType prefix name ->
                 case varType of
                     Src.LowVar ->
-                        findVarQual root region env prefix name
+                        findVarQual (Stuff.rootToTarget root) region env prefix name
 
                     Src.CapVar ->
-                        R.fmap (toVarCtor name) (Env.findCtorQual region env prefix name)
+                        R.fmap (toVarCtor name) (Env.findCtorQual (Stuff.rootToTarget root) region env prefix name)
 
             Src.List exprs _ ->
                 R.fmap Can.List (R.traverse (canonicalize root syntaxVersion env) (List.map Tuple.second exprs))
 
             Src.Op op ->
-                Env.findBinop region env op
+                Env.findBinop (Stuff.rootToTarget root) region env op
                     |> R.fmap
                         (\(Env.Binop _ home name annotation _ _) ->
                             Can.VarOperator op home name annotation
@@ -107,10 +108,10 @@ canonicalize root syntaxVersion env (A.At region expression) =
             Src.Lambda ( _, srcArgs ) ( _, body ) ->
                 delayedUsage <|
                     (Pattern.verify Error.DPLambdaArgs
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
+                        (R.traverse (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, bindings ) ->
-                                Env.addLocals bindings env
+                                Env.addLocals (Stuff.rootToTarget root) bindings env
                                     |> R.bind
                                         (\newEnv ->
                                             verifyBindings W.Pattern bindings (canonicalize root syntaxVersion newEnv body)
@@ -214,10 +215,10 @@ canonicalizeCaseBranch : Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Pattern
 canonicalizeCaseBranch root syntaxVersion env ( pattern, expr ) =
     directUsage
         (Pattern.verify Error.DPCaseBranch
-            (Pattern.canonicalize syntaxVersion env pattern)
+            (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env pattern)
             |> R.bind
                 (\( cpattern, bindings ) ->
-                    Env.addLocals bindings env
+                    Env.addLocals (Stuff.rootToTarget root) bindings env
                         |> R.bind
                             (\newEnv ->
                                 verifyBindings W.Pattern bindings (canonicalize root syntaxVersion newEnv expr)
@@ -240,7 +241,7 @@ canonicalizeBinops root syntaxVersion overallRegion env ops final =
         canonicalizeHelp : ( Src.Expr, A.Located Name ) -> R.RResult FreeLocals (List W.Warning) Error.Error ( Can.Expr, Env.Binop )
         canonicalizeHelp ( expr, A.At region op ) =
             R.fmap Tuple.pair (canonicalize root syntaxVersion env expr)
-                |> R.apply (Env.findBinop region env op)
+                |> R.apply (Env.findBinop (Stuff.rootToTarget root) region env op)
     in
     R.bind (runBinopStepper overallRegion)
         (R.fmap More (R.traverse canonicalizeHelp ops)
@@ -316,7 +317,7 @@ canonicalizeLet root syntaxVersion letRegion env defs body =
             (List.foldl addBindings Dups.none defs)
             |> R.bind
                 (\bindings ->
-                    Env.addLocals bindings env
+                    Env.addLocals (Stuff.rootToTarget root) bindings env
                         |> R.bind
                             (\newEnv ->
                                 verifyBindings W.Def bindings <|
@@ -326,7 +327,7 @@ canonicalizeLet root syntaxVersion letRegion env defs body =
                                                 canonicalize root syntaxVersion newEnv body
                                                     |> R.bind
                                                         (\cbody ->
-                                                            detectCycles letRegion (Graph.stronglyConnComp nodes) cbody
+                                                            detectCycles (Stuff.rootToTarget root) letRegion (Graph.stronglyConnComp nodes) cbody
                                                         )
                                             )
                                     )
@@ -414,10 +415,10 @@ addDefNodes root syntaxVersion env nodes (A.At _ def) =
             case maybeType of
                 Nothing ->
                     Pattern.verify (Error.DPFuncArgs name)
-                        (R.traverse (Pattern.canonicalize syntaxVersion env) (List.map Src.c1Value srcArgs))
+                        (R.traverse (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, argBindings ) ->
-                                Env.addLocals argBindings env
+                                Env.addLocals (Stuff.rootToTarget root) argBindings env
                                     |> R.bind
                                         (\newEnv ->
                                             verifyBindings W.Pattern argBindings (canonicalize root syntaxVersion newEnv body)
@@ -438,14 +439,14 @@ addDefNodes root syntaxVersion env nodes (A.At _ def) =
                             )
 
                 Just ( _, ( _, tipe ) ) ->
-                    Type.toAnnotation syntaxVersion env tipe
+                    Type.toAnnotation (Stuff.rootToTarget root) syntaxVersion env tipe
                         |> R.bind
                             (\(Can.Forall freeVars ctipe) ->
                                 Pattern.verify (Error.DPFuncArgs name)
-                                    (gatherTypedArgs syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
+                                    (gatherTypedArgs (Stuff.rootToTarget root) syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
-                                            Env.addLocals argBindings env
+                                            Env.addLocals (Stuff.rootToTarget root) argBindings env
                                                 |> R.bind
                                                     (\newEnv ->
                                                         verifyBindings W.Pattern argBindings (canonicalize root syntaxVersion newEnv body)
@@ -468,7 +469,7 @@ addDefNodes root syntaxVersion env nodes (A.At _ def) =
 
         Src.Destruct pattern ( _, body ) ->
             Pattern.verify Error.DPDestruct
-                (Pattern.canonicalize syntaxVersion env pattern)
+                (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env pattern)
                 |> R.bind
                     (\( cpattern, _ ) ->
                         R.RResult
@@ -575,7 +576,8 @@ getPatternNames names (A.At region pattern) =
 
 
 gatherTypedArgs :
-    SyntaxVersion
+    Target
+    -> SyntaxVersion
     -> Env.Env
     -> Name.Name
     -> List Src.Pattern
@@ -583,7 +585,7 @@ gatherTypedArgs :
     -> Index.ZeroBased
     -> List ( Can.Pattern, Can.Type )
     -> EResult Pattern.DupsDict w ( List ( Can.Pattern, Can.Type ), Can.Type )
-gatherTypedArgs syntaxVersion env name srcArgs tipe index revTypedArgs =
+gatherTypedArgs target syntaxVersion env name srcArgs tipe index revTypedArgs =
     case srcArgs of
         [] ->
             R.ok ( List.reverse revTypedArgs, tipe )
@@ -591,10 +593,10 @@ gatherTypedArgs syntaxVersion env name srcArgs tipe index revTypedArgs =
         srcArg :: otherSrcArgs ->
             case Type.iteratedDealias tipe of
                 Can.TLambda argType resultType ->
-                    Pattern.canonicalize syntaxVersion env srcArg
+                    Pattern.canonicalize target syntaxVersion env srcArg
                         |> R.bind
                             (\arg ->
-                                gatherTypedArgs syntaxVersion env name otherSrcArgs resultType (Index.next index) <|
+                                gatherTypedArgs target syntaxVersion env name otherSrcArgs resultType (Index.next index) <|
                                     (( arg, argType ) :: revTypedArgs)
                             )
 
@@ -606,8 +608,8 @@ gatherTypedArgs syntaxVersion env name srcArgs tipe index revTypedArgs =
                     R.throw (Error.AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
 
 
-detectCycles : A.Region -> List (Graph.SCC Binding) -> Can.Expr -> EResult i w Can.Expr
-detectCycles letRegion sccs body =
+detectCycles : Target -> A.Region -> List (Graph.SCC Binding) -> Can.Expr -> EResult i w Can.Expr
+detectCycles target letRegion sccs body =
     case sccs of
         [] ->
             R.ok body
@@ -617,27 +619,27 @@ detectCycles letRegion sccs body =
                 Graph.AcyclicSCC binding ->
                     case binding of
                         Define def ->
-                            detectCycles letRegion subSccs body
+                            detectCycles target letRegion subSccs body
                                 |> R.fmap (Can.Let def)
                                 |> R.fmap (A.At letRegion)
 
                         Edge _ ->
-                            detectCycles letRegion subSccs body
+                            detectCycles target letRegion subSccs body
 
                         Destruct pattern expr ->
-                            detectCycles letRegion subSccs body
+                            detectCycles target letRegion subSccs body
                                 |> R.fmap (Can.LetDestruct pattern expr)
                                 |> R.fmap (A.At letRegion)
 
                 Graph.CyclicSCC bindings ->
                     R.fmap (A.At letRegion)
-                        (R.fmap Can.LetRec (checkCycle bindings [])
-                            |> R.apply (detectCycles letRegion subSccs body)
+                        (R.fmap Can.LetRec (checkCycle target bindings [])
+                            |> R.apply (detectCycles target letRegion subSccs body)
                         )
 
 
-checkCycle : List Binding -> List Can.Def -> EResult i w (List Can.Def)
-checkCycle bindings defs =
+checkCycle : Target -> List Binding -> List Can.Def -> EResult i w (List Can.Def)
+checkCycle target bindings defs =
     case bindings of
         [] ->
             R.ok defs
@@ -646,25 +648,25 @@ checkCycle bindings defs =
             case binding of
                 Define ((Can.Def name args _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                        R.throw (Error.RecursiveLet target name (toNames otherBindings defs))
 
                     else
-                        checkCycle otherBindings (def :: defs)
+                        checkCycle target otherBindings (def :: defs)
 
                 Define ((Can.TypedDef name _ args _ _) as def) ->
                     if List.isEmpty args then
-                        R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                        R.throw (Error.RecursiveLet target name (toNames otherBindings defs))
 
                     else
-                        checkCycle otherBindings (def :: defs)
+                        checkCycle target otherBindings (def :: defs)
 
                 Edge name ->
-                    R.throw (Error.RecursiveLet name (toNames otherBindings defs))
+                    R.throw (Error.RecursiveLet target name (toNames otherBindings defs))
 
                 Destruct _ _ ->
                     -- a Destruct cannot appear in a cycle without any Edge values
                     -- so we just keep going until we get to the edges
-                    checkCycle otherBindings defs
+                    checkCycle target otherBindings defs
 
 
 toNames : List Binding -> List Can.Def -> List Name.Name
@@ -803,8 +805,8 @@ delayedUsage (R.RResult k) =
 -- FIND VARIABLE
 
 
-findVar : A.Region -> Env.Env -> Name -> EResult FreeLocals w Can.Expr_
-findVar region env name =
+findVar : Target -> A.Region -> Env.Env -> Name -> EResult FreeLocals w Can.Expr_
+findVar target region env name =
     case Dict.get identity name env.vars of
         Just var ->
             case var of
@@ -816,7 +818,7 @@ findVar region env name =
 
                 Env.Foreign home annotation ->
                     R.ok
-                        (if home == ModuleName.debug then
+                        (if home == ModuleName.debug target then
                             Can.VarDebug env.home name annotation
 
                          else
@@ -824,41 +826,41 @@ findVar region env name =
                         )
 
                 Env.Foreigns h hs ->
-                    R.throw (Error.AmbiguousVar region Nothing name h hs)
+                    R.throw (Error.AmbiguousVar target region Nothing name h hs)
 
         Nothing ->
-            R.throw (Error.NotFoundVar region Nothing name (toPossibleNames env.vars env.q_vars))
+            R.throw (Error.NotFoundVar target region Nothing name (toPossibleNames env.vars env.q_vars))
 
 
-findVarQual : Stuff.Root -> A.Region -> Env.Env -> Name -> Name -> EResult FreeLocals w Can.Expr_
-findVarQual root region env prefix name =
+findVarQual : Target -> A.Region -> Env.Env -> Name -> Name -> EResult FreeLocals w Can.Expr_
+findVarQual target region env prefix name =
     case Dict.get identity prefix env.q_vars of
         Just qualified ->
             case Dict.get identity name qualified of
                 Just (Env.Specific home annotation) ->
                     R.ok <|
-                        if home == ModuleName.debug then
+                        if home == ModuleName.debug target then
                             Can.VarDebug env.home name annotation
 
                         else
                             Can.VarForeign home name annotation
 
                 Just (Env.Ambiguous h hs) ->
-                    R.throw (Error.AmbiguousVar region (Just prefix) name h hs)
+                    R.throw (Error.AmbiguousVar target region (Just prefix) name h hs)
 
                 Nothing ->
-                    R.throw (Error.NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                    R.throw (Error.NotFoundVar target region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
         Nothing ->
             let
                 (IO.Canonical pkg _) =
                     env.home
             in
-            if Name.isKernel (Stuff.isRootGuida root) prefix && Pkg.isKernel pkg then
-                R.ok <| Can.VarKernel (Name.getKernel (Stuff.isRootGuida root) prefix) name
+            if Name.isKernel target prefix && Pkg.isKernel pkg then
+                R.ok <| Can.VarKernel (Name.getKernel target prefix) name
 
             else
-                R.throw (Error.NotFoundVar region (Just prefix) name (toPossibleNames env.vars env.q_vars))
+                R.throw (Error.NotFoundVar target region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
 
 toPossibleNames : Dict String Name Env.Var -> Env.Qualified Can.Annotation -> Error.PossibleNames

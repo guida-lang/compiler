@@ -4,6 +4,7 @@ module Compiler.Generate.Html exposing
     )
 
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target exposing (Target)
 
 
 leadingLines : Int
@@ -11,8 +12,17 @@ leadingLines =
     2
 
 
-sandwich : Name -> String -> String
-sandwich moduleName javascript =
+sandwich : Target -> Name -> String -> String
+sandwich target moduleName javascript =
+    let
+        ( id, namespace ) =
+            case target of
+                Target.GuidaTarget ->
+                    ( "guida", "Guida" )
+
+                Target.ElmTarget ->
+                    ( "elm", "Elm" )
+    in
     """<!DOCTYPE HTML>
 <html>
 <head>
@@ -23,13 +33,13 @@ sandwich moduleName javascript =
 
 <body>
 
-<pre id="guida"></pre>
+<pre id=\"""" ++ id ++ """"></pre>
 
 <script>
 try {
 """ ++ javascript ++ """
 
-  var app = Guida.""" ++ moduleName ++ """.init({ node: document.getElementById("guida") });
+  var app = """ ++ namespace ++ "." ++ moduleName ++ """.init({ node: document.getElementById(\"""" ++ id ++ """") });
 }
 catch (e)
 {
@@ -37,7 +47,7 @@ catch (e)
   var header = document.createElement("h1");
   header.style.fontFamily = "monospace";
   header.innerText = "Initialization Error";
-  var pre = document.getElementById("guida");
+  var pre = document.getElementById(\"""" ++ id ++ """");
   document.body.insertBefore(header, pre);
   pre.innerText = e;
   throw e;

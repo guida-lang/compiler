@@ -109,15 +109,15 @@ elmKernelPackages =
 
 sanitizeElmDeps : Dict ( String, String ) Name C.Constraint -> Dict ( String, String ) Name C.Constraint
 sanitizeElmDeps deps =
-    let
-        filteredDeps =
-            Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
-    in
-    if deps == filteredDeps then
-        filteredDeps
-
-    else
-        Dict.insert identity stdlib C.anything filteredDeps
+    -- let
+    --     filteredDeps =
+    --         Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
+    -- in
+    -- if deps == filteredDeps then
+    --     filteredDeps
+    -- else
+    --     Dict.insert identity stdlib C.anything filteredDeps
+    deps
 
 
 isKernel : Name -> Bool

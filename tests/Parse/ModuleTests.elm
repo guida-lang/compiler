@@ -1,6 +1,7 @@
 module Parse.ModuleTests exposing (suite)
 
 import Compiler.AST.Source as S
+import Compiler.Generate.Target as Target
 import Compiler.Parse.Module as M
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -14,7 +15,7 @@ suite =
         [ Test.describe "fromByteString"
             [ Test.test "Hello!" <|
                 \_ ->
-                    M.fromByteString SV.Elm M.Application """module Hello exposing (..)
+                    M.fromByteString Target.GuidaTarget SV.Elm M.Application """module Hello exposing (..)
 
 import Html exposing (text)
 

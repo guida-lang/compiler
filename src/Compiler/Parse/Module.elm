@@ -13,6 +13,7 @@ module Compiler.Parse.Module exposing
 
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Compiler.Imports as Imports
 import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Declaration as Decl
@@ -30,11 +31,11 @@ import Compiler.Reporting.Error.Syntax as E
 -- FROM BYTE STRING
 
 
-fromByteString : SyntaxVersion -> ProjectType -> String -> Result E.Error Src.Module
-fromByteString syntaxVersion projectType source =
-    case P.fromByteString (chompModule syntaxVersion projectType) E.ModuleBadEnd source of
+fromByteString : Target -> SyntaxVersion -> ProjectType -> String -> Result E.Error Src.Module
+fromByteString target syntaxVersion projectType source =
+    case P.fromByteString (chompModule target syntaxVersion projectType) E.ModuleBadEnd source of
         Ok modul ->
-            checkModule syntaxVersion projectType modul
+            checkModule target syntaxVersion projectType modul
 
         Err err ->
             Err (E.ParseError err)
@@ -61,7 +62,7 @@ isCore projectType =
 
 isStdlibCore : ProjectType -> Maybe Header -> Bool
 isStdlibCore projectType maybeHeader =
-    case ( projectType, maybeHeader ) of
+    case Debug.log "isStdlibCore" ( projectType, maybeHeader ) of
         ( Package pkg, Just header ) ->
             let
                 ( _, A.At _ name ) =
@@ -79,8 +80,8 @@ isStdlibCore projectType maybeHeader =
                     , Name.char
                     , Name.tuple
                     , Name.platform
-                    , "Platform.Cmd"
-                    , "Platform.Sub"
+                    , Name.platformCmd
+                    , Name.platformSub
                     ]
 
         _ ->
@@ -110,17 +111,17 @@ type alias Module =
     }
 
 
-chompModule : SyntaxVersion -> ProjectType -> P.Parser E.Module Module
-chompModule syntaxVersion projectType =
-    chompHeader
+chompModule : Target -> SyntaxVersion -> ProjectType -> P.Parser E.Module Module
+chompModule target syntaxVersion projectType =
+    chompHeader target
         |> P.bind
             (\( ( initialComments, headerComments ), header ) ->
-                chompImports
+                chompImports target
                     (if isCore projectType || isStdlibCore projectType header then
                         []
 
                      else
-                        Imports.defaults
+                        Imports.defaults target
                     )
                     |> P.bind
                         (\imports ->
@@ -151,8 +152,8 @@ chompModule syntaxVersion projectType =
 -- CHECK MODULE
 
 
-checkModule : SyntaxVersion -> ProjectType -> Module -> Result E.Error Src.Module
-checkModule syntaxVersion projectType module_ =
+checkModule : Target -> SyntaxVersion -> ProjectType -> Module -> Result E.Error Src.Module
+checkModule target syntaxVersion projectType module_ =
     let
         ( ( values, unions ), ( aliases, ports ) ) =
             categorizeDecls [] [] [] [] (List.map Src.c2Value module_.decls)
@@ -169,7 +170,7 @@ checkModule syntaxVersion projectType module_ =
                 ( _, exports ) =
                     header.exports
             in
-            checkEffects projectType ports effects
+            checkEffects target projectType ports effects
                 |> Result.map
                     (Src.Module syntaxVersion
                         (Just name)
@@ -203,8 +204,8 @@ checkModule syntaxVersion projectType module_ =
                 )
 
 
-checkEffects : ProjectType -> List Src.Port -> Effects -> Result E.Error Src.Effects
-checkEffects projectType ports effects =
+checkEffects : Target -> ProjectType -> List Src.Port -> Effects -> Result E.Error Src.Effects
+checkEffects target projectType ports effects =
     case effects of
         NoEffects region ->
             case ports of
@@ -217,7 +218,7 @@ checkEffects projectType ports effects =
                             Err (E.NoPortsInPackage name)
 
                         Application ->
-                            Err (E.UnexpectedPort region)
+                            Err (E.UnexpectedPort target region)
 
         Ports region _ ->
             case projectType of
@@ -239,7 +240,7 @@ checkEffects projectType ports effects =
                         Ok (Src.Manager region manager)
 
                     _ :: _ ->
-                        Err (E.UnexpectedPort region)
+                        Err (E.UnexpectedPort target region)
 
             else
                 Err (E.NoEffectsOutsideKernel region)
@@ -361,13 +362,13 @@ chompInfixes infixes =
 -- MODULE DOC COMMENT
 
 
-chompModuleDocCommentSpace : P.Parser E.Module (Src.C1 (Result A.Region Src.Comment))
-chompModuleDocCommentSpace =
+chompModuleDocCommentSpace : Target -> P.Parser E.Module (Src.C1 (Result A.Region Src.Comment))
+chompModuleDocCommentSpace target =
     P.addLocation (freshLine E.FreshLine)
         |> P.bind
             (\(A.At region beforeComments) ->
                 P.oneOfWithFallback
-                    [ Space.docComment E.ImportStart E.ModuleSpace
+                    [ Space.docComment (E.ImportStart target) E.ModuleSpace
                         |> P.bind
                             (\docComment ->
                                 Space.chomp E.ModuleSpace
@@ -414,8 +415,8 @@ type Effects
     | Manager A.Region Src.FComments (Src.C1 Src.Manager)
 
 
-chompHeader : P.Parser E.Module (Src.C2 (Maybe Header))
-chompHeader =
+chompHeader : Target -> P.Parser E.Module (Src.C2 (Maybe Header))
+chompHeader target =
     freshLine E.FreshLine
         |> P.bind
             (\initialComments ->
@@ -444,7 +445,7 @@ chompHeader =
                                                                                             P.addLocation (P.specialize E.ModuleExposing exposing_)
                                                                                                 |> P.bind
                                                                                                     (\exports ->
-                                                                                                        chompModuleDocCommentSpace
+                                                                                                        chompModuleDocCommentSpace target
                                                                                                             |> P.fmap
                                                                                                                 (\( headerComments, docComment ) ->
                                                                                                                     ( ( initialComments, headerComments )
@@ -462,31 +463,31 @@ chompHeader =
                                                     )
                                         )
                                 , -- port module MyThing exposing (..)
-                                  Keyword.port_ E.PortModuleProblem
-                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
+                                  Keyword.port_ (E.PortModuleProblem target)
+                                    |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace (E.PortModuleProblem target))
                                     |> P.bind
                                         (\postPortComments ->
-                                            Keyword.module_ E.PortModuleProblem
+                                            Keyword.module_ (E.PortModuleProblem target)
                                                 |> P.bind (\_ -> P.getPosition)
                                                 |> P.bind
                                                     (\effectEnd ->
-                                                        Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
+                                                        Space.chompAndCheckIndent E.ModuleSpace (E.PortModuleProblem target)
                                                             |> P.bind
                                                                 (\beforeNameComments ->
                                                                     P.addLocation (Var.moduleName E.PortModuleName)
                                                                         |> P.bind
                                                                             (\name ->
-                                                                                Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem
+                                                                                Space.chompAndCheckIndent E.ModuleSpace (E.PortModuleProblem target)
                                                                                     |> P.bind
                                                                                         (\afterNameComments ->
-                                                                                            Keyword.exposing_ E.PortModuleProblem
-                                                                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.PortModuleProblem)
+                                                                                            Keyword.exposing_ (E.PortModuleProblem target)
+                                                                                                |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace (E.PortModuleProblem target))
                                                                                                 |> P.bind
                                                                                                     (\postExportsComments ->
                                                                                                         P.addLocation (P.specialize E.PortModuleExposing exposing_)
                                                                                                             |> P.bind
                                                                                                                 (\exports ->
-                                                                                                                    chompModuleDocCommentSpace
+                                                                                                                    chompModuleDocCommentSpace target
                                                                                                                         |> P.fmap
                                                                                                                             (\( headerComments, docComment ) ->
                                                                                                                                 ( ( initialComments, headerComments )
@@ -539,7 +540,7 @@ chompHeader =
                                                                                                                                             P.addLocation (P.specialize (\_ -> E.Effect) exposing_)
                                                                                                                                                 |> P.bind
                                                                                                                                                     (\exports ->
-                                                                                                                                                        chompModuleDocCommentSpace
+                                                                                                                                                        chompModuleDocCommentSpace target
                                                                                                                                                             |> P.fmap
                                                                                                                                                                 (\( headerComments, docComment ) ->
                                                                                                                                                                     ( ( initialComments, headerComments )
@@ -701,36 +702,36 @@ spaces_em =
 -- IMPORTS
 
 
-chompImports : List (Src.C1 Src.Import) -> P.Parser E.Module (List (Src.C1 Src.Import))
-chompImports is =
+chompImports : Target -> List (Src.C1 Src.Import) -> P.Parser E.Module (List (Src.C1 Src.Import))
+chompImports target is =
     P.oneOfWithFallback
-        [ chompImport
-            |> P.bind (\i -> chompImports (i :: is))
+        [ chompImport target
+            |> P.bind (\i -> chompImports target (i :: is))
         ]
         (List.reverse is)
 
 
-chompImport : P.Parser E.Module (Src.C1 Src.Import)
-chompImport =
-    Keyword.import_ E.ImportStart
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentName)
+chompImport : Target -> P.Parser E.Module (Src.C1 Src.Import)
+chompImport target =
+    Keyword.import_ (E.ImportStart target)
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace (E.ImportIndentName target))
         |> P.bind
             (\preNameComments ->
-                P.addLocation (Var.moduleName E.ImportName)
+                P.addLocation (Var.moduleName (E.ImportName target))
                     |> P.bind
                         (\((A.At (A.Region _ end) _) as name) ->
                             Space.chomp E.ModuleSpace
                                 |> P.bind
                                     (\trailingComments ->
-                                        P.oneOf E.ImportEnd
-                                            [ Space.checkFreshLine E.ImportEnd
+                                        P.oneOf (E.ImportEnd target)
+                                            [ Space.checkFreshLine (E.ImportEnd target)
                                                 |> P.fmap (\_ -> ( trailingComments, Src.Import ( preNameComments, name ) Nothing ( ( [], [] ), Src.Explicit (A.At A.zero []) ) ))
-                                            , Space.checkIndent end E.ImportEnd
+                                            , Space.checkIndent end (E.ImportEnd target)
                                                 |> P.bind
                                                     (\_ ->
-                                                        P.oneOf E.ImportAs
-                                                            [ chompAs ( preNameComments, name ) trailingComments
-                                                            , chompExposing ( preNameComments, name ) Nothing [] trailingComments
+                                                        P.oneOf (E.ImportAs target)
+                                                            [ chompAs target ( preNameComments, name ) trailingComments
+                                                            , chompExposing target ( preNameComments, name ) Nothing [] trailingComments
                                                             ]
                                                     )
                                             ]
@@ -739,13 +740,13 @@ chompImport =
             )
 
 
-chompAs : Src.C1 (A.Located Name.Name) -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
-chompAs name trailingComments =
-    Keyword.as_ E.ImportAs
-        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentAlias)
+chompAs : Target -> Src.C1 (A.Located Name.Name) -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
+chompAs target name trailingComments =
+    Keyword.as_ (E.ImportAs target)
+        |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace (E.ImportIndentAlias target))
         |> P.bind
             (\postAliasComments ->
-                Var.upper E.ImportAlias
+                Var.upper (E.ImportAlias target)
                     |> P.bind
                         (\alias_ ->
                             P.getPosition
@@ -754,11 +755,11 @@ chompAs name trailingComments =
                                         Space.chomp E.ModuleSpace
                                             |> P.bind
                                                 (\preExposedComments ->
-                                                    P.oneOf E.ImportEnd
-                                                        [ Space.checkFreshLine E.ImportEnd
+                                                    P.oneOf (E.ImportEnd target)
+                                                        [ Space.checkFreshLine (E.ImportEnd target)
                                                             |> P.fmap (\_ -> ( preExposedComments, Src.Import name (Just ( ( trailingComments, postAliasComments ), alias_ )) ( ( [], [] ), Src.Explicit (A.At A.zero []) ) ))
-                                                        , Space.checkIndent end E.ImportEnd
-                                                            |> P.bind (\_ -> chompExposing name (Just ( postAliasComments, alias_ )) trailingComments preExposedComments)
+                                                        , Space.checkIndent end (E.ImportEnd target)
+                                                            |> P.bind (\_ -> chompExposing target name (Just ( postAliasComments, alias_ )) trailingComments preExposedComments)
                                                         ]
                                                 )
                                     )
@@ -766,16 +767,16 @@ chompAs name trailingComments =
             )
 
 
-chompExposing : Src.C1 (A.Located Name.Name) -> Maybe (Src.C1 Name.Name) -> Src.FComments -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
-chompExposing name maybeAlias trailingComments preExposedComments =
-    Keyword.exposing_ E.ImportExposing
+chompExposing : Target -> Src.C1 (A.Located Name.Name) -> Maybe (Src.C1 Name.Name) -> Src.FComments -> Src.FComments -> P.Parser E.Module (Src.C1 Src.Import)
+chompExposing target name maybeAlias trailingComments preExposedComments =
+    Keyword.exposing_ (E.ImportExposing target)
         |> P.bind (\_ -> Space.chompAndCheckIndent E.ModuleSpace E.ImportIndentExposingList)
         |> P.bind
             (\postExposedComments ->
                 P.specialize E.ImportExposingList exposing_
                     |> P.bind
                         (\exposed ->
-                            freshLine E.ImportEnd
+                            freshLine (E.ImportEnd target)
                                 |> P.fmap (\comments -> ( comments, Src.Import name (Maybe.map (\( postAliasComments, alias_ ) -> ( ( trailingComments, postAliasComments ), alias_ )) maybeAlias) ( ( preExposedComments, postExposedComments ), exposed ) ))
                         )
             )

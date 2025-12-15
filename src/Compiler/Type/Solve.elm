@@ -4,6 +4,7 @@ import Array exposing (Array)
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as Doc
 import Compiler.Reporting.Error.Type as Error
@@ -27,12 +28,12 @@ import Utils.Main as Utils
 -- RUN SOLVER
 
 
-run : Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.Name Can.Annotation))
-run constraint =
+run : Target -> Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.Name Can.Annotation))
+run target constraint =
     MVector.replicate 8 []
         |> IO.bind
             (\pools ->
-                solve Dict.empty Type.outermostRank pools emptyState constraint
+                solve target Dict.empty Type.outermostRank pools emptyState constraint
                     |> IO.bind
                         (\(State env _ errors) ->
                             case errors of
@@ -67,13 +68,13 @@ type State
     = State Env Mark (List Error.Error)
 
 
-solve : Env -> Int -> Pools -> State -> Constraint -> IO State
-solve env rank pools state constraint =
-    IO.loop solveHelp ( ( env, rank ), ( pools, state ), ( constraint, identity ) )
+solve : Target -> Env -> Int -> Pools -> State -> Constraint -> IO State
+solve target env rank pools state constraint =
+    IO.loop (solveHelp target) ( ( env, rank ), ( pools, state ), ( constraint, identity ) )
 
 
-solveHelp : ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) -> IO (IO.Step ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) State)
-solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constraint, cont ) ) =
+solveHelp : Target -> ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) -> IO (IO.Step ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) State)
+solveHelp target ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constraint, cont ) ) =
     case constraint of
         CTrue ->
             IO.fmap IO.Done <| cont <| IO.pure state
@@ -88,7 +89,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                         expectedToVariable rank pools expectation
                             |> IO.bind
                                 (\expected ->
-                                    Unify.unify actual expected
+                                    Unify.unify target actual expected
                                         |> IO.bind
                                             (\answer ->
                                                 case answer of
@@ -118,7 +119,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                         expectedToVariable rank pools expectation
                             |> IO.bind
                                 (\expected ->
-                                    Unify.unify actual expected
+                                    Unify.unify target actual expected
                                         |> IO.bind
                                             (\answer ->
                                                 case answer of
@@ -148,7 +149,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                         expectedToVariable rank pools expectation
                             |> IO.bind
                                 (\expected ->
-                                    Unify.unify actual expected
+                                    Unify.unify target actual expected
                                         |> IO.bind
                                             (\answer ->
                                                 case answer of
@@ -178,7 +179,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                         patternExpectationToVariable rank pools expectation
                             |> IO.bind
                                 (\expected ->
-                                    Unify.unify actual expected
+                                    Unify.unify target actual expected
                                         |> IO.bind
                                             (\answer ->
                                                 case answer of
@@ -194,7 +195,8 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                                         cont <|
                                                                             IO.pure <|
                                                                                 addError state <|
-                                                                                    Error.BadPattern region
+                                                                                    Error.BadPattern target
+                                                                                        region
                                                                                         category
                                                                                         actualType
                                                                                         (Error.ptypeReplace expectation expectedType)
@@ -204,14 +206,14 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                     )
 
         CAnd constraints ->
-            IO.fmap IO.Done <| cont <| IO.foldM (solve env rank pools) state constraints
+            IO.fmap IO.Done <| cont <| IO.foldM (solve target env rank pools) state constraints
 
         CLet [] flexs _ headerCon CTrue ->
             introduce rank pools flexs
                 |> IO.fmap (\_ -> IO.Loop ( ( env, rank ), ( pools, state ), ( headerCon, cont ) ))
 
         CLet [] [] header headerCon subCon ->
-            solve env rank pools state headerCon
+            solve target env rank pools state headerCon
                 |> IO.bind
                     (\state1 ->
                         IO.traverseMap identity compare (A.traverse (typeToVariable rank pools)) header
@@ -228,7 +230,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                         , ( subCon
                                           , IO.bind
                                                 (\state2 ->
-                                                    IO.foldM occurs state2 (Dict.toList compare locals)
+                                                    IO.foldM (occurs target) state2 (Dict.toList compare locals)
                                                 )
                                                 >> cont
                                           )
@@ -275,7 +277,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                             IO.traverseMap identity compare (A.traverse (typeToVariable nextRank nextPools)) header
                                                                 |> IO.bind
                                                                     (\locals ->
-                                                                        solve env nextRank nextPools state headerCon
+                                                                        solve target env nextRank nextPools state headerCon
                                                                             |> IO.bind
                                                                                 (\(State savedEnv mark errors) ->
                                                                                     let
@@ -299,7 +301,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                                                                     |> IO.bind
                                                                                                         (\_ ->
                                                                                                             -- check that things went well
-                                                                                                            IO.mapM_ isGeneric rigids
+                                                                                                            IO.mapM_ (isGeneric target) rigids
                                                                                                                 |> IO.fmap
                                                                                                                     (\_ ->
                                                                                                                         let
@@ -317,7 +319,7 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
                                                                                                                             , ( subCon
                                                                                                                               , IO.bind
                                                                                                                                     (\newState ->
-                                                                                                                                        IO.foldM occurs newState (Dict.toList compare locals)
+                                                                                                                                        IO.foldM (occurs target) newState (Dict.toList compare locals)
                                                                                                                                     )
                                                                                                                                     >> cont
                                                                                                                               )
@@ -337,8 +339,8 @@ solveHelp ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constr
 -- Check that a variable has rank == noRank, meaning that it can be generalized.
 
 
-isGeneric : Variable -> IO ()
-isGeneric var =
+isGeneric : Target -> Variable -> IO ()
+isGeneric target var =
     UF.get var
         |> IO.bind
             (\(Descriptor _ rank _ _) ->
@@ -352,7 +354,7 @@ isGeneric var =
                                 crash <|
                                     "You ran into a compiler bug. Here are some details for the developers:\n\n"
                                         ++ "    "
-                                        ++ Doc.toString (ET.toDoc L.empty RT.None tipe)
+                                        ++ Doc.toString (ET.toDoc target L.empty RT.None tipe)
                                         ++ " [rank = "
                                         ++ String.fromInt rank
                                         ++ "]\n\n"
@@ -369,13 +371,13 @@ expectedToVariable : Int -> Pools -> Error.Expected Type -> IO Variable
 expectedToVariable rank pools expectation =
     typeToVariable rank pools <|
         case expectation of
-            Error.NoExpectation tipe ->
+            Error.NoExpectation _ tipe ->
                 tipe
 
-            Error.FromContext _ _ tipe ->
+            Error.FromContext _ _ _ tipe ->
                 tipe
 
-            Error.FromAnnotation _ _ _ tipe ->
+            Error.FromAnnotation _ _ _ _ tipe ->
                 tipe
 
 
@@ -403,8 +405,8 @@ addError (State savedEnv rank errors) err =
 -- OCCURS CHECK
 
 
-occurs : State -> ( Name.Name, A.Located Variable ) -> IO State
-occurs state ( name, A.At region variable ) =
+occurs : Target -> State -> ( Name.Name, A.Located Variable ) -> IO State
+occurs target state ( name, A.At region variable ) =
     Occurs.occurs variable
         |> IO.bind
             (\hasOccurred ->
@@ -416,7 +418,7 @@ occurs state ( name, A.At region variable ) =
                                     |> IO.bind
                                         (\(Descriptor _ rank mark copy) ->
                                             UF.set variable (Descriptor IO.Error rank mark copy)
-                                                |> IO.fmap (\_ -> addError state (Error.InfiniteType region name errorType))
+                                                |> IO.fmap (\_ -> addError state (Error.InfiniteType target region name errorType))
                                         )
                             )
 

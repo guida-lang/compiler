@@ -219,7 +219,7 @@ read root =
                             Stuff.GuidaRoot _ ->
                                 guidaDecoder
 
-                            Stuff.ElmRoot _ ->
+                            Stuff.ElmRoot _ _ ->
                                 elmDecoder
                 in
                 case D.fromByteString decoder bytes of
@@ -228,7 +228,7 @@ read root =
                             Stuff.GuidaRoot _ ->
                                 Task.pure <| Err (Exit.OutlineHasBadGuidaStructure err)
 
-                            Stuff.ElmRoot _ ->
+                            Stuff.ElmRoot _ _ ->
                                 Task.pure <| Err (Exit.OutlineHasBadElmStructure err)
 
                     Ok outline ->

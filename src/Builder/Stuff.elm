@@ -1,5 +1,6 @@
 module Builder.Stuff exposing
-    ( PackageCache
+    ( Level(..)
+    , PackageCache
     , Root(..)
     , details
     , findRoot
@@ -21,11 +22,13 @@ module Builder.Stuff exposing
     , rootMap
     , rootPath
     , rootProjectFilePath
+    , rootToTarget
     , testDir
     , withRegistryLock
     , withRootLock
     )
 
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
@@ -33,6 +36,7 @@ import Prelude
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
 
@@ -99,9 +103,27 @@ toArtifactPath root name ext =
 -- ROOT
 
 
+type Level
+    = TopLevel
+    | Dependency
+
+
 type Root
     = GuidaRoot String
-    | ElmRoot String
+    | ElmRoot Level String
+
+
+rootToTarget : Root -> Target
+rootToTarget root =
+    case root of
+        GuidaRoot _ ->
+            Target.GuidaTarget
+
+        ElmRoot TopLevel _ ->
+            Target.ElmTarget
+
+        ElmRoot Dependency _ ->
+            crash "Error when trying to use dependency root information to determine target."
 
 
 isRootGuida : Root -> Bool
@@ -110,7 +132,7 @@ isRootGuida root =
         GuidaRoot _ ->
             True
 
-        ElmRoot _ ->
+        ElmRoot _ _ ->
             False
 
 
@@ -120,7 +142,7 @@ rootProjectFilePath root =
         GuidaRoot path ->
             path ++ "/guida.json"
 
-        ElmRoot path ->
+        ElmRoot _ path ->
             path ++ "/elm.json"
 
 
@@ -130,7 +152,7 @@ rootFilename root =
         GuidaRoot _ ->
             "guida.json"
 
-        ElmRoot _ ->
+        ElmRoot _ _ ->
             "elm.json"
 
 
@@ -140,7 +162,7 @@ rootPath root =
         GuidaRoot path ->
             path
 
-        ElmRoot path ->
+        ElmRoot _ path ->
             path
 
 
@@ -150,8 +172,8 @@ rootMap f root =
         GuidaRoot path ->
             GuidaRoot (f path)
 
-        ElmRoot path ->
-            GuidaRoot (f path)
+        ElmRoot level path ->
+            ElmRoot level (f path)
 
 
 findRoot : Task Never (Maybe Root)
@@ -181,7 +203,7 @@ findRootHelp dirs =
                                 |> Task.bind
                                     (\elmExists ->
                                         if elmExists then
-                                            Task.pure (Just (ElmRoot (Utils.fpJoinPath dirs)))
+                                            Task.pure (Just (ElmRoot TopLevel (Utils.fpJoinPath dirs)))
 
                                         else
                                             findRootHelp (Prelude.init dirs)
@@ -202,7 +224,7 @@ findRootIn path =
                         |> Task.bind
                             (\elmExists ->
                                 if elmExists then
-                                    Task.pure (Just (ElmRoot path))
+                                    Task.pure (Just (ElmRoot Dependency path))
 
                                 else
                                     Task.pure Nothing

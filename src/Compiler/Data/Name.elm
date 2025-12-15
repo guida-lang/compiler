@@ -35,6 +35,8 @@ module Compiler.Data.Name exposing
     , negate
     , node
     , platform
+    , platformCmd
+    , platformSub
     , program
     , replModule
     , replValueToPrint
@@ -55,6 +57,7 @@ module Compiler.Data.Name exposing
     , virtualDom
     )
 
+import Compiler.Generate.Target as Target exposing (Target)
 import Utils.Crash exposing (crash)
 
 
@@ -107,10 +110,10 @@ splitDots =
 -- GET KERNEL
 
 
-getKernel : Bool -> Name -> Name
-getKernel isRootGuida name =
-    if isKernel isRootGuida name then
-        String.dropLeft (String.length (prefixKernel isRootGuida)) name
+getKernel : Target -> Name -> Name
+getKernel target name =
+    if isKernel target name then
+        String.dropLeft (String.length (prefixKernel target)) name
 
     else
         crash "AssertionFailed"
@@ -120,9 +123,9 @@ getKernel isRootGuida name =
 -- STARTS WITH
 
 
-isKernel : Bool -> Name -> Bool
-isKernel isRootGuida =
-    String.startsWith (prefixKernel isRootGuida)
+isKernel : Target -> Name -> Bool
+isKernel target =
+    String.startsWith (prefixKernel target)
 
 
 isNumberType : Name -> Bool
@@ -145,13 +148,14 @@ isCompappendType =
     String.startsWith prefixCompappend
 
 
-prefixKernel : Bool -> Name
-prefixKernel isRootGuida =
-    if isRootGuida then
-        "Guida.Kernel."
+prefixKernel : Target -> Name
+prefixKernel target =
+    case target of
+        Target.GuidaTarget ->
+            "Guida.Kernel."
 
-    else
-        "Elm.Kernel."
+        Target.ElmTarget ->
+            "Elm.Kernel."
 
 
 prefixNumber : Name
@@ -393,6 +397,16 @@ sub =
 platform : Name
 platform =
     "Platform"
+
+
+platformCmd : Name
+platformCmd =
+    "Platform.Cmd"
+
+
+platformSub : Name
+platformSub =
+    "Platform.Sub"
 
 
 virtualDom : Name

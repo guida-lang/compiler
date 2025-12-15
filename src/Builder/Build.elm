@@ -32,6 +32,7 @@ import Compiler.Data.Map.Utils as Map
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Docs as Docs
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
@@ -150,7 +151,7 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                     docsNeed =
                                                         toDocsNeed docsGoal
                                                 in
-                                                Map.fromKeysA identity (fork statusEncoder << crawlModule env mvar docsNeed) (e :: es)
+                                                Map.fromKeysA identity (fork statusEncoder << crawlModule (Stuff.rootToTarget root) env mvar docsNeed) (e :: es)
                                                     |> Task.bind
                                                         (\roots ->
                                                             Utils.putMVar statusDictEncoder mvar roots
@@ -163,7 +164,7 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                                                         |> Task.bind
                                                                                             (\statuses ->
                                                                                                 -- compile
-                                                                                                checkMidpoint dmvar statuses
+                                                                                                checkMidpoint (Stuff.rootToTarget root) dmvar statuses
                                                                                                     |> Task.bind
                                                                                                         (\midpoint ->
                                                                                                             case midpoint of
@@ -250,7 +251,7 @@ fromPaths style root details paths =
                                                                                             Task.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder smvar)
                                                                                                 |> Task.bind
                                                                                                     (\statuses ->
-                                                                                                        checkMidpointAndRoots dmvar statuses sroots
+                                                                                                        checkMidpointAndRoots (Stuff.rootToTarget root) dmvar statuses sroots
                                                                                                             |> Task.bind
                                                                                                                 (\midpoint ->
                                                                                                                     case midpoint of
@@ -330,12 +331,12 @@ type Status
     | SKernel
 
 
-crawlDeps : Env -> MVar StatusDict -> List ModuleName.Raw -> a -> Task Never a
-crawlDeps env mvar deps blockedValue =
+crawlDeps : Target -> Env -> MVar StatusDict -> List ModuleName.Raw -> a -> Task Never a
+crawlDeps target env mvar deps blockedValue =
     let
         crawlNew : ModuleName.Raw -> () -> Task Never (MVar Status)
         crawlNew name () =
-            fork statusEncoder (crawlModule env mvar (DocsNeed False) name)
+            fork statusEncoder (crawlModule target env mvar (DocsNeed False) name)
     in
     Utils.takeMVar statusDictDecoder mvar
         |> Task.bind
@@ -362,8 +363,8 @@ crawlDeps env mvar deps blockedValue =
             )
 
 
-crawlModule : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> Task Never Status
-crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mvar ((DocsNeed needsDocs) as docsNeed) name =
+crawlModule : Target -> Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> Task Never Status
+crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as env) mvar ((DocsNeed needsDocs) as docsNeed) name =
     let
         guidaFileName : String
         guidaFileName =
@@ -397,7 +398,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                             Stuff.GuidaRoot _ ->
                                                 Import.GuidaAmbiguous
 
-                                            Stuff.ElmRoot _ ->
+                                            Stuff.ElmRoot _ _ ->
                                                 Import.ElmAmbiguous
                                 in
                                 Task.pure <| SBadImport <| ambiguousProblem path [] dep deps
@@ -408,14 +409,14 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                         (\newTime ->
                                             case Dict.get identity name locals of
                                                 Nothing ->
-                                                    crawlFile env mvar docsNeed name path newTime buildID
+                                                    crawlFile target env mvar docsNeed name path newTime buildID
 
                                                 Just ((Details.Local oldPath oldTime deps _ lastChange _) as local) ->
                                                     if path /= oldPath || oldTime /= newTime || needsDocs then
-                                                        crawlFile env mvar docsNeed name path newTime lastChange
+                                                        crawlFile target env mvar docsNeed name path newTime lastChange
 
                                                     else
-                                                        crawlDeps env mvar deps (SCached local)
+                                                        crawlDeps target env mvar deps (SCached local)
                                         )
 
                     p1 :: p2 :: ps ->
@@ -426,7 +427,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                     Stuff.GuidaRoot _ ->
                                         Import.GuidaAmbiguousLocal
 
-                                    Stuff.ElmRoot _ ->
+                                    Stuff.ElmRoot _ _ ->
                                         Import.ElmAmbiguousLocal
                         in
                         Task.pure <| SBadImport <| ambiguousLocalProblem (Utils.fpMakeRelative (Stuff.rootPath root) p1) (Utils.fpMakeRelative (Stuff.rootPath root) p2) (List.map (Utils.fpMakeRelative (Stuff.rootPath root)) ps)
@@ -446,13 +447,13 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                     Stuff.GuidaRoot _ ->
                                                         Import.GuidaAmbiguousForeign
 
-                                                    Stuff.ElmRoot _ ->
+                                                    Stuff.ElmRoot _ _ ->
                                                         Import.ElmAmbiguousForeign
                                         in
                                         Task.pure <| SBadImport <| ambiguousForeignProblem dep d ds
 
                             Nothing ->
-                                if Name.isKernel (Stuff.isRootGuida root) name && Parse.isKernel projectType then
+                                if Name.isKernel (Stuff.rootToTarget root) name && Parse.isKernel projectType then
                                     File.exists ("src/" ++ ModuleName.toFilePath name ++ ".js")
                                         |> Task.fmap
                                             (\exists ->
@@ -465,7 +466,7 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                             Stuff.GuidaRoot _ ->
                                                                 Import.GuidaNotFound
 
-                                                            Stuff.ElmRoot _ ->
+                                                            Stuff.ElmRoot _ _ ->
                                                                 Import.ElmNotFound
                                                         )
                                             )
@@ -477,18 +478,18 @@ crawlModule ((Env _ root projectType srcDirs buildID locals foreigns) as env) mv
                                                 Stuff.GuidaRoot _ ->
                                                     Import.GuidaNotFound
 
-                                                Stuff.ElmRoot _ ->
+                                                Stuff.ElmRoot _ _ ->
                                                     Import.ElmNotFound
                                             )
             )
 
 
-crawlFile : Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> Task Never Status
-crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
+crawlFile : Target -> Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> Task Never Status
+crawlFile target ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
     File.readUtf8 (Utils.fpCombine (Stuff.rootPath root) path)
         |> Task.bind
             (\source ->
-                case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
+                case Parse.fromByteString target (SV.fileSyntaxVersion path) projectType source of
                     Err err ->
                         Task.pure <| SBadSyntax path time source err
 
@@ -508,7 +509,7 @@ crawlFile ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expected
                                         local =
                                             Details.Local path time deps (List.any isMain values) lastChange buildID
                                     in
-                                    crawlDeps env mvar deps (SChanged local source modul docsNeed)
+                                    crawlDeps target env mvar deps (SChanged local source modul docsNeed)
 
                                 else
                                     Task.pure <| SBadSyntax path time source (Syntax.ModuleNameMismatch expectedName name)
@@ -560,9 +561,9 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                             File.readUtf8 path
                                                 |> Task.bind
                                                     (\source ->
-                                                        case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
+                                                        case Parse.fromByteString (Stuff.rootToTarget root) (SV.fileSyntaxVersion path) projectType source of
                                                             Ok modul ->
-                                                                compile env (DocsNeed False) local source ifaces modul
+                                                                compile (Stuff.rootToTarget root) env (DocsNeed False) local source ifaces modul
 
                                                             Err err ->
                                                                 Task.pure <|
@@ -587,7 +588,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                         Task.pure <|
                                                             RProblem <|
                                                                 Error.Module name path time source <|
-                                                                    case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
+                                                                    case Parse.fromByteString (Stuff.rootToTarget root) (SV.fileSyntaxVersion path) projectType source of
                                                                         Ok (Src.Module _ _ _ _ imports _ _ _ _ _) ->
                                                                             Error.BadImports (toImportErrors env results imports problems)
 
@@ -606,7 +607,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                 (\depsStatus ->
                                     case depsStatus of
                                         DepsChange ifaces ->
-                                            compile env docsNeed local source ifaces modul
+                                            compile (Stuff.rootToTarget root) env docsNeed local source ifaces modul
 
                                         DepsSame same cached ->
                                             loadInterfaces (Stuff.rootPath root) same cached
@@ -617,7 +618,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                                 Task.pure RBlocked
 
                                                             Just ifaces ->
-                                                                compile env docsNeed local source ifaces modul
+                                                                compile (Stuff.rootToTarget root) env docsNeed local source ifaces modul
                                                     )
 
                                         DepsBlock ->
@@ -822,8 +823,8 @@ loadInterface root ( name, ciMvar ) =
 -- CHECK PROJECT
 
 
-checkMidpoint : MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> Task Never (Result Exit.BuildProjectProblem Dependencies)
-checkMidpoint dmvar statuses =
+checkMidpoint : Target -> MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> Task Never (Result Exit.BuildProjectProblem Dependencies)
+checkMidpoint target dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
             Utils.readMVar maybeDependenciesDecoder dmvar
@@ -839,11 +840,11 @@ checkMidpoint dmvar statuses =
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar maybeDependenciesDecoder dmvar
-                |> Task.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> Task.fmap (\_ -> Err (Exit.BP_Cycle target name names))
 
 
-checkMidpointAndRoots : MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> NE.Nonempty RootStatus -> Task Never (Result Exit.BuildProjectProblem Dependencies)
-checkMidpointAndRoots dmvar statuses sroots =
+checkMidpointAndRoots : Target -> MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> NE.Nonempty RootStatus -> Task Never (Result Exit.BuildProjectProblem Dependencies)
+checkMidpointAndRoots target dmvar statuses sroots =
     case checkForCycles statuses of
         Nothing ->
             case checkUniqueRoots statuses sroots of
@@ -865,7 +866,7 @@ checkMidpointAndRoots dmvar statuses sroots =
 
         Just (NE.Nonempty name names) ->
             Utils.readMVar maybeDependenciesDecoder dmvar
-                |> Task.fmap (\_ -> Err (Exit.BP_Cycle name names))
+                |> Task.fmap (\_ -> Err (Exit.BP_Cycle target name names))
 
 
 
@@ -1008,8 +1009,8 @@ checkInside name p1 status =
 -- COMPILE MODULE
 
 
-compile : Env -> DocsNeed -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never BResult
-compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path time deps main lastChange _) source ifaces modul =
+compile : Target -> Env -> DocsNeed -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never BResult
+compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local path time deps main lastChange _) source ifaces modul =
     let
         pkg : Pkg.Name
         pkg =
@@ -1020,7 +1021,7 @@ compile (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ti
             (\result ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
-                        case makeDocs docsNeed canonical of
+                        case makeDocs target docsNeed canonical of
                             Err err ->
                                 Task.pure <|
                                     RProblem <|
@@ -1268,10 +1269,10 @@ toDocsNeed goal =
             DocsNeed True
 
 
-makeDocs : DocsNeed -> Can.Module -> Result EDocs.Error (Maybe Docs.Module)
-makeDocs (DocsNeed isNeeded) modul =
+makeDocs : Target -> DocsNeed -> Can.Module -> Result EDocs.Error (Maybe Docs.Module)
+makeDocs target (DocsNeed isNeeded) modul =
     if isNeeded then
-        case Docs.fromModule modul of
+        case Docs.fromModule target modul of
             Ok docs ->
                 Ok (Just docs)
 
@@ -1339,7 +1340,7 @@ fromRepl root details source =
     makeEnv Reporting.ignorer root details
         |> Task.bind
             (\((Env _ _ projectType _ _ _ _) as env) ->
-                case Parse.fromByteString SV.Guida projectType source of
+                case Parse.fromByteString (Stuff.rootToTarget root) SV.Guida projectType source of
                     Err syntaxError ->
                         Task.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 
@@ -1355,13 +1356,13 @@ fromRepl root details source =
                                     Utils.newMVar statusDictEncoder Dict.empty
                                         |> Task.bind
                                             (\mvar ->
-                                                crawlDeps env mvar deps ()
+                                                crawlDeps (Stuff.rootToTarget root) env mvar deps ()
                                                     |> Task.bind
                                                         (\_ ->
                                                             Task.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
                                                                 |> Task.bind
                                                                     (\statuses ->
-                                                                        checkMidpoint dmvar statuses
+                                                                        checkMidpoint (Stuff.rootToTarget root) dmvar statuses
                                                                             |> Task.bind
                                                                                 (\midpoint ->
                                                                                     case midpoint of
@@ -1653,8 +1654,8 @@ type RootStatus
 
 
 crawlRoot : Env -> MVar StatusDict -> RootLocation -> Task Never RootStatus
-crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
-    case root of
+crawlRoot ((Env _ root projectType _ buildID _ _) as env) mvar rootLocation =
+    case rootLocation of
         LInside name ->
             Utils.newEmptyMVar
                 |> Task.bind
@@ -1665,7 +1666,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                                     Utils.putMVar statusDictEncoder mvar (Dict.insert identity name statusMVar statusDict)
                                         |> Task.bind
                                             (\_ ->
-                                                Task.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule env mvar (DocsNeed False) name)
+                                                Task.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule (Stuff.rootToTarget root) env mvar (DocsNeed False) name)
                                                     |> Task.fmap (\_ -> SInside name)
                                             )
                                 )
@@ -1678,7 +1679,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                         File.readUtf8 path
                             |> Task.bind
                                 (\source ->
-                                    case Parse.fromByteString (SV.fileSyntaxVersion path) projectType source of
+                                    case Parse.fromByteString (Stuff.rootToTarget root) (SV.fileSyntaxVersion path) projectType source of
                                         Ok ((Src.Module _ _ _ _ imports values _ _ _ _) as modul) ->
                                             let
                                                 deps : List Name.Name
@@ -1689,7 +1690,7 @@ crawlRoot ((Env _ _ projectType _ buildID _ _) as env) mvar root =
                                                 local =
                                                     Details.Local path time deps (List.any isMain values) buildID buildID
                                             in
-                                            crawlDeps env mvar deps (SOutsideOk local source modul)
+                                            crawlDeps (Stuff.rootToTarget root) env mvar deps (SOutsideOk local source modul)
 
                                         Err syntaxError ->
                                             Task.pure <|

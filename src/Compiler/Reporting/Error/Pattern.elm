@@ -58,7 +58,7 @@ toReport source err =
                                 ]
                             )
 
-                P.BadCase ->
+                P.BadCase target ->
                     Report.Report "MISSING PATTERNS" region [] <|
                         Code.toSnippet source
                             region
@@ -69,7 +69,8 @@ toReport source err =
                                 , unhandledPatternsToDocBlock unhandled
                                 , D.reflow <|
                                     "I would have to crash if I saw one of those. Add branches for them!"
-                                , D.link "Hint"
+                                , D.link target
+                                    "Hint"
                                     "If you want to write the code for each branch later, use `Debug.todo` as a placeholder. Read"
                                     "missing-patterns"
                                     "for more guidance on this workflow."

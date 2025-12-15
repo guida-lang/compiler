@@ -20,6 +20,7 @@ import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
@@ -717,7 +718,7 @@ extractExposedPossiblyTests path =
     File.readUtf8 path
         |> Task.bind
             (\bytes ->
-                case Parse.fromByteString (SV.fileSyntaxVersion path) Parse.Application bytes of
+                case Parse.fromByteString Target.GuidaTarget (SV.fileSyntaxVersion path) Parse.Application bytes of
                     Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
                         let
                             exposed : List Name

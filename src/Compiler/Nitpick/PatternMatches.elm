@@ -19,6 +19,7 @@ import Compiler.AST.Canonical as Can
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -50,8 +51,8 @@ type Literal
 -- CREATE SIMPLIFIED PATTERNS
 
 
-simplify : Can.Pattern -> Pattern
-simplify (A.At _ pattern) =
+simplify : Target -> Can.Pattern -> Pattern
+simplify target (A.At _ pattern) =
     case pattern of
         Can.PAnything ->
             Anything
@@ -66,26 +67,26 @@ simplify (A.At _ pattern) =
             Ctor unit unitName []
 
         Can.PTuple a b [] ->
-            Ctor pair pairName [ simplify a, simplify b ]
+            Ctor pair pairName [ simplify target a, simplify target b ]
 
         Can.PTuple a b [ c ] ->
-            Ctor triple tripleName [ simplify a, simplify b, simplify c ]
+            Ctor triple tripleName [ simplify target a, simplify target b, simplify target c ]
 
         Can.PTuple a b cs ->
-            Ctor nTuple nTupleName (List.map simplify (a :: b :: cs))
+            Ctor nTuple nTupleName (List.map (simplify target) (a :: b :: cs))
 
         Can.PCtor { union, name, args } ->
             Ctor union name <|
-                List.map (\(Can.PatternCtorArg _ _ arg) -> simplify arg) args
+                List.map (\(Can.PatternCtorArg _ _ arg) -> simplify target arg) args
 
         Can.PList entries ->
-            List.foldr cons nil entries
+            List.foldr (cons target) (nil target) entries
 
         Can.PCons hd tl ->
-            cons hd (simplify tl)
+            cons target hd (simplify target tl)
 
         Can.PAlias subPattern _ ->
-            simplify subPattern
+            simplify target subPattern
 
         Can.PInt int ->
             Literal (Int int)
@@ -107,14 +108,14 @@ simplify (A.At _ pattern) =
                 []
 
 
-cons : Can.Pattern -> Pattern -> Pattern
-cons hd tl =
-    Ctor list consName [ simplify hd, tl ]
+cons : Target -> Can.Pattern -> Pattern -> Pattern
+cons target hd tl =
+    Ctor (list target) consName [ simplify target hd, tl ]
 
 
-nil : Pattern
-nil =
-    Ctor list nilName []
+nil : Target -> Pattern
+nil target =
+    Ctor (list target) nilName []
 
 
 
@@ -161,8 +162,8 @@ nTuple =
     Can.Union [ "a", "b", "cs" ] [ ctor ] 1 Can.Normal
 
 
-list : Can.Union
-list =
+list : Target -> Can.Union
+list target =
     let
         nilCtor : Can.Ctor
         nilCtor =
@@ -174,7 +175,7 @@ list =
                 Index.second
                 2
                 [ Can.TVar "a"
-                , Can.TType ModuleName.list Name.list [ Can.TVar "a" ]
+                , Can.TType (ModuleName.list target) Name.list [ Can.TVar "a" ]
                 ]
     in
     Can.Union [ "a" ] [ nilCtor, consCtor ] 2 Can.Normal
@@ -222,16 +223,16 @@ type Error
 type Context
     = BadArg
     | BadDestruct
-    | BadCase
+    | BadCase Target
 
 
 
 -- CHECK
 
 
-check : Can.Module -> Result (NE.Nonempty Error) ()
-check (Can.Module _ _ _ decls _ _ _ _) =
-    case checkDecls decls [] identity of
+check : Target -> Can.Module -> Result (NE.Nonempty Error) ()
+check target (Can.Module _ _ _ decls _ _ _ _) =
+    case checkDecls target decls [] identity of
         [] ->
             Ok ()
 
@@ -243,14 +244,14 @@ check (Can.Module _ _ _ decls _ _ _ _) =
 -- CHECK DECLS
 
 
-checkDecls : Can.Decls -> List Error -> (List Error -> List Error) -> List Error
-checkDecls decls errors cont =
+checkDecls : Target -> Can.Decls -> List Error -> (List Error -> List Error) -> List Error
+checkDecls target decls errors cont =
     case decls of
         Can.Declare def subDecls ->
-            checkDecls subDecls errors (checkDef def >> cont)
+            checkDecls target subDecls errors (checkDef target def >> cont)
 
         Can.DeclareRec def defs subDecls ->
-            List.foldr checkDef (checkDecls subDecls errors (checkDef def >> cont)) defs
+            List.foldr (checkDef target) (checkDecls target subDecls errors (checkDef target def >> cont)) defs
 
         Can.SaveTheEnvironment ->
             cont errors
@@ -260,32 +261,32 @@ checkDecls decls errors cont =
 -- CHECK DEFS
 
 
-checkDef : Can.Def -> List Error -> List Error
-checkDef def errors =
+checkDef : Target -> Can.Def -> List Error -> List Error
+checkDef target def errors =
     case def of
         Can.Def _ args body ->
-            List.foldr checkArg (checkExpr body errors) args
+            List.foldr (checkArg target) (checkExpr target body errors) args
 
         Can.TypedDef _ _ args body _ ->
-            List.foldr checkTypedArg (checkExpr body errors) args
+            List.foldr (checkTypedArg target) (checkExpr target body errors) args
 
 
-checkArg : Can.Pattern -> List Error -> List Error
-checkArg ((A.At region _) as pattern) errors =
-    checkPatterns region BadArg [ pattern ] errors
+checkArg : Target -> Can.Pattern -> List Error -> List Error
+checkArg target ((A.At region _) as pattern) errors =
+    checkPatterns target region BadArg [ pattern ] errors
 
 
-checkTypedArg : ( Can.Pattern, tipe ) -> List Error -> List Error
-checkTypedArg ( (A.At region _) as pattern, _ ) errors =
-    checkPatterns region BadArg [ pattern ] errors
+checkTypedArg : Target -> ( Can.Pattern, tipe ) -> List Error -> List Error
+checkTypedArg target ( (A.At region _) as pattern, _ ) errors =
+    checkPatterns target region BadArg [ pattern ] errors
 
 
 
 -- CHECK EXPRESSIONS
 
 
-checkExpr : Can.Expr -> List Error -> List Error
-checkExpr (A.At region expression) errors =
+checkExpr : Target -> Can.Expr -> List Error -> List Error
+checkExpr target (A.At region expression) errors =
     case expression of
         Can.VarLocal _ ->
             errors
@@ -321,57 +322,57 @@ checkExpr (A.At region expression) errors =
             errors
 
         Can.List entries ->
-            List.foldr checkExpr errors entries
+            List.foldr (checkExpr target) errors entries
 
         Can.Negate expr ->
-            checkExpr expr errors
+            checkExpr target expr errors
 
         Can.Binop _ _ _ _ left right ->
-            checkExpr left
-                (checkExpr right errors)
+            checkExpr target
+                left
+                (checkExpr target right errors)
 
         Can.Lambda args body ->
-            List.foldr checkArg (checkExpr body errors) args
+            List.foldr (checkArg target) (checkExpr target body errors) args
 
         Can.Call func args ->
-            checkExpr func (List.foldr checkExpr errors args)
+            checkExpr target func (List.foldr (checkExpr target) errors args)
 
         Can.If branches finally ->
-            List.foldr checkIfBranch (checkExpr finally errors) branches
+            List.foldr (checkIfBranch target) (checkExpr target finally errors) branches
 
         Can.Let def body ->
-            checkDef def (checkExpr body errors)
+            checkDef target def (checkExpr target body errors)
 
         Can.LetRec defs body ->
-            List.foldr checkDef (checkExpr body errors) defs
+            List.foldr (checkDef target) (checkExpr target body errors) defs
 
         Can.LetDestruct ((A.At reg _) as pattern) expr body ->
-            checkPatterns reg BadDestruct [ pattern ] <|
-                checkExpr expr (checkExpr body errors)
+            checkPatterns target reg BadDestruct [ pattern ] <|
+                checkExpr target expr (checkExpr target body errors)
 
         Can.Case expr branches ->
-            checkExpr expr (checkCases region branches errors)
+            checkExpr target expr (checkCases target region branches errors)
 
         Can.Accessor _ ->
             errors
 
         Can.Access record _ ->
-            checkExpr record errors
+            checkExpr target record errors
 
         Can.Update record fields ->
-            checkExpr record <| Dict.foldr A.compareLocated (\_ -> checkField) errors fields
+            checkExpr target record <| Dict.foldr A.compareLocated (\_ -> checkField target) errors fields
 
         Can.Record fields ->
-            Dict.foldr A.compareLocated (\_ -> checkExpr) errors fields
+            Dict.foldr A.compareLocated (\_ -> checkExpr target) errors fields
 
         Can.Unit ->
             errors
 
         Can.Tuple a b cs ->
-            checkExpr a
-                (checkExpr b
-                    (List.foldr checkExpr errors cs)
-                )
+            checkExpr target a <|
+                checkExpr target b <|
+                    List.foldr (checkExpr target) errors cs
 
         Can.Shader _ _ ->
             errors
@@ -381,37 +382,37 @@ checkExpr (A.At region expression) errors =
 -- CHECK FIELD
 
 
-checkField : Can.FieldUpdate -> List Error -> List Error
-checkField (Can.FieldUpdate _ expr) errors =
-    checkExpr expr errors
+checkField : Target -> Can.FieldUpdate -> List Error -> List Error
+checkField target (Can.FieldUpdate _ expr) errors =
+    checkExpr target expr errors
 
 
 
 -- CHECK IF BRANCH
 
 
-checkIfBranch : ( Can.Expr, Can.Expr ) -> List Error -> List Error
-checkIfBranch ( condition, branch ) errs =
-    checkExpr condition (checkExpr branch errs)
+checkIfBranch : Target -> ( Can.Expr, Can.Expr ) -> List Error -> List Error
+checkIfBranch target ( condition, branch ) errs =
+    checkExpr target condition (checkExpr target branch errs)
 
 
 
 -- CHECK CASE EXPRESSION
 
 
-checkCases : A.Region -> List Can.CaseBranch -> List Error -> List Error
-checkCases region branches errors =
+checkCases : Target -> A.Region -> List Can.CaseBranch -> List Error -> List Error
+checkCases target region branches errors =
     let
         ( patterns, newErrors ) =
-            List.foldr checkCaseBranch ( [], errors ) branches
+            List.foldr (checkCaseBranch target) ( [], errors ) branches
     in
-    checkPatterns region BadCase patterns newErrors
+    checkPatterns target region (BadCase target) patterns newErrors
 
 
-checkCaseBranch : Can.CaseBranch -> ( List Can.Pattern, List Error ) -> ( List Can.Pattern, List Error )
-checkCaseBranch (Can.CaseBranch pattern expr) ( patterns, errors ) =
+checkCaseBranch : Target -> Can.CaseBranch -> ( List Can.Pattern, List Error ) -> ( List Can.Pattern, List Error )
+checkCaseBranch target (Can.CaseBranch pattern expr) ( patterns, errors ) =
     ( pattern :: patterns
-    , checkExpr expr errors
+    , checkExpr target expr errors
     )
 
 
@@ -419,9 +420,9 @@ checkCaseBranch (Can.CaseBranch pattern expr) ( patterns, errors ) =
 -- CHECK PATTERNS
 
 
-checkPatterns : A.Region -> Context -> List Can.Pattern -> List Error -> List Error
-checkPatterns region context patterns errors =
-    case toNonRedundantRows region patterns of
+checkPatterns : Target -> A.Region -> Context -> List Can.Pattern -> List Error -> List Error
+checkPatterns target region context patterns errors =
+    case toNonRedundantRows target region patterns of
         Err err ->
             err :: errors
 
@@ -515,15 +516,15 @@ recoverCtor union name arity patterns =
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toNonRedundantRows : A.Region -> List Can.Pattern -> Result Error (List (List Pattern))
-toNonRedundantRows region patterns =
-    toSimplifiedUsefulRows region [] patterns
+toNonRedundantRows : Target -> A.Region -> List Can.Pattern -> Result Error (List (List Pattern))
+toNonRedundantRows target region patterns =
+    toSimplifiedUsefulRows target region [] patterns
 
 
 {-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
 -}
-toSimplifiedUsefulRows : A.Region -> List (List Pattern) -> List Can.Pattern -> Result Error (List (List Pattern))
-toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
+toSimplifiedUsefulRows : Target -> A.Region -> List (List Pattern) -> List Can.Pattern -> Result Error (List (List Pattern))
+toSimplifiedUsefulRows target overallRegion checkedRows uncheckedPatterns =
     case uncheckedPatterns of
         [] ->
             Ok checkedRows
@@ -532,10 +533,10 @@ toSimplifiedUsefulRows overallRegion checkedRows uncheckedPatterns =
             let
                 nextRow : List Pattern
                 nextRow =
-                    [ simplify pattern ]
+                    [ simplify target pattern ]
             in
             if isUseful checkedRows nextRow then
-                toSimplifiedUsefulRows overallRegion (nextRow :: checkedRows) rest
+                toSimplifiedUsefulRows target overallRegion (nextRow :: checkedRows) rest
 
             else
                 Err (Redundant overallRegion region (List.length checkedRows + 1))
@@ -769,17 +770,18 @@ errorDecoder =
 
 contextEncoder : Context -> BE.Encoder
 contextEncoder context =
-    BE.unsignedInt8
-        (case context of
-            BadArg ->
-                0
+    case context of
+        BadArg ->
+            BE.unsignedInt8 0
 
-            BadDestruct ->
-                1
+        BadDestruct ->
+            BE.unsignedInt8 1
 
-            BadCase ->
-                2
-        )
+        BadCase target ->
+            BE.sequence
+                [ BE.unsignedInt8 2
+                , Target.encoder target
+                ]
 
 
 contextDecoder : BD.Decoder Context
@@ -795,7 +797,7 @@ contextDecoder =
                         BD.succeed BadDestruct
 
                     2 ->
-                        BD.succeed BadCase
+                        BD.map BadCase Target.decoder
 
                     _ ->
                         BD.fail

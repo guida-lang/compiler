@@ -12,6 +12,7 @@ import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name exposing (Name)
+import Compiler.Generate.Target as Target
 import Compiler.Parse.Declaration as Decl
 import Compiler.Parse.Expression as Expr
 import Compiler.Parse.Module as M
@@ -1301,8 +1302,8 @@ parseExpressions source =
 
 parseModule : String -> Result () Module
 parseModule source =
-    -- TODO/FIXME SyntaxVersion
-    P.fromByteString (P.specialize (\_ -> Tuple.pair) (M.chompModule SV.Guida M.Application)) Tuple.pair source
+    -- TODO/FIXME Target + SyntaxVersion
+    P.fromByteString (P.specialize (\_ -> Tuple.pair) (M.chompModule Target.GuidaTarget SV.Guida M.Application)) Tuple.pair source
         |> Result.mapError (\_ -> ())
         |> Result.map formatModu
 
