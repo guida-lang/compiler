@@ -1,6 +1,5 @@
 module Compiler.Canonicalize.Environment.Foreign exposing (FResult, createInitialEnv)
 
-import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Canonicalize.Environment as Env
@@ -22,9 +21,9 @@ type alias FResult i w a =
     R.RResult i w Error.Error a
 
 
-createInitialEnv : Stuff.Root -> IO.Canonical -> Dict String ModuleName.Raw I.Interface -> List Src.Import -> FResult i w Env.Env
-createInitialEnv root home ifaces imports =
-    Utils.foldM (addImport ifaces) (emptyState (Stuff.rootToTarget root)) (toSafeImports root home imports)
+createInitialEnv : Target -> IO.Canonical -> Dict String ModuleName.Raw I.Interface -> List Src.Import -> FResult i w Env.Env
+createInitialEnv target home ifaces imports =
+    Utils.foldM (addImport ifaces) (emptyState target) (toSafeImports target home imports)
         |> R.fmap
             (\{ vars, types, ctors, binops, q_vars, q_types, q_ctors } ->
                 Env.Env home
@@ -77,18 +76,18 @@ emptyTypes target =
 -- TO SAFE IMPORTS
 
 
-toSafeImports : Stuff.Root -> IO.Canonical -> List Src.Import -> List Src.Import
-toSafeImports root (IO.Canonical package _) imports =
+toSafeImports : Target -> IO.Canonical -> List Src.Import -> List Src.Import
+toSafeImports target (IO.Canonical package _) imports =
     if Pkg.isKernel package then
-        List.filter (isNormal root) imports
+        List.filter (isNormal target) imports
 
     else
         imports
 
 
-isNormal : Stuff.Root -> Src.Import -> Bool
-isNormal root (Src.Import ( _, A.At _ name ) maybeAlias _) =
-    if Name.isKernel (Stuff.rootToTarget root) name then
+isNormal : Target -> Src.Import -> Bool
+isNormal target (Src.Import ( _, A.At _ name ) maybeAlias _) =
+    if Name.isKernel target name then
         case maybeAlias of
             Nothing ->
                 False

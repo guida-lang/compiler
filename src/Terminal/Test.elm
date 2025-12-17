@@ -20,7 +20,7 @@ import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
 import Compiler.Data.NonEmptyList as NE
-import Compiler.Generate.Target as Target
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
@@ -219,7 +219,7 @@ runHelp root testFileGlobs flags =
                                                                                                 ++ "\nvar Elm = (function(module) {\n"
                                                                                                 ++ addKernelTestChecking content
                                                                                                 ++ "\nreturn this.Elm;\n})({});\n"
-                                                                                                ++ after
+                                                                                                ++ after (Stuff.rootToTarget root)
                                                                                     in
                                                                                     interpret interpreter finalContent
                                                                                 )
@@ -348,10 +348,20 @@ if (typeof FormData === 'undefined') {
 """
 
 
-after : String
-after =
-    """// Run the Elm app.
-var app = Elm.Test.Generated.Main.init({ flags: Date.now() });
+after : Target -> String
+after target =
+    let
+        app =
+            case target of
+                Target.GuidaTarget ->
+                    """// Run the Guida app.
+var app = Guida.Test.Generated.Main.init({ flags: Date.now() });"""
+
+                Target.ElmTarget ->
+                    """// Run the Elm app.
+var app = Elm.Test.Generated.Main.init({ flags: Date.now() });"""
+    in
+    app ++ """
 
 var report = 'console';
 

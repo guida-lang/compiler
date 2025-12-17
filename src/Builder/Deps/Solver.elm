@@ -145,6 +145,7 @@ getTransitive constraints solution unvisited visited =
 
             else
                 let
+                    newDeps : Dict ( String, String ) Pkg.Name C.Constraint
                     newDeps =
                         case Utils.find (Tuple.mapSecond V.toComparable) info constraints of
                             GuidaConstraints _ deps ->

@@ -2893,8 +2893,7 @@ type Details
 
 type DetailsBadDep
     = BD_BadDownload Pkg.Name V.Version PackageProblem
-    | BD_BadGuidaBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
-    | BD_BadElmBuild Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
+    | BD_BadBuild Target Pkg.Name V.Version (Dict ( String, String ) Pkg.Name V.Version)
 
 
 toDetailsReport : Details -> Help.Report
@@ -3195,38 +3194,22 @@ toDetailsReport details =
                         BD_BadDownload pkg vsn packageProblem ->
                             toPackageProblemReport pkg vsn packageProblem
 
-                        BD_BadGuidaBuild pkg vsn fingerprint ->
+                        BD_BadBuild target pkg vsn fingerprint ->
                             Help.report "PROBLEM BUILDING DEPENDENCIES"
                                 Nothing
                                 "I ran into a compilation error when trying to build the following package:"
                                 [ D.indent 4 <| D.red <| D.fromChars <| Pkg.toChars pkg ++ " " ++ V.toChars vsn
-                                , D.reflow <|
-                                    "This probably means it has package constraints that are too wide. It may be possible to tweak your guida.json to avoid the root problem as a stopgap. Head over to https://guida-lang.org/community to get help figuring out how to take this path!"
-                                , D.toSimpleNote <|
-                                    "To help with the root problem, please report this to the package author along with the following information:"
+                                , D.reflow
+                                    ("This probably means it has package constraints that are too wide. It may be possible to tweak your "
+                                        ++ Target.toRootFilename target
+                                        ++ " to avoid the root problem as a stopgap. Head over to https://guida-lang.org/community to get help figuring out how to take this path!"
+                                    )
+                                , D.toSimpleNote "To help with the root problem, please report this to the package author along with the following information:"
                                 , D.indent 4 <|
                                     D.vcat <|
                                         List.map (\( p, v ) -> D.fromChars <| Pkg.toChars p ++ " " ++ V.toChars v) <|
                                             Dict.toList compare fingerprint
-                                , D.reflow <|
-                                    "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
-                                ]
-
-                        BD_BadElmBuild pkg vsn fingerprint ->
-                            Help.report "PROBLEM BUILDING DEPENDENCIES"
-                                Nothing
-                                "I ran into a compilation error when trying to build the following package:"
-                                [ D.indent 4 <| D.red <| D.fromChars <| Pkg.toChars pkg ++ " " ++ V.toChars vsn
-                                , D.reflow <|
-                                    "This probably means it has package constraints that are too wide. It may be possible to tweak your elm.json to avoid the root problem as a stopgap. Head over to https://guida-lang.org/community to get help figuring out how to take this path!"
-                                , D.toSimpleNote <|
-                                    "To help with the root problem, please report this to the package author along with the following information:"
-                                , D.indent 4 <|
-                                    D.vcat <|
-                                        List.map (\( p, v ) -> D.fromChars <| Pkg.toChars p ++ " " ++ V.toChars v) <|
-                                            Dict.toList compare fingerprint
-                                , D.reflow <|
-                                    "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
+                                , D.reflow "If you want to help out even more, try building the package locally. That should give you much more specific information about why this package is failing to build, which will in turn make it easier for the package author to fix it!"
                                 ]
 
         DetailsUnknownStdlibOnline registryDomain ->
@@ -3320,10 +3303,7 @@ toBadDepRank badDep =
         BD_BadDownload _ _ _ ->
             0
 
-        BD_BadGuidaBuild _ _ _ ->
-            1
-
-        BD_BadElmBuild _ _ _ ->
+        BD_BadBuild _ _ _ _ ->
             1
 
 
@@ -3804,7 +3784,7 @@ type BuildProblem
 
 type BuildProjectProblem
     = BP_PathUnknown FilePath
-    | BP_WithBadExtension FilePath
+    | BP_WithBadExtension Target FilePath
     | BP_WithAmbiguousSrcDir FilePath FilePath FilePath
     | BP_MainPathDuplicate FilePath FilePath
     | BP_RootNameDuplicate ModuleName.Raw FilePath FilePath
@@ -3837,12 +3817,20 @@ toProjectProblemReport projectProblem =
                     "If you are just getting started, try working through the examples in the official guide https://guide.elm-lang.org to get an idea of the kinds of things that typically go in a src/Main.elm file."
                 ]
 
-        BP_WithBadExtension path ->
+        BP_WithBadExtension Target.GuidaTarget path ->
+            Help.report "UNEXPECTED FILE EXTENSION"
+                Nothing
+                "I can only compile Guida and Elm files (with a .guida or .elm extension) but you want me to compile:"
+                [ D.indent 4 <| D.red <| D.fromChars path
+                , D.reflow "Is there a typo? Can the file extension be changed?"
+                ]
+
+        BP_WithBadExtension Target.ElmTarget path ->
             Help.report "UNEXPECTED FILE EXTENSION"
                 Nothing
                 "I can only compile Elm files (with a .elm extension) but you want me to compile:"
                 [ D.indent 4 <| D.red <| D.fromChars path
-                , D.reflow <| "Is there a typo? Can the file extension be changed?"
+                , D.reflow "Is there a typo? Can the file extension be changed?"
                 ]
 
         BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
@@ -3850,11 +3838,9 @@ toProjectProblemReport projectProblem =
                 Nothing
                 "I am getting confused when I try to compile this file:"
                 [ D.indent 4 <| D.red <| D.fromChars path
-                , D.reflow <|
-                    "I always check if files appear in any of the \"source-directories\" listed in your elm.json to see if there might be some cached information about them. That can help me compile faster! But in this case, it looks like this file may be in either of these directories:"
+                , D.reflow "I always check if files appear in any of the \"source-directories\" listed in your elm.json to see if there might be some cached information about them. That can help me compile faster! But in this case, it looks like this file may be in either of these directories:"
                 , D.indent 4 <| D.red <| D.vcat <| List.map D.fromChars [ srcDir1, srcDir2 ]
-                , D.reflow <|
-                    "Try to make it so no source directory contains another source directory!"
+                , D.reflow "Try to make it so no source directory contains another source directory!"
                 ]
 
         BP_MainPathDuplicate path1 path2 ->
@@ -3879,8 +3865,7 @@ toProjectProblemReport projectProblem =
                     "They both say `module "
                         ++ String.fromList (ModuleName.toChars name)
                         ++ " exposing (..)` up at the top, but they cannot have the same name!"
-                , D.reflow <|
-                    "Try changing to a different module name in one of them!"
+                , D.reflow "Try changing to a different module name in one of them!"
                 ]
 
         BP_RootNameInvalid givenPath srcDir _ ->
@@ -3893,10 +3878,8 @@ toProjectProblemReport projectProblem =
                         ++ Utils.fpAddTrailingPathSeparator srcDir
                         ++ " directory which is good, but I expect all of the files in there to use the following module naming convention:"
                 , toModuleNameConventionTable srcDir [ "Main", "HomePage", "Http.Helpers" ]
-                , D.reflow <|
-                    "Notice that the names always start with capital letters! Can you make your file use this naming convention?"
-                , D.toSimpleNote <|
-                    "Having a strict naming convention like this makes it a lot easier to find things in large projects. If you see a module imported, you know where to look for the corresponding file every time!"
+                , D.reflow "Notice that the names always start with capital letters! Can you make your file use this naming convention?"
+                , D.toSimpleNote "Having a strict naming convention like this makes it a lot easier to find things in large projects. If you see a module imported, you know where to look for the corresponding file every time!"
                 ]
 
         BP_CannotLoadDependencies ->
@@ -3914,28 +3897,26 @@ toProjectProblemReport projectProblem =
 
         BP_MissingExposed (NE.Nonempty ( name, problem ) _) ->
             case problem of
-                Import.GuidaNotFound ->
+                Import.NotFound target ->
+                    let
+                        rootFilename =
+                            Target.toRootFilename target
+                    in
                     Help.report "MISSING MODULE"
-                        (Just "guida.json")
-                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        (Just rootFilename)
+                        ("The \"exposed-modules\" of your " ++ rootFilename ++ " lists the following module:")
                         [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
+                        , D.reflow "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
                         ]
 
-                Import.ElmNotFound ->
-                    Help.report "MISSING MODULE"
-                        (Just "elm.json")
-                        "The  \"exposed-modules\" of your elm.json lists the following module:"
-                        [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
-                        ]
-
-                Import.GuidaAmbiguous _ _ pkg _ ->
+                Import.Ambiguous target _ _ pkg _ ->
+                    let
+                        rootFilename =
+                            Target.toRootFilename target
+                    in
                     Help.report "AMBIGUOUS MODULE NAME"
-                        (Just "guida.json")
-                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        (Just rootFilename)
+                        ("The \"exposed-modules\" of your " ++ rootFilename ++ " lists the following module:")
                         [ D.indent 4 <| D.red <| D.fromName name
                         , D.reflow <|
                             "But a module from "
@@ -3943,67 +3924,34 @@ toProjectProblemReport projectProblem =
                                 ++ " already uses that name. Try choosing a different name for your local file."
                         ]
 
-                Import.ElmAmbiguous _ _ pkg _ ->
+                Import.AmbiguousLocal target path1 path2 paths ->
+                    let
+                        rootFilename =
+                            Target.toRootFilename target
+                    in
                     Help.report "AMBIGUOUS MODULE NAME"
-                        (Just "elm.json")
-                        "The  \"exposed-modules\" of your elm.json lists the following module:"
+                        (Just rootFilename)
+                        ("The \"exposed-modules\" of your " ++ rootFilename ++ " lists the following module:")
                         [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But a module from "
-                                ++ Pkg.toChars pkg
-                                ++ " already uses that name. Try choosing a different name for your local file."
-                        ]
-
-                Import.GuidaAmbiguousLocal path1 path2 paths ->
-                    Help.report "AMBIGUOUS MODULE NAME"
-                        (Just "guida.json")
-                        "The  \"exposed-modules\" of your guida.json lists the following module:"
-                        [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I found multiple files with that name:"
+                        , D.reflow "But I found multiple files with that name:"
                         , D.dullyellow <|
                             D.indent 4 <|
                                 D.vcat <|
                                     List.map D.fromChars (path1 :: path2 :: paths)
-                        , D.reflow <|
-                            "Change the module names to be distinct!"
+                        , D.reflow "Change the module names to be distinct!"
                         ]
 
-                Import.ElmAmbiguousLocal path1 path2 paths ->
-                    Help.report "AMBIGUOUS MODULE NAME"
-                        (Just "elm.json")
-                        "The  \"exposed-modules\" of your elm.json lists the following module:"
-                        [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I found multiple files with that name:"
-                        , D.dullyellow <|
-                            D.indent 4 <|
-                                D.vcat <|
-                                    List.map D.fromChars (path1 :: path2 :: paths)
-                        , D.reflow <|
-                            "Change the module names to be distinct!"
-                        ]
-
-                Import.GuidaAmbiguousForeign _ _ _ ->
+                Import.AmbiguousForeign target _ _ _ ->
+                    let
+                        rootFilename =
+                            Target.toRootFilename target
+                    in
                     Help.report "MISSING MODULE"
-                        (Just "guida.json")
-                        "The  \"exposed-modules\" of your guida.json lists the following module:"
+                        (Just rootFilename)
+                        ("The \"exposed-modules\" of your " ++ rootFilename ++ " lists the following module:")
                         [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
-                        , D.toSimpleNote <|
-                            "It is not possible to \"re-export\" modules from other packages. You can only expose modules that you define in your own code."
-                        ]
-
-                Import.ElmAmbiguousForeign _ _ _ ->
-                    Help.report "MISSING MODULE"
-                        (Just "elm.json")
-                        "The  \"exposed-modules\" of your elm.json lists the following module:"
-                        [ D.indent 4 <| D.red <| D.fromName name
-                        , D.reflow <|
-                            "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
-                        , D.toSimpleNote <|
-                            "It is not possible to \"re-export\" modules from other packages. You can only expose modules that you define in your own code."
+                        , D.reflow "But I cannot find it in your src/ directory. Is there a typo? Was it renamed?"
+                        , D.toSimpleNote "It is not possible to \"re-export\" modules from other packages. You can only expose modules that you define in your own code."
                         ]
 
 
@@ -4306,17 +4254,10 @@ detailsBadDepEncoder detailsBadDep =
                 , packageProblemEncoder packageProblem
                 ]
 
-        BD_BadGuidaBuild pkg vsn fingerprint ->
+        BD_BadBuild target pkg vsn fingerprint ->
             BE.sequence
                 [ BE.unsignedInt8 1
-                , Pkg.nameEncoder pkg
-                , V.versionEncoder vsn
-                , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
-                ]
-
-        BD_BadElmBuild pkg vsn fingerprint ->
-            BE.sequence
-                [ BE.unsignedInt8 2
+                , Target.encoder target
                 , Pkg.nameEncoder pkg
                 , V.versionEncoder vsn
                 , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
@@ -4336,13 +4277,8 @@ detailsBadDepDecoder =
                             packageProblemDecoder
 
                     1 ->
-                        BD.map3 BD_BadGuidaBuild
-                            Pkg.nameDecoder
-                            V.versionDecoder
-                            (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
-
-                    2 ->
-                        BD.map3 BD_BadElmBuild
+                        BD.map4 BD_BadBuild
+                            Target.decoder
                             Pkg.nameDecoder
                             V.versionDecoder
                             (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
@@ -4399,9 +4335,10 @@ buildProjectProblemEncoder buildProjectProblem =
                 , BE.string path
                 ]
 
-        BP_WithBadExtension path ->
+        BP_WithBadExtension target path ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , Target.encoder target
                 , BE.string path
                 ]
 
@@ -4464,7 +4401,9 @@ buildProjectProblemDecoder =
                         BD.map BP_PathUnknown BD.string
 
                     1 ->
-                        BD.map BP_WithBadExtension BD.string
+                        BD.map2 BP_WithBadExtension
+                            Target.decoder
+                            BD.string
 
                     2 ->
                         BD.map3 BP_WithAmbiguousSrcDir

@@ -12,7 +12,6 @@ import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
-import Compiler.Generate.Target as Target
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V

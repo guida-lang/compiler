@@ -8,6 +8,7 @@ module Compiler.Reporting.Error.Import exposing
     , toReport
     )
 
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Reporting.Annotation as A
@@ -30,14 +31,10 @@ type Error
 
 
 type Problem
-    = GuidaNotFound
-    | ElmNotFound
-    | GuidaAmbiguous String (List String) Pkg.Name (List Pkg.Name)
-    | ElmAmbiguous String (List String) Pkg.Name (List Pkg.Name)
-    | GuidaAmbiguousLocal String String (List String)
-    | ElmAmbiguousLocal String String (List String)
-    | GuidaAmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
-    | ElmAmbiguousForeign Pkg.Name Pkg.Name (List Pkg.Name)
+    = NotFound Target
+    | Ambiguous Target String (List String) Pkg.Name (List Pkg.Name)
+    | AmbiguousLocal Target String String (List String)
+    | AmbiguousForeign Target Pkg.Name Pkg.Name (List Pkg.Name)
 
 
 
@@ -47,7 +44,7 @@ type Problem
 toReport : Code.Source -> Error -> Report.Report
 toReport source ((Error region name unimportedModules problem) as error) =
     case problem of
-        GuidaNotFound ->
+        NotFound Target.GuidaTarget ->
             Report.Report "MODULE NOT FOUND" region [] <|
                 Code.toSnippet source
                     region
@@ -88,7 +85,7 @@ toReport source ((Error region name unimportedModules problem) as error) =
                         ]
                     )
 
-        ElmNotFound ->
+        NotFound Target.ElmTarget ->
             Report.Report "MODULE NOT FOUND" region [] <|
                 Code.toSnippet source
                     region
@@ -129,22 +126,13 @@ toReport source ((Error region name unimportedModules problem) as error) =
                         ]
                     )
 
-        GuidaAmbiguous path _ pkg _ ->
+        Ambiguous _ path _ pkg _ ->
             ambiguousToReport source error path pkg
 
-        ElmAmbiguous path _ pkg _ ->
-            ambiguousToReport source error path pkg
-
-        GuidaAmbiguousLocal path1 path2 paths ->
+        AmbiguousLocal _ path1 path2 paths ->
             ambiguousLocalToReport source error path1 path2 paths
 
-        ElmAmbiguousLocal path1 path2 paths ->
-            ambiguousLocalToReport source error path1 path2 paths
-
-        GuidaAmbiguousForeign pkg1 pkg2 pkgs ->
-            ambiguousForeignToReport source error pkg1 pkg2 pkgs
-
-        ElmAmbiguousForeign pkg1 pkg2 pkgs ->
+        AmbiguousForeign _ pkg1 pkg2 pkgs ->
             ambiguousForeignToReport source error pkg1 pkg2 pkgs
 
 
@@ -253,57 +241,35 @@ toSuggestions name unimportedModules =
 problemEncoder : Problem -> BE.Encoder
 problemEncoder problem =
     case problem of
-        GuidaNotFound ->
-            BE.unsignedInt8 0
+        NotFound target ->
+            BE.sequence
+                [ BE.unsignedInt8 0
+                , Target.encoder target
+                ]
 
-        ElmNotFound ->
-            BE.unsignedInt8 1
+        Ambiguous target path paths pkg pkgs ->
+            BE.sequence
+                [ BE.unsignedInt8 1
+                , Target.encoder target
+                , BE.string path
+                , BE.list BE.string paths
+                , Pkg.nameEncoder pkg
+                , BE.list Pkg.nameEncoder pkgs
+                ]
 
-        GuidaAmbiguous path paths pkg pkgs ->
+        AmbiguousLocal target path1 path2 paths ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , BE.string path
+                , Target.encoder target
+                , BE.string path1
+                , BE.string path2
                 , BE.list BE.string paths
-                , Pkg.nameEncoder pkg
-                , BE.list Pkg.nameEncoder pkgs
                 ]
 
-        ElmAmbiguous path paths pkg pkgs ->
+        AmbiguousForeign target pkg1 pkg2 pkgs ->
             BE.sequence
                 [ BE.unsignedInt8 3
-                , BE.string path
-                , BE.list BE.string paths
-                , Pkg.nameEncoder pkg
-                , BE.list Pkg.nameEncoder pkgs
-                ]
-
-        GuidaAmbiguousLocal path1 path2 paths ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , BE.string path1
-                , BE.string path2
-                , BE.list BE.string paths
-                ]
-
-        ElmAmbiguousLocal path1 path2 paths ->
-            BE.sequence
-                [ BE.unsignedInt8 5
-                , BE.string path1
-                , BE.string path2
-                , BE.list BE.string paths
-                ]
-
-        GuidaAmbiguousForeign pkg1 pkg2 pkgs ->
-            BE.sequence
-                [ BE.unsignedInt8 6
-                , Pkg.nameEncoder pkg1
-                , Pkg.nameEncoder pkg2
-                , BE.list Pkg.nameEncoder pkgs
-                ]
-
-        ElmAmbiguousForeign pkg1 pkg2 pkgs ->
-            BE.sequence
-                [ BE.unsignedInt8 7
+                , Target.encoder target
                 , Pkg.nameEncoder pkg1
                 , Pkg.nameEncoder pkg2
                 , BE.list Pkg.nameEncoder pkgs
@@ -317,45 +283,26 @@ problemDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.succeed GuidaNotFound
+                        BD.map NotFound Target.decoder
 
                     1 ->
-                        BD.succeed ElmNotFound
+                        BD.map5 Ambiguous
+                            Target.decoder
+                            BD.string
+                            (BD.list BD.string)
+                            Pkg.nameDecoder
+                            (BD.list Pkg.nameDecoder)
 
                     2 ->
-                        BD.map4 GuidaAmbiguous
+                        BD.map4 AmbiguousLocal
+                            Target.decoder
+                            BD.string
                             BD.string
                             (BD.list BD.string)
-                            Pkg.nameDecoder
-                            (BD.list Pkg.nameDecoder)
 
                     3 ->
-                        BD.map4 ElmAmbiguous
-                            BD.string
-                            (BD.list BD.string)
-                            Pkg.nameDecoder
-                            (BD.list Pkg.nameDecoder)
-
-                    4 ->
-                        BD.map3 GuidaAmbiguousLocal
-                            BD.string
-                            BD.string
-                            (BD.list BD.string)
-
-                    5 ->
-                        BD.map3 ElmAmbiguousLocal
-                            BD.string
-                            BD.string
-                            (BD.list BD.string)
-
-                    6 ->
-                        BD.map3 GuidaAmbiguousForeign
-                            Pkg.nameDecoder
-                            Pkg.nameDecoder
-                            (BD.list Pkg.nameDecoder)
-
-                    7 ->
-                        BD.map3 ElmAmbiguousForeign
+                        BD.map4 AmbiguousForeign
+                            Target.decoder
                             Pkg.nameDecoder
                             Pkg.nameDecoder
                             (BD.list Pkg.nameDecoder)

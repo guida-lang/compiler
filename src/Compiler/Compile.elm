@@ -34,19 +34,19 @@ type Artifacts
     = Artifacts Can.Module (Dict String Name Can.Annotation) Opt.LocalGraph
 
 
-compile : Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
-compile root pkg ifaces modul =
-    Task.pure (canonicalize root pkg ifaces modul)
+compile : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
+compile target root pkg ifaces modul =
+    Task.pure (canonicalize target root pkg ifaces modul)
         |> Task.fmap
             (\canonicalResult ->
                 case canonicalResult of
                     Ok canonical ->
                         Result.map2 (\annotations () -> annotations)
-                            (typeCheck (Stuff.rootToTarget root) modul canonical)
-                            (nitpick (Stuff.rootToTarget root) canonical)
+                            (typeCheck target modul canonical)
+                            (nitpick target canonical)
                             |> Result.andThen
                                 (\annotations ->
-                                    optimize (Stuff.rootToTarget root) modul annotations canonical
+                                    optimize target modul annotations canonical
                                         |> Result.map (\objects -> Artifacts canonical annotations objects)
                                 )
 
@@ -59,9 +59,9 @@ compile root pkg ifaces modul =
 -- PHASES
 
 
-canonicalize : Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Result E.Error Can.Module
-canonicalize root pkg ifaces modul =
-    case Tuple.second (R.run (Canonicalize.canonicalize root pkg ifaces modul)) of
+canonicalize : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Result E.Error Can.Module
+canonicalize target root pkg ifaces modul =
+    case Tuple.second (R.run (Canonicalize.canonicalize target root pkg ifaces modul)) of
         Ok canonical ->
             Ok canonical
 

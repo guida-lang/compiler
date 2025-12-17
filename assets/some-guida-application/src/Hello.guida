@@ -1,0 +1,10 @@
+module Hello exposing (main)
+
+import Html
+import Html.Attributes as Attr
+
+
+main =
+    Html.span [ Attr.attribute "data-testid" "hello" ]
+        [ Html.text "Hello!"
+        ]

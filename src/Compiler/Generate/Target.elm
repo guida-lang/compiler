@@ -1,4 +1,4 @@
-module Compiler.Generate.Target exposing (Target(..), decoder, encoder)
+module Compiler.Generate.Target exposing (Target(..), decoder, encoder, toRootFilename)
 
 {-| Represents which output format the compiler should generate.
 
@@ -17,6 +17,16 @@ import Utils.Bytes.Encode as BE
 type Target
     = GuidaTarget
     | ElmTarget
+
+
+toRootFilename : Target -> String
+toRootFilename target =
+    case target of
+        GuidaTarget ->
+            "guida.json"
+
+        ElmTarget ->
+            "elm.json"
 
 
 encoder : Target -> BE.Encoder

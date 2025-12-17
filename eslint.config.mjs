@@ -15,6 +15,7 @@ export default defineConfig([
   ]),
   { files: ["**/*.{js,mjs,cjs}"] },
   { files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
+  { files: ["playwright.config.js", "e2e/**/*.{js,mjs,cjs}"], languageOptions: { sourceType: "module", globals: globals.node } },
   { files: ["bin/**/*.{js,mjs,cjs}"], languageOptions: { globals: globals.node } },
   { files: ["lib/index.js"], languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   { files: ["try/**/*.{js,mjs,cjs}"], languageOptions: { globals: { ...globals.browser, ...globals.node } } },

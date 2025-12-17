@@ -1,0 +1,10 @@
+module Example exposing (..)
+
+import Expect exposing (Expectation)
+import Fuzz exposing (Fuzzer, int, list, string)
+import Test exposing (..)
+
+
+suite : Test
+suite =
+    todo "Implement our first test. See https://guida-lang.org/docs/1.0.0/commands/test for how to do this!"

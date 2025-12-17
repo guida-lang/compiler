@@ -287,7 +287,7 @@ tuple target =
 
 platform : Target -> Canonical
 platform target =
-    case Debug.log "platform.target" target of
+    case target of
         GuidaTarget ->
             Canonical Pkg.stdlib Name.platform
 

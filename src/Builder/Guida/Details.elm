@@ -200,30 +200,25 @@ generate style scope root time =
                                 Task.pure (Err exit)
 
                             Ok ( env, outline ) ->
-                                -- convertToGuidaOutline env outline
-                                --     |> Task.bind
-                                --         (\convertedOutline ->
-                                --             case convertedOutline of
-                                --                 Outline.Pkg pkg ->
-                                --                     verifyPkg env time pkg
-                                --                 Outline.App app ->
-                                --                     verifyApp env time app
-                                --         )
-                                --     |> Task.run
-                                case outline of
-                                    Outline.Pkg pkg ->
-                                        Task.run (verifyPkg env time pkg)
+                                convertToGuidaOutline env outline
+                                    |> Task.bind
+                                        (\convertedOutline ->
+                                            case convertedOutline of
+                                                Outline.Pkg pkg ->
+                                                    verifyPkg env time pkg
 
-                                    Outline.App app ->
-                                        Task.run (verifyApp env time app)
+                                                Outline.App app ->
+                                                    verifyApp env time app
+                                        )
+                                    |> Task.run
                     )
         )
 
 
 convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outline
-convertToGuidaOutline (Env _ _ _ cache _ connection registry) outline =
-    case outline of
-        Outline.Pkg (Outline.ElmPkgOutline name summary license version exposed deps test elmVersion) ->
+convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
+    case ( root, outline ) of
+        ( Stuff.GuidaRoot _, Outline.Pkg (Outline.ElmPkgOutline name summary license version exposed deps test elmVersion) ) ->
             case Registry.getVersions_ Pkg.stdlib registry of
                 Err _ ->
                     Task.io Website.domain
@@ -282,36 +277,6 @@ convertToGuidaOutline (Env _ _ _ cache _ connection registry) outline =
                                     Solver.SolverErr exit ->
                                         Task.throw (Exit.DetailsSolverProblem exit)
                             )
-
-        Outline.App (Outline.ElmAppOutline elmVersion sourceDirs direct indirect testDirect testIndirect) ->
-            case Registry.getVersions_ Pkg.stdlib registry of
-                Err _ ->
-                    Task.io Website.domain
-                        |> Task.bind
-                            (\registryDomain ->
-                                case connection of
-                                    Solver.Online _ ->
-                                        Task.throw (Exit.DetailsUnknownStdlibOnline registryDomain)
-
-                                    Solver.Offline ->
-                                        Task.throw (Exit.DetailsUnknownStdlibOffline registryDomain)
-                            )
-
-                Ok (Registry.KnownVersions v _) ->
-                    let
-                        filter =
-                            Dict.filter (\( author, _ ) _ -> author /= Pkg.elm && author /= Pkg.elmExplorations)
-                    in
-                    Task.pure
-                        (Outline.App
-                            (Outline.ElmAppOutline elmVersion
-                                sourceDirs
-                                (Dict.insert identity Pkg.stdlib v (filter direct))
-                                (filter indirect)
-                                (filter testDirect)
-                                (filter testIndirect)
-                            )
-                        )
 
         _ ->
             Task.pure outline
@@ -680,7 +645,7 @@ type alias Dep =
 
 
 verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> Task Never Dep
-verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
+verifyDep (Env key _ root cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
         fingerprint : Dict ( String, String ) Pkg.Name V.Version
         fingerprint =
@@ -698,14 +663,14 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
                                         (\maybeCache ->
                                             case maybeCache of
                                                 Nothing ->
-                                                    build key cache depsMVar pkg details fingerprint EverySet.empty
+                                                    build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint EverySet.empty
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
                                                     if EverySet.member toComparableFingerprint fingerprint fingerprints then
                                                         Task.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
 
                                                     else
-                                                        build key cache depsMVar pkg details fingerprint fingerprints
+                                                        build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint fingerprints
                                         )
                             )
 
@@ -723,7 +688,7 @@ verifyDep (Env key _ _ cache manager _ _) depsMVar solution pkg ((Solver.Details
 
                                                 Ok () ->
                                                     Reporting.report key (Reporting.DReceived pkg vsn)
-                                                        |> Task.bind (\_ -> build key cache depsMVar pkg details fingerprint EverySet.empty)
+                                                        |> Task.bind (\_ -> build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint EverySet.empty)
                                         )
                             )
             )
@@ -751,8 +716,8 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
-build : Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
-build key cache depsMVar pkg (Solver.Details vsn _) f fs =
+build : Target -> Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
+build target key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Stuff.findRootIn (Stuff.package cache pkg vsn)
         -- TODO/FIXME remove the need to default to GuidaRoot
         |> Task.fmap (Maybe.withDefault (Stuff.GuidaRoot (Stuff.package cache pkg vsn)))
@@ -795,7 +760,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                 Utils.newEmptyMVar
                                                                                     |> Task.bind
                                                                                         (\mvar ->
-                                                                                            Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule root foreignDeps mvar pkg src docsStatus) exposedDict
+                                                                                            Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule target root foreignDeps mvar pkg src docsStatus) exposedDict
                                                                                                 |> Task.bind
                                                                                                     (\mvars ->
                                                                                                         Utils.putMVar statusDictEncoder mvar mvars
@@ -805,24 +770,14 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                 (\maybeStatuses ->
                                                                                                                     case Utils.sequenceDictMaybe identity compare maybeStatuses of
                                                                                                                         Nothing ->
-                                                                                                                            let
-                                                                                                                                detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
-                                                                                                                                detailsBadDep =
-                                                                                                                                    case root of
-                                                                                                                                        Stuff.GuidaRoot _ ->
-                                                                                                                                            Exit.BD_BadGuidaBuild
-
-                                                                                                                                        Stuff.ElmRoot _ _ ->
-                                                                                                                                            Debug.log "1" Exit.BD_BadElmBuild
-                                                                                                                            in
                                                                                                                             Reporting.report key Reporting.DBroken
-                                                                                                                                |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
+                                                                                                                                |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild target pkg vsn f)))
 
                                                                                                                         Just statuses ->
                                                                                                                             Utils.newEmptyMVar
                                                                                                                                 |> Task.bind
                                                                                                                                     (\rmvar ->
-                                                                                                                                        Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile root pkg rmvar) statuses
+                                                                                                                                        Utils.mapTraverse identity compare (fork (BE.maybe dResultEncoder) << compile target root pkg rmvar) statuses
                                                                                                                                             |> Task.bind
                                                                                                                                                 (\rmvars ->
                                                                                                                                                     Utils.putMVar dictRawMVarMaybeDResultEncoder rmvar rmvars
@@ -831,18 +786,8 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                                                                                                                                             (\maybeResults ->
                                                                                                                                                                 case Utils.sequenceDictMaybe identity compare maybeResults of
                                                                                                                                                                     Nothing ->
-                                                                                                                                                                        let
-                                                                                                                                                                            detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
-                                                                                                                                                                            detailsBadDep =
-                                                                                                                                                                                case root of
-                                                                                                                                                                                    Stuff.GuidaRoot _ ->
-                                                                                                                                                                                        Exit.BD_BadGuidaBuild
-
-                                                                                                                                                                                    Stuff.ElmRoot _ _ ->
-                                                                                                                                                                                        Debug.log "2" Exit.BD_BadElmBuild
-                                                                                                                                                                        in
                                                                                                                                                                         Reporting.report key Reporting.DBroken
-                                                                                                                                                                            |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
+                                                                                                                                                                            |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild target pkg vsn f)))
 
                                                                                                                                                                     Just results ->
                                                                                                                                                                         let
@@ -856,7 +801,7 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 
                                                                                                                                                                             objects : Opt.GlobalGraph
                                                                                                                                                                             objects =
-                                                                                                                                                                                gatherObjects root results
+                                                                                                                                                                                gatherObjects target results
 
                                                                                                                                                                             artifacts : Artifacts
                                                                                                                                                                             artifacts =
@@ -882,26 +827,16 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
                             in
                             case eitherOutline of
                                 Err _ ->
-                                    let
-                                        detailsBadDep : Pkg.Name -> V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Exit.DetailsBadDep
-                                        detailsBadDep =
-                                            case root of
-                                                Stuff.GuidaRoot _ ->
-                                                    Exit.BD_BadGuidaBuild
-
-                                                Stuff.ElmRoot _ _ ->
-                                                    Debug.log "3" Exit.BD_BadElmBuild
-                                    in
                                     Reporting.report key Reporting.DBroken
-                                        |> Task.fmap (\_ -> Err (Just (detailsBadDep pkg vsn f)))
+                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild target pkg vsn f)))
 
                                 Ok (Outline.App (Outline.GuidaAppOutline _ _ _ _ _ _)) ->
                                     Reporting.report key Reporting.DBroken
-                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadGuidaBuild pkg vsn f)))
+                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild target pkg vsn f)))
 
                                 Ok (Outline.App (Outline.ElmAppOutline _ _ _ _ _ _)) ->
                                     Reporting.report key Reporting.DBroken
-                                        |> Task.fmap (\_ -> Err (Just (Debug.log "4" (Exit.BD_BadElmBuild pkg vsn f))))
+                                        |> Task.fmap (\_ -> Err (Just (Exit.BD_BadBuild target pkg vsn f)))
 
                                 Ok (Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ exposed deps _ _)) ->
                                     pkgBuild exposed deps
@@ -916,13 +851,13 @@ build key cache depsMVar pkg (Solver.Details vsn _) f fs =
 -- GATHER
 
 
-gatherObjects : Stuff.Root -> Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
-gatherObjects root results =
-    Dict.foldr compare (addLocalGraph root) Opt.empty results
+gatherObjects : Target -> Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
+gatherObjects target results =
+    Dict.foldr compare (addLocalGraph target) Opt.empty results
 
 
-addLocalGraph : Stuff.Root -> ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
-addLocalGraph root name status graph =
+addLocalGraph : Target -> ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
+addLocalGraph target name status graph =
     case status of
         RLocal _ objs _ ->
             Opt.addLocalGraph objs graph
@@ -931,7 +866,7 @@ addLocalGraph root name status graph =
             graph
 
         RKernelLocal cs ->
-            Opt.addKernel (Name.getKernel (Stuff.rootToTarget root) name) cs graph
+            Opt.addKernel (Name.getKernel target name) cs graph
 
         RKernelForeign ->
             graph
@@ -1028,8 +963,8 @@ type Status
     | SKernelForeign
 
 
-crawlModule : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
-crawlModule root foreignDeps mvar pkg src docsStatus name =
+crawlModule : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
+crawlModule target root foreignDeps mvar pkg src docsStatus name =
     let
         path : String -> FilePath
         path extension =
@@ -1062,13 +997,13 @@ crawlModule root foreignDeps mvar pkg src docsStatus name =
 
                                 Nothing ->
                                     if guidaExists then
-                                        crawlFile root SV.Guida foreignDeps mvar pkg src docsStatus name guidaPath
+                                        crawlFile target root SV.Guida foreignDeps mvar pkg src docsStatus name guidaPath
 
                                     else if elmExists then
-                                        crawlFile root SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
+                                        crawlFile target root SV.Elm foreignDeps mvar pkg src docsStatus name elmPath
 
-                                    else if Pkg.isKernel pkg && Name.isKernel (Stuff.rootToTarget root) name then
-                                        crawlKernel root foreignDeps mvar pkg src name
+                                    else if Pkg.isKernel pkg && Name.isKernel target name then
+                                        crawlKernel target root foreignDeps mvar pkg src name
 
                                     else
                                         Task.pure Nothing
@@ -1076,15 +1011,15 @@ crawlModule root foreignDeps mvar pkg src docsStatus name =
             )
 
 
-crawlFile : Stuff.Root -> SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
-crawlFile root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
+crawlFile : Target -> Stuff.Root -> SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
+crawlFile target root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
         |> Task.bind
             (\bytes ->
-                case Parse.fromByteString (Stuff.rootToTarget root) syntaxVersion (Parse.Package pkg) bytes of
+                case Parse.fromByteString target syntaxVersion (Parse.Package pkg) bytes of
                     Ok ((Src.Module _ (Just (A.At _ actualName)) _ _ imports _ _ _ _ _) as modul) ->
                         if expectedName == actualName then
-                            crawlImports root foreignDeps mvar pkg src imports
+                            crawlImports target root foreignDeps mvar pkg src imports
                                 |> Task.fmap (\deps -> Just (SLocal docsStatus deps modul))
 
                         else
@@ -1095,8 +1030,8 @@ crawlFile root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName pa
             )
 
 
-crawlImports : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
-crawlImports root foreignDeps mvar pkg src imports =
+crawlImports : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
+crawlImports target root foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
         |> Task.bind
             (\statusDict ->
@@ -1109,7 +1044,7 @@ crawlImports root foreignDeps mvar pkg src imports =
                     news =
                         Dict.diff deps statusDict
                 in
-                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule root foreignDeps mvar pkg src DocsNotNeeded) news
+                Utils.mapTraverseWithKey identity compare (always << fork (BE.maybe statusEncoder) << crawlModule target root foreignDeps mvar pkg src DocsNotNeeded) news
                     |> Task.bind
                         (\mvars ->
                             Utils.putMVar statusDictEncoder mvar (Dict.union mvars statusDict)
@@ -1119,8 +1054,8 @@ crawlImports root foreignDeps mvar pkg src imports =
             )
 
 
-crawlKernel : Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
-crawlKernel root foreignDeps mvar pkg src name =
+crawlKernel : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
+crawlKernel target root foreignDeps mvar pkg src name =
     let
         path : FilePath
         path =
@@ -1133,12 +1068,12 @@ crawlKernel root foreignDeps mvar pkg src name =
                     File.readUtf8 path
                         |> Task.bind
                             (\bytes ->
-                                case Kernel.fromByteString (Stuff.rootToTarget root) pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
+                                case Kernel.fromByteString target pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
                                     Nothing ->
                                         Task.pure Nothing
 
                                     Just (Kernel.Content imports chunks) ->
-                                        crawlImports root foreignDeps mvar pkg src (List.map Src.c1Value imports)
+                                        crawlImports target root foreignDeps mvar pkg src (List.map Src.c1Value imports)
                                             |> Task.fmap (\_ -> Just (SKernelLocal chunks))
                             )
 
@@ -1168,8 +1103,8 @@ type DResult
     | RKernelForeign
 
 
-compile : Stuff.Root -> Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
-compile root pkg mvar status =
+compile : Target -> Stuff.Root -> Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
+compile target root pkg mvar status =
     case status of
         SLocal docsStatus deps modul ->
             Utils.readMVar moduleNameRawMVarMaybeDResultDecoder mvar
@@ -1180,7 +1115,7 @@ compile root pkg mvar status =
                                 (\maybeResults ->
                                     case Utils.sequenceDictMaybe identity compare maybeResults of
                                         Just results ->
-                                            Compile.compile root pkg (Utils.mapMapMaybe identity compare getInterface results) modul
+                                            Compile.compile target root pkg (Utils.mapMapMaybe identity compare getInterface results) modul
                                                 |> Task.fmap
                                                     (\result ->
                                                         case result of
@@ -1195,7 +1130,7 @@ compile root pkg mvar status =
 
                                                                     docs : Maybe Docs.Module
                                                                     docs =
-                                                                        makeDocs (Stuff.rootToTarget root) docsStatus canonical
+                                                                        makeDocs target docsStatus canonical
                                                                 in
                                                                 Just (RLocal ifaces objects docs)
                                                     )

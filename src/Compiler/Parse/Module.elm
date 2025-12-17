@@ -62,7 +62,7 @@ isCore projectType =
 
 isStdlibCore : ProjectType -> Maybe Header -> Bool
 isStdlibCore projectType maybeHeader =
-    case Debug.log "isStdlibCore" ( projectType, maybeHeader ) of
+    case ( projectType, maybeHeader ) of
         ( Package pkg, Just header ) ->
             let
                 ( _, A.At _ name ) =

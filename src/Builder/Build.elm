@@ -391,17 +391,7 @@ crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as 
                     [ path ] ->
                         case Dict.get identity name foreigns of
                             Just (Details.Foreign dep deps) ->
-                                let
-                                    ambiguousProblem : String -> List String -> Pkg.Name -> List Pkg.Name -> Import.Problem
-                                    ambiguousProblem =
-                                        case root of
-                                            Stuff.GuidaRoot _ ->
-                                                Import.GuidaAmbiguous
-
-                                            Stuff.ElmRoot _ _ ->
-                                                Import.ElmAmbiguous
-                                in
-                                Task.pure <| SBadImport <| ambiguousProblem path [] dep deps
+                                Task.pure <| SBadImport <| Import.Ambiguous target path [] dep deps
 
                             Nothing ->
                                 File.getTime path
@@ -420,17 +410,7 @@ crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as 
                                         )
 
                     p1 :: p2 :: ps ->
-                        let
-                            ambiguousLocalProblem : FilePath -> FilePath -> List FilePath -> Import.Problem
-                            ambiguousLocalProblem =
-                                case root of
-                                    Stuff.GuidaRoot _ ->
-                                        Import.GuidaAmbiguousLocal
-
-                                    Stuff.ElmRoot _ _ ->
-                                        Import.ElmAmbiguousLocal
-                        in
-                        Task.pure <| SBadImport <| ambiguousLocalProblem (Utils.fpMakeRelative (Stuff.rootPath root) p1) (Utils.fpMakeRelative (Stuff.rootPath root) p2) (List.map (Utils.fpMakeRelative (Stuff.rootPath root)) ps)
+                        Task.pure <| SBadImport <| Import.AmbiguousLocal target (Utils.fpMakeRelative (Stuff.rootPath root) p1) (Utils.fpMakeRelative (Stuff.rootPath root) p2) (List.map (Utils.fpMakeRelative (Stuff.rootPath root)) ps)
 
                     [] ->
                         case Dict.get identity name foreigns of
@@ -440,17 +420,7 @@ crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as 
                                         Task.pure <| SForeign dep
 
                                     d :: ds ->
-                                        let
-                                            ambiguousForeignProblem : Pkg.Name -> Pkg.Name -> List Pkg.Name -> Import.Problem
-                                            ambiguousForeignProblem =
-                                                case root of
-                                                    Stuff.GuidaRoot _ ->
-                                                        Import.GuidaAmbiguousForeign
-
-                                                    Stuff.ElmRoot _ _ ->
-                                                        Import.ElmAmbiguousForeign
-                                        in
-                                        Task.pure <| SBadImport <| ambiguousForeignProblem dep d ds
+                                        Task.pure <| SBadImport <| Import.AmbiguousForeign target dep d ds
 
                             Nothing ->
                                 if Name.isKernel (Stuff.rootToTarget root) name && Parse.isKernel projectType then
@@ -461,26 +431,12 @@ crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as 
                                                     SKernel
 
                                                 else
-                                                    SBadImport
-                                                        (case root of
-                                                            Stuff.GuidaRoot _ ->
-                                                                Import.GuidaNotFound
-
-                                                            Stuff.ElmRoot _ _ ->
-                                                                Import.ElmNotFound
-                                                        )
+                                                    SBadImport (Import.NotFound target)
                                             )
 
                                 else
                                     Task.pure <|
-                                        SBadImport
-                                            (case root of
-                                                Stuff.GuidaRoot _ ->
-                                                    Import.GuidaNotFound
-
-                                                Stuff.ElmRoot _ _ ->
-                                                    Import.ElmNotFound
-                                            )
+                                        SBadImport (Import.NotFound target)
             )
 
 
@@ -1016,7 +972,7 @@ compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local 
         pkg =
             projectTypeToPkg projectType
     in
-    Compile.compile root pkg ifaces modul
+    Compile.compile target root pkg ifaces modul
         |> Task.bind
             (\result ->
                 case result of
@@ -1412,7 +1368,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
 
         compileInput : Dict String ModuleName.Raw I.Interface -> Task Never (Result Exit.Repl ReplArtifacts)
         compileInput ifaces =
-            Compile.compile root pkg ifaces modul
+            Compile.compile (Stuff.rootToTarget root) root pkg ifaces modul
                 |> Task.fmap
                     (\result ->
                         case result of
@@ -1538,15 +1494,24 @@ getRootInfo env path =
 
 
 getRootInfoHelp : Env -> FilePath -> FilePath -> Task Never (Result Exit.BuildProjectProblem RootInfo)
-getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
+getRootInfoHelp (Env _ root _ srcDirs _ _ _) path absolutePath =
     let
         ( dirs, file ) =
             Utils.fpSplitFileName absolutePath
 
         ( final, ext ) =
             Utils.fpSplitExtension file
+
+        validExts : List String
+        validExts =
+            case root of
+                Stuff.GuidaRoot _ ->
+                    [ ".guida", ".elm" ]
+
+                Stuff.ElmRoot _ _ ->
+                    [ ".elm" ]
     in
-    if List.member ext [ ".guida", ".elm" ] then
+    if List.member ext validExts then
         let
             absoluteSegments : List String
             absoluteSegments =
@@ -1589,7 +1554,7 @@ getRootInfoHelp (Env _ _ _ srcDirs _ _ _) path absolutePath =
                 Task.pure <| Err <| Exit.BP_WithAmbiguousSrcDir path s1 s2
 
     else
-        Task.pure <| Err <| Exit.BP_WithBadExtension path
+        Task.pure <| Err <| Exit.BP_WithBadExtension (Stuff.rootToTarget root) path
 
 
 isInsideSrcDirByName : List String -> String -> AbsoluteSrcDir -> Task Never Bool
@@ -1762,7 +1727,7 @@ compileOutside (Env key root projectType _ _ _ _) (Details.Local path time _ _ _
         name =
             Src.getName modul
     in
-    Compile.compile root pkg ifaces modul
+    Compile.compile (Stuff.rootToTarget root) root pkg ifaces modul
         |> Task.bind
             (\result ->
                 case result of

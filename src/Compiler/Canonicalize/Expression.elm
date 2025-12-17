@@ -57,8 +57,8 @@ type Uses
 -- CANONICALIZE
 
 
-canonicalize : Stuff.Root -> SyntaxVersion -> Env.Env -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
-canonicalize root syntaxVersion env (A.At region expression) =
+canonicalize : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalize target root syntaxVersion env (A.At region expression) =
     R.fmap (A.At region) <|
         case expression of
             Src.Str string _ ->
@@ -76,45 +76,45 @@ canonicalize root syntaxVersion env (A.At region expression) =
             Src.Var varType name ->
                 case varType of
                     Src.LowVar ->
-                        findVar (Stuff.rootToTarget root) region env name
+                        findVar target region env name
 
                     Src.CapVar ->
-                        R.fmap (toVarCtor name) (Env.findCtor (Stuff.rootToTarget root) region env name)
+                        R.fmap (toVarCtor name) (Env.findCtor target region env name)
 
             Src.VarQual varType prefix name ->
                 case varType of
                     Src.LowVar ->
-                        findVarQual (Stuff.rootToTarget root) region env prefix name
+                        findVarQual target region env prefix name
 
                     Src.CapVar ->
-                        R.fmap (toVarCtor name) (Env.findCtorQual (Stuff.rootToTarget root) region env prefix name)
+                        R.fmap (toVarCtor name) (Env.findCtorQual target region env prefix name)
 
             Src.List exprs _ ->
-                R.fmap Can.List (R.traverse (canonicalize root syntaxVersion env) (List.map Tuple.second exprs))
+                R.fmap Can.List (R.traverse (canonicalize target root syntaxVersion env) (List.map Tuple.second exprs))
 
             Src.Op op ->
-                Env.findBinop (Stuff.rootToTarget root) region env op
+                Env.findBinop target region env op
                     |> R.fmap
                         (\(Env.Binop _ home name annotation _ _) ->
                             Can.VarOperator op home name annotation
                         )
 
             Src.Negate expr ->
-                R.fmap Can.Negate (canonicalize root syntaxVersion env expr)
+                R.fmap Can.Negate (canonicalize target root syntaxVersion env expr)
 
             Src.Binops ops final ->
-                R.fmap A.toValue (canonicalizeBinops root syntaxVersion region env (List.map (Tuple.mapSecond Src.c2Value) ops) final)
+                R.fmap A.toValue (canonicalizeBinops target root syntaxVersion region env (List.map (Tuple.mapSecond Src.c2Value) ops) final)
 
             Src.Lambda ( _, srcArgs ) ( _, body ) ->
                 delayedUsage <|
                     (Pattern.verify Error.DPLambdaArgs
-                        (R.traverse (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env) (List.map Src.c1Value srcArgs))
+                        (R.traverse (Pattern.canonicalize target syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, bindings ) ->
-                                Env.addLocals (Stuff.rootToTarget root) bindings env
+                                Env.addLocals target bindings env
                                     |> R.bind
                                         (\newEnv ->
-                                            verifyBindings W.Pattern bindings (canonicalize root syntaxVersion newEnv body)
+                                            verifyBindings W.Pattern bindings (canonicalize target root syntaxVersion newEnv body)
                                                 |> R.fmap
                                                     (\( cbody, freeLocals ) ->
                                                         ( Can.Lambda args cbody, freeLocals )
@@ -124,69 +124,69 @@ canonicalize root syntaxVersion env (A.At region expression) =
                     )
 
             Src.Call func args ->
-                R.fmap Can.Call (canonicalize root syntaxVersion env func)
-                    |> R.apply (R.traverse (canonicalize root syntaxVersion env) (List.map Src.c1Value args))
+                R.fmap Can.Call (canonicalize target root syntaxVersion env func)
+                    |> R.apply (R.traverse (canonicalize target root syntaxVersion env) (List.map Src.c1Value args))
 
             Src.If firstBranch branches finally ->
                 R.fmap Can.If
-                    (R.traverse (canonicalizeIfBranch root syntaxVersion env)
+                    (R.traverse (canonicalizeIfBranch target root syntaxVersion env)
                         (List.map (Src.c1Value >> Tuple.mapBoth Src.c2Value Src.c2Value) (firstBranch :: branches))
                     )
-                    |> R.apply (canonicalize root syntaxVersion env (Src.c1Value finally))
+                    |> R.apply (canonicalize target root syntaxVersion env (Src.c1Value finally))
 
             Src.Let defs _ expr ->
-                R.fmap A.toValue (canonicalizeLet root syntaxVersion region env (List.map Src.c2Value defs) expr)
+                R.fmap A.toValue (canonicalizeLet target root syntaxVersion region env (List.map Src.c2Value defs) expr)
 
             Src.Case expr branches ->
-                R.fmap Can.Case (canonicalize root syntaxVersion env (Src.c2Value expr))
-                    |> R.apply (R.traverse (canonicalizeCaseBranch root syntaxVersion env) (List.map (Tuple.mapBoth Src.c2Value Src.c1Value) branches))
+                R.fmap Can.Case (canonicalize target root syntaxVersion env (Src.c2Value expr))
+                    |> R.apply (R.traverse (canonicalizeCaseBranch target root syntaxVersion env) (List.map (Tuple.mapBoth Src.c2Value Src.c1Value) branches))
 
             Src.Accessor field ->
                 R.pure (Can.Accessor field)
 
             Src.Access record field ->
-                R.fmap Can.Access (canonicalize root syntaxVersion env record)
+                R.fmap Can.Access (canonicalize target root syntaxVersion env record)
                     |> R.apply (R.ok field)
 
             Src.Update ( _, name ) ( _, fields ) ->
                 let
                     makeCanFields : R.RResult i w Error.Error (Dict String (A.Located Name) (R.RResult FreeLocals (List W.Warning) Error.Error Can.FieldUpdate))
                     makeCanFields =
-                        Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize root syntaxVersion env t)) (List.map (Src.c2EolValue >> Tuple.mapBoth Src.c1Value Src.c1Value) fields)
+                        Dups.checkLocatedFields_ (\r t -> R.fmap (Can.FieldUpdate r) (canonicalize target root syntaxVersion env t)) (List.map (Src.c2EolValue >> Tuple.mapBoth Src.c1Value Src.c1Value) fields)
                 in
-                R.fmap Can.Update (canonicalize root syntaxVersion env name)
+                R.fmap Can.Update (canonicalize target root syntaxVersion env name)
                     |> R.apply (R.bind (Utils.sequenceADict A.toValue A.compareLocated) makeCanFields)
 
             Src.Record ( _, fields ) ->
                 Dups.checkLocatedFields (List.map (Src.c2EolValue >> Tuple.mapBoth Src.c1Value Src.c1Value) fields)
                     |> R.bind
                         (\fieldDict ->
-                            R.fmap Can.Record (R.traverseDict A.toValue A.compareLocated (canonicalize root syntaxVersion env) fieldDict)
+                            R.fmap Can.Record (R.traverseDict A.toValue A.compareLocated (canonicalize target root syntaxVersion env) fieldDict)
                         )
 
             Src.Unit ->
                 R.ok Can.Unit
 
             Src.Tuple ( _, a ) ( _, b ) cs ->
-                R.fmap Can.Tuple (canonicalize root syntaxVersion env a)
-                    |> R.apply (canonicalize root syntaxVersion env b)
-                    |> R.apply (canonicalizeTupleExtras root syntaxVersion region env (List.map Src.c2Value cs))
+                R.fmap Can.Tuple (canonicalize target root syntaxVersion env a)
+                    |> R.apply (canonicalize target root syntaxVersion env b)
+                    |> R.apply (canonicalizeTupleExtras target root syntaxVersion region env (List.map Src.c2Value cs))
 
             Src.Shader src tipe ->
                 R.ok (Can.Shader src tipe)
 
             Src.Parens ( _, expr ) ->
-                R.fmap A.toValue (canonicalize root syntaxVersion env expr)
+                R.fmap A.toValue (canonicalize target root syntaxVersion env expr)
 
 
-canonicalizeTupleExtras : Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
-canonicalizeTupleExtras root syntaxVersion region env extras =
+canonicalizeTupleExtras : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
+canonicalizeTupleExtras target root syntaxVersion region env extras =
     case extras of
         [] ->
             R.ok []
 
         [ three ] ->
-            R.fmap List.singleton <| canonicalize root syntaxVersion env three
+            R.fmap List.singleton <| canonicalize target root syntaxVersion env three
 
         _ ->
             case syntaxVersion of
@@ -194,34 +194,34 @@ canonicalizeTupleExtras root syntaxVersion region env extras =
                     R.throw (Error.TupleLargerThanThree region)
 
                 SV.Guida ->
-                    R.traverse (canonicalize root syntaxVersion env) extras
+                    R.traverse (canonicalize target root syntaxVersion env) extras
 
 
 
 -- CANONICALIZE IF BRANCH
 
 
-canonicalizeIfBranch : Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Expr, Src.Expr ) -> EResult FreeLocals (List W.Warning) ( Can.Expr, Can.Expr )
-canonicalizeIfBranch root syntaxVersion env ( condition, branch ) =
-    R.fmap Tuple.pair (canonicalize root syntaxVersion env condition)
-        |> R.apply (canonicalize root syntaxVersion env branch)
+canonicalizeIfBranch : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Expr, Src.Expr ) -> EResult FreeLocals (List W.Warning) ( Can.Expr, Can.Expr )
+canonicalizeIfBranch target root syntaxVersion env ( condition, branch ) =
+    R.fmap Tuple.pair (canonicalize target root syntaxVersion env condition)
+        |> R.apply (canonicalize target root syntaxVersion env branch)
 
 
 
 -- CANONICALIZE CASE BRANCH
 
 
-canonicalizeCaseBranch : Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Pattern, Src.Expr ) -> EResult FreeLocals (List W.Warning) Can.CaseBranch
-canonicalizeCaseBranch root syntaxVersion env ( pattern, expr ) =
+canonicalizeCaseBranch : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Pattern, Src.Expr ) -> EResult FreeLocals (List W.Warning) Can.CaseBranch
+canonicalizeCaseBranch target root syntaxVersion env ( pattern, expr ) =
     directUsage
         (Pattern.verify Error.DPCaseBranch
-            (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env pattern)
+            (Pattern.canonicalize target syntaxVersion env pattern)
             |> R.bind
                 (\( cpattern, bindings ) ->
-                    Env.addLocals (Stuff.rootToTarget root) bindings env
+                    Env.addLocals target bindings env
                         |> R.bind
                             (\newEnv ->
-                                verifyBindings W.Pattern bindings (canonicalize root syntaxVersion newEnv expr)
+                                verifyBindings W.Pattern bindings (canonicalize target root syntaxVersion newEnv expr)
                                     |> R.fmap
                                         (\( cexpr, freeLocals ) ->
                                             ( Can.CaseBranch cpattern cexpr, freeLocals )
@@ -235,17 +235,17 @@ canonicalizeCaseBranch root syntaxVersion env ( pattern, expr ) =
 -- CANONICALIZE BINOPS
 
 
-canonicalizeBinops : Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List ( Src.Expr, A.Located Name.Name ) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
-canonicalizeBinops root syntaxVersion overallRegion env ops final =
+canonicalizeBinops : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List ( Src.Expr, A.Located Name.Name ) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalizeBinops target root syntaxVersion overallRegion env ops final =
     let
         canonicalizeHelp : ( Src.Expr, A.Located Name ) -> R.RResult FreeLocals (List W.Warning) Error.Error ( Can.Expr, Env.Binop )
         canonicalizeHelp ( expr, A.At region op ) =
-            R.fmap Tuple.pair (canonicalize root syntaxVersion env expr)
-                |> R.apply (Env.findBinop (Stuff.rootToTarget root) region env op)
+            R.fmap Tuple.pair (canonicalize target root syntaxVersion env expr)
+                |> R.apply (Env.findBinop target region env op)
     in
     R.bind (runBinopStepper overallRegion)
         (R.fmap More (R.traverse canonicalizeHelp ops)
-            |> R.apply (canonicalize root syntaxVersion env final)
+            |> R.apply (canonicalize target root syntaxVersion env final)
         )
 
 
@@ -310,24 +310,24 @@ toBinop (Env.Binop op home name annotation _ _) left right =
     A.merge left right (Can.Binop op home name annotation left right)
 
 
-canonicalizeLet : Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List (A.Located Src.Def) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
-canonicalizeLet root syntaxVersion letRegion env defs body =
+canonicalizeLet : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List (A.Located Src.Def) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
+canonicalizeLet target root syntaxVersion letRegion env defs body =
     directUsage <|
         (Dups.detect (Error.DuplicatePattern Error.DPLetBinding)
             (List.foldl addBindings Dups.none defs)
             |> R.bind
                 (\bindings ->
-                    Env.addLocals (Stuff.rootToTarget root) bindings env
+                    Env.addLocals target bindings env
                         |> R.bind
                             (\newEnv ->
                                 verifyBindings W.Def bindings <|
-                                    (Utils.foldM (addDefNodes root syntaxVersion newEnv) [] defs
+                                    (Utils.foldM (addDefNodes target root syntaxVersion newEnv) [] defs
                                         |> R.bind
                                             (\nodes ->
-                                                canonicalize root syntaxVersion newEnv body
+                                                canonicalize target root syntaxVersion newEnv body
                                                     |> R.bind
                                                         (\cbody ->
-                                                            detectCycles (Stuff.rootToTarget root) letRegion (Graph.stronglyConnComp nodes) cbody
+                                                            detectCycles target letRegion (Graph.stronglyConnComp nodes) cbody
                                                         )
                                             )
                                     )
@@ -408,20 +408,20 @@ type Binding
     | Destruct Can.Pattern Can.Expr
 
 
-addDefNodes : Stuff.Root -> SyntaxVersion -> Env.Env -> List Node -> A.Located Src.Def -> EResult FreeLocals (List W.Warning) (List Node)
-addDefNodes root syntaxVersion env nodes (A.At _ def) =
+addDefNodes : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> List Node -> A.Located Src.Def -> EResult FreeLocals (List W.Warning) (List Node)
+addDefNodes target root syntaxVersion env nodes (A.At _ def) =
     case def of
         Src.Define ((A.At _ name) as aname) srcArgs ( _, body ) maybeType ->
             case maybeType of
                 Nothing ->
                     Pattern.verify (Error.DPFuncArgs name)
-                        (R.traverse (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env) (List.map Src.c1Value srcArgs))
+                        (R.traverse (Pattern.canonicalize target syntaxVersion env) (List.map Src.c1Value srcArgs))
                         |> R.bind
                             (\( args, argBindings ) ->
-                                Env.addLocals (Stuff.rootToTarget root) argBindings env
+                                Env.addLocals target argBindings env
                                     |> R.bind
                                         (\newEnv ->
-                                            verifyBindings W.Pattern argBindings (canonicalize root syntaxVersion newEnv body)
+                                            verifyBindings W.Pattern argBindings (canonicalize target root syntaxVersion newEnv body)
                                                 |> R.bind
                                                     (\( cbody, freeLocals ) ->
                                                         let
@@ -439,17 +439,17 @@ addDefNodes root syntaxVersion env nodes (A.At _ def) =
                             )
 
                 Just ( _, ( _, tipe ) ) ->
-                    Type.toAnnotation (Stuff.rootToTarget root) syntaxVersion env tipe
+                    Type.toAnnotation target syntaxVersion env tipe
                         |> R.bind
                             (\(Can.Forall freeVars ctipe) ->
                                 Pattern.verify (Error.DPFuncArgs name)
-                                    (gatherTypedArgs (Stuff.rootToTarget root) syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
+                                    (gatherTypedArgs target syntaxVersion env name (List.map Src.c1Value srcArgs) ctipe Index.first [])
                                     |> R.bind
                                         (\( ( args, resultType ), argBindings ) ->
-                                            Env.addLocals (Stuff.rootToTarget root) argBindings env
+                                            Env.addLocals target argBindings env
                                                 |> R.bind
                                                     (\newEnv ->
-                                                        verifyBindings W.Pattern argBindings (canonicalize root syntaxVersion newEnv body)
+                                                        verifyBindings W.Pattern argBindings (canonicalize target root syntaxVersion newEnv body)
                                                             |> R.bind
                                                                 (\( cbody, freeLocals ) ->
                                                                     let
@@ -469,12 +469,12 @@ addDefNodes root syntaxVersion env nodes (A.At _ def) =
 
         Src.Destruct pattern ( _, body ) ->
             Pattern.verify Error.DPDestruct
-                (Pattern.canonicalize (Stuff.rootToTarget root) syntaxVersion env pattern)
+                (Pattern.canonicalize target syntaxVersion env pattern)
                 |> R.bind
                     (\( cpattern, _ ) ->
                         R.RResult
                             (\fs ws ->
-                                case canonicalize root syntaxVersion env body of
+                                case canonicalize target root syntaxVersion env body of
                                     R.RResult k ->
                                         case k Dict.empty ws of
                                             R.ROk freeLocals warnings cbody ->

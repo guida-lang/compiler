@@ -18,7 +18,8 @@ bin/guida.min.js
 try/public/app.js
 
 # Assets
-assets/some-application/index.html
+assets/some-elm-application/index.html
+assets/some-guida-application/tmp
 
 # Examples
 examples/index.html

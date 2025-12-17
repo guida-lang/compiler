@@ -1,0 +1,5 @@
+{
+    "testMatch": [
+        "**/tests/**/*.test.js"
+    ]
+}
