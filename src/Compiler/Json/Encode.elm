@@ -125,7 +125,7 @@ object =
 
 string : String -> Value
 string str =
-    StringVal (escape str)
+    StringVal str
 
 
 name : String -> Value
@@ -172,7 +172,7 @@ list encodeEntry entries =
 
 chars : String -> Value
 chars chrs =
-    StringVal (escape chrs)
+    StringVal chrs
 
 
 escape : String -> String
@@ -240,7 +240,7 @@ encodeUgly value =
             "{" ++ String.join "," (List.map encodeEntryUgly entries) ++ "}"
 
         StringVal builder ->
-            "\"" ++ builder ++ "\""
+            "\"" ++ escape builder ++ "\""
 
         Boolean boolean ->
             if boolean then
@@ -289,7 +289,7 @@ encodeHelp indent value =
             encodeObject indent first rest
 
         StringVal builder ->
-            "\"" ++ builder ++ "\""
+            "\"" ++ escape builder ++ "\""
 
         Boolean boolean ->
             if boolean then
