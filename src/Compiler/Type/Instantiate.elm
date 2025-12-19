@@ -52,11 +52,11 @@ fromSrcType freeVars sourceType =
                             )
                     )
 
-        Can.TTuple a b maybeC ->
+        Can.TTuple a b cs ->
             IO.pure TupleN
                 |> IO.apply (fromSrcType freeVars a)
                 |> IO.apply (fromSrcType freeVars b)
-                |> IO.apply (IO.traverseList (fromSrcType freeVars) maybeC)
+                |> IO.apply (IO.traverseList (fromSrcType freeVars) cs)
 
         Can.TUnit ->
             IO.pure UnitN
