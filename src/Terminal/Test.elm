@@ -351,6 +351,7 @@ if (typeof FormData === 'undefined') {
 after : Target -> String
 after target =
     let
+        app : String
         app =
             case target of
                 Target.GuidaTarget ->

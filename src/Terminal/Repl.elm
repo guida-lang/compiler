@@ -146,8 +146,8 @@ type alias M a =
 
 
 loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
-loop env state =
-    read
+loop ((Env root _ _) as env) state =
+    read root
         |> Task.bind
             (\input ->
                 Utils.liftIOInputT (eval env state input)
@@ -181,8 +181,8 @@ type Input
     | Help (Maybe String)
 
 
-read : Utils.ReplInputT Input
-read =
+read : Stuff.Root -> Utils.ReplInputT Input
+read root =
     Utils.replGetInputLine "> "
         |> Task.bind
             (\maybeLine ->
@@ -196,17 +196,17 @@ read =
                             lines =
                                 Lines chars []
                         in
-                        case categorize lines of
+                        case categorize root lines of
                             Done input ->
                                 Task.pure input
 
                             Continue p ->
-                                readMore lines p
+                                readMore root lines p
             )
 
 
-readMore : Lines -> Prefill -> Utils.ReplInputT Input
-readMore previousLines prefill =
+readMore : Stuff.Root -> Lines -> Prefill -> Utils.ReplInputT Input
+readMore root previousLines prefill =
     Utils.replGetInputLineWithInitial "| " ( renderPrefill prefill, "" )
         |> Task.bind
             (\input ->
@@ -220,12 +220,12 @@ readMore previousLines prefill =
                             lines =
                                 addLine chars previousLines
                         in
-                        case categorize lines of
+                        case categorize root lines of
                             Done doneInput ->
                                 Task.pure doneInput
 
                             Continue p ->
-                                readMore lines p
+                                readMore root lines p
             )
 
 
@@ -296,8 +296,8 @@ type CategorizedInput
     | Continue Prefill
 
 
-categorize : Lines -> CategorizedInput
-categorize lines =
+categorize : Stuff.Root -> Lines -> CategorizedInput
+categorize root lines =
     if isBlank lines then
         Done Skip
 
@@ -308,7 +308,7 @@ categorize lines =
         attemptImport lines
 
     else
-        attemptDeclOrExpr lines
+        attemptDeclOrExpr root lines
 
 
 attemptImport : Lines -> CategorizedInput
@@ -348,16 +348,25 @@ ifDone lines input =
         Continue Indent
 
 
-attemptDeclOrExpr : Lines -> CategorizedInput
-attemptDeclOrExpr lines =
+attemptDeclOrExpr : Stuff.Root -> Lines -> CategorizedInput
+attemptDeclOrExpr root lines =
     let
+        syntaxVersion : SV.SyntaxVersion
+        syntaxVersion =
+            case root of
+                Stuff.GuidaRoot _ ->
+                    SV.Guida
+
+                Stuff.ElmRoot _ _ ->
+                    SV.Elm
+
         src : String
         src =
             linesToByteString lines
 
         declParser : P.Parser ( Row, Col ) ( PD.Decl, A.Position )
         declParser =
-            P.specialize (toDeclPosition src) (P.fmap (Tuple.mapFirst Src.c2Value) (PD.declaration SV.Guida))
+            P.specialize (toDeclPosition src) (P.fmap (Tuple.mapFirst Src.c2Value) (PD.declaration syntaxVersion))
     in
     case P.fromByteString declParser Tuple.pair src of
         Ok ( decl, _ ) ->
@@ -385,7 +394,7 @@ attemptDeclOrExpr lines =
                 let
                     exprParser : P.Parser ( Row, Col ) ( Src.C1 Src.Expr, A.Position )
                     exprParser =
-                        P.specialize (toExprPosition src) (PE.expression SV.Guida)
+                        P.specialize (toExprPosition src) (PE.expression syntaxVersion)
                 in
                 case P.fromByteString exprParser Tuple.pair src of
                     Ok _ ->
@@ -577,7 +586,7 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                                     (Build.fromRepl root details (toByteString newState output))
                                     |> Task.bind
                                         (\artifacts ->
-                                            Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl (Stuff.rootPath root) details ansi artifacts) (toPrintName output)
+                                            Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl (Stuff.rootToTarget root) (Stuff.rootPath root) details ansi artifacts) (toPrintName output)
                                         )
                             )
                     )

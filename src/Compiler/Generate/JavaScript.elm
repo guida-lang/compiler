@@ -72,31 +72,8 @@ generate target sourceMaps leadingLines mode (Opt.GlobalGraph graph _) mains =
     prelude target mode
         ++ stateToBuilder state
         ++ toMainExports target mode mains
-        ++ escapeNewCode """// EXTRA GUIDA CORE
-
-function _Utils_TupleN(a, b, ...cs) {
-  return { $: '#N', a: a, b: b, cs: cs };
-}
-
-(function(original) {
-    _Debug_toAnsiString = function(ansi, value) {
-        if (value.$ === '#N') {
-            var output = [_Debug_toAnsiString(ansi, value.a), _Debug_toAnsiString(ansi, value.b)];
-            for (var k in value.cs) {
-                output.push(_Debug_toAnsiString(ansi, value.cs[k]));
-            }
-            return '(' + output.join(',') + ')';
-        }
-        return original(ansi, value);
-    }
-}(_Debug_toAnsiString))"""
         ++ "}(this));"
         ++ generateSourceMaps sourceMaps leadingLines state
-
-
-escapeNewCode : String -> String
-escapeNewCode code =
-    "//__START__\n" ++ code ++ "\n//__END__\n"
 
 
 generateSourceMaps : SourceMaps -> Int -> State -> String

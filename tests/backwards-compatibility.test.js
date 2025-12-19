@@ -44,55 +44,6 @@ const examples = [
   ["Mario", defaultFlags],
 ];
 
-const replaceKnownDifferencesOutput = function (filePath) {
-  const content = readFileContent(filePath);
-  return replaceKnownDifferencesGuida(replaceKnownDifferencesNewEscapedCode(content));
-};
-
-const replaceKnownDifferencesReport = function (filePath) {
-  const content = readFileContent(filePath);
-  return replaceKnownDifferencesGuida(content);
-};
-
-const replaceKnownDifferencesDocs = function (filePath) {
-  const content = readFileContent(filePath);
-  return replaceKnownDifferencesGuida(content);
-};
-
-const replaceKnownDifferencesNewEscapedCode = function (content) {
-  return content.replace("__END__\n", "__END__").replace(/\/\/__START__$(?:(?!__START__)[\s\S])*?\/\/__END__/gm, "")
-};
-
-const replaceKnownDifferencesGuida = function (content) {
-  return content
-  // versions
-  // .replaceAll("\"versions\":{\"guida\":\"1.0.0\"}", "\"versions\":{\"elm\":\"0.19.1\"}")
-  // new documentation links
-  // .replaceAll("https://guida-lang.org/docs/1.0.0/hints/bad-recursion", "https://elm-lang.org/0.19.1/bad-recursion")
-  // .replaceAll("https://guida-lang.org/docs/1.0.0/hints/optimize", "https://elm-lang.org/0.19.1/optimize")
-  // .replaceAll("https://guida-lang.org/docs/1.0.0/hints/tuples", "https://elm-lang.org/0.19.1/tuples")
-  // // stdlib differences
-  // .replaceAll("$guida_lang$stdlib$Html$", "$elm$html$Html$")
-  // .replaceAll("$guida_lang$stdlib$VirtualDom$", "$elm$virtual_dom$VirtualDom$")
-  // .replaceAll("$guida_lang$stdlib$Json$", "$elm$json$Json$")
-  // .replaceAll("$guida_lang$stdlib$Result$", "$elm$core$Result$")
-  // .replaceAll("$guida_lang$stdlib$Basics$", "$elm$core$Basics$")
-  // .replaceAll("$guida_lang$stdlib$Array$", "$elm$core$Array$")
-  // .replaceAll("$guida_lang$stdlib$List$", "$elm$core$List$")
-  // .replaceAll("$guida_lang$stdlib$Guida$JsArray$", "$elm$core$Elm$JsArray$")
-  // .replaceAll("$guida_lang$stdlib$String$", "$elm$core$String$")
-  // .replaceAll("$guida_lang$stdlib$Char$", "$elm$core$Char$")
-  // .replaceAll("$guida_lang$stdlib$Maybe$", "$elm$core$Maybe$")
-  // .replaceAll("$guida_lang$stdlib$Dict$", "$elm$core$Dict$")
-  // .replaceAll("$guida_lang$stdlib$Tuple$", "$elm$core$Tuple$")
-  // .replaceAll("$guida_lang$stdlib$Set$", "$elm$core$Set$")
-  // // built-in type differences
-  // .replaceAll("_guida_builtin", "_elm_builtin")
-  // other minor differences
-  // .replaceAll("> for more\\ncomprehensive advice on working with large chunks of data in Guida.", "> for more\\ncomprehensive advice on working with large chunks of data in Elm.")
-  // .replaceAll("> for more comprehensive advice on\\nworking with large chunks of data in Guida.", "> for more comprehensive advice on\\nworking with large chunks of data in Elm.");
-};
-
 const readFileContent = function (filePath) {
   return fs.readFileSync(filePath).toString();
 };
@@ -138,7 +89,7 @@ describe("backwards compatibility", () => {
           console.error(e);
         }
 
-        expect(replaceKnownDifferencesOutput(guidaOutput)).toBe(readFileContent(elmOutput));
+        expect(readFileContent(guidaOutput)).toBe(readFileContent(elmOutput));
       });
     }
   );
@@ -171,7 +122,7 @@ describe("backwards compatibility", () => {
       console.error(e);
     }
 
-    expect(replaceKnownDifferencesOutput(guidaOutput)).toBe(readFileContent(elmOutput));
+    expect(readFileContent(guidaOutput)).toBe(readFileContent(elmOutput));
   });
 
   test("json report", () => {
@@ -198,7 +149,7 @@ describe("backwards compatibility", () => {
       );
     } catch (_) { }
 
-    expect(replaceKnownDifferencesReport(guidaOutput)).toBe(readFileContent(elmOutput));
+    expect(readFileContent(guidaOutput)).toBe(readFileContent(elmOutput));
   });
 
   test("docs", () => {
@@ -229,7 +180,7 @@ describe("backwards compatibility", () => {
       console.error(e);
     }
 
-    expect(replaceKnownDifferencesDocs(guidaOutput)).toBe(readFileContent(elmOutput));
+    expect(readFileContent(guidaOutput)).toBe(readFileContent(elmOutput));
   });
 
   describe("tuples", () => {
@@ -257,7 +208,7 @@ describe("backwards compatibility", () => {
         );
       } catch (_) { }
 
-      expect(replaceKnownDifferencesReport(guidaOutput)).toBe(readFileContent(elmOutput));
+      expect(readFileContent(guidaOutput)).toBe(readFileContent(elmOutput));
     });
   });
 });

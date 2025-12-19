@@ -1296,7 +1296,17 @@ fromRepl root details source =
     makeEnv Reporting.ignorer root details
         |> Task.bind
             (\((Env _ _ projectType _ _ _ _) as env) ->
-                case Parse.fromByteString (Stuff.rootToTarget root) SV.Guida projectType source of
+                let
+                    syntaxVersion : SV.SyntaxVersion
+                    syntaxVersion =
+                        case root of
+                            Stuff.GuidaRoot _ ->
+                                SV.Guida
+
+                            Stuff.ElmRoot _ _ ->
+                                SV.Elm
+                in
+                case Parse.fromByteString (Stuff.rootToTarget root) syntaxVersion projectType source of
                     Err syntaxError ->
                         Task.pure <| Err <| Exit.ReplBadInput source <| Error.BadSyntax syntaxError
 

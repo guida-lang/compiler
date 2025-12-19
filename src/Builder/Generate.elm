@@ -16,7 +16,7 @@ import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
-import Compiler.Generate.Target as Target
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
@@ -130,8 +130,8 @@ prepareSourceMaps withSourceMaps root =
         Task.pure JS.NoSourceMaps
 
 
-repl : FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task Exit.Generate String
-repl root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
+repl : Target -> FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task Exit.Generate String
+repl target root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
     Task.bind finalizeObjects (loadObjects root details modules)
         |> Task.fmap
             (\objects ->
@@ -140,7 +140,7 @@ repl root details ansi (Build.ReplArtifacts home modules localizer annotations) 
                     graph =
                         objectsToGlobalGraph objects
                 in
-                JS.generateForRepl Target.GuidaTarget ansi localizer graph home name (Utils.find identity name annotations)
+                JS.generateForRepl target ansi localizer graph home name (Utils.find identity name annotations)
             )
 
 

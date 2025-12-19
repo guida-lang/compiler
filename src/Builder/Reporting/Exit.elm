@@ -3899,6 +3899,7 @@ toProjectProblemReport projectProblem =
             case problem of
                 Import.NotFound target ->
                     let
+                        rootFilename : String
                         rootFilename =
                             Target.toRootFilename target
                     in
@@ -3911,6 +3912,7 @@ toProjectProblemReport projectProblem =
 
                 Import.Ambiguous target _ _ pkg _ ->
                     let
+                        rootFilename : String
                         rootFilename =
                             Target.toRootFilename target
                     in
@@ -3926,6 +3928,7 @@ toProjectProblemReport projectProblem =
 
                 Import.AmbiguousLocal target path1 path2 paths ->
                     let
+                        rootFilename : String
                         rootFilename =
                             Target.toRootFilename target
                     in
@@ -3943,6 +3946,7 @@ toProjectProblemReport projectProblem =
 
                 Import.AmbiguousForeign target _ _ _ ->
                     let
+                        rootFilename : String
                         rootFilename =
                             Target.toRootFilename target
                     in

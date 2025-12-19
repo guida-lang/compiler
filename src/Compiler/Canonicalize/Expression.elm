@@ -19,10 +19,10 @@ import Compiler.Canonicalize.Pattern as Pattern
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Generate.Target exposing (Target)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
-import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -189,12 +189,12 @@ canonicalizeTupleExtras target root syntaxVersion region env extras =
             R.fmap List.singleton <| canonicalize target root syntaxVersion env three
 
         _ ->
-            case syntaxVersion of
-                SV.Elm ->
-                    R.throw (Error.TupleLargerThanThree region)
-
-                SV.Guida ->
+            case target of
+                Target.GuidaTarget ->
                     R.traverse (canonicalize target root syntaxVersion env) extras
+
+                Target.ElmTarget ->
+                    R.throw (Error.TupleLargerThanThree region)
 
 
 
