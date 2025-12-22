@@ -7,7 +7,7 @@ describe("guida init command", () => {
     const tmpobj = tmp.dirSync();
 
     it("initializes project structure", () => {
-        child_process.execSync(`${path.join(__dirname, "../bin/index.js")} init --yes`, {
+        child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} init --yes`, {
             cwd: tmpobj.name,
             stdio: "pipe",
             env: {

@@ -111,7 +111,13 @@ runHelp root testFileGlobs flags =
                                                                 Outline.App (Outline.GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
                                                                     Outline.GuidaAppOutline guida (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
                                                                         |> makeAppPlan env Pkg.stdlib
-                                                                        -- TODO changes should only be done to the `tests/guida.json` in case the top level `guida.json` had changes! This will improve performance!
+                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                        |> Task.bind (attemptChanges root env)
+
+                                                                Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
+                                                                    Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                        |> makePkgPlan env (Dict.union deps test)
+                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env)
 
                                                                 Outline.App (Outline.ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
@@ -121,16 +127,6 @@ runHelp root testFileGlobs flags =
                                                                         |> Task.bind (makeAppPlan env Pkg.time)
                                                                         |> Task.bind (makeAppPlan env Pkg.random)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.bind (attemptChanges root env)
-
-                                                                Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
-                                                                    Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
-                                                                        |> makePkgPlan env (Dict.union deps test)
-                                                                        |> Task.bind (makeAppPlan env Pkg.core)
-                                                                        |> Task.bind (makeAppPlan env Pkg.json)
-                                                                        |> Task.bind (makeAppPlan env Pkg.time)
-                                                                        |> Task.bind (makeAppPlan env Pkg.random)
-                                                                        -- TODO changes should only be done to the `tests/guida.json` in case the top level `guida.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env)
 
                                                                 Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps test _) ->
@@ -213,12 +209,25 @@ runHelp root testFileGlobs flags =
                                                                             |> Task.bind
                                                                                 (\interpreter ->
                                                                                     let
+                                                                                        varName : String
+                                                                                        varName =
+                                                                                            case root of
+                                                                                                Stuff.GuidaRoot _ ->
+                                                                                                    "Guida"
+
+                                                                                                Stuff.ElmRoot _ _ ->
+                                                                                                    "Elm"
+
                                                                                         finalContent : String
                                                                                         finalContent =
                                                                                             before
-                                                                                                ++ "\nvar Elm = (function(module) {\n"
-                                                                                                ++ addKernelTestChecking content
-                                                                                                ++ "\nreturn this.Elm;\n})({});\n"
+                                                                                                ++ "\nvar "
+                                                                                                ++ varName
+                                                                                                ++ " = (function(module) {\n"
+                                                                                                ++ addKernelTestChecking (Stuff.rootToTarget root) content
+                                                                                                ++ "\nreturn this."
+                                                                                                ++ varName
+                                                                                                ++ ";\n})({});\n"
                                                                                                 ++ after (Stuff.rootToTarget root)
                                                                                     in
                                                                                     interpret interpreter finalContent
@@ -253,11 +262,17 @@ interpret interpreter javascript =
                     crash "not implemented"
 
 
-testVariantDefinition : Regex
-testVariantDefinition =
+testVariantDefinition : Target -> Regex
+testVariantDefinition target =
     Maybe.withDefault Regex.never <|
         Regex.fromStringWith { caseInsensitive = False, multiline = True }
-            "^var\\s+\\$guida_lang\\$test\\$Test\\$Internal\\$(?:GuidaTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
+            (case target of
+                Target.GuidaTarget ->
+                    "^var\\s+\\$guida_lang\\$stdlib\\$Test\\$Internal\\$(?:GuidaTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
+
+                Target.ElmTarget ->
+                    "^var\\s+\\$elm_explorations\\$test\\$Test\\$Internal\\$(?:ElmTestVariant__\\w+|UnitTest|FuzzTest|Labeled|Skipped|Only|Batch)\\s*=\\s*(?:\\w+\\(\\s*)?function\\s*\\([\\w, ]*\\)\\s*\\{\\s*return *\\{"
+            )
 
 
 checkDefinition : Regex
@@ -267,17 +282,36 @@ checkDefinition =
             "^(var\\s+\\$author\\$project\\$Test\\$Runner\\$Node\\$check)\\s*=\\s*\\$author\\$project\\$Test\\$Runner\\$Node\\$checkHelperReplaceMe___;?$"
 
 
-addKernelTestChecking : String -> String
-addKernelTestChecking content =
-    "var __guidaTestSymbol = Symbol(\"guidaTestSymbol\");\n"
+addKernelTestChecking : Target -> String -> String
+addKernelTestChecking target content =
+    let
+        testSymbolName : String
+        testSymbolName =
+            case target of
+                Target.GuidaTarget ->
+                    "__guidaTestSymbol"
+
+                Target.ElmTarget ->
+                    "__elmTestSymbol"
+    in
+    "var "
+        ++ testSymbolName
+        ++ " = Symbol(\"guidaTestSymbol\");\n"
         ++ (content
-                |> Regex.replace testVariantDefinition (\{ match } -> match ++ "__guidaTestSymbol: __guidaTestSymbol, ")
+                |> Regex.replace (testVariantDefinition target) (\{ match } -> match ++ testSymbolName ++ ": " ++ testSymbolName ++ ", ")
                 |> Regex.replaceAtMost 1
                     checkDefinition
                     (\{ submatches } ->
                         case submatches of
                             (Just firstSubmatch) :: _ ->
-                                firstSubmatch ++ " = value => value && value.__guidaTestSymbol === __guidaTestSymbol ? $guida_lang$stdlib$Maybe$Just(value) : $guida_lang$stdlib$Maybe$Nothing;"
+                                firstSubmatch
+                                    ++ (case target of
+                                            Target.GuidaTarget ->
+                                                " = value => value && value.__guidaTestSymbol === __guidaTestSymbol ? $guida_lang$stdlib$Maybe$Just(value) : $guida_lang$stdlib$Maybe$Nothing;"
+
+                                            Target.ElmTarget ->
+                                                " = value => value && value.__elmTestSymbol === __elmTestSymbol ? $elm$core$Maybe$Just(value) : $elm$core$Maybe$Nothing;"
+                                       )
 
                             _ ->
                                 crash "addKernelTestChecking: no submatches found"
