@@ -3109,7 +3109,7 @@ toDetailsReport details =
         DetailsHandEditedGuidaDependencies ->
             Help.report "ERROR IN DEPENDENCIES"
                 (Just "guida.json")
-                "It looks like the dependencies guida.json in were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
+                "It looks like the dependencies in guida.json were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
                 [ D.fillSep
                     [ D.fromChars "Try"
                     , D.fromChars "to"
@@ -3140,7 +3140,7 @@ toDetailsReport details =
         DetailsHandEditedElmDependencies ->
             Help.report "ERROR IN DEPENDENCIES"
                 (Just "elm.json")
-                "It looks like the dependencies elm.json in were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
+                "It looks like the dependencies in elm.json were edited by hand (or by a 3rd party tool) leaving them in an invalid state."
                 [ D.fillSep
                     [ D.fromChars "Try"
                     , D.fromChars "to"
