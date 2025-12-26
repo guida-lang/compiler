@@ -22,6 +22,7 @@ import Builder.Guida.Outline as Outline
 import Builder.Http as Http
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
@@ -82,10 +83,10 @@ type Details
     = Details V.Version (Dict ( String, String ) Pkg.Name C.Constraint)
 
 
-verify : Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Never (SolverResult (Dict ( String, String ) Pkg.Name Details))
-verify cache connection registry constraints =
+verify : Target -> Stuff.PackageCache -> Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Never (SolverResult (Dict ( String, String ) Pkg.Name Details))
+verify target cache connection registry constraints =
     Stuff.withRegistryLock cache <|
-        case try constraints of
+        case try target constraints of
             Solver solver ->
                 solver (State cache connection registry Dict.empty)
                     |> Task.fmap
@@ -190,7 +191,7 @@ addToApp cache connection registry pkg outline forTest =
 
                     attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
                     attempt toConstraint deps =
-                        try (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
+                        try Target.GuidaTarget (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
                 in
                 case
                     oneOf
@@ -258,7 +259,7 @@ addToApp cache connection registry pkg outline forTest =
 
                     attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
                     attempt toConstraint deps =
-                        try (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
+                        try Target.ElmTarget (Dict.insert identity pkg C.anything (Dict.map (\_ -> toConstraint) deps))
                 in
                 case
                     oneOf
@@ -334,7 +335,7 @@ addToTestApp cache connection registry pkg con outline =
 
                     attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
                     attempt toConstraint deps =
-                        try (Dict.insert identity pkg con (Dict.map (\_ -> toConstraint) deps))
+                        try Target.GuidaTarget (Dict.insert identity pkg con (Dict.map (\_ -> toConstraint) deps))
                 in
                 case
                     oneOf
@@ -394,7 +395,7 @@ addToTestApp cache connection registry pkg con outline =
 
                     attempt : (a -> C.Constraint) -> Dict ( String, String ) Pkg.Name a -> Solver (Dict ( String, String ) Pkg.Name V.Version)
                     attempt toConstraint deps =
-                        try (Dict.insert identity pkg con (Dict.map (\_ -> toConstraint) deps))
+                        try Target.ElmTarget (Dict.insert identity pkg con (Dict.map (\_ -> toConstraint) deps))
                 in
                 case
                     oneOf
@@ -452,7 +453,7 @@ removeFromApp cache connection registry pkg outline =
                     allDirects =
                         Dict.union direct testDirect
                 in
-                case try (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
+                case try Target.GuidaTarget (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
                             |> Task.fmap
@@ -500,7 +501,7 @@ removeFromApp cache connection registry pkg outline =
                     allDirects =
                         Dict.union direct testDirect
                 in
-                case try (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
+                case try Target.ElmTarget (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
                             |> Task.fmap
@@ -546,9 +547,9 @@ removeFromApp cache connection registry pkg outline =
 -- TRY
 
 
-try : Dict ( String, String ) Pkg.Name C.Constraint -> Solver (Dict ( String, String ) Pkg.Name V.Version)
-try constraints =
-    exploreGoals (Goals constraints Dict.empty)
+try : Target -> Dict ( String, String ) Pkg.Name C.Constraint -> Solver (Dict ( String, String ) Pkg.Name V.Version)
+try target constraints =
+    exploreGoals target (Goals constraints Dict.empty)
 
 
 
@@ -559,8 +560,8 @@ type Goals
     = Goals (Dict ( String, String ) Pkg.Name C.Constraint) (Dict ( String, String ) Pkg.Name V.Version)
 
 
-exploreGoals : Goals -> Solver (Dict ( String, String ) Pkg.Name V.Version)
-exploreGoals (Goals pending solved) =
+exploreGoals : Target -> Goals -> Solver (Dict ( String, String ) Pkg.Name V.Version)
+exploreGoals target (Goals pending solved) =
     let
         compare : ( Pkg.Name, C.Constraint ) -> Pkg.Name
         compare =
@@ -578,15 +579,15 @@ exploreGoals (Goals pending solved) =
 
                 addVsn : V.Version -> Solver Goals
                 addVsn =
-                    addVersion goals1 name
+                    addVersion target goals1 name
             in
             getRelevantVersions name constraint
                 |> bind (\( v, vs ) -> oneOf (addVsn v) (List.map addVsn vs))
-                |> bind (\goals2 -> exploreGoals goals2)
+                |> bind (\goals2 -> exploreGoals target goals2)
 
 
-addVersion : Goals -> Pkg.Name -> V.Version -> Solver Goals
-addVersion (Goals pending solved) name version =
+addVersion : Target -> Goals -> Pkg.Name -> V.Version -> Solver Goals
+addVersion target (Goals pending solved) name version =
     getConstraints name version
         |> bind
             (\constraints ->
@@ -604,7 +605,7 @@ addVersion (Goals pending solved) name version =
 
                     ElmConstraints elm deps ->
                         if C.goodElm elm then
-                            foldM (addConstraint solved) pending (Dict.toList compare (Pkg.sanitizeElmDeps deps))
+                            foldM (addConstraint solved) pending (Dict.toList compare (Pkg.sanitizeElmDeps target deps))
                                 |> fmap
                                     (\newPending ->
                                         Goals newPending (Dict.insert identity name version solved)

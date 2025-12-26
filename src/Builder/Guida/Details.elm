@@ -33,7 +33,7 @@ import Compiler.Compile as Compile
 import Compiler.Data.Name as Name
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Data.OneOrMore as OneOrMore
-import Compiler.Generate.Target exposing (Target)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as Con
 import Compiler.Guida.Docs as Docs
 import Compiler.Guida.Interface as I
@@ -238,7 +238,7 @@ convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
                         cons =
                             Dict.insert identity Pkg.stdlib Con.anything deps
                     in
-                    Task.io (Solver.verify cache connection registry cons)
+                    Task.io (Solver.verify (Stuff.rootToTarget root) cache connection registry cons)
                         |> Task.bind
                             (\result ->
                                 case result of
@@ -258,7 +258,7 @@ convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
                                                     license
                                                     version
                                                     exposed
-                                                    (Dict.filter (\( author, _ ) _ -> author /= Pkg.elm || author /= Pkg.elmExplorations) deps
+                                                    (Dict.filter (\( author, _ ) _ -> author /= Pkg.elm && author /= Pkg.elmExplorations) deps
                                                         |> Dict.insert identity Pkg.stdlib con
                                                     )
                                                     test
@@ -437,7 +437,7 @@ checkAppDeps outline =
 
 verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Exit.Details (Dict ( String, String ) Pkg.Name Solver.Details)
 verifyConstraints (Env _ _ root cache _ connection registry) constraints =
-    Task.io (Solver.verify cache connection registry constraints)
+    Task.io (Solver.verify (Stuff.rootToTarget root) cache connection registry constraints)
         |> Task.bind
             (\result ->
                 case result of
@@ -645,7 +645,7 @@ type alias Dep =
 
 
 verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> Task Never Dep
-verifyDep (Env key _ root cache manager _ _) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
+verifyDep ((Env key _ root cache manager _ _) as env) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     let
         fingerprint : Dict ( String, String ) Pkg.Name V.Version
         fingerprint =
@@ -663,14 +663,14 @@ verifyDep (Env key _ root cache manager _ _) depsMVar solution pkg ((Solver.Deta
                                         (\maybeCache ->
                                             case maybeCache of
                                                 Nothing ->
-                                                    build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint EverySet.empty
+                                                    build (Stuff.rootToTarget root) env key cache depsMVar pkg details fingerprint EverySet.empty
 
                                                 Just (ArtifactCache fingerprints artifacts) ->
                                                     if EverySet.member toComparableFingerprint fingerprint fingerprints then
                                                         Task.fmap (\_ -> Ok artifacts) (Reporting.report key Reporting.DBuilt)
 
                                                     else
-                                                        build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint fingerprints
+                                                        build (Stuff.rootToTarget root) env key cache depsMVar pkg details fingerprint fingerprints
                                         )
                             )
 
@@ -688,7 +688,7 @@ verifyDep (Env key _ root cache manager _ _) depsMVar solution pkg ((Solver.Deta
 
                                                 Ok () ->
                                                     Reporting.report key (Reporting.DReceived pkg vsn)
-                                                        |> Task.bind (\_ -> build (Stuff.rootToTarget root) key cache depsMVar pkg details fingerprint EverySet.empty)
+                                                        |> Task.bind (\_ -> build (Stuff.rootToTarget root) env key cache depsMVar pkg details fingerprint EverySet.empty)
                                         )
                             )
             )
@@ -716,8 +716,8 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
-build : Target -> Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
-build target key cache depsMVar pkg (Solver.Details vsn _) f fs =
+build : Target -> Env -> Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
+build target (Env _ _ _ _ _ connection registry) key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Stuff.findRootIn (Stuff.package cache pkg vsn)
         -- TODO/FIXME remove the need to default to GuidaRoot
         |> Task.fmap (Maybe.withDefault (Stuff.GuidaRoot (Stuff.package cache pkg vsn)))
@@ -732,7 +732,7 @@ build target key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                     Utils.readMVar dictPkgNameMVarDepDecoder depsMVar
                                         |> Task.bind
                                             (\allDeps ->
-                                                Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps (Pkg.sanitizeElmDeps deps))
+                                                Utils.mapTraverse identity Pkg.compareName (Utils.readMVar depDecoder) (Dict.intersection compare allDeps (Pkg.sanitizeElmDeps target deps))
                                                     |> Task.bind
                                                         (\directDeps ->
                                                             case Utils.sequenceDictResult identity Pkg.compareName directDeps of
@@ -842,7 +842,48 @@ build target key cache depsMVar pkg (Solver.Details vsn _) f fs =
                                     pkgBuild exposed deps
 
                                 Ok (Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ exposed deps _ _)) ->
-                                    pkgBuild exposed deps
+                                    case target of
+                                        Target.GuidaTarget ->
+                                            case Registry.getVersions_ Pkg.stdlib registry of
+                                                Err _ ->
+                                                    Task.pure (Err Nothing)
+
+                                                Ok (Registry.KnownVersions _ _) ->
+                                                    let
+                                                        cons : Dict ( String, String ) Pkg.Name Con.Constraint
+                                                        cons =
+                                                            Dict.insert identity Pkg.stdlib Con.anything deps
+                                                    in
+                                                    Solver.verify target cache connection registry cons
+                                                        |> Task.bind
+                                                            (\result ->
+                                                                case result of
+                                                                    Solver.SolverOk solution ->
+                                                                        let
+                                                                            (Solver.Details stdlibVsn _) =
+                                                                                Utils.find identity Pkg.stdlib solution
+
+                                                                            con : Con.Constraint
+                                                                            con =
+                                                                                Con.untilNextMajor stdlibVsn
+                                                                        in
+                                                                        pkgBuild exposed
+                                                                            (Dict.filter (\( author, _ ) _ -> author /= Pkg.elm && author /= Pkg.elmExplorations) deps
+                                                                                |> Dict.insert identity Pkg.stdlib con
+                                                                            )
+
+                                                                    Solver.NoSolution ->
+                                                                        Task.pure (Err Nothing)
+
+                                                                    Solver.NoOfflineSolution ->
+                                                                        Task.pure (Err Nothing)
+
+                                                                    Solver.SolverErr _ ->
+                                                                        Task.pure (Err Nothing)
+                                                            )
+
+                                        Target.ElmTarget ->
+                                            pkgBuild exposed deps
                         )
             )
 

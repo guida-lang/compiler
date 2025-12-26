@@ -32,6 +32,7 @@ module Compiler.Guida.Package exposing
     , webgl
     )
 
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as C
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
@@ -107,17 +108,22 @@ elmKernelPackages =
     ]
 
 
-sanitizeElmDeps : Dict ( String, String ) Name C.Constraint -> Dict ( String, String ) Name C.Constraint
-sanitizeElmDeps deps =
-    -- let
-    --     filteredDeps =
-    --         Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
-    -- in
-    -- if deps == filteredDeps then
-    --     filteredDeps
-    -- else
-    --     Dict.insert identity stdlib C.anything filteredDeps
-    deps
+sanitizeElmDeps : Target -> Dict ( String, String ) Name C.Constraint -> Dict ( String, String ) Name C.Constraint
+sanitizeElmDeps target deps =
+    case target of
+        Target.GuidaTarget ->
+            let
+                filteredDeps =
+                    Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
+            in
+            if deps == filteredDeps then
+                filteredDeps
+
+            else
+                Dict.insert identity stdlib C.anything filteredDeps
+
+        Target.ElmTarget ->
+            deps
 
 
 isKernel : Name -> Bool

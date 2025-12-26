@@ -14,6 +14,7 @@ import Builder.Reporting.Exit as Exit
 import Builder.Reporting.Exit.Help as Help
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Constraint as Con
 import Compiler.Guida.Licenses as Licenses
 import Compiler.Guida.Package as Pkg
@@ -212,7 +213,7 @@ init package =
 
 verify : Stuff.PackageCache -> Solver.Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name Con.Constraint -> (Dict ( String, String ) Pkg.Name Solver.Details -> Task Never (Result Exit.Init ())) -> Task Never (Result Exit.Init ())
 verify cache connection registry constraints callback =
-    Solver.verify cache connection registry constraints
+    Solver.verify Target.GuidaTarget cache connection registry constraints
         |> Task.bind
             (\result ->
                 case result of
@@ -255,9 +256,7 @@ packageDefaults =
 
 packageTestDefaults : Dict ( String, String ) Pkg.Name Con.Constraint
 packageTestDefaults =
-    Dict.fromList identity
-        [ ( Pkg.stdlib, Con.anything )
-        ]
+    Dict.empty
 
 
 testExample : String

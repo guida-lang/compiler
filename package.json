@@ -28,7 +28,6 @@
     "indexeddb-fs": "^2.1.5",
     "jszip": "^3.10.1",
     "mock-xmlhttprequest": "^8.4.1",
-    "package-registry": "file:../package-registry",
     "tmp": "^0.2.3",
     "which": "^5.0.0"
   },

@@ -8,6 +8,7 @@ import Builder.Guida.Outline as Outline
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
+import Compiler.Generate.Target as Target
 import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
@@ -309,7 +310,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                     cons =
                                         Dict.insert identity pkg C.anything old
                                 in
-                                Task.io (Solver.verify cache connection registry cons)
+                                Task.io (Solver.verify Target.GuidaTarget cache connection registry cons)
                                     |> Task.bind
                                         (\result ->
                                             case result of
@@ -397,7 +398,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                     cons =
                                         Dict.insert identity pkg C.anything old
                                 in
-                                Task.io (Solver.verify cache connection registry cons)
+                                Task.io (Solver.verify Target.ElmTarget cache connection registry cons)
                                     |> Task.bind
                                         (\result ->
                                             case result of
