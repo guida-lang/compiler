@@ -12,8 +12,12 @@ import Utils.Main as Utils
 
 
 getPossibilities : KnownVersions -> List ( V.Version, V.Version, M.Magnitude )
-getPossibilities (KnownVersions latest previous) =
+getPossibilities (KnownVersions ( _, latest ) previousWithSyntax) =
     let
+        previous : List V.Version
+        previous =
+            List.map Tuple.second previousWithSyntax
+
         allVersions : List V.Version
         allVersions =
             List.reverse (latest :: previous)

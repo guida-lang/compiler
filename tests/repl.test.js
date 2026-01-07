@@ -81,4 +81,12 @@ describe("repl", () => {
     test("elm application root 4-tuple", (done) => {
         run("( 1, 2, 3, 4 )", new RegExp("-- BAD TUPLE -+ REPL"), done, path.join(__dirname, "..", "assets", "some-elm-application"));
     }, 120_000);
+
+    test("small record", (done) => {
+        run("{ a = 1, b = 2 }", "{ \x1B[37ma\x1B[0m = \x1B[95m1\x1B[0m, \x1B[37mb\x1B[0m = \x1B[95m2\x1B[0m }\x1B[90m\n    : { a : number, b : number1 }\x1B[0m\n", done);
+    }, 120_000);
+
+    test("large record", (done) => {
+        run("{ a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7 }", "{ \x1B[37ma\x1B[0m = \x1B[95m1\x1B[0m, \x1B[37mb\x1B[0m = \x1B[95m2\x1B[0m, \x1B[37mc\x1B[0m = \x1B[95m3\x1B[0m, \x1B[37md\x1B[0m = \x1B[95m4\x1B[0m, \x1B[37me\x1B[0m = \x1B[95m5\x1B[0m, \x1B[37mf\x1B[0m = \x1B[95m6\x1B[0m, \x1B[37mg\x1B[0m = \x1B[95m7\x1B[0m }\x1B[90m\n    : { a : number\n      , b : number1\n      , c : number2\n      , d : number3\n      , e : number4\n      , f : number5\n      , g : number6\n      }\x1B[0m\n", done);
+    }, 120_000);
 });

@@ -652,9 +652,9 @@ getRelevantVersions : Pkg.Name -> C.Constraint -> Solver ( V.Version, List V.Ver
 getRelevantVersions name constraint =
     Solver <|
         \((State _ _ registry _) as state) ->
-            case Registry.getVersions name registry of
-                Just (Registry.KnownVersions newest previous) ->
-                    case List.filter (C.satisfies constraint) (newest :: previous) of
+            case Registry.getVersions Registry.KeepAllVersions name registry of
+                Just (Registry.KnownVersions ( _, newest ) previous) ->
+                    case List.filter (C.satisfies constraint) (newest :: List.map Tuple.second previous) of
                         [] ->
                             Task.pure (ISBack state)
 

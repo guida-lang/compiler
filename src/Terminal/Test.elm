@@ -1032,7 +1032,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
 
                                     Nothing ->
                                         -- finally try to add it from scratch
-                                        case Registry.getVersions_ pkg registry of
+                                        case Registry.getVersions_ Registry.KeepAllVersions pkg registry of
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
@@ -1101,7 +1101,7 @@ makeAppPlan (Solver.Env cache _ connection registry) pkg outline =
 
                                     Nothing ->
                                         -- finally try to add it from scratch
-                                        case Registry.getVersions_ pkg registry of
+                                        case Registry.getVersions_ Registry.KeepAllVersions pkg registry of
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->

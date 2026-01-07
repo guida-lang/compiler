@@ -244,7 +244,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                         Nothing ->
                             -- finally try to add it from scratch
-                            case Registry.getVersions_ pkg registry of
+                            case Registry.getVersions_ (Registry.FilterByTarget Target.GuidaTarget) pkg registry of
                                 Err suggestions ->
                                     case connection of
                                         Solver.Online _ ->
@@ -319,7 +319,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                                     Nothing ->
                                         -- finally try to add it from scratch
-                                        case Registry.getVersions_ pkg registry of
+                                        case Registry.getVersions_ (Registry.FilterByTarget Target.GuidaTarget) pkg registry of
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
@@ -367,7 +367,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                         Nothing ->
                             -- finally try to add it from scratch
-                            case Registry.getVersions_ pkg registry of
+                            case Registry.getVersions_ (Registry.FilterByTarget Target.ElmTarget) pkg registry of
                                 Err suggestions ->
                                     case connection of
                                         Solver.Online _ ->
@@ -442,7 +442,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                                     Nothing ->
                                         -- finally try to add it from scratch
-                                        case Registry.getVersions_ pkg registry of
+                                        case Registry.getVersions_ (Registry.FilterByTarget Target.ElmTarget) pkg registry of
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
@@ -484,7 +484,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                 else
                     -- try to add a new dependency
-                    case Registry.getVersions_ pkg registry of
+                    case Registry.getVersions_ (Registry.FilterByTarget Target.GuidaTarget) pkg registry of
                         Err suggestions ->
                             case connection of
                                 Solver.Online _ ->
@@ -567,7 +567,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                     Nothing ->
                         -- try to add a new dependency
-                        case Registry.getVersions_ pkg registry of
+                        case Registry.getVersions_ (Registry.FilterByTarget Target.GuidaTarget) pkg registry of
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->
@@ -640,7 +640,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                 else
                     -- try to add a new dependency
-                    case Registry.getVersions_ pkg registry of
+                    case Registry.getVersions_ (Registry.FilterByTarget Target.ElmTarget) pkg registry of
                         Err suggestions ->
                             case connection of
                                 Solver.Online _ ->
@@ -723,7 +723,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline forTest =
 
                     Nothing ->
                         -- try to add a new dependency
-                        case Registry.getVersions_ pkg registry of
+                        case Registry.getVersions_ (Registry.FilterByTarget Target.ElmTarget) pkg registry of
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->

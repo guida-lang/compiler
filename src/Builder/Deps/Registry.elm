@@ -1,6 +1,8 @@
 module Builder.Deps.Registry exposing
-    ( KnownVersions(..)
+    ( FilterVersions(..)
+    , KnownVersions(..)
     , Registry(..)
+    , Syntax(..)
     , fetch
     , getVersions
     , getVersions_
@@ -11,12 +13,12 @@ module Builder.Deps.Registry exposing
     , update
     )
 
-import Basics.Extra exposing (flip)
 import Builder.Deps.Website as Website
 import Builder.File as File
 import Builder.Http as Http
 import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
@@ -37,7 +39,12 @@ type Registry
 
 
 type KnownVersions
-    = KnownVersions V.Version (List V.Version)
+    = KnownVersions ( Syntax, V.Version ) (List ( Syntax, V.Version ))
+
+
+type Syntax
+    = Guida
+    | Elm
 
 
 
@@ -86,20 +93,53 @@ allPkgsDecoder =
         keyDecoder =
             Pkg.keyDecoder bail
 
-        versionsDecoder : D.Decoder () (List V.Version)
-        versionsDecoder =
-            D.list (D.mapError (\_ -> ()) V.decoder)
+        versionsDecoder : Syntax -> D.Decoder () (List ( Syntax, V.Version ))
+        versionsDecoder syntax =
+            D.fmap (List.map (Tuple.pair syntax)) (D.list (D.mapError (\_ -> ()) V.decoder))
 
-        toKnownVersions : List V.Version -> D.Decoder () KnownVersions
+        toKnownVersions : List ( Syntax, V.Version ) -> D.Decoder () KnownVersions
         toKnownVersions versions =
-            case List.sortWith (flip V.compare) versions of
+            case List.sortWith (\( _, v1 ) ( _, v2 ) -> V.compare v2 v1) versions of
                 v :: vs ->
                     D.pure (KnownVersions v vs)
 
                 [] ->
                     D.failure ()
     in
-    D.dict identity keyDecoder (D.bind toKnownVersions versionsDecoder)
+    D.oneOf
+        [ D.pure Tuple.pair
+            |> D.apply (D.field "guida" (D.dict identity keyDecoder (versionsDecoder Guida)))
+            |> D.apply (D.field "elm" (D.dict identity keyDecoder (versionsDecoder Elm)))
+            |> D.bind
+                (\( guidaVersions, elmVersions ) ->
+                    Dict.merge compare
+                        (\pkgName guidaPkgVersions ->
+                            D.bind
+                                (\acc ->
+                                    toKnownVersions guidaPkgVersions
+                                        |> D.fmap (\knownVersions -> Dict.insert identity pkgName knownVersions acc)
+                                )
+                        )
+                        (\pkgName guidaPkgVersions elmPkgVersions ->
+                            D.bind
+                                (\acc ->
+                                    toKnownVersions (guidaPkgVersions ++ elmPkgVersions)
+                                        |> D.fmap (\knownVersions -> Dict.insert identity pkgName knownVersions acc)
+                                )
+                        )
+                        (\pkgName elmPkgVersions ->
+                            D.bind
+                                (\acc ->
+                                    toKnownVersions elmPkgVersions
+                                        |> D.fmap (\knownVersions -> Dict.insert identity pkgName knownVersions acc)
+                                )
+                        )
+                        guidaVersions
+                        elmVersions
+                        (D.pure Dict.empty)
+                )
+        , D.dict identity keyDecoder (D.bind toKnownVersions (versionsDecoder Elm))
+        ]
 
 
 
@@ -108,7 +148,7 @@ allPkgsDecoder =
 
 update : Http.Manager -> Stuff.PackageCache -> Registry -> Task Never (Result Exit.RegistryProblem Registry)
 update manager cache ((Registry size packages) as oldRegistry) =
-    post manager ("/all-packages/since/" ++ String.fromInt size) (D.list newPkgDecoder) <|
+    post manager ("/all-packages/since/" ++ String.fromInt size) newPkgsDecoder <|
         \news ->
             case news of
                 [] ->
@@ -132,7 +172,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                         |> Task.fmap (\_ -> newRegistry)
 
 
-addNew : ( Pkg.Name, V.Version ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
+addNew : ( Pkg.Name, ( Syntax, V.Version ) ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
 addNew ( name, version ) versions =
     let
         add : Maybe KnownVersions -> KnownVersions
@@ -149,6 +189,16 @@ addNew ( name, version ) versions =
 
 
 -- NEW PACKAGE DECODER
+
+
+newPkgsDecoder : D.Decoder () (List ( Pkg.Name, ( Syntax, V.Version ) ))
+newPkgsDecoder =
+    D.oneOf
+        [ D.pure List.append
+            |> D.apply (D.field "guida" (D.list (D.fmap (\( pkgName, version ) -> ( pkgName, ( Guida, version ) )) newPkgDecoder)))
+            |> D.apply (D.field "elm" (D.list (D.fmap (\( pkgName, version ) -> ( pkgName, ( Elm, version ) )) newPkgDecoder)))
+        , D.list (D.fmap (\( pkgName, version ) -> ( pkgName, ( Elm, version ) )) newPkgDecoder)
+        ]
 
 
 newPkgDecoder : D.Decoder () ( Pkg.Name, V.Version )
@@ -194,14 +244,33 @@ latest manager cache =
 -- GET VERSIONS
 
 
-getVersions : Pkg.Name -> Registry -> Maybe KnownVersions
-getVersions name (Registry _ versions) =
-    Dict.get identity name versions
+type FilterVersions
+    = KeepAllVersions
+    | FilterByTarget Target
 
 
-getVersions_ : Pkg.Name -> Registry -> Result (List Pkg.Name) KnownVersions
-getVersions_ name (Registry _ versions) =
-    case Dict.get identity name versions of
+getVersions : FilterVersions -> Pkg.Name -> Registry -> Maybe KnownVersions
+getVersions filterVersions name (Registry _ versions) =
+    case filterVersions of
+        FilterByTarget Target.ElmTarget ->
+            Dict.get identity name versions
+                |> Maybe.andThen
+                    (\(KnownVersions v vs) ->
+                        case List.filter (\( syntax, _ ) -> syntax == Elm) (v :: vs) of
+                            goodVersion :: otherGoodVersions ->
+                                Just (KnownVersions goodVersion otherGoodVersions)
+
+                            [] ->
+                                Nothing
+                    )
+
+        _ ->
+            Dict.get identity name versions
+
+
+getVersions_ : FilterVersions -> Pkg.Name -> Registry -> Result (List Pkg.Name) KnownVersions
+getVersions_ filterVersions name ((Registry _ versions) as registry) =
+    case getVersions filterVersions name registry of
         Just kvs ->
             Ok kvs
 
@@ -251,13 +320,40 @@ registryEncoder (Registry size versions) =
 knownVersionsDecoder : BD.Decoder KnownVersions
 knownVersionsDecoder =
     BD.map2 KnownVersions
-        V.versionDecoder
-        (BD.list V.versionDecoder)
+        (BD.jsonPair syntaxDecoder V.versionDecoder)
+        (BD.list (BD.jsonPair syntaxDecoder V.versionDecoder))
 
 
 knownVersionsEncoder : KnownVersions -> BE.Encoder
 knownVersionsEncoder (KnownVersions version versions) =
     BE.sequence
-        [ V.versionEncoder version
-        , BE.list V.versionEncoder versions
+        [ BE.jsonPair syntaxEncoder V.versionEncoder version
+        , BE.list (BE.jsonPair syntaxEncoder V.versionEncoder) versions
         ]
+
+
+syntaxDecoder : BD.Decoder Syntax
+syntaxDecoder =
+    BD.string
+        |> BD.andThen
+            (\syntax ->
+                case syntax of
+                    "guida" ->
+                        BD.succeed Guida
+
+                    "elm" ->
+                        BD.succeed Elm
+
+                    _ ->
+                        BD.fail
+            )
+
+
+syntaxEncoder : Syntax -> BE.Encoder
+syntaxEncoder syntax =
+    case syntax of
+        Guida ->
+            BE.string "guida"
+
+        Elm ->
+            BE.string "elm"

@@ -10,6 +10,7 @@ module Compiler.Reporting.Render.Type exposing
     , vrecordSnippet
     )
 
+import Basics.Extra exposing (flip)
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
 import Compiler.Data.Name as Name
@@ -90,8 +91,7 @@ record entries maybeExt =
         ( fields, Nothing ) ->
             D.align <|
                 D.sep
-                    [ D.cat
-                        (List.interweave (D.fromChars "{ " :: List.repeat (List.length fields - 1) (D.fromChars ", ")) fields)
+                    [ D.cat (List.map2 (flip D.plus) (D.fromChars "{" :: List.repeat (List.length fields - 1) (D.fromChars ",")) fields)
                     , D.fromChars "}"
                     ]
 
@@ -100,9 +100,9 @@ record entries maybeExt =
                 D.sep
                     [ D.hang 4 <|
                         D.sep
-                            [ D.fromChars "{ " |> D.plus ext
-                            , D.cat
-                                (List.interweave (D.fromChars "|" :: List.repeat (List.length fields - 1) (D.fromChars ", ")) fields)
+                            [ D.fromChars "{"
+                                |> D.plus ext
+                            , D.cat (List.map2 (flip D.plus) (D.fromChars "|" :: List.repeat (List.length fields - 1) (D.fromChars ",")) fields)
                             ]
                     , D.fromChars "}"
                     ]

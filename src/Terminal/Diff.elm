@@ -86,7 +86,7 @@ diff : Env -> Args -> Task Exit.Diff ()
 diff ((Env _ _ _ registry) as env) args =
     case args of
         GlobalInquiry name v1 v2 ->
-            case Registry.getVersions_ name registry of
+            case Registry.getVersions_ Registry.KeepAllVersions name registry of
                 Ok vsns ->
                     getDocs env name vsns (V.min v1 v2)
                         |> Task.bind
@@ -144,16 +144,16 @@ diff ((Env _ _ _ registry) as env) args =
 
 
 getDocs : Env -> Pkg.Name -> Registry.KnownVersions -> V.Version -> Task Exit.Diff Docs.Documentation
-getDocs (Env _ cache manager _) name (Registry.KnownVersions latest previous) version =
-    if latest == version || List.member version previous then
+getDocs (Env _ cache manager _) name (Registry.KnownVersions ( _, latest ) previous) version =
+    if latest == version || List.member version (List.map Tuple.second previous) then
         Task.eio (Exit.DiffDocsProblem version) <| DD.getDocs cache manager name version
 
     else
-        Task.throw <| Exit.DiffUnknownVersion version (latest :: previous)
+        Task.throw <| Exit.DiffUnknownVersion version (latest :: List.map Tuple.second previous)
 
 
 getLatestDocs : Env -> Pkg.Name -> Registry.KnownVersions -> Task Exit.Diff Docs.Documentation
-getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions latest _) =
+getLatestDocs (Env _ cache manager _) name (Registry.KnownVersions ( _, latest ) _) =
     Task.eio (Exit.DiffDocsProblem latest) <| DD.getDocs cache manager name latest
 
 
@@ -194,7 +194,7 @@ readOutline (Env maybeRoot _ _ registry) =
                                                     Outline.ElmPkgOutline elmPkg _ _ _ _ _ _ _ ->
                                                         elmPkg
                                         in
-                                        case Registry.getVersions pkg registry of
+                                        case Registry.getVersions Registry.KeepAllVersions pkg registry of
                                             Just vsns ->
                                                 Task.pure ( pkg, vsns )
 

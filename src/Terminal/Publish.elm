@@ -91,7 +91,7 @@ publish ((Env root _ manager registry outline) as env) =
             let
                 maybeKnownVersions : Maybe Registry.KnownVersions
                 maybeKnownVersions =
-                    Registry.getVersions pkg registry
+                    Registry.getVersions Registry.KeepAllVersions pkg registry
             in
             reportPublishStart pkg vsn maybeKnownVersions
                 |> Task.bind
@@ -141,7 +141,7 @@ publish ((Env root _ manager registry outline) as env) =
             let
                 maybeKnownVersions : Maybe Registry.KnownVersions
                 maybeKnownVersions =
-                    Registry.getVersions pkg registry
+                    Registry.getVersions Registry.KeepAllVersions pkg registry
             in
             reportPublishStart pkg vsn maybeKnownVersions
                 |> Task.bind
@@ -524,8 +524,8 @@ verifyVersion ((Env root _ _ _ _) as env) pkg vsn newDocs publishedVersions =
                                 Stuff.ElmRoot _ _ ->
                                     Exit.PublishElmNotInitialVersion vsn
 
-            Just ((Registry.KnownVersions latest previous) as knownVersions) ->
-                if vsn == latest || List.member vsn previous then
+            Just ((Registry.KnownVersions ( _, latest ) previous) as knownVersions) ->
+                if vsn == latest || List.member vsn (List.map Tuple.second previous) then
                     Task.pure <| Err <| Exit.PublishAlreadyPublished vsn
 
                 else
@@ -533,7 +533,7 @@ verifyVersion ((Env root _ _ _ _) as env) pkg vsn newDocs publishedVersions =
 
 
 verifyBump : Env -> Pkg.Name -> V.Version -> Docs.Documentation -> Registry.KnownVersions -> Task Never (Result Exit.Publish GoodVersion)
-verifyBump (Env root cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions latest _) as knownVersions) =
+verifyBump (Env root cache manager _ _) pkg vsn newDocs ((Registry.KnownVersions ( _, latest ) _) as knownVersions) =
     case List.find (\( _, new, _ ) -> vsn == new) (Bump.getPossibilities knownVersions) of
         Nothing ->
             Task.pure <|

@@ -219,7 +219,7 @@ convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outl
 convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
     case ( root, outline ) of
         ( Stuff.GuidaRoot _, Outline.Pkg (Outline.ElmPkgOutline name summary license version exposed deps test elmVersion) ) ->
-            case Registry.getVersions_ Pkg.stdlib registry of
+            case Registry.getVersions_ Registry.KeepAllVersions Pkg.stdlib registry of
                 Err _ ->
                     Task.io Website.domain
                         |> Task.bind
@@ -844,7 +844,7 @@ build target (Env _ _ _ _ _ connection registry) key cache depsMVar pkg (Solver.
                                 Ok (Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ exposed deps _ _)) ->
                                     case target of
                                         Target.GuidaTarget ->
-                                            case Registry.getVersions_ Pkg.stdlib registry of
+                                            case Registry.getVersions_ Registry.KeepAllVersions Pkg.stdlib registry of
                                                 Err _ ->
                                                     Task.pure (Err Nothing)
 

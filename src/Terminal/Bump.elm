@@ -100,7 +100,7 @@ bump ((Env root _ _ registry outline) as env) =
             (\registryDomain ->
                 case outline of
                     Outline.GuidaPkgOutline pkg _ _ vsn _ _ _ _ ->
-                        case Registry.getVersions pkg registry of
+                        case Registry.getVersions Registry.KeepAllVersions pkg registry of
                             Just knownVersions ->
                                 let
                                     bumpableVersions : List V.Version
@@ -119,7 +119,7 @@ bump ((Env root _ _ registry outline) as env) =
                                 Task.io <| checkNewPackage root outline
 
                     Outline.ElmPkgOutline pkg _ _ vsn _ _ _ _ ->
-                        case Registry.getVersions pkg registry of
+                        case Registry.getVersions Registry.KeepAllVersions pkg registry of
                             Just knownVersions ->
                                 let
                                     bumpableVersions : List V.Version
