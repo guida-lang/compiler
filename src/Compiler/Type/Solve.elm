@@ -670,7 +670,6 @@ typeToVariable rank pools tipe =
 -- `register` in particular. Have not explored further yet. Top-level definitions
 -- are recommended in cases like this anyway, so there is at least a safety
 -- valve for now.
---
 
 
 typeToVar : Int -> Pools -> Dict String Name.Name Variable -> Type -> IO Variable

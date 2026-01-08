@@ -57,11 +57,11 @@ apply : StateT s a -> StateT s (a -> b) -> StateT s b
 apply (StateT arg) (StateT func) =
     StateT
         (\s ->
-            arg s
+            func s
                 |> IO.bind
-                    (\( a, sa ) ->
-                        func sa
-                            |> IO.fmap (\( fb, sb ) -> ( fb a, sb ))
+                    (\( fb, sf ) ->
+                        arg sf
+                            |> IO.fmap (\( a, sa ) -> ( fb a, sa ))
                     )
         )
 
