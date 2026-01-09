@@ -44,11 +44,11 @@ run pkg =
                                                         case oldOutline of
                                                             Outline.App outline ->
                                                                 makeAppPlan root env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes)
+                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
 
                                                             Outline.Pkg outline ->
                                                                 makePkgPlan root env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes)
+                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
                                                     )
                                         )
                                 )
@@ -67,8 +67,8 @@ type Changes vsn
     | Changes Outline.Outline
 
 
-attemptChanges : Stuff.Root -> Solver.Env -> Outline.Outline -> (a -> String) -> Changes a -> Task Exit.Install ()
-attemptChanges root env oldOutline _ changes =
+attemptChanges : Stuff.Root -> Solver.Env -> Outline.Outline -> Changes a -> Task Exit.Install ()
+attemptChanges root env oldOutline changes =
     case changes of
         AlreadyInstalled ->
             Task.io (IO.putStrLn "It is already installed!")
@@ -478,7 +478,7 @@ detectChanges old new =
     Dict.merge compare
         (\k v -> Dict.insert identity k (Remove v))
         (\k oldElem newElem acc ->
-            case keepChange k oldElem newElem of
+            case keepChange oldElem newElem of
                 Just change ->
                     Dict.insert identity k change acc
 
@@ -491,8 +491,8 @@ detectChanges old new =
         Dict.empty
 
 
-keepChange : k -> v -> v -> Maybe (Change v)
-keepChange _ old new =
+keepChange : v -> v -> Maybe (Change v)
+keepChange old new =
     if old == new then
         Nothing
 

@@ -24,7 +24,6 @@ import Compiler.Guida.Version as V exposing (Version)
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
-import List
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task

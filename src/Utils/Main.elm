@@ -1268,8 +1268,10 @@ chItemDecoder decoder =
 
 
 someExceptionEncoder : SomeException -> BE.Encoder
-someExceptionEncoder _ =
-    BE.unsignedInt8 0
+someExceptionEncoder someException =
+    case someException of
+        SomeException ->
+            BE.unsignedInt8 0
 
 
 someExceptionDecoder : BD.Decoder SomeException

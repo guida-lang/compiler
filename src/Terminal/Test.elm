@@ -51,16 +51,20 @@ type Flags
 
 run : List String -> Flags -> Task Never ()
 run paths flags =
-    Stuff.findRoot
+    getStyle
         |> Task.bind
-            (\maybeRoot ->
-                Reporting.attemptWithStyle style Exit.testToReport <|
-                    case maybeRoot of
-                        Just root ->
-                            runHelp root paths flags
+            (\style ->
+                Stuff.findRoot
+                    |> Task.bind
+                        (\maybeRoot ->
+                            Reporting.attemptWithStyle style Exit.testToReport <|
+                                case maybeRoot of
+                                    Just root ->
+                                        runHelp root paths flags
 
-                        Nothing ->
-                            Task.pure (Err Exit.TestNoOutline)
+                                    Nothing ->
+                                        Task.pure (Err Exit.TestNoOutline)
+                        )
             )
 
 
@@ -121,23 +125,31 @@ runHelp root testFileGlobs flags =
                                                                         |> Task.bind (attemptChanges root env)
 
                                                                 Outline.App (Outline.ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                    Outline.ElmAppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
-                                                                        |> makeAppPlan env Pkg.core
-                                                                        |> Task.bind (makeAppPlan env Pkg.json)
-                                                                        |> Task.bind (makeAppPlan env Pkg.time)
-                                                                        |> Task.bind (makeAppPlan env Pkg.random)
-                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.bind (attemptChanges root env)
+                                                                    Task.io (requireElmTestPackageApp root depsDirect testDirect)
+                                                                        |> Task.bind
+                                                                            (\_ ->
+                                                                                Outline.ElmAppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                                    |> makeAppPlan env Pkg.core
+                                                                                    |> Task.bind (makeAppPlan env Pkg.json)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.time)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.random)
+                                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                                    |> Task.bind (attemptChanges root env)
+                                                                            )
 
                                                                 Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps test _) ->
-                                                                    Outline.ElmAppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
-                                                                        |> makePkgPlan env (Dict.union deps test)
-                                                                        |> Task.bind (makeAppPlan env Pkg.core)
-                                                                        |> Task.bind (makeAppPlan env Pkg.json)
-                                                                        |> Task.bind (makeAppPlan env Pkg.time)
-                                                                        |> Task.bind (makeAppPlan env Pkg.random)
-                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.bind (attemptChanges root env)
+                                                                    Task.io (requireElmTestPackagePkg root deps test)
+                                                                        |> Task.bind
+                                                                            (\_ ->
+                                                                                Outline.ElmAppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                                    |> makePkgPlan env (Dict.union deps test)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.core)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.json)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.time)
+                                                                                    |> Task.bind (makeAppPlan env Pkg.random)
+                                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                                    |> Task.bind (attemptChanges root env)
+                                                                            )
                                                         )
                                             )
                                 )
@@ -203,43 +215,72 @@ runHelp root testFileGlobs flags =
                                                     |> Task.bind
                                                         (\content ->
                                                             IO.hPutStrLn IO.stdout "Starting tests"
+                                                                |> Task.bind (\_ -> getInterpreter)
                                                                 |> Task.bind
-                                                                    (\_ ->
-                                                                        getInterpreter
-                                                                            |> Task.bind
-                                                                                (\interpreter ->
-                                                                                    let
-                                                                                        varName : String
-                                                                                        varName =
-                                                                                            case root of
-                                                                                                Stuff.GuidaRoot _ ->
-                                                                                                    "Guida"
+                                                                    (\interpreter ->
+                                                                        let
+                                                                            varName : String
+                                                                            varName =
+                                                                                case root of
+                                                                                    Stuff.GuidaRoot _ ->
+                                                                                        "Guida"
 
-                                                                                                Stuff.ElmRoot _ _ ->
-                                                                                                    "Elm"
+                                                                                    Stuff.ElmRoot _ _ ->
+                                                                                        "Elm"
 
-                                                                                        finalContent : String
-                                                                                        finalContent =
-                                                                                            before
-                                                                                                ++ "\nvar "
-                                                                                                ++ varName
-                                                                                                ++ " = (function(module) {\n"
-                                                                                                ++ addKernelTestChecking (Stuff.rootToTarget root) content
-                                                                                                ++ "\nreturn this."
-                                                                                                ++ varName
-                                                                                                ++ ";\n})({});\n"
-                                                                                                ++ after (Stuff.rootToTarget root)
-                                                                                    in
-                                                                                    interpret interpreter finalContent
-                                                                                )
+                                                                            finalContent : String
+                                                                            finalContent =
+                                                                                before
+                                                                                    ++ "\nvar "
+                                                                                    ++ varName
+                                                                                    ++ " = (function(module) {\n"
+                                                                                    ++ addKernelTestChecking (Stuff.rootToTarget root) content
+                                                                                    ++ "\nreturn this."
+                                                                                    ++ varName
+                                                                                    ++ ";\n})({});\n"
+                                                                                    ++ after (Stuff.rootToTarget root)
+                                                                        in
+                                                                        interpret interpreter finalContent
                                                                     )
                                                         )
                                             )
                                         |> Task.io
                                 )
-                            |> Task.fmap (\_ -> ())
+                            |> Task.void
                     )
             )
+
+
+requireElmTestPackageApp : Stuff.Root -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Task Never ()
+requireElmTestPackageApp root depsDirect testDirect =
+    case Maybe.or (Dict.get identity Pkg.test testDirect) (Dict.get identity Pkg.test depsDirect) of
+        Just (V.Version 2 _ _) ->
+            Task.pure ()
+
+        Just version ->
+            IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ V.toChars version ++ ".")
+                |> Task.bind (\_ -> Exit.exitFailure)
+
+        Nothing ->
+            IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
+                |> Task.bind (\_ -> Exit.exitFailure)
+
+
+requireElmTestPackagePkg : Stuff.Root -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Never ()
+requireElmTestPackagePkg root deps test =
+    case Maybe.or (Dict.get identity Pkg.test deps) (Dict.get identity Pkg.test test) of
+        Just range ->
+            case C.lowerBound range of
+                V.Version 2 _ _ ->
+                    Task.pure ()
+
+                _ ->
+                    IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ C.toChars range ++ ".")
+                        |> Task.bind (\_ -> Exit.exitFailure)
+
+        Nothing ->
+            IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
+                |> Task.bind (\_ -> Exit.exitFailure)
 
 
 interpret : FilePath -> String -> Task Never Exit.ExitCode
@@ -753,9 +794,9 @@ generateElmReportVariant maybeReport =
 -- GET INFORMATION
 
 
-style : Reporting.Style
-style =
-    Reporting.silent
+getStyle : Task Never Reporting.Style
+getStyle =
+    Reporting.terminal
 
 
 extractExposedPossiblyTests : String -> Task Never (Maybe ( String, List String ))
@@ -1211,7 +1252,7 @@ runMake root path =
     BW.withScope
         (\scope ->
             Task.run <|
-                (Task.eio Exit.TestBadDetails (Details.load style scope root)
+                (Task.eio Exit.TestBadDetails (Details.load Reporting.silent scope root)
                     |> Task.bind
                         (\details ->
                             buildPaths root details (NE.Nonempty path [])
@@ -1227,7 +1268,7 @@ runMake root path =
 buildPaths : Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Test Build.Artifacts
 buildPaths root details paths =
     Task.eio Exit.TestCannotBuild <|
-        Build.fromPaths style root details paths
+        Build.fromPaths Reporting.silent root details paths
 
 
 

@@ -9,7 +9,6 @@ module Compiler.Reporting.Render.Code exposing
     , whatIsNext
     )
 
-import Char
 import Compiler.Parse.Primitives exposing (Col, Row)
 import Compiler.Parse.Symbol exposing (binopCharSet)
 import Compiler.Parse.Variable as Var

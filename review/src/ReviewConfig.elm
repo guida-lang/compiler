@@ -39,7 +39,7 @@ config =
     , NoConfusingPrefixOperator.rule
     , NoDebug.Log.rule
     , NoDebug.TodoOrToString.rule
-        |> Rule.ignoreErrorsForDirectories [ "tests/" ]
+        |> Rule.ignoreErrorsForDirectories [ "tests" ]
     , NoExposingEverything.rule
     , NoImportingEverything.rule []
     , NoMissingTypeAnnotation.rule
@@ -53,8 +53,7 @@ config =
     , NoUnused.Dependencies.rule
 
     -- , NoUnused.Exports.rule
-    , NoUnused.Parameters.rule
-        |> Rule.ignoreErrorsForFiles [ "src/Utils/Crash.elm" ]
+    -- , NoUnused.Parameters.rule
     , NoUnused.Patterns.rule
     , NoUnused.Variables.rule
     , Simplify.rule Simplify.defaults

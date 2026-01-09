@@ -138,7 +138,7 @@ patternToDoc context pattern =
                 ctorDoc =
                     D.hsep (D.fromChars name :: List.map (patternToDoc Arg) args)
             in
-            if context == Arg && List.length args > 0 then
+            if context == Arg && not (List.isEmpty args) then
                 D.fromChars "("
                     |> D.a ctorDoc
                     |> D.a (D.fromChars ")")

@@ -2108,7 +2108,7 @@ formatExpression importInfo (A.At region aexpr) =
                 ( ( multiline
                   , Box.allSingles (List.map (formatPreCommented << Src.c1map (syntaxParens SpaceSeparated << formatPattern << A.toValue)) srcArgs)
                   )
-                , ( bodyComments == []
+                , ( List.isEmpty bodyComments
                   , syntaxParens SyntaxSeparated (formatExpression importInfo expr)
                   )
                 )

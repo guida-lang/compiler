@@ -23,6 +23,7 @@ module Compiler.Guida.Package exposing
     , sanitizeElmDeps
     , stdlib
     , suggestions
+    , test
     , time
     , toChars
     , toJsonString
@@ -113,6 +114,7 @@ sanitizeElmDeps target deps =
     case target of
         Target.GuidaTarget ->
             let
+                filteredDeps : Dict ( String, String ) Name C.Constraint
                 filteredDeps =
                     Dict.filter (\d _ -> not (List.member d elmKernelPackages)) deps
             in
