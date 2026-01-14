@@ -21,5 +21,5 @@ cd try
 npm install
 ```
 
-3. Start the server with `npm run server`
+3. Start the server with `npm start`
 4. Open http://127.0.0.1:8088

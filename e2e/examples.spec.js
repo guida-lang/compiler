@@ -13,12 +13,7 @@ const guidaAppPath = path.join(__dirname, "..", "assets", "some-guida-applicatio
  */
 const guidaMake = (filepath, output) => {
   return execSync(`../../bin/index.js make ${filepath} --output=tmp/${output}`, {
-    cwd: guidaAppPath,
-    env: {
-      ...process.env,
-      GUIDA_HOME: path.join(guidaAppPath, ".guida"),
-      GUIDA_REGISTRY: "http://localhost:3210"
-    }
+    cwd: guidaAppPath
   });
 };
 

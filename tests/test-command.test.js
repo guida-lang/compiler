@@ -35,12 +35,7 @@ describe("guida test command", () => {
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         test.stderr.on("data", (data) => {
@@ -87,12 +82,7 @@ describe("guida test command", () => {
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         test.stderr.on("data", (data) => {
@@ -182,12 +172,7 @@ suite =
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         let stdout = "";
@@ -268,12 +253,7 @@ suite =
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         let stdout = "";
@@ -356,12 +336,7 @@ suite =
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         let stdout = "";
@@ -440,12 +415,7 @@ suite =
 
         const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         let stdout = "";

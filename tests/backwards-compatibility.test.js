@@ -78,11 +78,7 @@ describe("backwards compatibility", () => {
           childProcess.execSync(
             `../bin/index.js make src/${example}.elm ${commandFlag} --output ${guidaOutput}`,
             {
-              cwd: path.join(__dirname, "..", "examples"),
-              env: {
-                ...process.env,
-                GUIDA_REGISTRY: "https://package.elm-lang.org"
-              }
+              cwd: path.join(__dirname, "..", "examples")
             }
           );
         } catch (e) {
@@ -111,11 +107,7 @@ describe("backwards compatibility", () => {
       childProcess.execSync(
         `./bin/index.js make src/Terminal/Main.elm --output ${guidaOutput}`,
         {
-          cwd: path.join(__dirname, ".."),
-          env: {
-            ...process.env,
-            GUIDA_REGISTRY: "https://package.elm-lang.org"
-          }
+          cwd: path.join(__dirname, "..")
         }
       );
     } catch (e) {
@@ -140,11 +132,7 @@ describe("backwards compatibility", () => {
       childProcess.execSync(
         `../../bin/index.js make src/Invalid.elm --report=json &> ${guidaOutput}`,
         {
-          cwd: path.join(__dirname, "..", "assets", "some-elm-application"),
-          env: {
-            ...process.env,
-            GUIDA_REGISTRY: "https://package.elm-lang.org"
-          }
+          cwd: path.join(__dirname, "..", "assets", "some-elm-application")
         }
       );
     } catch (_) { }
@@ -169,11 +157,7 @@ describe("backwards compatibility", () => {
       childProcess.execSync(
         `../../bin/index.js make --docs=${guidaOutput}`,
         {
-          cwd: path.join(__dirname, "..", "assets", "some-elm-package"),
-          env: {
-            ...process.env,
-            GUIDA_REGISTRY: "https://package.elm-lang.org"
-          }
+          cwd: path.join(__dirname, "..", "assets", "some-elm-package")
         }
       );
     } catch (e) {
@@ -199,11 +183,7 @@ describe("backwards compatibility", () => {
         childProcess.execSync(
           `../../bin/index.js make src/ElmTupleN.elm --report=json &> ${guidaOutput}`,
           {
-            cwd: path.join(__dirname, "..", "assets", "some-elm-application"),
-            env: {
-              ...process.env,
-              GUIDA_REGISTRY: "https://package.elm-lang.org"
-            }
+            cwd: path.join(__dirname, "..", "assets", "some-elm-application")
           }
         );
       } catch (_) { }

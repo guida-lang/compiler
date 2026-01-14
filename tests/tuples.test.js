@@ -7,11 +7,7 @@ describe("tuples", () => {
             childProcess.execSync(
                 `../../bin/index.js make src/GuidaTupleN.guida`,
                 {
-                    cwd: path.join(__dirname, "..", "assets", "some-guida-application"), env: {
-                        ...process.env,
-                        GUIDA_HOME: path.join(__dirname, "..", "assets", "some-guida-application", ".guida"),
-                        GUIDA_REGISTRY: "http://localhost:3210"
-                    }
+                    cwd: path.join(__dirname, "..", "assets", "some-guida-application")
                 }
             );
         }).not.toThrow();
@@ -21,11 +17,7 @@ describe("tuples", () => {
         childProcess.exec(
             `../../bin/index.js make src/GuidaTupleN.guida`,
             {
-                cwd: path.join(__dirname, "..", "assets", "some-elm-application"), env: {
-                    ...process.env,
-                    GUIDA_HOME: path.join(__dirname, "..", "assets", "some-elm-application", ".guida"),
-                    GUIDA_REGISTRY: "https://package.elm-lang.org"
-                },
+                cwd: path.join(__dirname, "..", "assets", "some-elm-application")
             }, (err, _stdout, stderr) => {
                 expect(err).toBeDefined();
                 expect(stderr).toMatch("UNEXPECTED FILE EXTENSION");

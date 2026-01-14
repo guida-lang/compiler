@@ -38,12 +38,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "elm.json"))).toBe(true);
@@ -95,12 +90,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "elm.json"))).toBe(true);
@@ -145,12 +135,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -195,12 +180,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -245,12 +225,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall guida-lang/project-metadata-utils --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -295,12 +270,7 @@ describe("guida uninstall command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} uninstall guida-lang/project-metadata-utils --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);

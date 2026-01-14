@@ -70,15 +70,42 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-  let
-    _ =
-      (0, 1, 2, 3)
-  in
   div []
     [ button [ onClick Decrement ] [ text "-" ]
     , div [] [ text (String.fromInt model) ]
     , button [ onClick Increment ] [ text "+" ]
     ]</textarea>
+
+  <div id="config-options">
+    <fieldset>
+      <legend>Select a json config:</legend>
+
+      <input type="radio" id="guida-json" name="config" value="guida" checked />
+      <label for="guida">Guida</label>
+
+      <input type="radio" id="elm-json" name="config" value="elm" />
+      <label for="elm">Elm</label>
+    </fieldset>
+  </div>
+
+  <textarea id="json-config" readonly>{
+    "type": "application",
+    "source-directories": [
+        "src"
+    ],
+    "guida-version": "1.0.0",
+    "dependencies": {
+        "direct": {
+            "guida-lang/stdlib": "1.0.0"
+        },
+        "indirect": {}
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}</textarea>
+
   <select id="mode">
     <option value="dev" selected>Dev</option>
     <option value="debug">Debug</option>

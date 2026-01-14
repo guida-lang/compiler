@@ -9,12 +9,7 @@ describe("guida init command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} init --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -58,12 +53,7 @@ suite =
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} init --package --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);

@@ -36,12 +36,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "elm.json"))).toBe(true);
@@ -94,12 +89,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "elm.json"))).toBe(true);
@@ -152,12 +142,7 @@ describe("guida install command", () => {
         expect(() => {
             child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install guida-lang/project-metadata-utils --yes`, {
                 cwd: tmpobj.name,
-                stdio: "pipe",
-                env: {
-                    ...process.env,
-                    GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                    GUIDA_REGISTRY: "http://localhost:3210"
-                }
+                stdio: "pipe"
             });
         }).toThrow("UNKNOWN PACKAGE");
     });
@@ -184,12 +169,7 @@ describe("guida install command", () => {
         expect(() => {
             child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install guida-lang/project-metadata-utils --yes`, {
                 cwd: tmpobj.name,
-                stdio: "pipe",
-                env: {
-                    ...process.env,
-                    GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                    GUIDA_REGISTRY: "http://localhost:3210"
-                }
+                stdio: "pipe"
             });
         }).toThrow("UNKNOWN PACKAGE");
     });
@@ -219,12 +199,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -269,12 +244,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -319,12 +289,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install guida-lang/project-metadata-utils --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -369,12 +334,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install guida-lang/project-metadata-utils --yes`, {
             cwd: tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(tmpobj.name, "guida.json"))).toBe(true);
@@ -395,8 +355,6 @@ describe("guida install command", () => {
     });
 
     it("installs elm package on elm.json and guida package on guida.json, with same GUIDA_HOME", () => {
-        const home_tmpobj = tmp.dirSync();
-
         // ELM
         const elm_tmpobj = tmp.dirSync();
 
@@ -429,12 +387,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: elm_tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(home_tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(elm_tmpobj.name, "elm.json"))).toBe(true);
@@ -490,12 +443,7 @@ describe("guida install command", () => {
 
         child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} install evancz/elm-playground --yes`, {
             cwd: guida_tmpobj.name,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(home_tmpobj.name, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         expect(fs.existsSync(path.join(guida_tmpobj.name, "guida.json"))).toBe(true);

@@ -9,10 +9,6 @@ describe("maybe map", () => {
             `../../bin/index.js make src/MaybeMap.elm`,
             {
                 cwd: path.join(__dirname, "..", "assets", "some-elm-application"),
-                env: {
-                    ...process.env,
-                    GUIDA_REGISTRY: "https://package.elm-lang.org"
-                }
             }
         );
 

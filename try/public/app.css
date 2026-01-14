@@ -2,6 +2,8 @@ body {
     display: grid;
     grid-template:
         "code code code code preview" 1fr
+        "config-options config-options config-options config-options preview" min-content
+        "json-config json-config json-config json-config preview" 1fr
         "mode sourcemaps format run preview" min-content
         "dependency dependency install uninstall preview" min-content
         / 1fr 2fr 1fr 1fr 5fr;
@@ -16,6 +18,17 @@ body {
     padding: 10px;
     overflow-y: auto;
     resize: none;
+}
+
+#config-options {
+    grid-area: config-options;
+    padding: 10px;
+    overflow-y: auto;
+    resize: none;
+}
+
+#json-config {
+    grid-area: json-config;
 }
 
 #mode {

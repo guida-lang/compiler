@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "preserver": "esbuild app.js --bundle --platform=browser --outfile=public/app.js",
-    "server": "./server.js"
+    "prestart": "esbuild app.js --bundle --platform=browser --outfile=public/app.js",
+    "start": "./server.js"
   },
   "dependencies": {
     "esbuild": "^0.25.1",

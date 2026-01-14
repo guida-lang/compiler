@@ -11,12 +11,7 @@ describe("repl", () => {
     const run = (input, output, done, dir = tmpobj.name) => {
         const repl = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["repl"], {
             cwd: dir,
-            stdio: "pipe",
-            env: {
-                ...process.env,
-                GUIDA_HOME: path.join(dir, ".guida"),
-                GUIDA_REGISTRY: "http://localhost:3210"
-            }
+            stdio: "pipe"
         });
 
         repl.stdout.on("data", (data) => {
