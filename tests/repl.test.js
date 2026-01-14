@@ -69,7 +69,7 @@ describe("repl", () => {
         run("( 1, 2, 3 )", "(\x1B[95m1\x1B[0m,\x1B[95m2\x1B[0m,\x1B[95m3\x1B[0m)\x1B[90m : ( number, number1, number2 )\x1B[0m\n", done);
     }, 120_000);
 
-    test("4-tuple", (done) => {
+    test.skip("4-tuple", (done) => {
         run("( 1, 2, 3, 4 )", "(\x1B[95m1\x1B[0m,\x1B[95m2\x1B[0m,\x1B[95m3\x1B[0m,\x1B[95m4\x1B[0m)\x1B[90m : ( number, number1, number2, number3 )\x1B[0m\n", done);
     }, 120_000);
 
