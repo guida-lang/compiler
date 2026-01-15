@@ -14,7 +14,6 @@ module Terminal.Terminal exposing
     , zeroOrMore
     )
 
-import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import List.Extra as List
 import System.Exit as Exit
@@ -43,7 +42,9 @@ app intro outro commands =
                         Error.exitWithOverview intro outro commands
 
                     [ "--version" ] ->
-                        IO.hPutStrLn IO.stdout (V.toChars V.compiler)
+                        IO.hPutStrLn IO.stdout
+                            -- (V.toChars V.compiler)
+                            "1.0.0-alpha"
                             |> Task.bind (\_ -> Exit.exitSuccess)
 
                     command :: chunks ->
