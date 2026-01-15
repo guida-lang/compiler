@@ -25,7 +25,6 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "form-data": "^4.0.2",
-    "indexeddb-fs": "^2.1.5",
     "jszip": "^3.10.1",
     "mock-xmlhttprequest": "^8.4.1",
     "tmp": "^0.2.3",

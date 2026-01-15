@@ -9,6 +9,7 @@
   "dependencies": {
     "esbuild": "^0.25.1",
     "express": "^4.22.1",
-    "guida": "file:.."
+    "guida": "file:..",
+    "indexeddb-fs": "^2.1.5"
   }
 }
