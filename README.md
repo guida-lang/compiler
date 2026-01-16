@@ -150,24 +150,31 @@ npm run elm-format
 
 # Publish new npm package version
 
-Before publishing a new npm package version, make sure you are on the correct
-branch, ie. in case of wanting to publish a 0.x version, you should have the
-`v0.x` branch checked out.
+Before publishing a new npm package version, verify it locally by using `npm pack`.
+This will create a `.tgz` file, which can be used to install it locally like so:
+
+```
+npm pack
+npm install -g guida-*.tgz
+```
+
+Make sure you are on the correct branch, ie. in case of wanting to publish a 0.x
+version, you should have the `v0.x` branch checked out.
 
 To publish a new version, we should then run the following commands:
 
 ```
 npm version <newversion>
-npm publish
+npm publish --tag latest
 git push origin <currentbranch>
 git push origin tag v<newversion>
 ```
 
-As an example, these should have been the commands ran for publishing `v0.2.0-alpha`
+As an example, these should have been the commands ran for publishing `v0.2.0-alpha`:
 
 ```
 npm version 0.2.0-alpha
-npm publish
+npm publish --tag latest
 git push origin v0.x
 git push origin tag v0.2.0-alpha
 ```
