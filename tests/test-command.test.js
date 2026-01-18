@@ -273,6 +273,36 @@ suite =
         });
     }, 120_000);
 
+    it("runs tests after `guida init --yes`", (done) => {
+        const tmpobj = tmp.dirSync();
+
+        child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} init --yes`, {
+            cwd: tmpobj.name,
+            stdio: "pipe"
+        });
+
+        const test = child_process.spawn(path.join(__dirname, "..", "bin", "index.js"), ["test"], {
+            cwd: tmpobj.name,
+            stdio: "pipe"
+        });
+
+        let stdout = "";
+
+        test.stdout.on("data", (data) => {
+            stdout += data.toString();
+        });
+
+        test.on("close", (code) => {
+            const strippedOutput = util.stripVTControlCharacters(stdout);
+
+            expect(strippedOutput).toMatch("TEST RUN INCOMPLETE");
+            expect(strippedOutput).toMatch(new RegExp("Todo: +1"));
+            expect(code).toBe(0);
+
+            done();
+        });
+    }, 120_000);
+
     it("runs tests with application guida.json", (done) => {
         const tmpobj = tmp.dirSync();
 

@@ -805,13 +805,13 @@ extractExposedPossiblyTests path =
         |> Task.bind
             (\bytes ->
                 case Parse.fromByteString Target.GuidaTarget (SV.fileSyntaxVersion path) Parse.Application bytes of
-                    Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ _ _ _ _ _) ->
+                    Ok (Src.Module _ (Just (A.At _ name)) (A.At _ exposing_) _ _ values _ _ _ _) ->
                         let
                             exposed : List Name
                             exposed =
                                 case exposing_ of
                                     Src.Open _ _ ->
-                                        []
+                                        List.map (\(A.At _ (Src.Value _ ( _, A.At _ lowerName ) _ _ _)) -> lowerName) values
 
                                     Src.Explicit (A.At _ exposedList) ->
                                         List.filterMap
