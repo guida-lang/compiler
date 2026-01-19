@@ -102,7 +102,7 @@ modify f =
 
 traverseList : (a -> StateT s b) -> List a -> StateT s (List b)
 traverseList f =
-    List.foldr (\a -> bind (\c -> fmap (\va -> va :: c) (f a)))
+    List.foldl (\a -> bind (\c -> fmap (\va -> c ++ [ va ]) (f a)))
         (pure [])
 
 
