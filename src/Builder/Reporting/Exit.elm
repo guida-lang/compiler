@@ -303,7 +303,7 @@ bumpToReport bump =
                 Nothing
                 "I cannot find a guida.json so I am not sure what you want me to bump."
                 [ D.reflow <|
-                    "Guida packages always have an guida.json that says the current version number. If you run this command from a directory with a guida.json file, I will try to bump the version in there based on the API changes."
+                    "Guida packages always have a guida.json that says the current version number. If you run this command from a directory with a guida.json file, I will try to bump the version in there based on the API changes."
                 ]
 
         BumpBadOutline outline ->
@@ -4137,9 +4137,9 @@ testToReport test =
         TestNoOutline ->
             Help.report "TEST WHAT?"
                 Nothing
-                "I cannot find an elm.json so I am not sure what you want me to test."
+                "I cannot find a guida.json (or elm.json) so I am not sure what you want me to test. Normally you run `guida test` from within a project!"
                 [ D.reflow <|
-                    "Elm packages always have an elm.json that states the version number, dependencies, exposed modules, etc."
+                    "Guida packages always have a guida.json that states the version number, dependencies, exposed modules, etc."
                 ]
 
         TestBadOutline outline ->
