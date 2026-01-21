@@ -4,6 +4,7 @@ module Compiler.Data.Name exposing
     , basics
     , bitwise
     , bool
+    , bytes
     , char
     , cmd
     , debug
@@ -362,6 +363,11 @@ array =
 dict : Name
 dict =
     "Dict"
+
+
+bytes : Name
+bytes =
+    "Bytes"
 
 
 tuple : Name

@@ -1,0 +1,17 @@
+{
+    "type": "application",
+    "source-directories": [
+        "src"
+    ],
+    "guida-version": "1.0.0",
+    "dependencies": {
+        "direct": {
+            "guida-lang/stdlib": "1.0.0"
+        },
+        "indirect": {}
+    },
+    "test-dependencies": {
+        "direct": {},
+        "indirect": {}
+    }
+}

@@ -9,7 +9,7 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
-import Compiler.Generate.Target exposing (Target)
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
@@ -201,7 +201,7 @@ checkPayload target tipe =
         Can.TType home name args ->
             case args of
                 [] ->
-                    if isJson target home name || isString target home name || isIntFloatBool target home name then
+                    if isJson target home name || isString target home name || isIntFloatBool target home name || allowsBytes target home name then
                         Ok ()
 
                     else
@@ -289,3 +289,13 @@ isMaybe target home name =
 isArray : Target -> IO.Canonical -> Name.Name -> Bool
 isArray target home name =
     home == ModuleName.array target && name == Name.array
+
+
+allowsBytes : Target -> IO.Canonical -> Name.Name -> Bool
+allowsBytes target home name =
+    target == Target.GuidaTarget && isBytes target home name
+
+
+isBytes : Target -> IO.Canonical -> Name.Name -> Bool
+isBytes target home name =
+    home == ModuleName.bytes target && name == Name.bytes

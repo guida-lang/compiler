@@ -2,6 +2,7 @@ module Compiler.Guida.ModuleName exposing
     ( Raw
     , array
     , basics
+    , bytes
     , canonicalDecoder
     , canonicalEncoder
     , char
@@ -361,6 +362,20 @@ jsonEncode target =
 
         ElmTarget ->
             Canonical Pkg.json "Json.Encode"
+
+
+
+-- BYTES
+
+
+bytes : Target -> Canonical
+bytes target =
+    case target of
+        GuidaTarget ->
+            Canonical Pkg.stdlib Name.bytes
+
+        ElmTarget ->
+            Canonical Pkg.bytes Name.bytes
 
 
 

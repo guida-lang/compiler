@@ -706,7 +706,7 @@ toReport source err =
                             [ D.reflow "I cannot handle that. The types that CAN flow in and out of Guida include:"
                             , D.indent 4 <|
                                 D.reflow
-                                    "Ints, Floats, Bools, Strings, Maybes, Lists, Arrays, tuples, records, and JSON values."
+                                    "Ints, Floats, Bools, Strings, Maybes, Lists, Arrays, tuples, records, JSON values, and Bytes."
                             , D.reflow
                                 "Since JSON values can flow through, you can use JSON encoders and decoders to allow other types through as well. More advanced users often just do everything with encoders and decoders for more control and better errors."
                             ]

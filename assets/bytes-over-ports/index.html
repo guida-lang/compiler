@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Bytes over Ports</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="./tmp/index.js"></script>
+</head>
+
+<body>
+    <div id="app"></div>
+    <script type="text/javascript">
+        var app = Guida.Main.init({
+            node: document.getElementById('app')
+        });
+
+        // Listen for bytes from Guida
+        // Guida's Bytes are DataView objects internally
+        app.ports.sendBytes.subscribe(function (dataView) {
+            console.log('Received from Guida:', dataView);
+            console.log('Type:', dataView.constructor.name);
+
+            // Convert DataView to Uint8Array for easier viewing
+            var uint8Array = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+            console.log('As Uint8Array:', uint8Array);
+            console.log('Values:', Array.from(uint8Array));
+
+            // Send the same bytes back to Guida after a short delay
+            // We can send DataView, Uint8Array, or ArrayBuffer - all work
+            setTimeout(function () {
+                console.log('Sending bytes back to Guida...');
+                // Send as DataView (same as received)
+                app.ports.receiveBytes.send(dataView);
+            }, 500);
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,105 @@
+port module Main exposing (main)
+
+import Browser
+import Bytes exposing (Bytes)
+import Bytes.Encode as BE
+import Html exposing (Html, div, h1, text)
+import Html.Attributes as Attr
+
+
+
+-- PORTS
+
+
+port sendBytes : Bytes -> Cmd msg
+
+
+port receiveBytes : (Bytes -> msg) -> Sub msg
+
+
+
+-- MODEL
+
+
+type alias Model =
+    { receivedWidth : Maybe Int
+    }
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    let
+        -- Create a simple byte sequence: [1, 2, 3, 4, 5]
+        bytes =
+            BE.encode
+                (BE.sequence
+                    [ BE.unsignedInt8 1
+                    , BE.unsignedInt8 2
+                    , BE.unsignedInt8 3
+                    , BE.unsignedInt8 4
+                    , BE.unsignedInt8 5
+                    ]
+                )
+    in
+    ( { receivedWidth = Nothing }
+    , sendBytes bytes
+    )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = GotBytes Bytes
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        GotBytes bytes ->
+            ( { model | receivedWidth = Just (Bytes.width bytes) }
+            , Cmd.none
+            )
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    receiveBytes GotBytes
+
+
+
+-- VIEW
+
+
+view : Model -> Html Msg
+view model =
+    div [ Attr.attribute "data-testid" "message" ]
+        [ text
+            (case model.receivedWidth of
+                Just width ->
+                    "Received bytes back from JavaScript! Width: "
+                        ++ String.fromInt width
+
+                Nothing ->
+                    "Waiting for bytes from JavaScript..."
+            )
+        ]
+
+
+
+-- MAIN
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , update = update
+        , subscriptions = subscriptions
+        , view = view
+        }

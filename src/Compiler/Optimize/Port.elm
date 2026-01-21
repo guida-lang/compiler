@@ -59,6 +59,9 @@ toEncoder target tipe =
                     else if name == Name.value then
                         Names.registerGlobal A.zero (ModuleName.basics target) Name.identity_
 
+                    else if name == Name.bytes then
+                        Names.registerGlobal A.zero (ModuleName.basics target) Name.identity_
+
                     else
                         crash "toEncoder: bad custom type"
 
@@ -271,6 +274,9 @@ toDecoder target tipe =
 
                 ( "Value", [] ) ->
                     decode target "value"
+
+                ( "Bytes", [] ) ->
+                    decode target "bytes"
 
                 ( "Maybe", [ arg ] ) ->
                     decodeMaybe target arg
