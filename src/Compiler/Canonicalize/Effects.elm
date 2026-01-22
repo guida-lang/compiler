@@ -9,9 +9,9 @@ import Compiler.AST.Utils.Type as Type
 import Compiler.Canonicalize.Environment as Env
 import Compiler.Canonicalize.Type as Type
 import Compiler.Data.Name as Name
-import Compiler.Generate.Target as Target exposing (Target)
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
-import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Canonicalize as Error
 import Compiler.Reporting.Result as R
@@ -103,7 +103,7 @@ canonicalizePort target syntaxVersion env (Src.Port _ ( _, A.At region portName 
                                 [ outgoingType ] ->
                                     case msg of
                                         Can.TVar _ ->
-                                            case checkPayload target outgoingType of
+                                            case checkPayload target syntaxVersion outgoingType of
                                                 Ok () ->
                                                     R.ok
                                                         ( portName
@@ -129,7 +129,7 @@ canonicalizePort target syntaxVersion env (Src.Port _ ( _, A.At region portName 
                                     case msg of
                                         Can.TVar msg2 ->
                                             if msg1 == msg2 then
-                                                case checkPayload target incomingType of
+                                                case checkPayload target syntaxVersion incomingType of
                                                     Ok () ->
                                                         R.ok
                                                             ( portName
@@ -192,38 +192,38 @@ verifyManager tagRegion values name =
 -- CHECK PAYLOAD TYPES
 
 
-checkPayload : Target -> Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkPayload target tipe =
+checkPayload : Target -> SyntaxVersion -> Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayload target syntaxVersion tipe =
     case tipe of
         Can.TAlias _ _ args aliasedType ->
-            checkPayload target (Type.dealias args aliasedType)
+            checkPayload target syntaxVersion (Type.dealias args aliasedType)
 
         Can.TType home name args ->
             case args of
                 [] ->
-                    if isJson target home name || isString target home name || isIntFloatBool target home name || allowsBytes target home name then
+                    if isJson target home name || isString target home name || isIntFloatBool target home name || allowsBytes target syntaxVersion home name then
                         Ok ()
 
                     else
-                        Err ( tipe, Error.UnsupportedType name )
+                        Err ( tipe, Error.UnsupportedType syntaxVersion name )
 
                 [ arg ] ->
                     if isList target home name || isMaybe target home name || isArray target home name then
-                        checkPayload target arg
+                        checkPayload target syntaxVersion arg
 
                     else
-                        Err ( tipe, Error.UnsupportedType name )
+                        Err ( tipe, Error.UnsupportedType syntaxVersion name )
 
                 _ ->
-                    Err ( tipe, Error.UnsupportedType name )
+                    Err ( tipe, Error.UnsupportedType syntaxVersion name )
 
         Can.TUnit ->
             Ok ()
 
         Can.TTuple a b cs ->
-            checkPayload target a
-                |> Result.andThen (\_ -> checkPayload target b)
-                |> Result.andThen (\_ -> checkPayloadTupleCs target cs)
+            checkPayload target syntaxVersion a
+                |> Result.andThen (\_ -> checkPayload target syntaxVersion b)
+                |> Result.andThen (\_ -> checkPayloadTupleCs target syntaxVersion cs)
 
         Can.TVar name ->
             Err ( tipe, Error.TypeVariable name )
@@ -236,25 +236,25 @@ checkPayload target tipe =
 
         Can.TRecord fields Nothing ->
             Dict.foldl compare
-                (\_ field acc -> Result.andThen (\_ -> checkFieldPayload target field) acc)
+                (\_ field acc -> Result.andThen (\_ -> checkFieldPayload target syntaxVersion field) acc)
                 (Ok ())
                 fields
 
 
-checkPayloadTupleCs : Target -> List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkPayloadTupleCs target types =
+checkPayloadTupleCs : Target -> SyntaxVersion -> List Can.Type -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkPayloadTupleCs target syntaxVersion types =
     case types of
         [] ->
             Ok ()
 
         tipe :: rest ->
-            checkPayload target tipe
-                |> Result.andThen (\_ -> checkPayloadTupleCs target rest)
+            checkPayload target syntaxVersion tipe
+                |> Result.andThen (\_ -> checkPayloadTupleCs target syntaxVersion rest)
 
 
-checkFieldPayload : Target -> Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()
-checkFieldPayload target (Can.FieldType _ tipe) =
-    checkPayload target tipe
+checkFieldPayload : Target -> SyntaxVersion -> Can.FieldType -> Result ( Can.Type, Error.InvalidPayload ) ()
+checkFieldPayload target syntaxVersion (Can.FieldType _ tipe) =
+    checkPayload target syntaxVersion tipe
 
 
 isIntFloatBool : Target -> IO.Canonical -> Name.Name -> Bool
@@ -291,9 +291,9 @@ isArray target home name =
     home == ModuleName.array target && name == Name.array
 
 
-allowsBytes : Target -> IO.Canonical -> Name.Name -> Bool
-allowsBytes target home name =
-    target == Target.GuidaTarget && isBytes target home name
+allowsBytes : Target -> SyntaxVersion -> IO.Canonical -> Name.Name -> Bool
+allowsBytes target syntaxVersion home name =
+    syntaxVersion == SV.Guida && isBytes target home name
 
 
 isBytes : Target -> IO.Canonical -> Name.Name -> Bool

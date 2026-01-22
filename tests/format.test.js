@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const childProcess = require("child_process");
+const child_process = require("child_process");
 const os = require("os");
 const tmpDir = os.tmpdir();
 
@@ -353,11 +353,11 @@ describe("format", () => {
 
             fs.writeFileSync(moduleFilename, generateModule(module));
 
-            childProcess.execSync(`elm-format ${moduleFilename} --output ${elmOutput}`, {
+            child_process.execSync(`elm-format ${moduleFilename} --output ${elmOutput}`, {
                 cwd: path.join(__dirname, "..")
             });
 
-            childProcess.execSync(`./bin/index.js format ${moduleFilename} --output ${guidaOutput}`, {
+            child_process.execSync(`./bin/index.js format ${moduleFilename} --output ${guidaOutput}`, {
                 cwd: path.join(__dirname, "..")
             });
 

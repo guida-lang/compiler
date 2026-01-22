@@ -84,7 +84,7 @@ toReport localizer source err =
                         , D.reflow ("But type variables like `" ++ name ++ "` cannot be given as flags. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Guida program.")
                         )
 
-                    E.UnsupportedType name ->
+                    E.UnsupportedType _ name ->
                         ( "a `" ++ name ++ "` value"
                         , D.stack
                             [ D.reflow "I cannot handle that. The types that CAN be in flags include:"

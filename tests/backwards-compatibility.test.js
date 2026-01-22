@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const childProcess = require("child_process");
+const child_process = require("child_process");
 const os = require("os");
 const tmpDir = os.tmpdir();
 
@@ -66,7 +66,7 @@ describe("backwards compatibility", () => {
         const commandFlag = generateCommandFlags(flag);
 
         try {
-          childProcess.execSync(
+          child_process.execSync(
             `elm make src/${example}.elm ${commandFlag} --output ${elmOutput}`,
             { cwd: path.join(__dirname, "..", "examples") }
           );
@@ -75,7 +75,7 @@ describe("backwards compatibility", () => {
         }
 
         try {
-          childProcess.execSync(
+          child_process.execSync(
             `../bin/index.js make src/${example}.elm ${commandFlag} --output ${guidaOutput}`,
             {
               cwd: path.join(__dirname, "..", "examples")
@@ -95,7 +95,7 @@ describe("backwards compatibility", () => {
     const guidaOutput = `${tmpDir}/guida-test-guida-self-hosted-${process.pid}.js`;
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `elm make src/Terminal/Main.elm --output ${elmOutput}`,
         { cwd: path.join(__dirname, "..") }
       );
@@ -104,7 +104,7 @@ describe("backwards compatibility", () => {
     }
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `./bin/index.js make src/Terminal/Main.elm --output ${guidaOutput}`,
         {
           cwd: path.join(__dirname, "..")
@@ -122,14 +122,14 @@ describe("backwards compatibility", () => {
     const guidaOutput = `${tmpDir}/guida-test-guida-json-report-${process.pid}.json`;
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `elm make src/Invalid.elm --report=json &> ${elmOutput}`,
         { cwd: path.join(__dirname, "..", "assets", "some-elm-application") }
       );
     } catch (_) { }
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `../../bin/index.js make src/Invalid.elm --report=json &> ${guidaOutput}`,
         {
           cwd: path.join(__dirname, "..", "assets", "some-elm-application")
@@ -145,7 +145,7 @@ describe("backwards compatibility", () => {
     const guidaOutput = `${tmpDir}/guida-test-guida-docs-${process.pid}.json`;
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `elm make --docs=${elmOutput}`,
         { cwd: path.join(__dirname, "..", "assets", "some-elm-package") }
       );
@@ -154,7 +154,7 @@ describe("backwards compatibility", () => {
     }
 
     try {
-      childProcess.execSync(
+      child_process.execSync(
         `../../bin/index.js make --docs=${guidaOutput}`,
         {
           cwd: path.join(__dirname, "..", "assets", "some-elm-package")
@@ -173,14 +173,14 @@ describe("backwards compatibility", () => {
       const guidaOutput = `${tmpDir}/guida-test-guida-tuple-n-${process.pid}.json`;
 
       try {
-        childProcess.execSync(
+        child_process.execSync(
           `elm make src/ElmTupleN.elm --report=json &> ${elmOutput}`,
           { cwd: path.join(__dirname, "..", "assets", "some-elm-application") }
         );
       } catch (_) { }
 
       try {
-        childProcess.execSync(
+        child_process.execSync(
           `../../bin/index.js make src/ElmTupleN.elm --report=json &> ${guidaOutput}`,
           {
             cwd: path.join(__dirname, "..", "assets", "some-elm-application")

@@ -14,6 +14,7 @@ import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Optimize.Expression as Expr
 import Compiler.Optimize.Names as Names
 import Compiler.Optimize.Port as Port
+import Compiler.Parse.SyntaxVersion exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Main as E
 import Compiler.Reporting.Result as R
@@ -36,9 +37,9 @@ type alias Annotations =
     Dict String Name.Name Can.Annotation
 
 
-optimize : Target -> Annotations -> Can.Module -> MResult i (List W.Warning) Opt.LocalGraph
-optimize target annotations (Can.Module home _ _ decls unions aliases _ effects) =
-    addDecls target home annotations decls <|
+optimize : Target -> SyntaxVersion -> Annotations -> Can.Module -> MResult i (List W.Warning) Opt.LocalGraph
+optimize target syntaxVersion annotations (Can.Module home _ _ decls unions aliases _ effects) =
+    addDecls target syntaxVersion home annotations decls <|
         addEffects target home effects <|
             addUnions home unions <|
                 addAliases home aliases <|
@@ -211,16 +212,16 @@ addToGraph name node fields (Opt.LocalGraph main nodes fieldCounts) =
 -- ADD DECLS
 
 
-addDecls : Target -> IO.Canonical -> Annotations -> Can.Decls -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
-addDecls target home annotations decls graph =
-    R.loop (addDeclsHelp target home annotations) ( decls, graph )
+addDecls : Target -> SyntaxVersion -> IO.Canonical -> Annotations -> Can.Decls -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDecls target syntaxVersion home annotations decls graph =
+    R.loop (addDeclsHelp target syntaxVersion home annotations) ( decls, graph )
 
 
-addDeclsHelp : Target -> IO.Canonical -> Annotations -> ( Can.Decls, Opt.LocalGraph ) -> MResult i (List W.Warning) (R.Step ( Can.Decls, Opt.LocalGraph ) Opt.LocalGraph)
-addDeclsHelp target home annotations ( decls, graph ) =
+addDeclsHelp : Target -> SyntaxVersion -> IO.Canonical -> Annotations -> ( Can.Decls, Opt.LocalGraph ) -> MResult i (List W.Warning) (R.Step ( Can.Decls, Opt.LocalGraph ) Opt.LocalGraph)
+addDeclsHelp target syntaxVersion home annotations ( decls, graph ) =
     case decls of
         Can.Declare def subDecls ->
-            addDef target home annotations def graph
+            addDef target syntaxVersion home annotations def graph
                 |> R.fmap (R.Loop << Tuple.pair subDecls)
 
         Can.DeclareRec d ds subDecls ->
@@ -277,8 +278,8 @@ defToName def =
 -- ADD DEFS
 
 
-addDef : Target -> IO.Canonical -> Annotations -> Can.Def -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
-addDef target home annotations def graph =
+addDef : Target -> SyntaxVersion -> IO.Canonical -> Annotations -> Can.Def -> Opt.LocalGraph -> MResult i (List W.Warning) Opt.LocalGraph
+addDef target syntaxVersion home annotations def graph =
     case def of
         Can.Def (A.At region name) args body ->
             let
@@ -286,14 +287,14 @@ addDef target home annotations def graph =
                     Utils.find identity name annotations
             in
             R.warn (W.MissingTypeAnnotation region name tipe)
-                |> R.bind (\_ -> addDefHelp target region annotations home name args body graph)
+                |> R.bind (\_ -> addDefHelp target syntaxVersion region annotations home name args body graph)
 
         Can.TypedDef (A.At region name) _ typedArgs body _ ->
-            addDefHelp target region annotations home name (List.map Tuple.first typedArgs) body graph
+            addDefHelp target syntaxVersion region annotations home name (List.map Tuple.first typedArgs) body graph
 
 
-addDefHelp : Target -> A.Region -> Annotations -> IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
-addDefHelp target region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
+addDefHelp : Target -> SyntaxVersion -> A.Region -> Annotations -> IO.Canonical -> Name.Name -> List Can.Pattern -> Can.Expr -> Opt.LocalGraph -> MResult i w Opt.LocalGraph
+addDefHelp target syntaxVersion region annotations home name args body ((Opt.LocalGraph _ nodes fieldCounts) as graph) =
     if name /= Name.main_ then
         R.ok (addDefNode target home region name args body EverySet.empty graph)
 
@@ -317,7 +318,7 @@ addDefHelp target region annotations home name args body ((Opt.LocalGraph _ node
 
             Can.TType hm nm [ flags, _, message ] ->
                 if hm == ModuleName.platform target && nm == Name.program then
-                    case Effects.checkPayload target flags of
+                    case Effects.checkPayload target syntaxVersion flags of
                         Ok () ->
                             R.ok <| addMain <| Names.run <| Names.fmap (Opt.Dynamic message) <| Port.toFlagsDecoder target flags
 

@@ -90,8 +90,8 @@ nitpick target canonical =
 
 
 optimize : Target -> Src.Module -> Dict String Name.Name Can.Annotation -> Can.Module -> Result E.Error Opt.LocalGraph
-optimize target modul annotations canonical =
-    case Tuple.second (R.run (Optimize.optimize target annotations canonical)) of
+optimize target ((Src.Module syntaxVersion _ _ _ _ _ _ _ _ _) as modul) annotations canonical =
+    case Tuple.second (R.run (Optimize.optimize target syntaxVersion annotations canonical)) of
         Ok localGraph ->
             Ok localGraph
 
