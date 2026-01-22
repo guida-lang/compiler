@@ -304,12 +304,22 @@ main =
         , subscriptions = \\_ -> Sub.none
         }`);
 
-        child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} make src/Main.guida --output=/dev/null`, {
-            cwd: tmpobj.name,
-            stdio: "pipe"
-        });
+        try {
+            child_process.execSync(`${path.join(__dirname, "..", "bin", "index.js")} make src/Main.guida --output=/dev/null`, {
+                cwd: tmpobj.name,
+                stdio: "pipe"
+            });
+        } catch (e) {
+            const strippedMessage = util.stripVTControlCharacters(e.message);
 
-        done();
+            expect(strippedMessage).toMatch("BAD FLAGS");
+            expect(strippedMessage).toMatch(new RegExp("Ints, Floats, Bools, Strings, Maybes, Lists, Arrays, tuples, records, and\\s+JSON values."));
+            expect(e.status).toBe(1);
+
+            return done();
+        }
+
+        done(new Error("Expected guida make to fail due to type error in flags"));
     });
 
     it("Guida Project with guida file with bytes ports", (done) => {
