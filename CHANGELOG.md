@@ -9,11 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Fixed
+
+### Changed
+
+## [1.0.0-beta.2] - 2025-01-25
+
+### Added
+- Send Bytes through flags and ports ([#137](https://github.com/guida-lang/compiler/issues/137))
+
+### Fixed
+- Incorrect order of number types on tuple ([#135](https://github.com/guida-lang/compiler/issues/135))
+- Test command fails right after initialising a guida project ([#130](https://github.com/guida-lang/compiler/issues/130))
+
+## [1.0.0-beta]
+
+### Added
+
 - WIP: Allow running the `make` command in the browser ([#94](https://github.com/guida-lang/compiler/issues/94)).
 - Initial REPL tests for basic arithmetic evaluation.
 - New `test` command ([#98](https://github.com/guida-lang/compiler/issues/98)).
 - Add `elm-explorations/test` dependency as part of `init` ([#65](https://github.com/guida-lang/compiler/issues/65)).
-- Extend record referred by another record’s field ([#79](https://github.com/guida-lang/compiler/issues/79)).
+- Extend record referred by another record's field ([#79](https://github.com/guida-lang/compiler/issues/79)).
 - Add a `CONTRIBUTING.md` file ([#103](https://github.com/guida-lang/compiler/issues/103)).
 - `guida format` command ([#100](https://github.com/guida-lang/compiler/issues/100)).
 - Numeric separators ([#109](https://github.com/guida-lang/compiler/issues/109)).
@@ -29,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Refactored project structure to support both Node and Browser environments.
 - Refactoring of `Task` aliases for a more unified approach across the codebase ([#108](https://github.com/guida-lang/compiler/issues/108)).
+- Merge browser and node APIs into single entry ([#131](https://github.com/guida-lang/compiler/issues/131)).
+- Move from elm references to guida ([#124](https://github.com/guida-lang/compiler/issues/124)).
 
 ---
 
