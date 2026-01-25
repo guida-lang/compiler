@@ -12,17 +12,13 @@
     <div id="app"></div>
     <script type="text/javascript">
         var app = Guida.Main.init({
-            node: document.getElementById('app')
+            node: document.getElementById('app'),
+            flags: new Uint8Array([1, 2, 3, 4, 5, 6, 7])
         });
 
         // Listen for bytes from Guida
         // Guida's Bytes are DataView objects internally
-        app.ports.sendBytes.subscribe(function (dataView) {
-            console.log('Received from Guida:', dataView);
-            console.log('Type:', dataView.constructor.name);
-
-            // Convert DataView to Uint8Array for easier viewing
-            var uint8Array = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+        app.ports.sendBytes.subscribe(function (uint8Array) {
             console.log('As Uint8Array:', uint8Array);
             console.log('Values:', Array.from(uint8Array));
 
@@ -31,8 +27,8 @@
             setTimeout(function () {
                 console.log('Sending bytes back to Guida...');
                 // Send as DataView (same as received)
-                app.ports.receiveBytes.send(dataView);
-            }, 500);
+                app.ports.receiveBytes.send(uint8Array);
+            }, 100);
         });
     </script>
 </body>

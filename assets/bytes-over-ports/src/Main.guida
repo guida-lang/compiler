@@ -26,21 +26,8 @@ type alias Model =
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    let
-        -- Create a simple byte sequence: [1, 2, 3, 4, 5]
-        bytes =
-            BE.encode
-                (BE.sequence
-                    [ BE.unsignedInt8 1
-                    , BE.unsignedInt8 2
-                    , BE.unsignedInt8 3
-                    , BE.unsignedInt8 4
-                    , BE.unsignedInt8 5
-                    ]
-                )
-    in
+init : Bytes -> ( Model, Cmd Msg )
+init bytes =
     ( { receivedWidth = Nothing }
     , sendBytes bytes
     )
@@ -95,7 +82,7 @@ view model =
 -- MAIN
 
 
-main : Program () Model Msg
+main : Program Bytes Model Msg
 main =
     Browser.element
         { init = init

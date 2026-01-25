@@ -29,6 +29,7 @@ module Compiler.Data.Name exposing
     , isKernel
     , isNumberType
     , jsArray
+    , json
     , list
     , mainModule
     , main_
@@ -378,6 +379,11 @@ tuple =
 jsArray : Name
 jsArray =
     "JsArray"
+
+
+json : Name
+json =
+    "Json"
 
 
 task : Name
