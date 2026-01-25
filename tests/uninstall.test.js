@@ -122,7 +122,7 @@ describe("guida uninstall command", () => {
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0",
+                    "guida-lang/stdlib": "1.0.1",
                     "evancz/elm-playground": "1.0.3"
                 },
                 indirect: {}
@@ -147,7 +147,7 @@ describe("guida uninstall command", () => {
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -172,7 +172,7 @@ describe("guida uninstall command", () => {
             "exposed-modules": [],
             "guida-version": "1.0.0 <= v < 2.0.0",
             dependencies: {
-                "guida-lang/stdlib": "1.0.0 <= v < 2.0.0",
+                "guida-lang/stdlib": "1.0.1 <= v < 2.0.0",
                 "evancz/elm-playground": "1.0.3 <= v < 2.0.0"
             },
             "test-dependencies": {}
@@ -193,7 +193,7 @@ describe("guida uninstall command", () => {
             "exposed-modules": [],
             "guida-version": "1.0.0 <= v < 2.0.0",
             dependencies: {
-                "guida-lang/stdlib": "1.0.0 <= v < 2.0.0"
+                "guida-lang/stdlib": "1.0.1 <= v < 2.0.0"
             },
             "test-dependencies": {}
         });
@@ -212,7 +212,7 @@ describe("guida uninstall command", () => {
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0",
+                    "guida-lang/stdlib": "1.0.1",
                     "guida-lang/project-metadata-utils": "1.0.0"
                 },
                 indirect: {}
@@ -237,7 +237,7 @@ describe("guida uninstall command", () => {
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -262,7 +262,7 @@ describe("guida uninstall command", () => {
             "exposed-modules": [],
             "guida-version": "1.0.0 <= v < 2.0.0",
             dependencies: {
-                "guida-lang/stdlib": "1.0.0 <= v < 2.0.0",
+                "guida-lang/stdlib": "1.0.1 <= v < 2.0.0",
                 "guida-lang/project-metadata-utils": "1.0.0 <= v < 2.0.0"
             },
             "test-dependencies": {}
@@ -283,7 +283,7 @@ describe("guida uninstall command", () => {
             "exposed-modules": [],
             "guida-version": "1.0.0 <= v < 2.0.0",
             dependencies: {
-                "guida-lang/stdlib": "1.0.0 <= v < 2.0.0"
+                "guida-lang/stdlib": "1.0.1 <= v < 2.0.0"
             },
             "test-dependencies": {}
         });

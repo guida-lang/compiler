@@ -155,7 +155,7 @@ main =
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -209,7 +209,7 @@ main =
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -280,7 +280,7 @@ main =
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -323,7 +323,7 @@ main =
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },

@@ -314,7 +314,7 @@ suite =
             "guida-version": "1.0.0",
             dependencies: {
                 direct: {
-                    "guida-lang/stdlib": "1.0.0"
+                    "guida-lang/stdlib": "1.0.1"
                 },
                 indirect: {}
             },
@@ -398,7 +398,7 @@ suite =
             "exposed-modules": [],
             "guida-version": "1.0.0 <= v < 2.0.0",
             dependencies: {
-                "guida-lang/stdlib": "1.0.0 <= v < 2.0.0"
+                "guida-lang/stdlib": "1.0.1 <= v < 2.0.0"
             },
             "test-dependencies": {}
         }));
