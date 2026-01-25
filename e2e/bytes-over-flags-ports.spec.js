@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { execSync } from "node:child_process";
 import path from "node:path";
 
-const guidaAppPath = path.join(__dirname, "..", "assets", "bytes-over-ports");
+const guidaAppPath = path.join(__dirname, "..", "assets", "bytes-over-flags-ports");
 
 /**
  * @param {string} filepath
@@ -25,14 +25,14 @@ const fileURL = (filename) => {
     return pathToFileURL(path.join(guidaAppPath, filename)).toString();
 };
 
-test("Bytes", async ({ page }) => {
+test("Bytes over Flags and Ports", async ({ page }) => {
     guidaMake("src/Main.guida", "index.js");
 
     await page.goto(fileURL("index.html"));
 
-    // Expects page to have a title of Bytes over Ports.
-    await expect(page).toHaveTitle("Bytes over Ports");
+    // Expects page to have a title of Bytes over Flags and Ports.
+    await expect(page).toHaveTitle("Bytes over Flags and Ports");
 
-    // Expects page to contain "Width: 5".
-    await expect(page.getByTestId("message")).toContainText("Received bytes back from JavaScript! Width: 5");
+    // Expects page to contain "Width: 7".
+    await expect(page.getByTestId("message")).toContainText("Received bytes back from JavaScript! Width: 7");
 });

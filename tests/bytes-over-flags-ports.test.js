@@ -5,7 +5,7 @@ const tmp = require("tmp");
 const util = require('node:util');
 const { describe } = require("node:test");
 
-describe("Bytes over Ports", () => {
+describe("Bytes over Flags and Ports", () => {
     it("Elm project with bytes flags", (done) => {
         const tmpobj = tmp.dirSync();
 
