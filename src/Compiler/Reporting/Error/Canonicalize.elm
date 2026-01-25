@@ -20,6 +20,7 @@ import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Data.OneOrMore as OneOrMore exposing (OneOrMore)
 import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Parse.SyntaxVersion as SV exposing (SyntaxVersion)
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Code as Code
@@ -95,7 +96,7 @@ type InvalidPayload
     = ExtendedRecord
     | Function
     | TypeVariable Name
-    | UnsupportedType Name
+    | UnsupportedType SyntaxVersion Name
 
 
 type PortProblem
@@ -700,7 +701,19 @@ toReport source err =
                             ("But type variables like `" ++ name ++ "` cannot flow through ports. I need to know exactly what type of data I am getting, so I can guarantee that unexpected data cannot sneak in and crash the Guida program.")
                         )
 
-                    UnsupportedType name ->
+                    UnsupportedType SV.Guida name ->
+                        ( "a `" ++ name ++ "` value"
+                        , D.stack
+                            [ D.reflow "I cannot handle that. The types that CAN flow in and out of Guida include:"
+                            , D.indent 4 <|
+                                D.reflow
+                                    "Ints, Floats, Bools, Strings, Maybes, Lists, Arrays, tuples, records, JSON values, and Bytes."
+                            , D.reflow
+                                "Since JSON values can flow through, you can use JSON encoders and decoders to allow other types through as well. More advanced users often just do everything with encoders and decoders for more control and better errors."
+                            ]
+                        )
+
+                    UnsupportedType SV.Elm name ->
                         ( "a `" ++ name ++ "` value"
                         , D.stack
                             [ D.reflow "I cannot handle that. The types that CAN flow in and out of Guida include:"
@@ -2049,9 +2062,10 @@ invalidPayloadEncoder invalidPayload =
                 , BE.string name
                 ]
 
-        UnsupportedType name ->
+        UnsupportedType syntaxVersion name ->
             BE.sequence
                 [ BE.unsignedInt8 3
+                , SV.encoder syntaxVersion
                 , BE.string name
                 ]
 
@@ -2072,7 +2086,9 @@ invalidPayloadDecoder =
                         BD.map TypeVariable BD.string
 
                     3 ->
-                        BD.map UnsupportedType BD.string
+                        BD.map2 UnsupportedType
+                            SV.decoder
+                            BD.string
 
                     _ ->
                         BD.fail

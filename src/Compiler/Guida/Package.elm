@@ -2,6 +2,7 @@ module Compiler.Guida.Package exposing
     ( Author
     , Name
     , Project
+    , bytes
     , compareName
     , core
     , decoder

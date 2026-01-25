@@ -18,6 +18,7 @@ bin/guida.min.js
 try/public/app.js
 
 # Assets
+assets/bytes-over-flags-ports/tmp
 assets/some-elm-application/index.html
 assets/some-guida-application/tmp
 

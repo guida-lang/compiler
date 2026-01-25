@@ -4,6 +4,7 @@ module Compiler.Data.Name exposing
     , basics
     , bitwise
     , bool
+    , bytes
     , char
     , cmd
     , debug
@@ -28,6 +29,7 @@ module Compiler.Data.Name exposing
     , isKernel
     , isNumberType
     , jsArray
+    , json
     , list
     , mainModule
     , main_
@@ -364,6 +366,11 @@ dict =
     "Dict"
 
 
+bytes : Name
+bytes =
+    "Bytes"
+
+
 tuple : Name
 tuple =
     "Tuple"
@@ -372,6 +379,11 @@ tuple =
 jsArray : Name
 jsArray =
     "JsArray"
+
+
+json : Name
+json =
+    "Json"
 
 
 task : Name
