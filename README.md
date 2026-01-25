@@ -158,6 +158,8 @@ npm pack
 npm install -g guida-*.tgz
 ```
 
+Update the version displayed when running `guida --version` (see `src/Terminal/Terminal.elm`).
+
 Make sure you are on the correct branch, ie. in case of wanting to publish a 0.x
 version, you should have the `v0.x` branch checked out.
 

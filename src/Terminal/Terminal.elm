@@ -44,7 +44,7 @@ app intro outro commands =
                     [ "--version" ] ->
                         IO.hPutStrLn IO.stdout
                             -- (V.toChars V.compiler)
-                            "1.0.0-beta"
+                            "1.0.0-beta.2"
                             |> Task.bind (\_ -> Exit.exitSuccess)
 
                     command :: chunks ->
