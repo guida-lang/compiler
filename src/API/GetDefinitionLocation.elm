@@ -106,25 +106,27 @@ findSymbolAt line char values unions aliases =
         valueMatch : Maybe (A.Located String)
         valueMatch =
             List.filterMap (matchValue line char) values |> List.head
-
-        unionMatch : Maybe (A.Located String)
-        unionMatch =
-            List.filterMap (matchUnion line char) unions |> List.head
-
-        aliasMatch : Maybe (A.Located String)
-        aliasMatch =
-            List.filterMap (matchAlias line char) aliases |> List.head
     in
     case valueMatch of
         Just v ->
             Ok v
 
         Nothing ->
+            let
+                unionMatch : Maybe (A.Located String)
+                unionMatch =
+                    List.filterMap (matchUnion line char) unions |> List.head
+            in
             case unionMatch of
                 Just u ->
                     Ok u
 
                 Nothing ->
+                    let
+                        aliasMatch : Maybe (A.Located String)
+                        aliasMatch =
+                            List.filterMap (matchAlias line char) aliases |> List.head
+                    in
                     case aliasMatch of
                         Just a ->
                             Ok a
