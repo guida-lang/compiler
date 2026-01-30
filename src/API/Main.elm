@@ -1,6 +1,8 @@
 module API.Main exposing (main)
 
 import API.Format as Format
+import API.GetDefinitionLocation as GetDefinitionLocation
+import API.Init as Init
 import API.Install as Install
 import API.Make as Make
 import API.Uninstall as Uninstall
@@ -33,6 +35,18 @@ app =
         |> Task.bind
             (\args ->
                 case args of
+                    InitArgs package ->
+                        Init.run (Init.Flags package)
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Ok () ->
+                                            exitWithResponse Encode.null
+
+                                        Err error ->
+                                            exitWithResponse (Encode.object [ ( "error", Encode.string (E.encodeUgly (Exit.toJson (Exit.initToReport error))) ) ])
+                                )
+
                     MakeArgs path debug optimize withSourceMaps ->
                         Make.run path (Make.Flags debug optimize withSourceMaps)
                             |> Task.bind
@@ -111,6 +125,38 @@ app =
                                                     |> Result.withDefault Encode.null
                                                 )
                                 )
+
+                    GetDefinitionLocationArgs uri line character ->
+                        GetDefinitionLocation.run uri line character
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Ok location ->
+                                            exitWithResponse
+                                                (Encode.object
+                                                    [ ( "uri", Encode.string location.uri )
+                                                    , ( "range"
+                                                      , Encode.object
+                                                            [ ( "start"
+                                                              , Encode.object
+                                                                    [ ( "line", Encode.int location.range.start.line )
+                                                                    , ( "character", Encode.int location.range.start.character )
+                                                                    ]
+                                                              )
+                                                            , ( "end"
+                                                              , Encode.object
+                                                                    [ ( "line", Encode.int location.range.end.line )
+                                                                    , ( "character", Encode.int location.range.end.character )
+                                                                    ]
+                                                              )
+                                                            ]
+                                                      )
+                                                    ]
+                                                )
+
+                                        Err _ ->
+                                            exitWithResponse Encode.null
+                                )
             )
 
 
@@ -129,11 +175,13 @@ exitWithResponse value =
 
 
 type Args
-    = MakeArgs String Bool Bool Bool
+    = InitArgs Bool
+    | MakeArgs String Bool Bool Bool
     | FormatArgs String
     | InstallArgs String
     | UninstallArgs String
     | DiagnosticsArgs DiagnosticsSource
+    | GetDefinitionLocationArgs String Int Int
 
 
 type DiagnosticsSource
@@ -147,6 +195,10 @@ argsDecoder =
         |> Decode.andThen
             (\command ->
                 case command of
+                    "init" ->
+                        Decode.map InitArgs
+                            (Decode.field "package" Decode.bool)
+
                     "make" ->
                         Decode.map4 MakeArgs
                             (Decode.field "path" Decode.string)
@@ -173,6 +225,12 @@ argsDecoder =
                                 , Decode.map DiagnosticsSourcePath (Decode.field "path" Decode.string)
                                 ]
                             )
+
+                    "get-definition-location" ->
+                        Decode.map3 GetDefinitionLocationArgs
+                            (Decode.field "uri" Decode.string)
+                            (Decode.at [ "position", "line" ] Decode.int)
+                            (Decode.at [ "position", "character" ] Decode.int)
 
                     _ ->
                         Decode.fail ("Unknown command: " ++ command)

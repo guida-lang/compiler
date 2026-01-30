@@ -31,6 +31,10 @@ export interface GuidaConfig {
     env?: Record<string, any>;
 }
 
+export interface InitOptions {
+    package?: boolean;
+}
+
 export interface MakeOptions {
     debug?: boolean;
     optimize?: boolean;
@@ -75,8 +79,15 @@ export type DiagnosticsResult =
         message: Message[];
     };
 
+export type Position = {
+    line: number;
+    character: number;
+};
+
+export declare const init: (config: GuidaConfig, options?: InitOptions) => Promise<GuidaResponse>;
 export declare const make: (config: GuidaConfig, path: string, options?: MakeOptions) => Promise<GuidaResponse>;
 export declare const format: (config: GuidaConfig, content: string) => Promise<GuidaResponse>;
 export declare const install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;
+export declare const getDefinitionLocation: (config: GuidaConfig, args: { uri: string, position: Position }) => Promise<null | { uri: string, start: Position, end: Position }>;
