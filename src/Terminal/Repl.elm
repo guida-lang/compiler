@@ -97,16 +97,18 @@ printWelcomeMessage =
 
         dashes : String
         dashes =
-            String.repeat (80 - String.length vsn) "-"
+            String.repeat (83 - String.length vsn) "-"
     in
     D.toAnsi IO.stdout <|
         D.vcat
             [ D.black (D.fromChars "----")
                 |> D.plus (D.dullcyan title)
                 |> D.plus (D.black (D.fromChars dashes))
-            , D.black (D.fromChars "Say :help for help and :exit to exit! More at ")
-                |> D.a (D.fromChars (D.makeCommandLink "repl"))
-            , D.black (D.fromChars "--------------------------------------------------------------------------------------------")
+            , D.black
+                (D.fromChars "Say :help for help and :exit to exit! More at "
+                    |> D.a (D.fromChars (D.makeCommandLink "repl"))
+                )
+            , D.black (D.fromChars "-----------------------------------------------------------------------------------------------")
             , D.fromChars ""
             ]
 
