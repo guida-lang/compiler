@@ -4,7 +4,6 @@ const { createFs } = require("indexeddb-fs");
 const fs = createFs({ databaseName: "guida-fs" });
 
 const config = {
-    XMLHttpRequest: globalThis.XMLHttpRequest,
     env: {},
     writeFile: fs.writeFile,
     readFile: fs.readFile,

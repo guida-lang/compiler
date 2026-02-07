@@ -7,7 +7,6 @@ const guida = require("..");
 
 const config = () => {
     return {
-        XMLHttpRequest: require("xmlhttprequest").XMLHttpRequest,
         env: {},
         writeFile: async (path, data) => {
             fs.writeFileSync(path, data);
@@ -90,7 +89,27 @@ suite =
 `);
     });
 
-    it.skip("getDefinitionLocation - simple example", async () => {
+    it("make - compiles simple application", async () => {
+        const tmpobj = tmp.dirSync();
+        process.chdir(tmpobj.name);
+
+        await guida.init(config(), { package: false });
+
+        fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }`);
+
+        const result = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(result).toHaveProperty("output", expect.any(String));
+    });
+
+    it("getDefinitionLocation - simple example", async () => {
         const tmpobj = tmp.dirSync();
         process.chdir(tmpobj.name);
 
@@ -112,11 +131,11 @@ add a b =
 
         const location = await guida.getDefinitionLocation(
             config(),
-            { uri: path.join(tmpobj.name, "src", "Main.guida"), position: { line: 5, character: 27 } }
+            { path: path.join(tmpobj.name, "src", "Main.guida"), position: { line: 5, character: 25 } }
         )
 
         expect(location).toEqual({
-            uri: path.join(tmpobj.name, "src", "Main.guida"),
+            path: path.join(tmpobj.name, "src", "Main.guida"),
             range: {
                 start: { line: 11, character: 0 },
                 end: { line: 11, character: 3 }

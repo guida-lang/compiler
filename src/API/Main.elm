@@ -126,15 +126,15 @@ app =
                                                 )
                                 )
 
-                    GetDefinitionLocationArgs uri line character ->
-                        GetDefinitionLocation.run uri line character
+                    GetDefinitionLocationArgs path line character ->
+                        GetDefinitionLocation.run path line character
                             |> Task.bind
                                 (\result ->
                                     case result of
                                         Ok location ->
                                             exitWithResponse
                                                 (Encode.object
-                                                    [ ( "uri", Encode.string location.uri )
+                                                    [ ( "path", Encode.string location.path )
                                                     , ( "range"
                                                       , Encode.object
                                                             [ ( "start"
@@ -228,7 +228,7 @@ argsDecoder =
 
                     "get-definition-location" ->
                         Decode.map3 GetDefinitionLocationArgs
-                            (Decode.field "uri" Decode.string)
+                            (Decode.field "path" Decode.string)
                             (Decode.at [ "position", "line" ] Decode.int)
                             (Decode.at [ "position", "character" ] Decode.int)
 

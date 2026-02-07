@@ -7,17 +7,19 @@ module API.GetDefinitionLocation exposing
 import Builder.File as File
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
+import Compiler.Data.Name exposing (Name)
 import Compiler.Generate.Target as Target
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
+import List.Extra as List
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
 
 
 type alias Location =
-    { uri : String
+    { path : String
     , range :
         { start : Position
         , end : Position
@@ -36,13 +38,13 @@ type alias Position =
 
 
 run : String -> Int -> Int -> Task Never (Result () Location)
-run uri line character =
-    Stuff.findRootIn (Utils.fpDropFileName uri)
+run path line character =
+    Stuff.findRootIn (Utils.fpDropFileName path)
         |> Task.bind
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
-                        runHelp root uri line character
+                        runHelp root path (line + 1) (character + 1)
 
                     Nothing ->
                         Task.pure (Err ())
@@ -50,16 +52,16 @@ run uri line character =
 
 
 runHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
-runHelp _ uri requestLine requestChar =
+runHelp _ path requestLine requestChar =
     -- Step 1: Read the source file at the provided URI
-    File.readUtf8 uri
+    File.readUtf8 path
         |> Task.bind
             (\content ->
                 -- Step 2: Parse the source code to find the symbol at the given position
                 let
                     syntaxVersion : SV.SyntaxVersion
                     syntaxVersion =
-                        SV.fileSyntaxVersion uri
+                        SV.fileSyntaxVersion path
 
                     parseResult : Result String Src.Module
                     parseResult =
@@ -70,7 +72,7 @@ runHelp _ uri requestLine requestChar =
                             Err _ ->
                                 Err "Parse error"
 
-                    symbolAtPosition : Result () (A.Located String)
+                    symbolAtPosition : Result () A.Region
                     symbolAtPosition =
                         case parseResult of
                             Ok (Src.Module _ _ _ _ _ values unions aliases _ _) ->
@@ -82,7 +84,7 @@ runHelp _ uri requestLine requestChar =
                     result : Result () Location
                     result =
                         symbolAtPosition
-                            |> Result.map (regionToLocation uri)
+                            |> Result.map (regionToLocation path)
                 in
                 -- Step 3: Resolve the definition through canonicalization (found symbol location)
                 -- Step 4: Return the location of the definition
@@ -90,9 +92,9 @@ runHelp _ uri requestLine requestChar =
             )
 
 
-regionToLocation : String -> A.Located String -> Location
-regionToLocation uri (A.At (A.Region (A.Position startLine startChar) (A.Position endLine endChar)) _) =
-    { uri = uri
+regionToLocation : String -> A.Region -> Location
+regionToLocation path (A.Region (A.Position startLine startChar) (A.Position endLine endChar)) =
+    { path = path
     , range =
         { start = { line = startLine - 1, character = startChar - 1 }
         , end = { line = endLine - 1, character = endChar - 1 }
@@ -100,39 +102,185 @@ regionToLocation uri (A.At (A.Region (A.Position startLine startChar) (A.Positio
     }
 
 
-findSymbolAt : Int -> Int -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Result () (A.Located String)
+findSymbolAt : Int -> Int -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Result () A.Region
 findSymbolAt line char values unions aliases =
-    let
-        valueMatch : Maybe (A.Located String)
-        valueMatch =
-            List.filterMap (matchValue line char) values |> List.head
-    in
-    case valueMatch of
-        Just v ->
-            Ok v
-
-        Nothing ->
-            let
-                unionMatch : Maybe (A.Located String)
-                unionMatch =
-                    List.filterMap (matchUnion line char) unions |> List.head
-            in
-            case unionMatch of
-                Just u ->
-                    Ok u
+    -- let
+    --     valueMatch : Maybe (A.Located String)
+    --     valueMatch =
+    --         List.filterMap (matchValue line char) values |> List.head
+    -- in
+    case findSymbolAtValues line char values of
+        Just symbol ->
+            case findDefinitionForSymbol symbol values of
+                Just region ->
+                    Ok region
 
                 Nothing ->
-                    let
-                        aliasMatch : Maybe (A.Located String)
-                        aliasMatch =
-                            List.filterMap (matchAlias line char) aliases |> List.head
-                    in
-                    case aliasMatch of
-                        Just a ->
-                            Ok a
+                    Err ()
 
-                        Nothing ->
-                            Err ()
+        -- Ok v
+        Nothing ->
+            -- let
+            --     unionMatch : Maybe (A.Located String)
+            --     unionMatch =
+            --         List.filterMap (matchUnion line char) unions |> List.head
+            -- in
+            -- case unionMatch of
+            --     Just u ->
+            --         Ok u
+            --     Nothing ->
+            --         let
+            --             aliasMatch : Maybe (A.Located String)
+            --             aliasMatch =
+            --                 List.filterMap (matchAlias line char) aliases |> List.head
+            --         in
+            --         case aliasMatch of
+            --             Just a ->
+            --                 Ok a
+            --             Nothing ->
+            --                 Err ()
+            Err ()
+
+
+type Symbol
+    = Var Src.VarType Name
+    | VarQual Src.VarType Name Name
+
+
+findSymbolAtValues : Int -> Int -> List (A.Located Src.Value) -> Maybe Symbol
+findSymbolAtValues line char values =
+    case values of
+        [] ->
+            Nothing
+
+        v :: vs ->
+            case findSymbolAtValue line char v of
+                Just symbol ->
+                    Just symbol
+
+                Nothing ->
+                    findSymbolAtValues line char vs
+
+
+findSymbolAtValue : Int -> Int -> A.Located Src.Value -> Maybe Symbol
+findSymbolAtValue line char (A.At region (Src.Value _ _ _ ( _, body ) _)) =
+    if regionContainsPosition region line char then
+        findSymbolAtExpr line char body
+
+    else
+        Nothing
+
+
+findSymbolAtExpr : Int -> Int -> Src.Expr -> Maybe Symbol
+findSymbolAtExpr line char (A.At region expr_) =
+    if regionContainsPosition region line char then
+        case expr_ of
+            -- = Chr String
+            -- | Str String Bool
+            -- | Int Int String
+            -- | Float Float String
+            Src.Var varType name ->
+                -- | Var VarType Name
+                Just (Var varType name)
+
+            Src.VarQual varType prefix name ->
+                -- | VarQual VarType Name Name
+                Just (VarQual varType prefix name)
+
+            -- | List (List (C2Eol Expr)) FComments
+            -- | Op Name
+            -- | Negate Expr
+            -- | Binops (List ( Expr, C2 (A.Located Name) )) Expr
+            Src.Lambda srcArgs ( _, body ) ->
+                -- | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
+                findSymbolAtExpr line char body
+
+            Src.Call func args ->
+                -- | Call Expr (List (C1 Expr))
+                List.stoppableFoldl
+                    (\callExpr acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char callExpr)
+                    )
+                    Nothing
+                    (func :: List.map Src.c1Value args)
+
+            -- | If (C1 ( C2 Expr, C2 Expr )) (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
+            -- | Let (List (C2 (A.Located Def))) FComments Expr
+            -- | Case (C2 Expr) (List ( C2 Pattern, C1 Expr ))
+            -- | Accessor Name
+            -- | Access Expr (A.Located Name)
+            -- | Update (C2 Expr) (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
+            Src.Record ( _, fields ) ->
+                -- | Record (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
+                List.stoppableFoldl
+                    (\( _, ( _, ( _, field ) ) ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char field)
+                    )
+                    Nothing
+                    fields
+
+            -- | Unit
+            Src.Tuple a b cs ->
+                -- | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
+                List.stoppableFoldl
+                    (\( _, tupleExpr ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char tupleExpr)
+                    )
+                    Nothing
+                    (a :: b :: cs)
+
+            -- | Shader Shader.Source Shader.Types
+            -- | Parens (C2 Expr)
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findDefinitionForSymbol : Symbol -> List (A.Located Src.Value) -> Maybe A.Region
+findDefinitionForSymbol symbol values =
+    case symbol of
+        Var Src.LowVar name ->
+            List.stoppableFoldl
+                (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
+                    if valueName == name then
+                        List.Stop (Just region)
+
+                    else
+                        List.Continue acc
+                )
+                Nothing
+                values
+
+        -- VarQual varType prefix name ->
+        --     List.filterMap
+        --         (\(A.At region (Src.Value _ ( _, A.At _ valueName ) _ _ _)) ->
+        --             if valueName == name then
+        --                 Just region
+        --             else
+        --                 Nothing
+        --         )
+        --         values
+        --         |> List.head
+        _ ->
+            -- Debug.todo "not implemented"
+            Nothing
 
 
 matchValue : Int -> Int -> A.Located Src.Value -> Maybe (A.Located String)

@@ -2,12 +2,8 @@
  * Configuration object expected by the Guida runner.
  */
 export interface GuidaConfig {
-    // XMLHttpRequest constructor for making HTTP requests.
-    // @ts-ignore
-    XMLHttpRequest: typeof XMLHttpRequest;
-
     // Write text or binary data to a path.
-    writeFile(path: string, data: string | ArrayBuffer | Uint8Array | Buffer): Promise<void>;
+    writeFile(path: string, data: string | Uint8Array | Buffer): Promise<void>;
 
     // Read file contents. Can return text or binary data.
     readFile(path: string): Promise<string | ArrayBuffer | Uint8Array | Buffer | { buffer: ArrayBuffer }>;
@@ -90,4 +86,4 @@ export declare const format: (config: GuidaConfig, content: string) => Promise<G
 export declare const install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;
-export declare const getDefinitionLocation: (config: GuidaConfig, args: { uri: string, position: Position }) => Promise<null | { uri: string, start: Position, end: Position }>;
+export declare const getDefinitionLocation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | { path: string, range: { start: Position, end: Position } }>;
