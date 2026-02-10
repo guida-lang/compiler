@@ -5,14 +5,24 @@ const os = require("node:os");
 const tmp = require("tmp");
 const guida = require("..");
 
-const config = () => {
+const config = (env = {}) => {
     return {
-        env: {},
+        env,
         writeFile: async (path, data) => {
-            fs.writeFileSync(path, data);
+            return new Promise((resolve, _reject) => {
+                fs.writeFile(path, data, (err) => {
+                    if (err) throw err;
+                    resolve();
+                });
+            });
         },
         readFile: async (path) => {
-            return await fs.readFileSync(path);
+            return new Promise((resolve, _reject) => {
+                fs.readFile(path, (err, data) => {
+                    if (err) throw err;
+                    resolve(data);
+                });
+            });
         },
         details: (path) => {
             const stats = fs.statSync(path);
@@ -107,6 +117,29 @@ main =
 
         const result = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
         expect(result).toHaveProperty("output", expect.any(String));
+    });
+
+    it("make - sequential builds", async () => {
+        const tmpobj = tmp.dirSync();
+        process.chdir(tmpobj.name);
+
+        await guida.init(config(), { package: false });
+
+        fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }`);
+
+        const firstRunResult = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(firstRunResult).toHaveProperty("output", expect.any(String));
+
+        const secondRunResult = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(secondRunResult).toHaveProperty("output", expect.any(String));
     });
 
     it("getDefinitionLocation - simple example", async () => {

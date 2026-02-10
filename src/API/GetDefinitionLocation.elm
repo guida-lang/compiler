@@ -175,28 +175,45 @@ findSymbolAtExpr : Int -> Int -> Src.Expr -> Maybe Symbol
 findSymbolAtExpr line char (A.At region expr_) =
     if regionContainsPosition region line char then
         case expr_ of
-            -- = Chr String
-            -- | Str String Bool
-            -- | Int Int String
-            -- | Float Float String
             Src.Var varType name ->
-                -- | Var VarType Name
                 Just (Var varType name)
 
             Src.VarQual varType prefix name ->
-                -- | VarQual VarType Name Name
                 Just (VarQual varType prefix name)
 
-            -- | List (List (C2Eol Expr)) FComments
-            -- | Op Name
-            -- | Negate Expr
-            -- | Binops (List ( Expr, C2 (A.Located Name) )) Expr
-            Src.Lambda srcArgs ( _, body ) ->
-                -- | Lambda (C1 (List (C1 Pattern))) (C1 Expr)
+            Src.List list _ ->
+                List.stoppableFoldl
+                    (\( _, listExpr ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char listExpr)
+                    )
+                    Nothing
+                    list
+
+            Src.Negate negatedExpr ->
+                findSymbolAtExpr line char negatedExpr
+
+            Src.Binops ops final ->
+                List.stoppableFoldl
+                    (\opExpr acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char opExpr)
+                    )
+                    Nothing
+                    (final :: List.map Tuple.first ops)
+
+            Src.Lambda _ ( _, body ) ->
                 findSymbolAtExpr line char body
 
             Src.Call func args ->
-                -- | Call Expr (List (C1 Expr))
                 List.stoppableFoldl
                     (\callExpr acc ->
                         case acc of
@@ -209,14 +226,71 @@ findSymbolAtExpr line char (A.At region expr_) =
                     Nothing
                     (func :: List.map Src.c1Value args)
 
-            -- | If (C1 ( C2 Expr, C2 Expr )) (List (C1 ( C2 Expr, C2 Expr ))) (C1 Expr)
-            -- | Let (List (C2 (A.Located Def))) FComments Expr
-            -- | Case (C2 Expr) (List ( C2 Pattern, C1 Expr ))
-            -- | Accessor Name
-            -- | Access Expr (A.Located Name)
-            -- | Update (C2 Expr) (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
+            Src.If firstBranch branches ( _, finally ) ->
+                List.stoppableFoldl
+                    (\ifExpr acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char ifExpr)
+                    )
+                    Nothing
+                    (finally :: List.concatMap (\( _, ( ( _, condition ), ( _, branch ) ) ) -> [ condition, branch ]) (firstBranch :: branches))
+
+            Src.Let defs _ body ->
+                let
+                    defToExpr ( _, def ) =
+                        case A.toValue def of
+                            Src.Define _ _ ( _, defBody ) _ ->
+                                defBody
+
+                            Src.Destruct _ ( _, defBody ) ->
+                                defBody
+                in
+                List.stoppableFoldl
+                    (\letExpr acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char letExpr)
+                    )
+                    Nothing
+                    (body :: List.map defToExpr defs)
+
+            Src.Case ( _, subject ) clauses ->
+                List.stoppableFoldl
+                    (\caseExpr acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char caseExpr)
+                    )
+                    Nothing
+                    (subject :: List.map (Tuple.second >> Src.c1Value) clauses)
+
+            Src.Access record _ ->
+                findSymbolAtExpr line char record
+
+            Src.Update ( _, name ) ( _, fields ) ->
+                List.stoppableFoldl
+                    (\field acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtExpr line char field)
+                    )
+                    Nothing
+                    (name :: List.map (Src.c2EolValue >> Tuple.second >> Src.c1Value) fields)
+
             Src.Record ( _, fields ) ->
-                -- | Record (C1 (List (C2Eol ( C1 (A.Located Name), C1 Expr ))))
                 List.stoppableFoldl
                     (\( _, ( _, ( _, field ) ) ) acc ->
                         case acc of
@@ -229,9 +303,7 @@ findSymbolAtExpr line char (A.At region expr_) =
                     Nothing
                     fields
 
-            -- | Unit
             Src.Tuple a b cs ->
-                -- | Tuple (C2 Expr) (C2 Expr) (List (C2 Expr))
                 List.stoppableFoldl
                     (\( _, tupleExpr ) acc ->
                         case acc of
@@ -244,8 +316,9 @@ findSymbolAtExpr line char (A.At region expr_) =
                     Nothing
                     (a :: b :: cs)
 
-            -- | Shader Shader.Source Shader.Types
-            -- | Parens (C2 Expr)
+            Src.Parens ( _, firstExpr ) ->
+                findSymbolAtExpr line char firstExpr
+
             _ ->
                 Nothing
 
