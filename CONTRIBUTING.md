@@ -30,7 +30,7 @@ Find out more about our [Vision](README.md#vision) on the project [README](READM
 We welcome contributions of all kinds, code, documentation, bug reports, feedback, and ideas!
 
 If you're unsure about where to start or how to approach an issue, feel free to open a [discussion](https://github.com/guida-lang/compiler/discussions)
-or join our [Guida Discord server](https://discord.gg/Ur33engz) to connect with other contributors and users.
+or join our [Guida Discord server](https://discord.gg/B6WgPzf5Aa) to connect with other contributors and users.
 We’re happy to help point you in the right direction!
 
 ---
@@ -124,7 +124,7 @@ If you're unsure where the issue belongs, feel free to post anyway — we’ll h
 
 ## Questions?
 
-Join the [Guida Discord server](https://discord.gg/Ur33engz) to connect with other contributors and users, ask questions, and share ideas.
+Join the [Guida Discord server](https://discord.gg/B6WgPzf5Aa) to connect with other contributors and users, ask questions, and share ideas.
 
 Please note that responses may come with a bit of delay, as availability can be limited during the day.
 
