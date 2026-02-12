@@ -1,5 +1,6 @@
 module API.Main exposing (main)
 
+import API.Diagnostics as Diagnostics
 import API.Format as Format
 import API.GetDefinitionLocation as GetDefinitionLocation
 import API.Init as Init
@@ -111,7 +112,7 @@ app =
                                     )
 
                     DiagnosticsArgs (DiagnosticsSourcePath path) ->
-                        Make.run path (Make.Flags False False False)
+                        Diagnostics.run path
                             |> Task.bind
                                 (\result ->
                                     case result of

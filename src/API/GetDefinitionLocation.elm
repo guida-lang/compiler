@@ -5,14 +5,18 @@ module API.GetDefinitionLocation exposing
     )
 
 import Builder.File as File
+import Builder.Guida.Outline as Outline
 import Builder.Stuff as Stuff
 import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
 import Compiler.Generate.Target as Target
+import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
+import Data.Map as Dict
 import List.Extra as List
+import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
@@ -52,12 +56,10 @@ run path line character =
 
 
 runHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
-runHelp _ path requestLine requestChar =
-    -- Step 1: Read the source file at the provided URI
+runHelp root path requestLine requestChar =
     File.readUtf8 path
         |> Task.bind
             (\content ->
-                -- Step 2: Parse the source code to find the symbol at the given position
                 let
                     syntaxVersion : SV.SyntaxVersion
                     syntaxVersion =
@@ -71,29 +73,19 @@ runHelp _ path requestLine requestChar =
 
                             Err _ ->
                                 Err "Parse error"
-
-                    symbolAtPosition : Result () A.Region
-                    symbolAtPosition =
-                        case parseResult of
-                            Ok (Src.Module _ _ _ _ _ values unions aliases _ _) ->
-                                findSymbolAt requestLine requestChar values unions aliases
-
-                            Err _ ->
-                                Err ()
-
-                    result : Result () Location
-                    result =
-                        symbolAtPosition
-                            |> Result.map (regionToLocation path)
                 in
-                -- Step 3: Resolve the definition through canonicalization (found symbol location)
-                -- Step 4: Return the location of the definition
-                Task.pure result
+                case parseResult of
+                    Ok (Src.Module _ _ _ _ imports values unions aliases _ _) ->
+                        findSymbolAt root path requestLine requestChar imports values unions aliases
+                            |> Task.fmap (Result.map regionToLocation)
+
+                    Err _ ->
+                        Task.pure (Err ())
             )
 
 
-regionToLocation : String -> A.Region -> Location
-regionToLocation path (A.Region (A.Position startLine startChar) (A.Position endLine endChar)) =
+regionToLocation : ( String, A.Region ) -> Location
+regionToLocation ( path, A.Region (A.Position startLine startChar) (A.Position endLine endChar) ) =
     { path = path
     , range =
         { start = { line = startLine - 1, character = startChar - 1 }
@@ -102,44 +94,23 @@ regionToLocation path (A.Region (A.Position startLine startChar) (A.Position end
     }
 
 
-findSymbolAt : Int -> Int -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Result () A.Region
-findSymbolAt line char values unions aliases =
-    -- let
-    --     valueMatch : Maybe (A.Located String)
-    --     valueMatch =
-    --         List.filterMap (matchValue line char) values |> List.head
-    -- in
+findSymbolAt : Stuff.Root -> String -> Int -> Int -> List Src.Import -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Task Never (Result () ( String, A.Region ))
+findSymbolAt root path line char imports values _ _ =
     case findSymbolAtValues line char values of
         Just symbol ->
-            case findDefinitionForSymbol symbol values of
-                Just region ->
-                    Ok region
+            findDefinitionForSymbol root path symbol imports values
+                |> Task.fmap
+                    (\definition ->
+                        case definition of
+                            Just pathAndRegion ->
+                                Ok pathAndRegion
 
-                Nothing ->
-                    Err ()
+                            Nothing ->
+                                Err ()
+                    )
 
-        -- Ok v
         Nothing ->
-            -- let
-            --     unionMatch : Maybe (A.Located String)
-            --     unionMatch =
-            --         List.filterMap (matchUnion line char) unions |> List.head
-            -- in
-            -- case unionMatch of
-            --     Just u ->
-            --         Ok u
-            --     Nothing ->
-            --         let
-            --             aliasMatch : Maybe (A.Located String)
-            --             aliasMatch =
-            --                 List.filterMap (matchAlias line char) aliases |> List.head
-            --         in
-            --         case aliasMatch of
-            --             Just a ->
-            --                 Ok a
-            --             Nothing ->
-            --                 Err ()
-            Err ()
+            Task.pure (Err ())
 
 
 type Symbol
@@ -326,34 +297,124 @@ findSymbolAtExpr line char (A.At region expr_) =
         Nothing
 
 
-findDefinitionForSymbol : Symbol -> List (A.Located Src.Value) -> Maybe A.Region
-findDefinitionForSymbol symbol values =
+findDefinitionForSymbol : Stuff.Root -> String -> Symbol -> List Src.Import -> List (A.Located Src.Value) -> Task Never (Maybe ( String, A.Region ))
+findDefinitionForSymbol root initialPath symbol imports values =
     case symbol of
         Var Src.LowVar name ->
             List.stoppableFoldl
                 (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
                     if valueName == name then
-                        List.Stop (Just region)
+                        List.Stop (Just ( initialPath, region ))
 
                     else
                         List.Continue acc
                 )
                 Nothing
                 values
+                |> Task.pure
 
-        -- VarQual varType prefix name ->
-        --     List.filterMap
-        --         (\(A.At region (Src.Value _ ( _, A.At _ valueName ) _ _ _)) ->
-        --             if valueName == name then
-        --                 Just region
-        --             else
-        --                 Nothing
-        --         )
-        --         values
-        --         |> List.head
-        _ ->
-            -- Debug.todo "not implemented"
-            Nothing
+        Var Src.CapVar _ ->
+            -- TODO
+            Task.pure Nothing
+
+        VarQual _ prefix name ->
+            Outline.getAllModulePaths root
+                |> Task.fmap
+                    (\allModulePaths ->
+                        imports
+                            |> List.map
+                                (\(Src.Import ( _, A.At _ importName ) maybeAlias _) ->
+                                    ( maybeAlias
+                                        |> Maybe.map Tuple.second
+                                        |> Maybe.withDefault importName
+                                    , importName
+                                    )
+                                )
+                            |> Dict.fromList identity
+                            |> Dict.get identity prefix
+                            |> Maybe.andThen
+                                (\modulePath ->
+                                    List.stoppableFoldl
+                                        (\( TypeCheck.Canonical _ home, filePath ) _ ->
+                                            if home == modulePath then
+                                                List.Stop (Just filePath)
+
+                                            else
+                                                List.Continue Nothing
+                                        )
+                                        Nothing
+                                        (Dict.toList ModuleName.compareCanonical allModulePaths)
+                                )
+                    )
+                |> Task.bind
+                    (\maybePath ->
+                        case maybePath of
+                            Just path ->
+                                File.readUtf8 path
+                                    |> Task.fmap
+                                        (\content ->
+                                            let
+                                                syntaxVersion : SV.SyntaxVersion
+                                                syntaxVersion =
+                                                    SV.fileSyntaxVersion path
+                                            in
+                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                Ok (Src.Module _ _ (A.At _ exports) _ _ targetValues _ _ _ _) ->
+                                                    case exports of
+                                                        Src.Open _ _ ->
+                                                            List.stoppableFoldl
+                                                                (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) _ ->
+                                                                    if valueName == name then
+                                                                        List.Stop (Just ( path, valueRegion ))
+
+                                                                    else
+                                                                        List.Continue Nothing
+                                                                )
+                                                                Nothing
+                                                                targetValues
+
+                                                        Src.Explicit (A.At _ exposedList) ->
+                                                            List.stoppableFoldl
+                                                                (\( _, exposed ) _ ->
+                                                                    case exposed of
+                                                                        Src.Lower (A.At _ exposedName) ->
+                                                                            if exposedName == name then
+                                                                                let
+                                                                                    foundRegion =
+                                                                                        List.stoppableFoldl
+                                                                                            (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) _ ->
+                                                                                                if valueName == name then
+                                                                                                    List.Stop (Just ( path, valueRegion ))
+
+                                                                                                else
+                                                                                                    List.Continue Nothing
+                                                                                            )
+                                                                                            Nothing
+                                                                                            targetValues
+                                                                                in
+                                                                                case foundRegion of
+                                                                                    Just region ->
+                                                                                        List.Stop (Just region)
+
+                                                                                    Nothing ->
+                                                                                        List.Continue Nothing
+
+                                                                            else
+                                                                                List.Continue Nothing
+
+                                                                        _ ->
+                                                                            List.Continue Nothing
+                                                                )
+                                                                Nothing
+                                                                exposedList
+
+                                                Err _ ->
+                                                    Nothing
+                                        )
+
+                            Nothing ->
+                                Task.pure Nothing
+                    )
 
 
 matchValue : Int -> Int -> A.Located Src.Value -> Maybe (A.Located String)
