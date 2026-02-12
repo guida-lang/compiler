@@ -16,6 +16,7 @@ import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict
 import List.Extra as List
+import Maybe.Extra as Maybe
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Main as Utils
@@ -116,6 +117,7 @@ findSymbolAt root path line char imports values _ _ =
 type Symbol
     = Var Src.VarType Name
     | VarQual Src.VarType Name Name
+    | Type Name
 
 
 findSymbolAtValues : Int -> Int -> List (A.Located Src.Value) -> Maybe Symbol
@@ -134,9 +136,83 @@ findSymbolAtValues line char values =
 
 
 findSymbolAtValue : Int -> Int -> A.Located Src.Value -> Maybe Symbol
-findSymbolAtValue line char (A.At region (Src.Value _ _ _ ( _, body ) _)) =
+findSymbolAtValue line char (A.At region (Src.Value _ _ _ ( _, body ) maybeType)) =
     if regionContainsPosition region line char then
-        findSymbolAtExpr line char body
+        case maybeType of
+            Just ( _, ( _, type_ ) ) ->
+                Maybe.or (findSymbolAtType line char type_) <|
+                    findSymbolAtExpr line char body
+
+            Nothing ->
+                findSymbolAtExpr line char body
+
+    else
+        Nothing
+
+
+findSymbolAtType : Int -> Int -> Src.Type -> Maybe Symbol
+findSymbolAtType line char (A.At region type_) =
+    if regionContainsPosition region line char then
+        case type_ of
+            Src.TLambda ( _, arg ) ( _, result ) ->
+                List.stoppableFoldl
+                    (\lambdaType acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtType line char lambdaType)
+                    )
+                    Nothing
+                    [ arg, result ]
+
+            Src.TVar _ ->
+                Nothing
+
+            Src.TType nameRegion name args ->
+                if regionContainsPosition nameRegion line char then
+                    Just (Type name)
+
+                else
+                    List.stoppableFoldl
+                        (\( _, argType ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
+
+                                Nothing ->
+                                    List.Continue (findSymbolAtType line char argType)
+                        )
+                        Nothing
+                        args
+
+            Src.TTypeQual _ _ _ _ ->
+                -- Src.TTypeQual A.Region Name Name (List (C1 Type))
+                Nothing
+
+            Src.TRecord _ _ _ ->
+                -- Src.TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
+                Nothing
+
+            Src.TUnit ->
+                Nothing
+
+            Src.TTuple a b cs ->
+                List.stoppableFoldl
+                    (\( _, tupleType ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtType line char tupleType)
+                    )
+                    Nothing
+                    (a :: b :: cs)
+
+            Src.TParens ( _, tipe_ ) ->
+                findSymbolAtType line char tipe_
 
     else
         Nothing
@@ -301,17 +377,17 @@ findDefinitionForSymbol : Stuff.Root -> String -> Symbol -> List Src.Import -> L
 findDefinitionForSymbol root initialPath symbol imports values =
     case symbol of
         Var Src.LowVar name ->
-            List.stoppableFoldl
-                (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
-                    if valueName == name then
-                        List.Stop (Just ( initialPath, region ))
+            Task.pure <|
+                List.stoppableFoldl
+                    (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
+                        if valueName == name then
+                            List.Stop (Just ( initialPath, region ))
 
-                    else
-                        List.Continue acc
-                )
-                Nothing
-                values
-                |> Task.pure
+                        else
+                            List.Continue acc
+                    )
+                    Nothing
+                    values
 
         Var Src.CapVar _ ->
             -- TODO
@@ -415,6 +491,10 @@ findDefinitionForSymbol root initialPath symbol imports values =
                             Nothing ->
                                 Task.pure Nothing
                     )
+
+        Type _ ->
+            -- TODO
+            Task.pure Nothing
 
 
 matchValue : Int -> Int -> A.Located Src.Value -> Maybe (A.Located String)
