@@ -1,5 +1,6 @@
-module API.GetDefinitionLocation exposing
-    ( Location
+module API.LanguageServerProtocol exposing
+    ( Flags(..)
+    , Location
     , Position
     , run
     )
@@ -39,21 +40,31 @@ type alias Position =
 
 
 
+-- FLAGS
+
+
+type Flags
+    = GetDefinitionLocation String Int Int
+
+
+
 -- RUN
 
 
-run : String -> Int -> Int -> Task Never (Result () Location)
-run path line character =
-    Stuff.findRootIn (Utils.fpDropFileName path)
-        |> Task.bind
-            (\maybeRoot ->
-                case maybeRoot of
-                    Just root ->
-                        runHelp root path (line + 1) (character + 1)
+run : Flags -> Task Never (Result () Location)
+run flags =
+    case flags of
+        GetDefinitionLocation path line character ->
+            Stuff.findRootIn (Utils.fpDropFileName path)
+                |> Task.bind
+                    (\maybeRoot ->
+                        case maybeRoot of
+                            Just root ->
+                                runHelp root path (line + 1) (character + 1)
 
-                    Nothing ->
-                        Task.pure (Err ())
-            )
+                            Nothing ->
+                                Task.pure (Err ())
+                    )
 
 
 runHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
@@ -96,10 +107,10 @@ regionToLocation ( path, A.Region (A.Position startLine startChar) (A.Position e
 
 
 findSymbolAt : Stuff.Root -> String -> Int -> Int -> List Src.Import -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Task Never (Result () ( String, A.Region ))
-findSymbolAt root path line char imports values _ _ =
+findSymbolAt root path line char imports values unions aliases =
     case findSymbolAtValues line char values of
         Just symbol ->
-            findDefinitionForSymbol root path symbol imports values
+            findDefinitionForSymbol root path symbol imports values unions aliases
                 |> Task.fmap
                     (\definition ->
                         case definition of
@@ -118,6 +129,7 @@ type Symbol
     = Var Src.VarType Name
     | VarQual Src.VarType Name Name
     | Type Name
+    | TypeQual Name Name
 
 
 findSymbolAtValues : Int -> Int -> List (A.Located Src.Value) -> Maybe Symbol
@@ -187,13 +199,35 @@ findSymbolAtType line char (A.At region type_) =
                         Nothing
                         args
 
-            Src.TTypeQual _ _ _ _ ->
-                -- Src.TTypeQual A.Region Name Name (List (C1 Type))
-                Nothing
+            Src.TTypeQual nameRegion home name args ->
+                if regionContainsPosition nameRegion line char then
+                    Just (TypeQual home name)
 
-            Src.TRecord _ _ _ ->
-                -- Src.TRecord (List (C2 ( C1 (A.Located Name), C1 Type ))) (Maybe (C2 (A.Located Name))) FComments
-                Nothing
+                else
+                    List.stoppableFoldl
+                        (\( _, argType ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
+
+                                Nothing ->
+                                    List.Continue (findSymbolAtType line char argType)
+                        )
+                        Nothing
+                        args
+
+            Src.TRecord fields _ _ ->
+                List.stoppableFoldl
+                    (\( _, ( _, ( _, fieldType ) ) ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtType line char fieldType)
+                    )
+                    Nothing
+                    fields
 
             Src.TUnit ->
                 Nothing
@@ -373,8 +407,8 @@ findSymbolAtExpr line char (A.At region expr_) =
         Nothing
 
 
-findDefinitionForSymbol : Stuff.Root -> String -> Symbol -> List Src.Import -> List (A.Located Src.Value) -> Task Never (Maybe ( String, A.Region ))
-findDefinitionForSymbol root initialPath symbol imports values =
+findDefinitionForSymbol : Stuff.Root -> String -> Symbol -> List Src.Import -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Task Never (Maybe ( String, A.Region ))
+findDefinitionForSymbol root initialPath symbol imports values unions aliases =
     case symbol of
         Var Src.LowVar name ->
             Task.pure <|
@@ -456,7 +490,8 @@ findDefinitionForSymbol root initialPath symbol imports values =
                                                                         Src.Lower (A.At _ exposedName) ->
                                                                             if exposedName == name then
                                                                                 let
-                                                                                    foundRegion =
+                                                                                    foundPathAndRegion : Maybe ( Utils.FilePath, A.Region )
+                                                                                    foundPathAndRegion =
                                                                                         List.stoppableFoldl
                                                                                             (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) _ ->
                                                                                                 if valueName == name then
@@ -468,9 +503,9 @@ findDefinitionForSymbol root initialPath symbol imports values =
                                                                                             Nothing
                                                                                             targetValues
                                                                                 in
-                                                                                case foundRegion of
-                                                                                    Just region ->
-                                                                                        List.Stop (Just region)
+                                                                                case foundPathAndRegion of
+                                                                                    Just pathAndRegion ->
+                                                                                        List.Stop (Just pathAndRegion)
 
                                                                                     Nothing ->
                                                                                         List.Continue Nothing
@@ -492,36 +527,159 @@ findDefinitionForSymbol root initialPath symbol imports values =
                                 Task.pure Nothing
                     )
 
-        Type _ ->
-            -- TODO
-            Task.pure Nothing
+        Type name ->
+            -- TODO check external types
+            let
+                maybeUnionRegion : Maybe ( String, A.Region )
+                maybeUnionRegion =
+                    List.stoppableFoldl
+                        (\(A.At _ union) _ ->
+                            case union of
+                                Src.Union ( _, A.At regionName unionName ) _ _ ->
+                                    if unionName == name then
+                                        List.Stop (Just ( initialPath, regionName ))
 
+                                    else
+                                        List.Continue Nothing
+                        )
+                        Nothing
+                        unions
 
-matchValue : Int -> Int -> A.Located Src.Value -> Maybe (A.Located String)
-matchValue line char (A.At region (Src.Value _ ( _, A.At nameRegion name ) _ _ _)) =
-    if regionContainsPosition nameRegion line char then
-        Just (A.At region name)
+                maybeAliasRegion : Maybe ( String, A.Region )
+                maybeAliasRegion =
+                    List.stoppableFoldl
+                        (\(A.At _ union) _ ->
+                            case union of
+                                Src.Alias _ ( _, A.At regionName aliasName ) _ _ ->
+                                    if aliasName == name then
+                                        List.Stop (Just ( initialPath, regionName ))
 
-    else
-        Nothing
+                                    else
+                                        List.Continue Nothing
+                        )
+                        Nothing
+                        aliases
+            in
+            Task.pure <|
+                Maybe.or maybeUnionRegion maybeAliasRegion
 
+        TypeQual prefix name ->
+            Outline.getAllModulePaths root
+                |> Task.fmap
+                    (\allModulePaths ->
+                        imports
+                            |> List.map
+                                (\(Src.Import ( _, A.At _ importName ) maybeAlias _) ->
+                                    ( maybeAlias
+                                        |> Maybe.map Tuple.second
+                                        |> Maybe.withDefault importName
+                                    , importName
+                                    )
+                                )
+                            |> Dict.fromList identity
+                            |> Dict.get identity prefix
+                            |> Maybe.andThen
+                                (\modulePath ->
+                                    List.stoppableFoldl
+                                        (\( TypeCheck.Canonical _ home, filePath ) _ ->
+                                            if home == modulePath then
+                                                List.Stop (Just filePath)
 
-matchUnion : Int -> Int -> A.Located Src.Union -> Maybe (A.Located String)
-matchUnion line char (A.At region (Src.Union ( _, A.At nameRegion name ) _ _)) =
-    if regionContainsPosition nameRegion line char then
-        Just (A.At region name)
+                                            else
+                                                List.Continue Nothing
+                                        )
+                                        Nothing
+                                        (Dict.toList ModuleName.compareCanonical allModulePaths)
+                                )
+                    )
+                |> Task.bind
+                    (\maybePath ->
+                        case maybePath of
+                            Just path ->
+                                File.readUtf8 path
+                                    |> Task.fmap
+                                        (\content ->
+                                            let
+                                                syntaxVersion : SV.SyntaxVersion
+                                                syntaxVersion =
+                                                    SV.fileSyntaxVersion path
+                                            in
+                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions targetAliases _ _) ->
+                                                    case exports of
+                                                        Src.Open _ _ ->
+                                                            let
+                                                                maybeUnionRegion : Maybe ( String, A.Region )
+                                                                maybeUnionRegion =
+                                                                    List.stoppableFoldl
+                                                                        (\(A.At _ union) _ ->
+                                                                            case union of
+                                                                                Src.Union ( _, A.At regionName unionName ) _ _ ->
+                                                                                    if unionName == name then
+                                                                                        List.Stop (Just ( path, regionName ))
 
-    else
-        Nothing
+                                                                                    else
+                                                                                        List.Continue Nothing
+                                                                        )
+                                                                        Nothing
+                                                                        targetUnions
 
+                                                                maybeAliasRegion : Maybe ( String, A.Region )
+                                                                maybeAliasRegion =
+                                                                    List.stoppableFoldl
+                                                                        (\(A.At _ union) _ ->
+                                                                            case union of
+                                                                                Src.Alias _ ( _, A.At regionName aliasName ) _ _ ->
+                                                                                    if aliasName == name then
+                                                                                        List.Stop (Just ( path, regionName ))
 
-matchAlias : Int -> Int -> A.Located Src.Alias -> Maybe (A.Located String)
-matchAlias line char (A.At region (Src.Alias _ ( _, A.At nameRegion name ) _ _)) =
-    if regionContainsPosition nameRegion line char then
-        Just (A.At region name)
+                                                                                    else
+                                                                                        List.Continue Nothing
+                                                                        )
+                                                                        Nothing
+                                                                        targetAliases
+                                                            in
+                                                            Maybe.or maybeUnionRegion maybeAliasRegion
 
-    else
-        Nothing
+                                                        Src.Explicit (A.At _ exposedList) ->
+                                                            List.stoppableFoldl
+                                                                (\( _, exposed ) _ ->
+                                                                    case exposed of
+                                                                        -- Src.Lower (A.At _ exposedName) ->
+                                                                        --     if exposedName == name then
+                                                                        --         let
+                                                                        --             foundPathAndRegion : Maybe ( Utils.FilePath, A.Region )
+                                                                        --             foundPathAndRegion =
+                                                                        --                 List.stoppableFoldl
+                                                                        --                     (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) _ ->
+                                                                        --                         if valueName == name then
+                                                                        --                             List.Stop (Just ( path, valueRegion ))
+                                                                        --                         else
+                                                                        --                             List.Continue Nothing
+                                                                        --                     )
+                                                                        --                     Nothing
+                                                                        --                     targetValues
+                                                                        --         in
+                                                                        --         case foundPathAndRegion of
+                                                                        --             Just pathAndRegion ->
+                                                                        --                 List.Stop (Just pathAndRegion)
+                                                                        --             Nothing ->
+                                                                        --                 List.Continue Nothing
+                                                                        --     else
+                                                                        --         List.Continue Nothing
+                                                                        _ ->
+                                                                            List.Continue Nothing
+                                                                )
+                                                                Nothing
+                                                                exposedList
+
+                                                Err _ ->
+                                                    Nothing
+                                        )
+
+                            Nothing ->
+                                Task.pure Nothing
+                    )
 
 
 regionContainsPosition : A.Region -> Int -> Int -> Bool

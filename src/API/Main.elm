@@ -2,9 +2,9 @@ module API.Main exposing (main)
 
 import API.Diagnostics as Diagnostics
 import API.Format as Format
-import API.GetDefinitionLocation as GetDefinitionLocation
 import API.Init as Init
 import API.Install as Install
+import API.LanguageServerProtocol as LanguageServerProtocol
 import API.Make as Make
 import API.Uninstall as Uninstall
 import Builder.Reporting.Exit as Exit
@@ -128,7 +128,7 @@ app =
                                 )
 
                     GetDefinitionLocationArgs path line character ->
-                        GetDefinitionLocation.run path line character
+                        LanguageServerProtocol.run (LanguageServerProtocol.GetDefinitionLocation path line character)
                             |> Task.bind
                                 (\result ->
                                     case result of
