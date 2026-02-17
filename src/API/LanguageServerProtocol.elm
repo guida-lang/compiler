@@ -12,6 +12,7 @@ import Compiler.AST.Source as Src
 import Compiler.Data.Name exposing (Name)
 import Compiler.Generate.Target as Target
 import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Guida.Package as Pkg
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -411,17 +412,104 @@ findDefinitionForSymbol : Stuff.Root -> String -> Symbol -> List Src.Import -> L
 findDefinitionForSymbol root initialPath symbol imports values unions aliases =
     case symbol of
         Var Src.LowVar name ->
-            Task.pure <|
-                List.stoppableFoldl
-                    (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
-                        if valueName == name then
-                            List.Stop (Just ( initialPath, region ))
+            let
+                -- 1. Check local definitions
+                maybeLocal =
+                    List.stoppableFoldl
+                        (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
+                            if valueName == name then
+                                List.Stop (Just ( initialPath, region ))
 
-                        else
-                            List.Continue acc
-                    )
-                    Nothing
-                    values
+                            else
+                                List.Continue acc
+                        )
+                        Nothing
+                        values
+            in
+            case maybeLocal of
+                Just found ->
+                    Task.pure (Just found)
+
+                Nothing ->
+                    -- 2. Check imports and their exposing lists
+                    Outline.getAllModulePaths root
+                        |> Task.andThen
+                            (\allModulePaths ->
+                                let
+                                    findInImport : Src.Import -> Task Never (Maybe ( String, A.Region ))
+                                    findInImport (Src.Import ( _, A.At _ importName ) _ ( _, exposing_ )) =
+                                        let
+                                            isExposed =
+                                                case exposing_ of
+                                                    Src.Open _ _ ->
+                                                        True
+
+                                                    Src.Explicit (A.At _ exposedList) ->
+                                                        List.any
+                                                            (\( _, e ) ->
+                                                                case e of
+                                                                    Src.Lower (A.At _ exposedName) ->
+                                                                        exposedName == name
+
+                                                                    _ ->
+                                                                        False
+                                                            )
+                                                            exposedList
+                                        in
+                                        if isExposed then
+                                            case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                                                Nothing ->
+                                                    Task.pure Nothing
+
+                                                Just path ->
+                                                    File.readUtf8 path
+                                                        |> Task.map
+                                                            (\content ->
+                                                                let
+                                                                    syntaxVersion =
+                                                                        SV.fileSyntaxVersion path
+                                                                in
+                                                                case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                                    Ok (Src.Module _ _ (A.At _ _) _ _ targetValues _ _ _ _) ->
+                                                                        List.stoppableFoldl
+                                                                            (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
+                                                                                if valueName == name then
+                                                                                    List.Stop (Just ( path, region ))
+
+                                                                                else
+                                                                                    List.Continue acc
+                                                                            )
+                                                                            Nothing
+                                                                            targetValues
+
+                                                                    Err _ ->
+                                                                        Nothing
+                                                            )
+
+                                        else
+                                            Task.pure Nothing
+
+                                    -- Try each import in order
+                                    tryImports : List Src.Import -> Task Never (Maybe ( String, A.Region ))
+                                    tryImports importsList =
+                                        case importsList of
+                                            [] ->
+                                                Task.pure Nothing
+
+                                            i :: is ->
+                                                findInImport i
+                                                    |> Task.andThen
+                                                        (\res ->
+                                                            case res of
+                                                                Just _ ->
+                                                                    Task.pure res
+
+                                                                Nothing ->
+                                                                    tryImports is
+                                                        )
+                                in
+                                tryImports imports
+                            )
 
         Var Src.CapVar _ ->
             -- TODO

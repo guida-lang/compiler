@@ -231,7 +231,7 @@ type U = U1 | U2
 `);
 
             utilFnExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } }
-            utilFn2Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } }
+            utilFn2Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } }
             utilTTypeExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } }
             utilUTypeExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } }
             utilU1Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } }
