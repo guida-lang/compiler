@@ -519,7 +519,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                             findCtorInImport (Src.Import ( _, A.At _ importName ) _ _) =
                                 case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
                                     Nothing ->
-            Task.pure Nothing
+                                        Task.pure Nothing
 
                                     Just path ->
                                         File.readUtf8 path
@@ -812,7 +812,6 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                     )
 
         Type name ->
-            -- TODO check external types
             let
                 maybeUnionRegion : Maybe ( String, A.Region )
                 maybeUnionRegion =
@@ -832,8 +831,8 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                 maybeAliasRegion : Maybe ( String, A.Region )
                 maybeAliasRegion =
                     List.stoppableFoldl
-                        (\(A.At _ union) _ ->
-                            case union of
+                        (\(A.At _ alias) _ ->
+                            case alias of
                                 Src.Alias _ ( _, A.At regionName aliasName ) _ _ ->
                                     if aliasName == name then
                                         List.Stop (Just ( initialPath, regionName ))
@@ -844,125 +843,178 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                         Nothing
                         aliases
             in
-            Task.pure <|
-                Maybe.or maybeUnionRegion maybeAliasRegion
+            case Maybe.or maybeUnionRegion maybeAliasRegion of
+                Just found ->
+                    Task.pure (Just found)
+
+                Nothing ->
+                    -- Check imports for external types
+                    Outline.getAllModulePaths root
+                        |> Task.andThen
+                            (\allModulePaths ->
+                                let
+                                    findTypeInImport (Src.Import ( _, A.At _ importName ) _ ( _, exposing_ )) =
+                                        let
+                                            isExposed =
+                                                case exposing_ of
+                                                    Src.Open _ _ ->
+                                                        True
+
+                                                    Src.Explicit (A.At _ exposedList) ->
+                                                        List.any
+                                                            (\( _, e ) ->
+                                                                case e of
+                                                                    Src.Upper (A.At _ exposedName) _ ->
+                                                                        exposedName == name
+
+                                                                    _ ->
+                                                                        False
+                                                            )
+                                                            exposedList
+                                        in
+                                        if isExposed then
+                                            case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                                                Nothing ->
+                                                    Task.pure Nothing
+
+                                                Just path ->
+                                                    File.readUtf8 path
+                                                        |> Task.map
+                                                            (\content ->
+                                                                let
+                                                                    syntaxVersion =
+                                                                        SV.fileSyntaxVersion path
+                                                                in
+                                                                case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                                    Ok (Src.Module _ _ (A.At _ exports) _ _ _ extUnions extAliases _ _) ->
+                                                                        let
+                                                                            unionRegion =
+                                                                                List.stoppableFoldl
+                                                                                    (\(A.At _ (Src.Union ( _, A.At regionName unionName ) _ _)) acc ->
+                                                                                        if unionName == name then
+                                                                                            List.Stop (Just ( path, regionName ))
+
+                                                                                        else
+                                                                                            List.Continue acc
+                                                                                    )
+                                                                                    Nothing
+                                                                                    extUnions
+
+                                                                            aliasRegion =
+                                                                                List.stoppableFoldl
+                                                                                    (\(A.At _ (Src.Alias _ ( _, A.At regionName aliasName ) _ _)) acc ->
+                                                                                        if aliasName == name then
+                                                                                            List.Stop (Just ( path, regionName ))
+
+                                                                                        else
+                                                                                            List.Continue acc
+                                                                                    )
+                                                                                    Nothing
+                                                                                    extAliases
+                                                                        in
+                                                                        Maybe.or unionRegion aliasRegion
+
+                                                                    Err _ ->
+                                                                        Nothing
+                                                            )
+
+                                        else
+                                            Task.pure Nothing
+
+                                    tryImports importsList =
+                                        case importsList of
+                                            [] ->
+                                                Task.pure Nothing
+
+                                            i :: is ->
+                                                findTypeInImport i
+                                                    |> Task.andThen
+                                                        (\res ->
+                                                            case res of
+                                                                Just _ ->
+                                                                    Task.pure res
+
+                                                                Nothing ->
+                                                                    tryImports is
+                                                        )
+                                in
+                                tryImports imports
+                            )
 
         TypeQual prefix name ->
             Outline.getAllModulePaths root
-                |> Task.fmap
+                |> Task.andThen
                     (\allModulePaths ->
-                        imports
-                            |> List.map
-                                (\(Src.Import ( _, A.At _ importName ) maybeAlias _) ->
-                                    ( maybeAlias
-                                        |> Maybe.map Tuple.second
-                                        |> Maybe.withDefault importName
-                                    , importName
-                                    )
-                                )
-                            |> Dict.fromList identity
-                            |> Dict.get identity prefix
-                            |> Maybe.andThen
-                                (\modulePath ->
-                                    List.stoppableFoldl
-                                        (\( TypeCheck.Canonical _ home, filePath ) _ ->
-                                            if home == modulePath then
-                                                List.Stop (Just filePath)
+                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName prefix) allModulePaths of
+                            Nothing ->
+                                Task.pure Nothing
 
-                                            else
-                                                List.Continue Nothing
-                                        )
-                                        Nothing
-                                        (Dict.toList ModuleName.compareCanonical allModulePaths)
-                                )
-                    )
-                |> Task.bind
-                    (\maybePath ->
-                        case maybePath of
                             Just path ->
                                 File.readUtf8 path
-                                    |> Task.fmap
+                                    |> Task.map
                                         (\content ->
                                             let
-                                                syntaxVersion : SV.SyntaxVersion
                                                 syntaxVersion =
                                                     SV.fileSyntaxVersion path
                                             in
                                             case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                 Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions targetAliases _ _) ->
-                                                    case exports of
-                                                        Src.Open _ _ ->
+                                                    let
+                                                        findType =
                                                             let
-                                                                maybeUnionRegion : Maybe ( String, A.Region )
-                                                                maybeUnionRegion =
+                                                                unionRegion =
                                                                     List.stoppableFoldl
-                                                                        (\(A.At _ union) _ ->
-                                                                            case union of
-                                                                                Src.Union ( _, A.At regionName unionName ) _ _ ->
-                                                                                    if unionName == name then
-                                                                                        List.Stop (Just ( path, regionName ))
+                                                                        (\(A.At _ (Src.Union ( _, A.At regionName unionName ) _ _)) acc ->
+                                                                            if unionName == name then
+                                                                                List.Stop (Just ( path, regionName ))
 
-                                                                                    else
-                                                                                        List.Continue Nothing
+                                                                            else
+                                                                                List.Continue acc
                                                                         )
                                                                         Nothing
                                                                         targetUnions
 
-                                                                maybeAliasRegion : Maybe ( String, A.Region )
-                                                                maybeAliasRegion =
+                                                                aliasRegion =
                                                                     List.stoppableFoldl
-                                                                        (\(A.At _ union) _ ->
-                                                                            case union of
-                                                                                Src.Alias _ ( _, A.At regionName aliasName ) _ _ ->
-                                                                                    if aliasName == name then
-                                                                                        List.Stop (Just ( path, regionName ))
+                                                                        (\(A.At _ (Src.Alias _ ( _, A.At regionName aliasName ) _ _)) acc ->
+                                                                            if aliasName == name then
+                                                                                List.Stop (Just ( path, regionName ))
 
-                                                                                    else
-                                                                                        List.Continue Nothing
+                                                                            else
+                                                                                List.Continue acc
                                                                         )
                                                                         Nothing
                                                                         targetAliases
                                                             in
-                                                            Maybe.or maybeUnionRegion maybeAliasRegion
+                                                            Maybe.or unionRegion aliasRegion
+                                                    in
+                                                    case exports of
+                                                        Src.Open _ _ ->
+                                                            findType
 
                                                         Src.Explicit (A.At _ exposedList) ->
-                                                            List.stoppableFoldl
-                                                                (\( _, exposed ) _ ->
-                                                                    case exposed of
-                                                                        -- Src.Lower (A.At _ exposedName) ->
-                                                                        --     if exposedName == name then
-                                                                        --         let
-                                                                        --             foundPathAndRegion : Maybe ( Utils.FilePath, A.Region )
-                                                                        --             foundPathAndRegion =
-                                                                        --                 List.stoppableFoldl
-                                                                        --                     (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) _ ->
-                                                                        --                         if valueName == name then
-                                                                        --                             List.Stop (Just ( path, valueRegion ))
-                                                                        --                         else
-                                                                        --                             List.Continue Nothing
-                                                                        --                     )
-                                                                        --                     Nothing
-                                                                        --                     targetValues
-                                                                        --         in
-                                                                        --         case foundPathAndRegion of
-                                                                        --             Just pathAndRegion ->
-                                                                        --                 List.Stop (Just pathAndRegion)
-                                                                        --             Nothing ->
-                                                                        --                 List.Continue Nothing
-                                                                        --     else
-                                                                        --         List.Continue Nothing
-                                                                        _ ->
-                                                                            List.Continue Nothing
-                                                                )
+                                                            let
+                                                                isExposed =
+                                                                    List.any
+                                                                        (\( _, e ) ->
+                                                                            case e of
+                                                                                Src.Upper (A.At _ exposedName) _ ->
+                                                                                    exposedName == name
+
+                                                                                _ ->
+                                                                                    False
+                                                                        )
+                                                                        exposedList
+                                                            in
+                                                            if isExposed then
+                                                                findType
+
+                                                            else
                                                                 Nothing
-                                                                exposedList
 
                                                 Err _ ->
                                                     Nothing
                                         )
-
-                            Nothing ->
-                                Task.pure Nothing
                     )
 
 
