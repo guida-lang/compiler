@@ -143,9 +143,10 @@ main =
     });
 
     describe("getDefinitionLocation", () => {
+        let mainPath, utilPath;
         let assertLocation;
-        let expressionsCommentLine, typeAnnotationsCommentLine;
-        let fnRange, tTypeRange;
+        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine;
+        let fnRange, tTypeRange, userTypeRange;
         let utilFnExpected, utilFn2Expected, utilTTypeExpected, utilUTypeExpected;
         let utilU1Expected, utilU2Expected;
 
@@ -153,16 +154,17 @@ main =
             const tmpobj = tmp.dirSync();
             process.chdir(tmpobj.name);
 
-            assertLocation = async (position, expected) => {
-                const initialPath = path.join(tmpobj.name, "src", "Main.guida");
-                const location = await guida.getDefinitionLocation(config(), { path: initialPath, position: position });
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+            utilPath = path.join(tmpobj.name, "src", "Util.guida");
 
-                expect(location).toEqual(Object.assign({ path: path.join(tmpobj.name, "src", "Main.guida") }, expected));
+            assertLocation = async (position, expected) => {
+                const location = await guida.getDefinitionLocation(config(), { path: mainPath, position: position });
+                expect(location).toEqual(Object.assign({ path: mainPath }, expected));
             }
 
             await guida.init(config(), { package: false });
 
-            fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (..)
+            fs.writeFileSync(mainPath, `module Main exposing (..)
 
 import Util exposing (U(..), fn2)
 
@@ -190,7 +192,7 @@ exposedVarFn = fn2
 qualTypeFn = Util.U1
 exposedTypeFn = U2
 
--- TYPE ANNOTATIONS
+-- UNION TYPE ANNOTATIONS
 
 type T = T1
 
@@ -211,15 +213,24 @@ tTuple = ()
 
 exposedTType : U
 exposedTType = ()
+
+-- ALIAS TYPE ANNOTATIONS
+
+type alias User = { name: String }
+
+aliasLambda : User -> User
+aliasLambda = ()
 `);
 
             expressionsCommentLine = 4;
-            typeAnnotationsCommentLine = 28;
+            unionTypeAnnotationsCommentLine = 28;
+            aliasTypeAnnotationsCommentLine = 50;
 
             fnRange = { range: { start: { line: expressionsCommentLine + 2, character: 0 }, end: { line: expressionsCommentLine + 2, character: 2 } } };
-            tTypeRange = { range: { start: { line: typeAnnotationsCommentLine + 2, character: 5 }, end: { line: typeAnnotationsCommentLine + 2, character: 6 } } };
+            tTypeRange = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 5 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 6 } } };
+            userTypeRange = { range: { start: { line: aliasTypeAnnotationsCommentLine + 2, character: 11 }, end: { line: aliasTypeAnnotationsCommentLine + 2, character: 15 } } };
 
-            fs.writeFileSync(path.join(tmpobj.name, "src", "Util.guida"), `module Util exposing (..)
+            fs.writeFileSync(utilPath, `module Util exposing (..)
 
 fn = ()
 
@@ -228,15 +239,21 @@ fn2 = ()
 type T = T1 | T2
 
 type U = U1 | U2
+
+type alias Car = { sold: Bool }
 `);
 
-            utilFnExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } }
-            utilFn2Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } }
-            utilTTypeExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } }
-            utilUTypeExpected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } }
-            utilU1Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } }
-            utilU2Expected = { path: path.join(tmpobj.name, "src", "Util.guida"), range: { start: { line: 8, character: 14 }, end: { line: 8, character: 16 } } }
+            utilFnExpected = { path: utilPath, range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } }
+            utilFn2Expected = { path: utilPath, range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } }
+            utilTTypeExpected = { path: utilPath, range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } }
+            utilUTypeExpected = { path: utilPath, range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } }
+            utilU1Expected = { path: utilPath, range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } }
+            utilU2Expected = { path: utilPath, range: { start: { line: 8, character: 14 }, end: { line: 8, character: 16 } } }
         });
+
+        // IMPORTS
+        it("importUtil", async () => { await assertLocation({ line: 2, character: 7 }, { path: utilPath, range: { start: { line: 0, character: 7 }, end: { line: 0, character: 11 } } }); });
+        it("importUtilFn2", async () => { await assertLocation({ line: 2, character: 29 }, utilFn2Expected); });
 
         // EXPRESSIONS
         it("varFn", async () => { await assertLocation({ line: expressionsCommentLine + 4, character: 8 }, fnRange); });
@@ -283,23 +300,27 @@ type U = U1 | U2
         it("qualTypeFn", async () => { await assertLocation({ line: expressionsCommentLine + 21, character: 13 }, utilU1Expected); });
         it("exposedTypeFn", async () => { await assertLocation({ line: expressionsCommentLine + 22, character: 16 }, utilU2Expected); });
 
-        // TYPE ANNOTATIONS
-        it("lambdaType arg", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 4, character: 10 }, tTypeRange); });
-        it("lambdaType result", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 4, character: 15 }, tTypeRange); });
+        // UNION TYPE ANNOTATIONS
+        it("lambdaType arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 4, character: 10 }, tTypeRange); });
+        it("lambdaType result", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 4, character: 15 }, tTypeRange); });
 
-        it("tType name", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 7, character: 8 }, tTypeRange); });
-        it("tType arg", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 7, character: 10 }, tTypeRange); });
+        it("tType name", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 7, character: 8 }, tTypeRange); });
+        it("tType arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 7, character: 10 }, tTypeRange); });
 
-        it("tTypeQual name", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 10, character: 12 }, utilTTypeExpected); });
-        it("tTypeQual arg", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 10, character: 19 }, tTypeRange); });
+        it("tTypeQual name", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 10, character: 12 }, utilTTypeExpected); });
+        it("tTypeQual arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 10, character: 19 }, tTypeRange); });
 
-        it("tRecord", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 13, character: 16 }, tTypeRange); });
+        it("tRecord", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 13, character: 16 }, tTypeRange); });
 
-        it("tTuple 1st", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 16, character: 10 }, tTypeRange); });
-        it("tTuple 2nd", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 16, character: 13 }, tTypeRange); });
-        it("tTuple 3rd", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 16, character: 16 }, tTypeRange); });
-        it("tTuple 4th", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 16, character: 19 }, tTypeRange); });
+        it("tTuple 1st", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 10 }, tTypeRange); });
+        it("tTuple 2nd", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 13 }, tTypeRange); });
+        it("tTuple 3rd", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 16 }, tTypeRange); });
+        it("tTuple 4th", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 19 }, tTypeRange); });
 
-        it("exposedTType", async () => { await assertLocation({ line: typeAnnotationsCommentLine + 19, character: 15 }, utilUTypeExpected); });
+        it("exposedTType", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 19, character: 15 }, utilUTypeExpected); });
+
+        // ALIAS TYPE ANNOTATIONS
+
+        it("aliasLambda", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 4, character: 15 }, userTypeRange); });
     });
 });

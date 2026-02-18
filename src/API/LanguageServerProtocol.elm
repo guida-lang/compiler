@@ -109,21 +109,68 @@ regionToLocation ( path, A.Region (A.Position startLine startChar) (A.Position e
 
 findSymbolAt : Stuff.Root -> String -> Int -> Int -> List Src.Import -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Task Never (Result () ( String, A.Region ))
 findSymbolAt root path line char imports values unions aliases =
-    case findSymbolAtValues line char values of
-        Just symbol ->
-            findDefinitionForSymbol root path symbol imports values unions aliases
-                |> Task.fmap
-                    (\definition ->
-                        case definition of
-                            Just pathAndRegion ->
-                                Ok pathAndRegion
+    let
+        findImportSymbol : Maybe ( String, ( String, A.Region ) )
+        findImportSymbol =
+            List.stoppableFoldl
+                (\(Src.Import ( _, A.At nameRegion importName ) _ _) acc ->
+                    if regionContainsPosition nameRegion line char then
+                        List.Stop (Just ( importName, ( importName, nameRegion ) ))
+
+                    else
+                        List.Continue acc
+                )
+                Nothing
+                imports
+    in
+    case findImportSymbol of
+        Just ( importName, _ ) ->
+            -- Return the location of the imported module header (module declaration region)
+            Outline.getAllModulePaths root
+                |> Task.andThen
+                    (\allModulePaths ->
+                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName (Debug.log "importName" importName)) allModulePaths of
+                            Just importPath ->
+                                File.readUtf8 (Debug.log "importPath" importPath)
+                                    |> Task.map
+                                        (\content ->
+                                            let
+                                                syntaxVersion =
+                                                    SV.fileSyntaxVersion importPath
+                                            in
+                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                Ok (Src.Module _ maybeName _ _ _ _ _ _ _ _) ->
+                                                    case maybeName of
+                                                        Just (A.At nameRegion _) ->
+                                                            Ok ( importPath, nameRegion )
+
+                                                        Nothing ->
+                                                            Err ()
+
+                                                _ ->
+                                                    Err ()
+                                        )
 
                             Nothing ->
-                                Err ()
+                                Task.pure (Err ())
                     )
 
         Nothing ->
-            Task.pure (Err ())
+            case findSymbolAtValues line char values of
+                Just symbol ->
+                    findDefinitionForSymbol root path symbol imports values unions aliases
+                        |> Task.fmap
+                            (\definition ->
+                                case definition of
+                                    Just pathAndRegion ->
+                                        Ok pathAndRegion
+
+                                    Nothing ->
+                                        Err ()
+                            )
+
+                Nothing ->
+                    Task.pure (Err ())
 
 
 type Symbol
