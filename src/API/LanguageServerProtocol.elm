@@ -511,9 +511,114 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                 tryImports imports
                             )
 
-        Var Src.CapVar _ ->
-            -- TODO
+        Var Src.CapVar name ->
+            Outline.getAllModulePaths root
+                |> Task.andThen
+                    (\allModulePaths ->
+                        let
+                            findCtorInImport (Src.Import ( _, A.At _ importName ) _ _) =
+                                case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                                    Nothing ->
             Task.pure Nothing
+
+                                    Just path ->
+                                        File.readUtf8 path
+                                            |> Task.map
+                                                (\content ->
+                                                    let
+                                                        syntaxVersion =
+                                                            SV.fileSyntaxVersion path
+                                                    in
+                                                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                        Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions _ _ _) ->
+                                                            let
+                                                                findCtor =
+                                                                    List.stoppableFoldl
+                                                                        (\(A.At _ (Src.Union ( _, A.At _ unionName ) _ ctors)) acc ->
+                                                                            case
+                                                                                List.stoppableFoldl
+                                                                                    (\( A.At ctorRegion ctorName, _ ) acc2 ->
+                                                                                        if ctorName == name then
+                                                                                            List.Stop (Just ( path, ctorRegion ))
+
+                                                                                        else
+                                                                                            List.Continue acc2
+                                                                                    )
+                                                                                    Nothing
+                                                                                    (List.map Src.c2EolValue ctors)
+                                                                            of
+                                                                                Just foundCtor ->
+                                                                                    List.Stop (Just foundCtor)
+
+                                                                                Nothing ->
+                                                                                    List.Continue acc
+                                                                        )
+                                                                        Nothing
+                                                                        targetUnions
+                                                            in
+                                                            case exports of
+                                                                Src.Open _ _ ->
+                                                                    findCtor
+
+                                                                Src.Explicit (A.At _ exposedList) ->
+                                                                    let
+                                                                        isExposed =
+                                                                            List.any
+                                                                                (\( _, e ) ->
+                                                                                    case e of
+                                                                                        Src.Upper (A.At _ exposedName) ( _, Src.Public _ ) ->
+                                                                                            -- U(..) exposes all ctors for union U
+                                                                                            List.any
+                                                                                                (\(A.At _ (Src.Union ( _, A.At _ unionName ) ctors _)) ->
+                                                                                                    (unionName == exposedName)
+                                                                                                        && List.any
+                                                                                                            (\c ->
+                                                                                                                case Src.c1Value c of
+                                                                                                                    A.At _ ctorName ->
+                                                                                                                        ctorName == name
+                                                                                                            )
+                                                                                                            ctors
+                                                                                                )
+                                                                                                targetUnions
+
+                                                                                        Src.Upper (A.At _ exposedName) ( _, Src.Private ) ->
+                                                                                            -- U2 is directly exposed
+                                                                                            name == exposedName
+
+                                                                                        _ ->
+                                                                                            False
+                                                                                )
+                                                                                exposedList
+                                                                    in
+                                                                    if isExposed then
+                                                                        findCtor
+
+                                                                    else
+                                                                        Nothing
+
+                                                        Err _ ->
+                                                            Nothing
+                                                )
+
+                            tryImports importsList =
+                                case importsList of
+                                    [] ->
+                                        Task.pure Nothing
+
+                                    i :: is ->
+                                        findCtorInImport i
+                                            |> Task.andThen
+                                                (\res ->
+                                                    case res of
+                                                        Just _ ->
+                                                            Task.pure res
+
+                                                        Nothing ->
+                                                            tryImports is
+                                                )
+                        in
+                        tryImports imports
+                    )
 
         VarQual Src.CapVar prefix name ->
             Outline.getAllModulePaths root
