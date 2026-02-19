@@ -107,31 +107,85 @@ regionToLocation ( path, A.Region (A.Position startLine startChar) (A.Position e
     }
 
 
+type ImportSymbol
+    = OnModuleName String String A.Region
+    | OnExposedValue String String A.Region
+
+
 findSymbolAt : Stuff.Root -> String -> Int -> Int -> List Src.Import -> List (A.Located Src.Value) -> List (A.Located Src.Union) -> List (A.Located Src.Alias) -> Task Never (Result () ( String, A.Region ))
 findSymbolAt root path line char imports values unions aliases =
     let
-        findImportSymbol : Maybe ( String, ( String, A.Region ) )
+        findImportSymbol : Maybe ImportSymbol
         findImportSymbol =
             List.stoppableFoldl
-                (\(Src.Import ( _, A.At nameRegion importName ) _ _) acc ->
+                (\(Src.Import ( _, A.At nameRegion importName ) _ ( _, exposing_ )) acc ->
                     if regionContainsPosition nameRegion line char then
-                        List.Stop (Just ( importName, ( importName, nameRegion ) ))
+                        List.Stop (Just (OnModuleName importName importName nameRegion))
 
                     else
-                        List.Continue acc
+                        case exposing_ of
+                            Src.Open _ _ ->
+                                List.Continue acc
+
+                            Src.Explicit (A.At _ exposedList) ->
+                                let
+                                    exposedWithRegion =
+                                        List.map
+                                            (\c2 ->
+                                                let
+                                                    e =
+                                                        Src.c2Value c2
+                                                in
+                                                case e of
+                                                    Src.Lower (A.At regionName exposedName) ->
+                                                        ( regionName, e )
+
+                                                    Src.Upper (A.At regionName exposedName) _ ->
+                                                        ( regionName, e )
+
+                                                    _ ->
+                                                        ( A.Region (A.Position 0 0) (A.Position 0 0), e )
+                                            )
+                                            exposedList
+
+                                    found =
+                                        List.stoppableFoldl
+                                            (\( region, e ) innerAcc ->
+                                                if regionContainsPosition region line char then
+                                                    case e of
+                                                        Src.Lower (A.At regionName exposedName) ->
+                                                            List.Stop (Just (OnExposedValue exposedName importName regionName))
+
+                                                        Src.Upper (A.At regionName exposedName) _ ->
+                                                            List.Stop (Just (OnExposedValue exposedName importName regionName))
+
+                                                        _ ->
+                                                            List.Continue innerAcc
+
+                                                else
+                                                    List.Continue innerAcc
+                                            )
+                                            Nothing
+                                            exposedWithRegion
+                                in
+                                case found of
+                                    Just result ->
+                                        List.Stop (Just result)
+
+                                    Nothing ->
+                                        List.Continue acc
                 )
                 Nothing
                 imports
     in
     case findImportSymbol of
-        Just ( importName, _ ) ->
-            -- Return the location of the imported module header (module declaration region)
+        Just (OnModuleName _ importName nameRegion) ->
             Outline.getAllModulePaths root
                 |> Task.andThen
                     (\allModulePaths ->
-                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName (Debug.log "importName" importName)) allModulePaths of
+                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
                             Just importPath ->
-                                File.readUtf8 (Debug.log "importPath" importPath)
+                                File.readUtf8 importPath
                                     |> Task.map
                                         (\content ->
                                             let
@@ -141,8 +195,51 @@ findSymbolAt root path line char imports values unions aliases =
                                             case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                 Ok (Src.Module _ maybeName _ _ _ _ _ _ _ _) ->
                                                     case maybeName of
-                                                        Just (A.At nameRegion _) ->
-                                                            Ok ( importPath, nameRegion )
+                                                        Just (A.At moduleRegion _) ->
+                                                            Ok ( importPath, moduleRegion )
+
+                                                        Nothing ->
+                                                            Err ()
+
+                                                _ ->
+                                                    Err ()
+                                        )
+
+                            Nothing ->
+                                Task.pure (Err ())
+                    )
+
+        Just (OnExposedValue exposedName importName regionName) ->
+            Outline.getAllModulePaths root
+                |> Task.andThen
+                    (\allModulePaths ->
+                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                            Just importPath ->
+                                File.readUtf8 importPath
+                                    |> Task.map
+                                        (\content ->
+                                            let
+                                                syntaxVersion =
+                                                    SV.fileSyntaxVersion importPath
+                                            in
+                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                Ok (Src.Module _ _ _ _ _ targetValues _ _ _ _) ->
+                                                    let
+                                                        found =
+                                                            List.stoppableFoldl
+                                                                (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
+                                                                    if valueName == exposedName then
+                                                                        List.Stop (Just ( importPath, region ))
+
+                                                                    else
+                                                                        List.Continue acc
+                                                                )
+                                                                Nothing
+                                                                targetValues
+                                                    in
+                                                    case found of
+                                                        Just result ->
+                                                            Ok result
 
                                                         Nothing ->
                                                             Err ()
