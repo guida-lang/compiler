@@ -145,10 +145,10 @@ main =
     describe("getDefinitionLocation", () => {
         let mainPath, utilPath;
         let assertLocation;
-        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine;
+        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine, portsCommentLine;
         let fnRange, tTypeRange, userTypeRange;
         let utilFnExpected, utilFn2Expected, utilTTypeExpected, utilUTypeExpected;
-        let utilU1Expected, utilU2Expected;
+        let utilU1Expected, utilU2Expected, carTypeExpected, sendMessageFnExpected, messageReceiverFnExpected;
 
         beforeAll(async () => {
             const tmpobj = tmp.dirSync();
@@ -220,17 +220,26 @@ type alias User = { name: String }
 
 aliasLambda : User -> User
 aliasLambda = ()
+
+qualAliasTypeFn = Util.Car
+
+-- PORTS
+
+sendMessageFn = Util.sendMessage "Hello"
+
+messageReceiverSub = Util.messageReceiver (\\_ -> ())
 `);
 
             expressionsCommentLine = 4;
             unionTypeAnnotationsCommentLine = 28;
             aliasTypeAnnotationsCommentLine = 50;
+            portsCommentLine = 59;
 
             fnRange = { range: { start: { line: expressionsCommentLine + 2, character: 0 }, end: { line: expressionsCommentLine + 2, character: 2 } } };
             tTypeRange = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 5 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 6 } } };
             userTypeRange = { range: { start: { line: aliasTypeAnnotationsCommentLine + 2, character: 11 }, end: { line: aliasTypeAnnotationsCommentLine + 2, character: 15 } } };
 
-            fs.writeFileSync(utilPath, `module Util exposing (..)
+            fs.writeFileSync(utilPath, `port module Util exposing (..)
 
 fn = ()
 
@@ -241,22 +250,30 @@ type T = T1 | T2
 type U = U1 | U2
 
 type alias Car = { sold: Bool }
+
+port sendMessage : String -> Cmd msg
+
+port messageReceiver : (String -> msg) -> Sub msg
 `);
 
-            utilFnExpected = { path: utilPath, range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } }
-            utilFn2Expected = { path: utilPath, range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } }
-            utilTTypeExpected = { path: utilPath, range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } }
-            utilUTypeExpected = { path: utilPath, range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } }
-            utilU1Expected = { path: utilPath, range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } }
-            utilU2Expected = { path: utilPath, range: { start: { line: 8, character: 14 }, end: { line: 8, character: 16 } } }
+            utilFnExpected = { path: utilPath, range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } };
+            utilFn2Expected = { path: utilPath, range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } };
+            utilTTypeExpected = { path: utilPath, range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } };
+            utilUTypeExpected = { path: utilPath, range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } };
+            utilU1Expected = { path: utilPath, range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } };
+            utilU2Expected = { path: utilPath, range: { start: { line: 8, character: 14 }, end: { line: 8, character: 16 } } };
+            carTypeExpected = { path: utilPath, range: { start: { line: 10, character: 11 }, end: { line: 10, character: 14 } } };
+            sendMessageFnExpected = { path: utilPath, range: { start: { line: 12, character: 5 }, end: { line: 12, character: 16 } } };
+            messageReceiverFnExpected = { path: utilPath, range: { start: { line: 14, character: 5 }, end: { line: 14, character: 20 } } };
         });
 
         // IMPORTS
-        it("importUtil", async () => { await assertLocation({ line: 2, character: 7 }, { path: utilPath, range: { start: { line: 0, character: 7 }, end: { line: 0, character: 11 } } }); });
+        it("importUtil", async () => { await assertLocation({ line: 2, character: 7 }, { path: utilPath, range: { start: { line: 0, character: 12 }, end: { line: 0, character: 16 } } }); });
         it("importUtilFn2", async () => { await assertLocation({ line: 2, character: 29 }, utilFn2Expected); });
 
         // EXPRESSIONS
         it("varFn", async () => { await assertLocation({ line: expressionsCommentLine + 4, character: 8 }, fnRange); });
+        it("varFn (end position)", async () => { await assertLocation({ line: expressionsCommentLine + 4, character: 10 }, fnRange); });
 
         it("varQualFn", async () => { await assertLocation({ line: expressionsCommentLine + 5, character: 12 }, utilFnExpected); });
 
@@ -320,7 +337,13 @@ type alias Car = { sold: Bool }
         it("exposedTType", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 19, character: 15 }, utilUTypeExpected); });
 
         // ALIAS TYPE ANNOTATIONS
-
         it("aliasLambda", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 4, character: 15 }, userTypeRange); });
+
+        it("qualAliasTypeFn", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 7, character: 18 }, carTypeExpected); });
+
+        // PORTS
+        it("sendMessageFn", async () => { await assertLocation({ line: portsCommentLine + 2, character: 16 }, sendMessageFnExpected); });
+
+        it("messageReceiverSub", async () => { await assertLocation({ line: portsCommentLine + 4, character: 21 }, messageReceiverFnExpected); });
     });
 });
