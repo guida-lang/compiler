@@ -3512,6 +3512,7 @@ type Make
     | MakeMultipleFilesIntoHtml
     | MakeNoMain
     | MakeNonMainFilesIntoJavaScript ModuleName.Raw (List ModuleName.Raw)
+    | MakeNonMainFilesIntoRust ModuleName.Raw (List ModuleName.Raw)
     | MakeCannotBuild BuildProblem
     | MakeBadGenerate Generate
 
@@ -3740,6 +3741,70 @@ makeToReport make =
                             ++ String.fromList (ModuleName.toChars m)
                             ++ ".init() are definitely defined in the resulting file. I am missing `main` values in:"
                         )
+                        [ D.indent 4 <| D.red <| D.vcat <| List.map D.fromName (m :: ms)
+                        , D.reflow <|
+                            "Try adding a `main` value to them? Or if you just want to verify that these modules compile, switch to --output=/dev/null to skip the code gen phase altogether."
+                        , D.toSimpleNote <|
+                            "Adding a `main` value can be as brief as adding something like this:"
+                        , D.vcat
+                            [ D.fillSep
+                                [ D.cyan (D.fromChars "import")
+                                , D.fromChars "Html"
+                                ]
+                            , D.fromChars ""
+                            , D.fillSep
+                                [ D.green (D.fromChars "main")
+                                , D.fromChars "="
+                                ]
+                            , D.indent 2 <|
+                                D.fillSep
+                                    [ D.cyan (D.fromChars "Html")
+                                        |> D.a (D.fromChars ".text")
+                                    , D.dullyellow (D.fromChars "\"Hello!\"")
+                                    ]
+                            ]
+                        , D.reflow <|
+                            "Or use https://package.elm-lang.org/packages/elm/core/latest/Platform#worker to make a `main` with no user interface."
+                        ]
+
+        MakeNonMainFilesIntoRust m ms ->
+            case ms of
+                [] ->
+                    Help.report "NO MAIN"
+                        Nothing
+                        ("When producing a Rust file, I require that the given file has a `main` value. That way generated entrypoints for "
+                            ++ String.fromList (ModuleName.toChars m)
+                            ++ ".init() is definitely defined in the resulting file!"
+                        )
+                        [ D.reflow <|
+                            "Try adding a `main` value to your file? Or if you just want to verify that this module compiles, switch to --output=/dev/null to skip the code gen phase altogether."
+                        , D.toSimpleNote <|
+                            "Adding a `main` value can be as brief as adding something like this:"
+                        , D.vcat
+                            [ D.fillSep
+                                [ D.cyan (D.fromChars "import")
+                                , D.fromChars "Html"
+                                ]
+                            , D.fromChars ""
+                            , D.fillSep
+                                [ D.green (D.fromChars "main")
+                                , D.fromChars "="
+                                ]
+                            , D.indent 2 <|
+                                D.fillSep
+                                    [ D.cyan (D.fromChars "Html")
+                                        |> D.a (D.fromChars ".text")
+                                    , D.dullyellow (D.fromChars "\"Hello!\"")
+                                    ]
+                            ]
+                        , D.reflow <|
+                            "Or use https://package.elm-lang.org/packages/elm/core/latest/Platform#worker to make a `main` with no user interface."
+                        ]
+
+                _ :: _ ->
+                    Help.report "NO MAIN"
+                        Nothing
+                        "When producing a Rust file, I require that given files all have `main` values. That way generated Rust entrypoints are definitely defined for each module. I am missing `main` values in:"
                         [ D.indent 4 <| D.red <| D.vcat <| List.map D.fromName (m :: ms)
                         , D.reflow <|
                             "Try adding a `main` value to them? Or if you just want to verify that these modules compile, switch to --output=/dev/null to skip the code gen phase altogether."

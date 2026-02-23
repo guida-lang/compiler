@@ -1,7 +1,10 @@
 module Builder.Generate exposing
     ( debug
+    , debugRust
     , dev
+    , devRust
     , prod
+    , prodRust
     , repl
     )
 
@@ -16,6 +19,7 @@ import Compiler.Data.Name as N
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.JavaScript as JS
 import Compiler.Generate.Mode as Mode
+import Compiler.Generate.Rust as Rust
 import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.Compiler.Type.Extract as Extract
 import Compiler.Guida.Interface as I
@@ -68,6 +72,36 @@ debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots
             )
 
 
+debugRust : Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+debugRust root details (Build.Artifacts pkg ifaces roots modules) =
+    loadObjects (Stuff.rootPath root) details modules
+        |> Task.bind
+            (\loading ->
+                loadTypes (Stuff.rootPath root) ifaces modules
+                    |> Task.bind
+                        (\types ->
+                            finalizeObjects loading
+                                |> Task.fmap
+                                    (\objects ->
+                                        let
+                                            mode : Mode.Mode
+                                            mode =
+                                                Mode.Dev (Just types)
+
+                                            graph : Opt.GlobalGraph
+                                            graph =
+                                                objectsToGlobalGraph objects
+
+                                            mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                            mains =
+                                                gatherMains pkg objects roots
+                                        in
+                                        Rust.generate (Stuff.rootToTarget root) mode graph mains
+                                    )
+                        )
+            )
+
+
 dev : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
@@ -88,6 +122,28 @@ dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots module
                 in
                 prepareSourceMaps withSourceMaps root
                     |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
+            )
+
+
+devRust : Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+devRust root details (Build.Artifacts pkg _ roots modules) =
+    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
+        |> Task.fmap
+            (\objects ->
+                let
+                    mode : Mode.Mode
+                    mode =
+                        Mode.Dev Nothing
+
+                    graph : Opt.GlobalGraph
+                    graph =
+                        objectsToGlobalGraph objects
+
+                    mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                    mains =
+                        gatherMains pkg objects roots
+                in
+                Rust.generate (Stuff.rootToTarget root) mode graph mains
             )
 
 
@@ -114,6 +170,32 @@ prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modul
                             in
                             prepareSourceMaps withSourceMaps root
                                 |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
+                        )
+            )
+
+
+prodRust : Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+prodRust root details (Build.Artifacts pkg _ roots modules) =
+    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
+        |> Task.bind
+            (\objects ->
+                checkForDebugUses objects
+                    |> Task.fmap
+                        (\_ ->
+                            let
+                                graph : Opt.GlobalGraph
+                                graph =
+                                    objectsToGlobalGraph objects
+
+                                mode : Mode.Mode
+                                mode =
+                                    Mode.Prod (Mode.shortenFieldNames graph)
+
+                                mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                mains =
+                                    gatherMains pkg objects roots
+                            in
+                            Rust.generate (Stuff.rootToTarget root) mode graph mains
                         )
             )
 

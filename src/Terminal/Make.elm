@@ -43,6 +43,7 @@ type Flags
 type Output
     = JS String
     | Html String
+    | Rust String
     | DevNull
 
 
@@ -128,6 +129,18 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
 
                                                                             name :: names ->
                                                                                 Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
+
+                                                                    Just (Rust target) ->
+                                                                        case getNoMains artifacts of
+                                                                            [] ->
+                                                                                toBuilderRust root details desiredMode artifacts
+                                                                                    |> Task.bind
+                                                                                        (\builder ->
+                                                                                            generate style target builder (Build.getRootNames artifacts)
+                                                                                        )
+
+                                                                            name :: names ->
+                                                                                Task.throw (Exit.MakeNonMainFilesIntoRust name names)
 
                                                                     Just (Html target) ->
                                                                         hasOneMain artifacts
@@ -338,6 +351,20 @@ toBuilder withSourceMaps leadingLines root details desiredMode artifacts =
                 Generate.prod withSourceMaps leadingLines root details artifacts
 
 
+toBuilderRust : Stuff.Root -> Details.Details -> DesiredMode -> Build.Artifacts -> Task Exit.Make String
+toBuilderRust root details desiredMode artifacts =
+    Task.mapError Exit.MakeBadGenerate <|
+        case desiredMode of
+            Debug ->
+                Generate.debugRust root details artifacts
+
+            Dev ->
+                Generate.devRust root details artifacts
+
+            Prod ->
+                Generate.prodRust root details artifacts
+
+
 
 -- PARSERS
 
@@ -367,7 +394,7 @@ output =
         { singular = "output file"
         , plural = "output files"
         , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "guida.js", "index.html", "/dev/null" ]
+        , examples = \_ -> Task.pure [ "guida.js", "index.html", "guida.rs", "/dev/null" ]
         }
 
 
@@ -381,6 +408,9 @@ parseOutput name =
 
     else if hasExt ".js" name then
         Just (JS name)
+
+    else if hasExt ".rs" name then
+        Just (Rust name)
 
     else
         Nothing
