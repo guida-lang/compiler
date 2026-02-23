@@ -1,8 +1,8 @@
 module API.LanguageServerProtocol exposing
-    ( Flags(..)
-    , Location
+    ( Location
     , Position
-    , run
+    , findReferences
+    , getDefinitionLocation
     )
 
 import Builder.File as File
@@ -41,35 +41,44 @@ type alias Position =
 
 
 
--- FLAGS
-
-
-type Flags
-    = GetDefinitionLocation String Int Int
-
-
-
 -- RUN
 
 
-run : Flags -> Task Never (Result () Location)
-run flags =
-    case flags of
-        GetDefinitionLocation path line character ->
-            Stuff.findRootIn (Utils.fpDropFileName path)
-                |> Task.bind
-                    (\maybeRoot ->
-                        case maybeRoot of
-                            Just root ->
-                                runHelp root path (line + 1) (character + 1)
+getDefinitionLocation : String -> Int -> Int -> Task Never (Result () Location)
+getDefinitionLocation path line character =
+    Stuff.findRootIn (Utils.fpDropFileName path)
+        |> Task.bind
+            (\maybeRoot ->
+                case maybeRoot of
+                    Just root ->
+                        getDefinitionLocationHelp root path (line + 1) (character + 1)
 
-                            Nothing ->
-                                Task.pure (Err ())
-                    )
+                    Nothing ->
+                        Task.pure (Err ())
+            )
 
 
-runHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
-runHelp root path requestLine requestChar =
+findReferences : String -> Int -> Int -> Task Never (Result () (List Location))
+findReferences path line character =
+    Stuff.findRootIn (Utils.fpDropFileName path)
+        |> Task.bind
+            (\maybeRoot ->
+                case maybeRoot of
+                    Just root ->
+                        -- findReferencesHelp root path (line + 1) (character + 1)
+                        Debug.todo "findReferences not implemented yet"
+
+                    Nothing ->
+                        Task.pure (Err ())
+            )
+
+
+
+-- GET DEFINITION LOCATION
+
+
+getDefinitionLocationHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
+getDefinitionLocationHelp root path requestLine requestChar =
     Stuff.withRootLock (Stuff.rootPath root)
         (File.readUtf8 path
             |> Task.bind

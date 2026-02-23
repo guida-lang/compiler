@@ -346,4 +346,35 @@ port messageReceiver : (String -> msg) -> Sub msg
 
         it("messageReceiverSub", async () => { await assertLocation({ line: portsCommentLine + 4, character: 21 }, messageReceiverFnExpected); });
     });
+
+    describe("findReferences", () => {
+        let mainPath;
+        let assertReferences;
+
+        beforeAll(async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+
+            assertReferences = async (position, expected) => {
+                const refs = await guida.findReferences(config(), { path: mainPath, position: position });
+                expect(refs).toEqual(Object.assign({ path: mainPath }, expected));
+            }
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(mainPath, `module Main exposing (..)
+
+fn a = a + a
+`);
+        });
+
+        it("fn", async () => {
+            await assertReferences({ line: 2, character: 3 }, [
+                { path: mainPath, range: { start: { line: 2, character: 7 }, end: { line: 2, character: 8 } } },
+                { path: mainPath, range: { start: { line: 2, character: 11 }, end: { line: 2, character: 12 } } }
+            ]);
+        });
+    });
 });

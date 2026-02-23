@@ -80,10 +80,16 @@ export type Position = {
     character: number;
 };
 
+export type Location = {
+    path: string;
+    range: { start: Position, end: Position };
+};
+
 export declare const init: (config: GuidaConfig, options?: InitOptions) => Promise<GuidaResponse>;
 export declare const make: (config: GuidaConfig, path: string, options?: MakeOptions) => Promise<GuidaResponse>;
 export declare const format: (config: GuidaConfig, content: string) => Promise<GuidaResponse>;
 export declare const install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;
-export declare const getDefinitionLocation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | { path: string, range: { start: Position, end: Position } }>;
+export declare const getDefinitionLocation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location>;
+export declare const findReferences: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location[]>;

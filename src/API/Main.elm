@@ -128,7 +128,7 @@ app =
                                 )
 
                     GetDefinitionLocationArgs path line character ->
-                        LanguageServerProtocol.run (LanguageServerProtocol.GetDefinitionLocation path line character)
+                        LanguageServerProtocol.getDefinitionLocation path line character
                             |> Task.bind
                                 (\result ->
                                     case result of
@@ -153,6 +153,42 @@ app =
                                                             ]
                                                       )
                                                     ]
+                                                )
+
+                                        Err _ ->
+                                            exitWithResponse Encode.null
+                                )
+
+                    FindReferencesArgs path line character ->
+                        LanguageServerProtocol.findReferences path line character
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Ok locations ->
+                                            exitWithResponse
+                                                (Encode.list
+                                                    (\location ->
+                                                        Encode.object
+                                                            [ ( "path", Encode.string location.path )
+                                                            , ( "range"
+                                                              , Encode.object
+                                                                    [ ( "start"
+                                                                      , Encode.object
+                                                                            [ ( "line", Encode.int location.range.start.line )
+                                                                            , ( "character", Encode.int location.range.start.character )
+                                                                            ]
+                                                                      )
+                                                                    , ( "end"
+                                                                      , Encode.object
+                                                                            [ ( "line", Encode.int location.range.end.line )
+                                                                            , ( "character", Encode.int location.range.end.character )
+                                                                            ]
+                                                                      )
+                                                                    ]
+                                                              )
+                                                            ]
+                                                    )
+                                                    locations
                                                 )
 
                                         Err _ ->
@@ -183,6 +219,7 @@ type Args
     | UninstallArgs String
     | DiagnosticsArgs DiagnosticsSource
     | GetDefinitionLocationArgs String Int Int
+    | FindReferencesArgs String Int Int
 
 
 type DiagnosticsSource
@@ -229,6 +266,12 @@ argsDecoder =
 
                     "get-definition-location" ->
                         Decode.map3 GetDefinitionLocationArgs
+                            (Decode.field "path" Decode.string)
+                            (Decode.at [ "position", "line" ] Decode.int)
+                            (Decode.at [ "position", "character" ] Decode.int)
+
+                    "find-references" ->
+                        Decode.map3 FindReferencesArgs
                             (Decode.field "path" Decode.string)
                             (Decode.at [ "position", "line" ] Decode.int)
                             (Decode.at [ "position", "character" ] Decode.int)
