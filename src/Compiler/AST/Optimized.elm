@@ -28,9 +28,10 @@ import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
 import Compiler.Data.Name as Name exposing (Name)
-import Compiler.Guida.Kernel as K
+import Compiler.Guida.JavaScript.Kernel as JSKernel
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Rust.Kernel as RustKernel
 import Compiler.Optimize.DecisionTree as DT
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
@@ -166,7 +167,7 @@ type Node
     | Link Global
     | Cycle (List Name) (List ( Name, Expr )) (List Def) (EverySet (List String) Global)
     | Manager EffectsType
-    | Kernel (List K.Chunk) (EverySet (List String) Global)
+    | Kernel (List JSKernel.Chunk) (List RustKernel.Chunk) (EverySet (List String) Global)
     | PortIncoming Expr (EverySet (List String) Global)
     | PortOutgoing Expr (EverySet (List String) Global)
 
@@ -200,8 +201,8 @@ addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
         (Dict.union fields1 fields2)
 
 
-addKernel : Name -> List K.Chunk -> GlobalGraph -> GlobalGraph
-addKernel shortName chunks (GlobalGraph nodes fields) =
+addKernel : Name -> List JSKernel.Chunk -> List RustKernel.Chunk -> GlobalGraph -> GlobalGraph
+addKernel shortName jsChunks rustChunks (GlobalGraph nodes fields) =
     let
         global : Global
         global =
@@ -209,38 +210,38 @@ addKernel shortName chunks (GlobalGraph nodes fields) =
 
         node : Node
         node =
-            Kernel chunks (List.foldr addKernelDep EverySet.empty chunks)
+            Kernel jsChunks rustChunks (List.foldr addKernelDep EverySet.empty jsChunks)
     in
     GlobalGraph
         (Dict.insert toComparableGlobal global node nodes)
-        (Dict.union (K.countFields chunks) fields)
+        (Dict.union (JSKernel.countFields jsChunks) fields)
 
 
-addKernelDep : K.Chunk -> EverySet (List String) Global -> EverySet (List String) Global
+addKernelDep : JSKernel.Chunk -> EverySet (List String) Global -> EverySet (List String) Global
 addKernelDep chunk deps =
     case chunk of
-        K.JS _ ->
+        JSKernel.JS _ ->
             deps
 
-        K.GuidaVar home name ->
+        JSKernel.GuidaVar home name ->
             EverySet.insert toComparableGlobal (Global home name) deps
 
-        K.JsVar shortName _ ->
+        JSKernel.JsVar shortName _ ->
             EverySet.insert toComparableGlobal (toKernelGlobal shortName) deps
 
-        K.GuidaField _ ->
+        JSKernel.GuidaField _ ->
             deps
 
-        K.JsField _ ->
+        JSKernel.JsField _ ->
             deps
 
-        K.JsEnum _ ->
+        JSKernel.JsEnum _ ->
             deps
 
-        K.Debug ->
+        JSKernel.Debug ->
             deps
 
-        K.Prod ->
+        JSKernel.Prod ->
             deps
 
 
@@ -397,11 +398,12 @@ nodeEncoder node =
                 , effectsTypeEncoder effectsType
                 ]
 
-        Kernel chunks deps ->
+        Kernel jsChunks rustChunks jsDeps ->
             BE.sequence
                 [ BE.unsignedInt8 9
-                , BE.list K.chunkEncoder chunks
-                , BE.everySet compareGlobal globalEncoder deps
+                , BE.list JSKernel.chunkEncoder jsChunks
+                , BE.list RustKernel.chunkEncoder rustChunks
+                , BE.everySet compareGlobal globalEncoder jsDeps
                 ]
 
         PortIncoming decoder deps ->
@@ -469,8 +471,9 @@ nodeDecoder =
                         BD.map Manager effectsTypeDecoder
 
                     9 ->
-                        BD.map2 Kernel
-                            (BD.list K.chunkDecoder)
+                        BD.map3 Kernel
+                            (BD.list JSKernel.chunkDecoder)
+                            (BD.list RustKernel.chunkDecoder)
                             (BD.everySet toComparableGlobal globalDecoder)
 
                     10 ->

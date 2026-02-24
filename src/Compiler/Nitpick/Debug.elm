@@ -45,7 +45,7 @@ nodeHasDebug node =
         Opt.Manager _ ->
             False
 
-        Opt.Kernel _ _ ->
+        Opt.Kernel _ _ _ ->
             False
 
         Opt.PortIncoming expr _ ->

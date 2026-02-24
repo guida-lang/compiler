@@ -1,4 +1,4 @@
-module Compiler.Guida.Kernel exposing
+module Compiler.Guida.Rust.Kernel exposing
     ( Chunk(..)
     , Content(..)
     , Foreigns
@@ -30,7 +30,7 @@ import Utils.Crash exposing (crash)
 
 
 type Chunk
-    = JS String
+    = Rust String
     | GuidaVar IO.Canonical Name
     | JsVar Name Name
     | GuidaField Name
@@ -52,7 +52,7 @@ countFields chunks =
 addField : Chunk -> Dict String Name Int -> Dict String Name Int
 addField chunk fields =
     case chunk of
-        JS _ ->
+        Rust _ ->
             fields
 
         GuidaVar _ _ ->
@@ -153,11 +153,11 @@ chompChunks : VarTable -> Enums -> Fields -> String -> Int -> Int -> Row -> Col 
 chompChunks vs es fs src pos end row col lastPos revChunks =
     if pos >= end then
         let
-            js : String
-            js =
+            rust : String
+            rust =
                 toByteString src lastPos end
         in
-        ( ( List.reverse (JS js :: revChunks), pos ), ( row, col ) )
+        ( ( List.reverse (Rust rust :: revChunks), pos ), ( row, col ) )
 
     else
         let
@@ -177,11 +177,11 @@ chompChunks vs es fs src pos end row col lastPos revChunks =
             in
             if pos3 <= end && P.unsafeIndex src pos1 == '_' then
                 let
-                    js : String
-                    js =
+                    rust : String
+                    rust =
                         toByteString src lastPos pos
                 in
-                chompTag vs es fs src pos3 end row (col + 3) (JS js :: revChunks)
+                chompTag vs es fs src pos3 end row (col + 3) (Rust rust :: revChunks)
 
             else
                 chompChunks vs es fs src pos1 end row (col + 1) lastPos revChunks
@@ -421,10 +421,10 @@ toName exposed =
 chunkEncoder : Chunk -> BE.Encoder
 chunkEncoder chunk =
     case chunk of
-        JS javascript ->
+        Rust rust ->
             BE.sequence
                 [ BE.unsignedInt8 0
-                , BE.string javascript
+                , BE.string rust
                 ]
 
         GuidaVar home name ->
@@ -473,7 +473,7 @@ chunkDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map JS BD.string
+                        BD.map Rust BD.string
 
                     1 ->
                         BD.map2 GuidaVar

@@ -18,7 +18,7 @@ import Compiler.Generate.JavaScript.Name as JsName
 import Compiler.Generate.JavaScript.SourceMap as SourceMap
 import Compiler.Generate.Mode as Mode
 import Compiler.Generate.Target exposing (Target)
-import Compiler.Guida.Kernel as K
+import Compiler.Guida.JavaScript.Kernel as K
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -317,12 +317,12 @@ addGlobalHelp target mode graph ((Opt.Global home _) as global) state =
         Opt.Manager effectsType ->
             generateManager target mode graph global effectsType state
 
-        Opt.Kernel chunks deps ->
+        Opt.Kernel jsChunks _ deps ->
             if isDebugger global && not (Mode.isDebug mode) then
                 state
 
             else
-                addKernel (addDeps deps state) (generateKernel mode chunks)
+                addKernel (addDeps deps state) (generateKernel mode jsChunks)
 
         Opt.Enum index ->
             addStmt state

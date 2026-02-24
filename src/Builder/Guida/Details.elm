@@ -37,9 +37,10 @@ import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Constraint as Con
 import Compiler.Guida.Docs as Docs
 import Compiler.Guida.Interface as I
-import Compiler.Guida.Kernel as Kernel
+import Compiler.Guida.JavaScript.Kernel as JSKernel
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
+import Compiler.Guida.Rust.Kernel as RustKernel
 import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
@@ -906,8 +907,8 @@ addLocalGraph target name status graph =
         RForeign _ ->
             graph
 
-        RKernelLocal cs ->
-            Opt.addKernel (Name.getKernel target name) cs graph
+        RKernelLocal jsChunks rustChunks ->
+            Opt.addKernel (Name.getKernel target name) jsChunks rustChunks graph
 
         RKernelForeign ->
             graph
@@ -944,7 +945,7 @@ toLocalInterface func result =
         RForeign _ ->
             Nothing
 
-        RKernelLocal _ ->
+        RKernelLocal _ _ ->
             Nothing
 
         RKernelForeign ->
@@ -1000,7 +1001,7 @@ type alias StatusDict =
 type Status
     = SLocal DocsStatus (Dict String ModuleName.Raw ()) Src.Module
     | SForeign I.Interface
-    | SKernelLocal (List Kernel.Chunk)
+    | SKernelLocal (List JSKernel.Chunk) (List RustKernel.Chunk)
     | SKernelForeign
 
 
@@ -1098,24 +1099,40 @@ crawlImports target root foreignDeps mvar pkg src imports =
 crawlKernel : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
 crawlKernel target root foreignDeps mvar pkg src name =
     let
-        path : FilePath
-        path =
-            Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) "js")
-    in
-    File.exists path
-        |> Task.bind
-            (\exists ->
-                if exists then
-                    File.readUtf8 path
-                        |> Task.bind
-                            (\bytes ->
-                                case Kernel.fromByteString target pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) bytes of
-                                    Nothing ->
-                                        Task.pure Nothing
+        path : String -> FilePath
+        path extension =
+            Utils.fpCombine src (Utils.fpAddExtension (ModuleName.toFilePath name) extension)
 
-                                    Just (Kernel.Content imports chunks) ->
-                                        crawlImports target root foreignDeps mvar pkg src (List.map Src.c1Value imports)
-                                            |> Task.fmap (\_ -> Just (SKernelLocal chunks))
+        jsPath : FilePath
+        jsPath =
+            path "js"
+
+        rustPath : FilePath
+        rustPath =
+            path "rs"
+    in
+    Task.map2 Tuple.pair (File.exists jsPath) (File.exists rustPath)
+        |> Task.bind
+            (\( jsExists, rustExists ) ->
+                if jsExists && rustExists then
+                    Task.map2 Tuple.pair (File.readUtf8 jsPath) (File.readUtf8 rustPath)
+                        |> Task.bind
+                            (\( jsBytes, rustBytes ) ->
+                                case
+                                    ( JSKernel.fromByteString target pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) jsBytes
+                                    , RustKernel.fromByteString target pkg (Utils.mapMapMaybe identity compare getDepHome foreignDeps) rustBytes
+                                    )
+                                of
+                                    ( Just (JSKernel.Content imports jsChunks), Just (RustKernel.Content rustImports rustChunks) ) ->
+                                        if imports == rustImports then
+                                            crawlImports target root foreignDeps mvar pkg src (List.map Src.c1Value imports)
+                                                |> Task.fmap (\_ -> Just (SKernelLocal jsChunks rustChunks))
+
+                                        else
+                                            Task.pure Nothing
+
+                                    _ ->
+                                        Task.pure Nothing
                             )
 
                 else
@@ -1140,7 +1157,7 @@ getDepHome fi =
 type DResult
     = RLocal I.Interface Opt.LocalGraph (Maybe Docs.Module)
     | RForeign I.Interface
-    | RKernelLocal (List Kernel.Chunk)
+    | RKernelLocal (List JSKernel.Chunk) (List RustKernel.Chunk)
     | RKernelForeign
 
 
@@ -1184,8 +1201,8 @@ compile target root pkg mvar status =
         SForeign iface ->
             Task.pure (Just (RForeign iface))
 
-        SKernelLocal chunks ->
-            Task.pure (Just (RKernelLocal chunks))
+        SKernelLocal jsChunks rustChunks ->
+            Task.pure (Just (RKernelLocal jsChunks rustChunks))
 
         SKernelForeign ->
             Task.pure (Just RKernelForeign)
@@ -1200,7 +1217,7 @@ getInterface result =
         RForeign iface ->
             Just iface
 
-        RKernelLocal _ ->
+        RKernelLocal _ _ ->
             Nothing
 
         RKernelForeign ->
@@ -1264,7 +1281,7 @@ toDocs result =
         RForeign _ ->
             Nothing
 
-        RKernelLocal _ ->
+        RKernelLocal _ _ ->
             Nothing
 
         RKernelForeign ->
@@ -1428,10 +1445,11 @@ statusEncoder status =
                 , I.interfaceEncoder iface
                 ]
 
-        SKernelLocal chunks ->
+        SKernelLocal jsChunks rustChunks ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , BE.list Kernel.chunkEncoder chunks
+                , BE.list JSKernel.chunkEncoder jsChunks
+                , BE.list RustKernel.chunkEncoder rustChunks
                 ]
 
         SKernelForeign ->
@@ -1456,7 +1474,9 @@ statusDecoder =
                         BD.map SForeign I.interfaceDecoder
 
                     2 ->
-                        BD.map SKernelLocal (BD.list Kernel.chunkDecoder)
+                        BD.map2 SKernelLocal
+                            (BD.list JSKernel.chunkDecoder)
+                            (BD.list RustKernel.chunkDecoder)
 
                     3 ->
                         BD.succeed SKernelForeign
@@ -1493,10 +1513,11 @@ dResultEncoder dResult =
                 , I.interfaceEncoder iface
                 ]
 
-        RKernelLocal chunks ->
+        RKernelLocal jsChunks rustChunks ->
             BE.sequence
                 [ BE.unsignedInt8 2
-                , BE.list Kernel.chunkEncoder chunks
+                , BE.list JSKernel.chunkEncoder jsChunks
+                , BE.list RustKernel.chunkEncoder rustChunks
                 ]
 
         RKernelForeign ->
@@ -1519,7 +1540,9 @@ dResultDecoder =
                         BD.map RForeign I.interfaceDecoder
 
                     2 ->
-                        BD.map RKernelLocal (BD.list Kernel.chunkDecoder)
+                        BD.map2 RKernelLocal
+                            (BD.list JSKernel.chunkDecoder)
+                            (BD.list RustKernel.chunkDecoder)
 
                     3 ->
                         BD.succeed RKernelForeign
