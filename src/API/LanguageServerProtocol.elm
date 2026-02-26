@@ -65,12 +65,323 @@ findReferences path line character =
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
-                        -- findReferencesHelp root path (line + 1) (character + 1)
-                        Debug.todo "findReferences not implemented yet"
+                        findReferencesHelp root path (line + 1) (character + 1)
 
                     Nothing ->
                         Task.pure (Err ())
             )
+
+
+findReferencesHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () (List Location))
+findReferencesHelp root path requestLine requestChar =
+    Stuff.withRootLock (Stuff.rootPath root)
+        (File.readUtf8 path
+            |> Task.bind
+                (\content ->
+                    let
+                        syntaxVersion : SV.SyntaxVersion
+                        syntaxVersion =
+                            SV.fileSyntaxVersion path
+                    in
+                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                        Ok (Src.Module _ _ _ _ _ values _ _ _ _) ->
+                            case findLocalReferenceTarget requestLine requestChar values of
+                                Just ( targetName, body ) ->
+                                    let
+                                        matches =
+                                            collectVarReferences targetName body
+                                    in
+                                    if List.isEmpty matches then
+                                        []
+                                            |> Ok
+                                            |> Task.pure
+
+                                    else
+                                        let
+                                            argLoc =
+                                                case findFocusedPatternRegion requestLine requestChar values of
+                                                    Just region ->
+                                                        [ regionToLocation ( path, region ) ]
+
+                                                    Nothing ->
+                                                        []
+                                        in
+                                        (argLoc ++ List.map (\region -> regionToLocation ( path, region )) matches)
+                                            |> Ok
+                                            |> Task.pure
+
+                                Nothing ->
+                                    Task.pure (Err ())
+
+                        Err _ ->
+                            Task.pure (Err ())
+                )
+        )
+
+
+findFocusedPatternRegion : Int -> Int -> List (A.Located Src.Value) -> Maybe A.Region
+findFocusedPatternRegion line char values =
+    case values of
+        [] ->
+            Nothing
+
+        (A.At valueRegion (Src.Value _ _ args ( _, _ ) _)) :: rest ->
+            if regionContainsPosition valueRegion line char then
+                findPatternRegionInArgs line char args
+                    |> Maybe.orElse (findFocusedPatternRegion line char rest)
+
+            else
+                findFocusedPatternRegion line char rest
+
+
+findPatternRegionInArgs : Int -> Int -> List (Src.C1 Src.Pattern) -> Maybe A.Region
+findPatternRegionInArgs line char args =
+    case args of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternRegionAt line char (Src.c1Value pattern_) of
+                Just foundRegion ->
+                    Just foundRegion
+
+                Nothing ->
+                    findPatternRegionInArgs line char rest
+
+
+findPatternRegionAt : Int -> Int -> Src.Pattern -> Maybe A.Region
+findPatternRegionAt line char (A.At region pattern_) =
+    if regionContainsPosition region line char then
+        case pattern_ of
+            Src.PVar _ ->
+                Just region
+
+            Src.PAnything _ ->
+                Just region
+
+            Src.PAlias innerPattern ( _, A.At aliasRegion _ ) ->
+                if regionContainsPosition aliasRegion line char then
+                    Just aliasRegion
+
+                else
+                    findPatternRegionAt line char (Src.c1Value innerPattern)
+
+            Src.PParens ( _, innerPattern ) ->
+                findPatternRegionAt line char innerPattern
+
+            Src.PTuple a b cs ->
+                findPatternRegionInList line char (List.map Tuple.second (a :: b :: cs))
+
+            Src.PList ( _, patterns ) ->
+                findPatternRegionInList line char (List.map Src.c2Value patterns)
+
+            Src.PCons left right ->
+                case findPatternRegionAt line char (Src.c0EolValue left) of
+                    Just leftRegion ->
+                        Just leftRegion
+
+                    Nothing ->
+                        findPatternRegionAt line char (Src.c2EolValue right)
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findPatternRegionInList : Int -> Int -> List Src.Pattern -> Maybe A.Region
+findPatternRegionInList line char patterns =
+    case patterns of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternRegionAt line char pattern_ of
+                Just foundRegion ->
+                    Just foundRegion
+
+                Nothing ->
+                    findPatternRegionInList line char rest
+
+
+findLocalReferenceTarget : Int -> Int -> List (A.Located Src.Value) -> Maybe ( Name, Src.Expr )
+findLocalReferenceTarget line char values =
+    case values of
+        [] ->
+            Nothing
+
+        (A.At valueRegion (Src.Value _ _ args ( _, body ) _)) :: rest ->
+            if regionContainsPosition valueRegion line char then
+                case findPatternBinderInArgs line char args of
+                    Just name ->
+                        Just ( name, body )
+
+                    Nothing ->
+                        findLocalReferenceTarget line char rest
+
+            else
+                findLocalReferenceTarget line char rest
+
+
+findPatternBinderInArgs : Int -> Int -> List (Src.C1 Src.Pattern) -> Maybe Name
+findPatternBinderInArgs line char args =
+    case args of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternBinderAt line char (Src.c1Value pattern_) of
+                Just name ->
+                    Just name
+
+                Nothing ->
+                    findPatternBinderInArgs line char rest
+
+
+findPatternBinderAt : Int -> Int -> Src.Pattern -> Maybe Name
+findPatternBinderAt line char (A.At region pattern_) =
+    if regionContainsPosition region line char then
+        case pattern_ of
+            Src.PVar name ->
+                Just name
+
+            Src.PAnything name ->
+                Just name
+
+            Src.PAlias innerPattern ( _, A.At aliasRegion aliasName ) ->
+                if regionContainsPosition aliasRegion line char then
+                    Just aliasName
+
+                else
+                    findPatternBinderAt line char (Src.c1Value innerPattern)
+
+            Src.PParens ( _, innerPattern ) ->
+                findPatternBinderAt line char innerPattern
+
+            Src.PTuple a b cs ->
+                findPatternBinderInList line char (List.map Tuple.second (a :: b :: cs))
+
+            Src.PList ( _, patterns ) ->
+                findPatternBinderInList line char (List.map Src.c2Value patterns)
+
+            Src.PCons left right ->
+                case findPatternBinderAt line char (Src.c0EolValue left) of
+                    Just name ->
+                        Just name
+
+                    Nothing ->
+                        findPatternBinderAt line char (Src.c2EolValue right)
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findPatternBinderInList : Int -> Int -> List Src.Pattern -> Maybe Name
+findPatternBinderInList line char patterns =
+    case patterns of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternBinderAt line char pattern_ of
+                Just name ->
+                    Just name
+
+                Nothing ->
+                    findPatternBinderInList line char rest
+
+
+collectVarReferences : Name -> Src.Expr -> List A.Region
+collectVarReferences targetName (A.At region expr_) =
+    case expr_ of
+        Src.Var Src.LowVar name ->
+            if name == targetName then
+                [ region ]
+
+            else
+                []
+
+        Src.Var _ _ ->
+            []
+
+        Src.VarQual _ _ _ ->
+            []
+
+        Src.List entries _ ->
+            List.concatMap (collectVarReferences targetName << Src.c2EolValue) entries
+
+        Src.Negate expr ->
+            collectVarReferences targetName expr
+
+        Src.Binops ops final ->
+            List.concatMap (collectVarReferences targetName) (List.map Tuple.first ops ++ [ final ])
+
+        Src.Lambda _ ( _, body ) ->
+            collectVarReferences targetName body
+
+        Src.Call fn args ->
+            List.concatMap (collectVarReferences targetName) (fn :: List.map Src.c1Value args)
+
+        Src.If firstBranch branches ( _, finalExpr ) ->
+            let
+                branchExprs : List Src.Expr
+                branchExprs =
+                    List.concatMap
+                        (\( _, ( ( _, condition ), ( _, branchExpr ) ) ) ->
+                            [ condition, branchExpr ]
+                        )
+                        (firstBranch :: branches)
+            in
+            List.concatMap (collectVarReferences targetName) (branchExprs ++ [ finalExpr ])
+
+        Src.Let defs _ body ->
+            let
+                defBodies : List Src.Expr
+                defBodies =
+                    List.map
+                        (\( _, def ) ->
+                            case A.toValue def of
+                                Src.Define _ _ ( _, defBody ) _ ->
+                                    defBody
+
+                                Src.Destruct _ ( _, defBody ) ->
+                                    defBody
+                        )
+                        defs
+            in
+            List.concatMap (collectVarReferences targetName) (defBodies ++ [ body ])
+
+        Src.Case ( _, subject ) clauses ->
+            let
+                clauseExprs : List Src.Expr
+                clauseExprs =
+                    List.map (Tuple.second >> Src.c1Value) clauses
+            in
+            List.concatMap (collectVarReferences targetName) (subject :: clauseExprs)
+
+        Src.Access record _ ->
+            collectVarReferences targetName record
+
+        Src.Update ( _, nameExpr ) ( _, fields ) ->
+            List.concatMap (collectVarReferences targetName)
+                (nameExpr :: List.map (Src.c2EolValue >> Tuple.second >> Src.c1Value) fields)
+
+        Src.Record ( _, fields ) ->
+            List.concatMap (collectVarReferences targetName)
+                (List.map (Tuple.second << Tuple.second << Src.c2EolValue) fields)
+
+        Src.Tuple a b cs ->
+            List.concatMap (collectVarReferences targetName) (List.map Tuple.second (a :: b :: cs))
+
+        Src.Parens ( _, expr ) ->
+            collectVarReferences targetName expr
+
+        _ ->
+            []
 
 
 
@@ -148,10 +459,10 @@ findSymbolAt root path line char imports values unions aliases =
                                                         Src.c2Value c2
                                                 in
                                                 case e of
-                                                    Src.Lower (A.At regionName exposedName) ->
+                                                    Src.Lower (A.At regionName _) ->
                                                         ( regionName, e )
 
-                                                    Src.Upper (A.At regionName exposedName) _ ->
+                                                    Src.Upper (A.At regionName _) _ ->
                                                         ( regionName, e )
 
                                                     _ ->
@@ -190,7 +501,7 @@ findSymbolAt root path line char imports values unions aliases =
                 imports
     in
     case findImportSymbol of
-        Just (OnModuleName _ importName nameRegion) ->
+        Just (OnModuleName _ importName _) ->
             Outline.getAllModulePaths root
                 |> Task.andThen
                     (\allModulePaths ->
@@ -220,7 +531,7 @@ findSymbolAt root path line char imports values unions aliases =
                                 Task.pure (Err ())
                     )
 
-        Just (OnExposedValue exposedName importName regionName) ->
+        Just (OnExposedValue exposedName importName _) ->
             Outline.getAllModulePaths root
                 |> Task.andThen
                     (\allModulePaths ->
@@ -689,7 +1000,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                             let
                                                                 findCtor =
                                                                     List.stoppableFoldl
-                                                                        (\(A.At _ (Src.Union ( _, A.At _ unionName ) _ ctors)) acc ->
+                                                                        (\(A.At _ (Src.Union ( _, A.At _ _ ) _ ctors)) acc ->
                                                                             case
                                                                                 List.stoppableFoldl
                                                                                     (\( A.At ctorRegion ctorName, _ ) acc2 ->
@@ -1013,7 +1324,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                         SV.fileSyntaxVersion path
                                                                 in
                                                                 case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                                                                    Ok (Src.Module _ _ (A.At _ exports) _ _ _ extUnions extAliases _ _) ->
+                                                                    Ok (Src.Module _ _ (A.At _ _) _ _ _ extUnions extAliases _ _) ->
                                                                         let
                                                                             unionRegion =
                                                                                 List.stoppableFoldl
