@@ -93,3 +93,4 @@ export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<Gu
 export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;
 export declare const getDefinitionLocation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location>;
 export declare const findReferences: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location[]>;
+export declare const getHoverInformation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | { documentation: string; range?: { start: Position, end: Position } }>;

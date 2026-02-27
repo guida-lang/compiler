@@ -1,8 +1,10 @@
 module API.LanguageServerProtocol exposing
-    ( Location
+    ( HoverInformation
+    , Location
     , Position
     , findReferences
     , getDefinitionLocation
+    , getHoverInformation
     )
 
 import Builder.File as File
@@ -13,6 +15,7 @@ import Compiler.Data.Name exposing (Name)
 import Compiler.Generate.Target as Target
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
+import Compiler.Json.String as Json
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
@@ -40,6 +43,12 @@ type alias Position =
     }
 
 
+type alias HoverInformation =
+    { documentation : String
+    , range : Maybe { start : Position, end : Position }
+    }
+
+
 
 -- RUN
 
@@ -52,6 +61,20 @@ getDefinitionLocation path line character =
                 case maybeRoot of
                     Just root ->
                         getDefinitionLocationHelp root path (line + 1) (character + 1)
+
+                    Nothing ->
+                        Task.pure (Err ())
+            )
+
+
+getHoverInformation : String -> Int -> Int -> Task Never (Result () (Maybe HoverInformation))
+getHoverInformation path line character =
+    Stuff.findRootIn (Utils.fpDropFileName path)
+        |> Task.bind
+            (\maybeRoot ->
+                case maybeRoot of
+                    Just root ->
+                        getHoverInformationHelp root path (line + 1) (character + 1)
 
                     Nothing ->
                         Task.pure (Err ())
@@ -417,6 +440,130 @@ getDefinitionLocationHelp root path requestLine requestChar =
                             Task.pure (Err ())
                 )
         )
+
+
+
+-- GET HOVER INFORMATION
+
+
+getHoverInformationHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () (Maybe HoverInformation))
+getHoverInformationHelp root path requestLine requestChar =
+    Stuff.withRootLock (Stuff.rootPath root)
+        (File.readUtf8 path
+            |> Task.bind
+                (\content ->
+                    let
+                        syntaxVersion : SV.SyntaxVersion
+                        syntaxVersion =
+                            SV.fileSyntaxVersion path
+
+                        parseResult : Result String Src.Module
+                        parseResult =
+                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                Ok modul ->
+                                    Ok modul
+
+                                Err _ ->
+                                    Err "Parse error"
+                    in
+                    case parseResult of
+                        Ok (Src.Module _ _ _ docs imports values unions aliases _ _) ->
+                            -- First, try to find hover locally (on a definition in this file)
+                            case findLocalValueHover requestLine requestChar docs values of
+                                Just hover ->
+                                    Task.pure (Ok (Just hover))
+
+                                Nothing ->
+                                    -- If not found locally, search via symbol resolution
+                                    findSymbolAt root path requestLine requestChar imports values unions aliases
+                                        |> Task.bind
+                                            (\symbolResult ->
+                                                case symbolResult of
+                                                    Ok ( defPath, defRegion ) ->
+                                                        File.readUtf8 defPath
+                                                            |> Task.bind
+                                                                (\defContent ->
+                                                                    let
+                                                                        defSyntaxVersion : SV.SyntaxVersion
+                                                                        defSyntaxVersion =
+                                                                            SV.fileSyntaxVersion defPath
+                                                                    in
+                                                                    case Parse.fromByteString Target.GuidaTarget defSyntaxVersion Parse.Application defContent of
+                                                                        Ok (Src.Module _ _ _ defDocs _ defValues _ _ _ _) ->
+                                                                            Task.pure (Ok (extractHoverFromDocs defRegion defDocs defValues))
+
+                                                                        Err _ ->
+                                                                            Task.pure (Err ())
+                                                                )
+
+                                                    Err _ ->
+                                                        Task.pure (Err ())
+                                            )
+
+                        Err _ ->
+                            Task.pure (Err ())
+                )
+        )
+
+
+findLocalValueHover : Int -> Int -> Src.Docs -> List (A.Located Src.Value) -> Maybe HoverInformation
+findLocalValueHover requestLine requestChar docs values =
+    case values of
+        [] ->
+            Nothing
+
+        (A.At valueRegion (Src.Value _ ( _, A.At nameRegion valueName ) _ _ _)) :: rest ->
+            if regionContainsPosition valueRegion requestLine requestChar || regionContainsPosition nameRegion requestLine requestChar then
+                extractHoverFromDocs valueRegion docs values
+
+            else
+                findLocalValueHover requestLine requestChar docs rest
+
+
+extractHoverFromDocs : A.Region -> Src.Docs -> List (A.Located Src.Value) -> Maybe HoverInformation
+extractHoverFromDocs targetRegion docs values =
+    -- First, find the value name that matches the target region
+    findValueNameAtRegion targetRegion values
+        |> Maybe.andThen
+            (\valueName ->
+                -- Look up the documentation for this value name in the Docs
+                case docs of
+                    Src.YesDocs _ valueDocs ->
+                        findDocForName valueName valueDocs
+                            |> Maybe.map (\(Src.Comment snippet) -> { documentation = Json.fromComment snippet, range = Nothing })
+
+                    Src.NoDocs _ valueDocs ->
+                        findDocForName valueName valueDocs
+                            |> Maybe.map (\(Src.Comment snippet) -> { documentation = Json.fromComment snippet, range = Nothing })
+            )
+
+
+findDocForName : Name -> List ( Name, Src.Comment ) -> Maybe Src.Comment
+findDocForName targetName docs =
+    case docs of
+        [] ->
+            Nothing
+
+        ( name, comment ) :: rest ->
+            if name == targetName then
+                Just comment
+
+            else
+                findDocForName targetName rest
+
+
+findValueNameAtRegion : A.Region -> List (A.Located Src.Value) -> Maybe Name
+findValueNameAtRegion targetRegion values =
+    case values of
+        [] ->
+            Nothing
+
+        (A.At valueRegion (Src.Value _ ( _, A.At nameRegion valueName ) _ _ _)) :: rest ->
+            if valueRegion == targetRegion || nameRegion == targetRegion then
+                Just valueName
+
+            else
+                findValueNameAtRegion targetRegion rest
 
 
 regionToLocation : ( String, A.Region ) -> Location

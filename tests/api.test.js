@@ -526,4 +526,54 @@ ppar (a) = a
             ]);
         });
     });
+
+    describe("getHoverInformation", () => {
+        let mainPath;
+        let assertHover;
+
+        beforeAll(async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+
+            assertHover = async (position, expected) => {
+                const hover = await guida.getHoverInformation(config(), { path: mainPath, position: position });
+                expect(hover).toEqual(expected);
+            }
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(mainPath, `module Main exposing (..)
+
+{-| Main module documentation... -}
+
+{-| This is a documented function that does something useful. -}
+documentedFunction = ()
+
+fn = documentedFunction
+
+listMap = List.map
+`);
+        });
+
+
+        it("returns documentation when hovering on function definition", async () => {
+            await assertHover({ line: 5, character: 0 }, {
+                documentation: " This is a documented function that does something useful. "
+            });
+        });
+
+        it("returns placeholder hover information for documented function", async () => {
+            await assertHover({ line: 7, character: 5 }, {
+                documentation: " This is a documented function that does something useful. "
+            });
+        });
+
+        it("returns documentation when hovering on List.map definition", async () => {
+            await assertHover({ line: 9, character: 10 }, {
+                documentation: "TODO"
+            });
+        });
+    });
 });

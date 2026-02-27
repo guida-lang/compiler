@@ -194,6 +194,54 @@ app =
                                         Err _ ->
                                             exitWithResponse Encode.null
                                 )
+
+                    GetHoverInformationArgs path line character ->
+                        LanguageServerProtocol.getHoverInformation path line character
+                            |> Task.bind
+                                (\result ->
+                                    case result of
+                                        Ok maybeHover ->
+                                            case maybeHover of
+                                                Just hover ->
+                                                    let
+                                                        rangeFields : List ( String, Encode.Value )
+                                                        rangeFields =
+                                                            case hover.range of
+                                                                Just range ->
+                                                                    [ ( "range"
+                                                                      , Encode.object
+                                                                            [ ( "start"
+                                                                              , Encode.object
+                                                                                    [ ( "line", Encode.int range.start.line )
+                                                                                    , ( "character", Encode.int range.start.character )
+                                                                                    ]
+                                                                              )
+                                                                            , ( "end"
+                                                                              , Encode.object
+                                                                                    [ ( "line", Encode.int range.end.line )
+                                                                                    , ( "character", Encode.int range.end.character )
+                                                                                    ]
+                                                                              )
+                                                                            ]
+                                                                      )
+                                                                    ]
+
+                                                                Nothing ->
+                                                                    []
+                                                    in
+                                                    exitWithResponse
+                                                        (Encode.object
+                                                            (( "documentation", Encode.string hover.documentation )
+                                                                :: rangeFields
+                                                            )
+                                                        )
+
+                                                Nothing ->
+                                                    exitWithResponse Encode.null
+
+                                        Err _ ->
+                                            exitWithResponse Encode.null
+                                )
             )
 
 
@@ -220,6 +268,7 @@ type Args
     | DiagnosticsArgs DiagnosticsSource
     | GetDefinitionLocationArgs String Int Int
     | FindReferencesArgs String Int Int
+    | GetHoverInformationArgs String Int Int
 
 
 type DiagnosticsSource
@@ -272,6 +321,12 @@ argsDecoder =
 
                     "find-references" ->
                         Decode.map3 FindReferencesArgs
+                            (Decode.field "path" Decode.string)
+                            (Decode.at [ "position", "line" ] Decode.int)
+                            (Decode.at [ "position", "character" ] Decode.int)
+
+                    "get-hover-information" ->
+                        Decode.map3 GetHoverInformationArgs
                             (Decode.field "path" Decode.string)
                             (Decode.at [ "position", "line" ] Decode.int)
                             (Decode.at [ "position", "character" ] Decode.int)
