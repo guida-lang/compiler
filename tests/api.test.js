@@ -528,7 +528,7 @@ ppar (a) = a
     });
 
     describe("getHoverInformation", () => {
-        let mainPath;
+        let mainPath, utilPath;
         let assertHover;
 
         beforeAll(async () => {
@@ -536,6 +536,7 @@ ppar (a) = a
             process.chdir(tmpobj.name);
 
             mainPath = path.join(tmpobj.name, "src", "Main.guida");
+            utilPath = path.join(tmpobj.name, "src", "Util.guida");
 
             assertHover = async (position, expected) => {
                 const hover = await guida.getHoverInformation(config(), { path: mainPath, position: position });
@@ -548,31 +549,40 @@ ppar (a) = a
 
 {-| Main module documentation... -}
 
+import Util
+
 {-| This is a documented function that does something useful. -}
 documentedFunction = ()
 
 fn = documentedFunction
 
-listMap = List.map
+fn2 = Util.utilFn
+`);
+
+            fs.writeFileSync(utilPath, `module Util exposing (..)
+
+{-| Main module documentation... -}
+
+{-| This is another documented function that does something useful on util. -}
+utilFn = ()
 `);
         });
 
-
         it("returns documentation when hovering on function definition", async () => {
-            await assertHover({ line: 5, character: 0 }, {
+            await assertHover({ line: 7, character: 0 }, {
                 documentation: " This is a documented function that does something useful. "
             });
         });
 
         it("returns placeholder hover information for documented function", async () => {
-            await assertHover({ line: 7, character: 5 }, {
+            await assertHover({ line: 9, character: 5 }, {
                 documentation: " This is a documented function that does something useful. "
             });
         });
 
-        it("returns documentation when hovering on List.map definition", async () => {
-            await assertHover({ line: 9, character: 10 }, {
-                documentation: "TODO"
+        it("returns documentation when hovering on Util.utilFn definition", async () => {
+            await assertHover({ line: 11, character: 6 }, {
+                documentation: " This is another documented function that does something useful on util. "
             });
         });
     });
