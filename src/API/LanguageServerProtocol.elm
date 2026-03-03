@@ -109,25 +109,20 @@ findReferencesHelp root path requestLine requestChar =
                     case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                         Ok (Src.Module _ _ _ _ _ values _ _ _ _) ->
                             case findLocalReferenceTarget requestLine requestChar values of
-                                Just ( targetName, body ) ->
+                                Just ( targetName, declarationRegion, body ) ->
                                     let
                                         matches =
                                             collectVarReferences targetName body
                                     in
                                     if List.isEmpty matches then
-                                        []
+                                        [ regionToLocation ( path, declarationRegion ) ]
                                             |> Ok
                                             |> Task.pure
 
                                     else
                                         let
                                             argLoc =
-                                                case findFocusedPatternRegion requestLine requestChar values of
-                                                    Just region ->
-                                                        [ regionToLocation ( path, region ) ]
-
-                                                    Nothing ->
-                                                        []
+                                                [ regionToLocation ( path, declarationRegion ) ]
                                         in
                                         (argLoc ++ List.map (\region -> regionToLocation ( path, region )) matches)
                                             |> Ok
@@ -228,7 +223,7 @@ findPatternRegionInList line char patterns =
                     findPatternRegionInList line char rest
 
 
-findLocalReferenceTarget : Int -> Int -> List (A.Located Src.Value) -> Maybe ( Name, Src.Expr )
+findLocalReferenceTarget : Int -> Int -> List (A.Located Src.Value) -> Maybe ( Name, A.Region, Src.Expr )
 findLocalReferenceTarget line char values =
     case values of
         [] ->
@@ -238,13 +233,361 @@ findLocalReferenceTarget line char values =
             if regionContainsPosition valueRegion line char then
                 case findPatternBinderInArgs line char args of
                     Just name ->
-                        Just ( name, body )
+                        case findPatternRegionByNameInArgs name args of
+                            Just declarationRegion ->
+                                Just ( name, declarationRegion, body )
+
+                            Nothing ->
+                                findLocalReferenceTarget line char rest
 
                     Nothing ->
-                        findLocalReferenceTarget line char rest
+                        case findLocalBodyReferenceTarget line char args body of
+                            Just target ->
+                                Just target
+
+                            Nothing ->
+                                findLocalReferenceTarget line char rest
 
             else
                 findLocalReferenceTarget line char rest
+
+
+findLocalBodyReferenceTarget : Int -> Int -> List (Src.C1 Src.Pattern) -> Src.Expr -> Maybe ( Name, A.Region, Src.Expr )
+findLocalBodyReferenceTarget line char args body =
+    let
+        argNames : List Name
+        argNames =
+            collectPatternBinderNamesInArgs args
+    in
+    case findBodyUsageNameAt line char body of
+        Just name ->
+            if List.member name argNames then
+                findPatternRegionByNameInArgs name args
+                    |> Maybe.map (\declarationRegion -> ( name, declarationRegion, body ))
+
+            else
+                findBodyUsageRegionAt line char body
+                    |> Maybe.map (\usageRegion -> ( name, usageRegion, body ))
+
+        Nothing ->
+            Nothing
+
+
+collectPatternBinderNamesInArgs : List (Src.C1 Src.Pattern) -> List Name
+collectPatternBinderNamesInArgs args =
+    List.concatMap (collectPatternBinderNames << Src.c1Value) args
+
+
+collectPatternBinderNames : Src.Pattern -> List Name
+collectPatternBinderNames (A.At _ pattern_) =
+    case pattern_ of
+        Src.PVar name ->
+            [ name ]
+
+        Src.PAnything name ->
+            [ name ]
+
+        Src.PAlias innerPattern ( _, A.At _ aliasName ) ->
+            aliasName :: collectPatternBinderNames (Src.c1Value innerPattern)
+
+        Src.PParens ( _, innerPattern ) ->
+            collectPatternBinderNames innerPattern
+
+        Src.PTuple a b cs ->
+            List.concatMap (collectPatternBinderNames << Tuple.second) (a :: b :: cs)
+
+        Src.PList ( _, patterns ) ->
+            List.concatMap (collectPatternBinderNames << Src.c2Value) patterns
+
+        Src.PCons left right ->
+            collectPatternBinderNames (Src.c0EolValue left)
+                ++ collectPatternBinderNames (Src.c2EolValue right)
+
+        _ ->
+            []
+
+
+findPatternRegionByNameInArgs : Name -> List (Src.C1 Src.Pattern) -> Maybe A.Region
+findPatternRegionByNameInArgs targetName args =
+    case args of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternRegionByName targetName (Src.c1Value pattern_) of
+                Just region ->
+                    Just region
+
+                Nothing ->
+                    findPatternRegionByNameInArgs targetName rest
+
+
+findPatternRegionByName : Name -> Src.Pattern -> Maybe A.Region
+findPatternRegionByName targetName (A.At region pattern_) =
+    case pattern_ of
+        Src.PVar name ->
+            if name == targetName then
+                Just region
+
+            else
+                Nothing
+
+        Src.PAnything name ->
+            if name == targetName then
+                Just region
+
+            else
+                Nothing
+
+        Src.PAlias innerPattern ( _, A.At aliasRegion aliasName ) ->
+            if aliasName == targetName then
+                Just aliasRegion
+
+            else
+                findPatternRegionByName targetName (Src.c1Value innerPattern)
+
+        Src.PParens ( _, innerPattern ) ->
+            findPatternRegionByName targetName innerPattern
+
+        Src.PTuple a b cs ->
+            findPatternRegionByNameInList targetName (List.map Tuple.second (a :: b :: cs))
+
+        Src.PList ( _, patterns ) ->
+            findPatternRegionByNameInList targetName (List.map Src.c2Value patterns)
+
+        Src.PCons left right ->
+            case findPatternRegionByName targetName (Src.c0EolValue left) of
+                Just foundRegion ->
+                    Just foundRegion
+
+                Nothing ->
+                    findPatternRegionByName targetName (Src.c2EolValue right)
+
+        _ ->
+            Nothing
+
+
+findPatternRegionByNameInList : Name -> List Src.Pattern -> Maybe A.Region
+findPatternRegionByNameInList targetName patterns =
+    case patterns of
+        [] ->
+            Nothing
+
+        pattern_ :: rest ->
+            case findPatternRegionByName targetName pattern_ of
+                Just foundRegion ->
+                    Just foundRegion
+
+                Nothing ->
+                    findPatternRegionByNameInList targetName rest
+
+
+findBodyUsageNameAt : Int -> Int -> Src.Expr -> Maybe Name
+findBodyUsageNameAt line char (A.At region expr_) =
+    if regionContainsPosition region line char then
+        case expr_ of
+            Src.Var Src.LowVar name ->
+                Just name
+
+            Src.Var Src.CapVar name ->
+                Just name
+
+            Src.VarQual _ _ _ ->
+                Nothing
+
+            Src.List entries _ ->
+                findNameAtInList line char (List.map Src.c2EolValue entries)
+
+            Src.Negate expr ->
+                findBodyUsageNameAt line char expr
+
+            Src.Binops ops final ->
+                findNameAtInList line char (List.map Tuple.first ops ++ [ final ])
+
+            Src.Lambda _ ( _, body ) ->
+                findBodyUsageNameAt line char body
+
+            Src.Call fn args ->
+                findNameAtInList line char (fn :: List.map Src.c1Value args)
+
+            Src.If firstBranch branches ( _, finalExpr ) ->
+                let
+                    branchExprs : List Src.Expr
+                    branchExprs =
+                        List.concatMap
+                            (\( _, ( ( _, condition ), ( _, branchExpr ) ) ) ->
+                                [ condition, branchExpr ]
+                            )
+                            (firstBranch :: branches)
+                in
+                findNameAtInList line char (branchExprs ++ [ finalExpr ])
+
+            Src.Let defs _ body ->
+                let
+                    defBodies : List Src.Expr
+                    defBodies =
+                        List.map
+                            (\( _, def ) ->
+                                case A.toValue def of
+                                    Src.Define _ _ ( _, defBody ) _ ->
+                                        defBody
+
+                                    Src.Destruct _ ( _, defBody ) ->
+                                        defBody
+                            )
+                            defs
+                in
+                findNameAtInList line char (defBodies ++ [ body ])
+
+            Src.Case ( _, subject ) clauses ->
+                let
+                    clauseExprs : List Src.Expr
+                    clauseExprs =
+                        List.map (Tuple.second >> Src.c1Value) clauses
+                in
+                findNameAtInList line char (subject :: clauseExprs)
+
+            Src.Access record _ ->
+                findBodyUsageNameAt line char record
+
+            Src.Update ( _, nameExpr ) ( _, fields ) ->
+                findNameAtInList line char <|
+                    (nameExpr :: List.map (Src.c2EolValue >> Tuple.second >> Src.c1Value) fields)
+
+            Src.Record ( _, fields ) ->
+                findNameAtInList line char <|
+                    List.map (Tuple.second << Tuple.second << Src.c2EolValue) fields
+
+            Src.Tuple a b cs ->
+                findNameAtInList line char (List.map Tuple.second (a :: b :: cs))
+
+            Src.Parens ( _, expr ) ->
+                findBodyUsageNameAt line char expr
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findBodyUsageRegionAt : Int -> Int -> Src.Expr -> Maybe A.Region
+findBodyUsageRegionAt line char (A.At region expr_) =
+    if regionContainsPosition region line char then
+        case expr_ of
+            Src.Var Src.LowVar _ ->
+                Just region
+
+            Src.Var Src.CapVar _ ->
+                Just region
+
+            Src.VarQual _ _ _ ->
+                Nothing
+
+            Src.List entries _ ->
+                findRegionAtInList line char (List.map Src.c2EolValue entries)
+
+            Src.Negate expr ->
+                findBodyUsageRegionAt line char expr
+
+            Src.Binops ops final ->
+                findRegionAtInList line char (List.map Tuple.first ops ++ [ final ])
+
+            Src.Lambda _ ( _, body ) ->
+                findBodyUsageRegionAt line char body
+
+            Src.Call fn args ->
+                findRegionAtInList line char (fn :: List.map Src.c1Value args)
+
+            Src.If firstBranch branches ( _, finalExpr ) ->
+                let
+                    branchExprs : List Src.Expr
+                    branchExprs =
+                        List.concatMap
+                            (\( _, ( ( _, condition ), ( _, branchExpr ) ) ) ->
+                                [ condition, branchExpr ]
+                            )
+                            (firstBranch :: branches)
+                in
+                findRegionAtInList line char (branchExprs ++ [ finalExpr ])
+
+            Src.Let defs _ body ->
+                let
+                    defBodies : List Src.Expr
+                    defBodies =
+                        List.map
+                            (\( _, def ) ->
+                                case A.toValue def of
+                                    Src.Define _ _ ( _, defBody ) _ ->
+                                        defBody
+
+                                    Src.Destruct _ ( _, defBody ) ->
+                                        defBody
+                            )
+                            defs
+                in
+                findRegionAtInList line char (defBodies ++ [ body ])
+
+            Src.Case ( _, subject ) clauses ->
+                let
+                    clauseExprs : List Src.Expr
+                    clauseExprs =
+                        List.map (Tuple.second >> Src.c1Value) clauses
+                in
+                findRegionAtInList line char (subject :: clauseExprs)
+
+            Src.Access record _ ->
+                findBodyUsageRegionAt line char record
+
+            Src.Update ( _, nameExpr ) ( _, fields ) ->
+                findRegionAtInList line char <|
+                    (nameExpr :: List.map (Src.c2EolValue >> Tuple.second >> Src.c1Value) fields)
+
+            Src.Record ( _, fields ) ->
+                findRegionAtInList line char <|
+                    List.map (Tuple.second << Tuple.second << Src.c2EolValue) fields
+
+            Src.Tuple a b cs ->
+                findRegionAtInList line char (List.map Tuple.second (a :: b :: cs))
+
+            Src.Parens ( _, expr ) ->
+                findBodyUsageRegionAt line char expr
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findRegionAtInList : Int -> Int -> List Src.Expr -> Maybe A.Region
+findRegionAtInList line char expressions =
+    case expressions of
+        [] ->
+            Nothing
+
+        expression :: rest ->
+            case findBodyUsageRegionAt line char expression of
+                Just region ->
+                    Just region
+
+                Nothing ->
+                    findRegionAtInList line char rest
+
+
+findNameAtInList : Int -> Int -> List Src.Expr -> Maybe Name
+findNameAtInList line char expressions =
+    case expressions of
+        [] ->
+            Nothing
+
+        expression :: rest ->
+            case findBodyUsageNameAt line char expression of
+                Just name ->
+                    Just name
+
+                Nothing ->
+                    findNameAtInList line char rest
 
 
 findPatternBinderInArgs : Int -> Int -> List (Src.C1 Src.Pattern) -> Maybe Name
@@ -328,8 +671,12 @@ collectVarReferences targetName (A.At region expr_) =
             else
                 []
 
-        Src.Var _ _ ->
-            []
+        Src.Var Src.CapVar name ->
+            if name == targetName then
+                [ region ]
+
+            else
+                []
 
         Src.VarQual _ _ _ ->
             []
@@ -421,17 +768,8 @@ getDefinitionLocationHelp root path requestLine requestChar =
                         syntaxVersion : SV.SyntaxVersion
                         syntaxVersion =
                             SV.fileSyntaxVersion path
-
-                        parseResult : Result String Src.Module
-                        parseResult =
-                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                                Ok modul ->
-                                    Ok modul
-
-                                Err _ ->
-                                    Err "Parse error"
                     in
-                    case parseResult of
+                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                         Ok (Src.Module _ _ _ _ imports values unions aliases _ _) ->
                             findSymbolAt root path requestLine requestChar imports values unions aliases
                                 |> Task.fmap (Result.map regionToLocation)
@@ -456,17 +794,8 @@ getHoverInformationHelp root path requestLine requestChar =
                         syntaxVersion : SV.SyntaxVersion
                         syntaxVersion =
                             SV.fileSyntaxVersion path
-
-                        parseResult : Result String Src.Module
-                        parseResult =
-                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                                Ok modul ->
-                                    Ok modul
-
-                                Err _ ->
-                                    Err "Parse error"
                     in
-                    case parseResult of
+                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                         Ok (Src.Module _ _ _ docs imports values unions aliases _ _) ->
                             -- First, try to find hover locally (on a definition in this file)
                             case findLocalValueHover requestLine requestChar docs values of
@@ -1323,76 +1652,125 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
             Outline.getAllModulePaths root
                 |> Task.andThen
                     (\allModulePaths ->
-                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName prefix) allModulePaths of
+                        let
+                            maybeModulePathAndPkg : Maybe ( Utils.FilePath, Pkg.Name )
+                            maybeModulePathAndPkg =
+                                Dict.foldl ModuleName.compareCanonical
+                                    (\(TypeCheck.Canonical pkgName home) path acc ->
+                                        if prefix == home then
+                                            Just ( path, pkgName )
+
+                                        else
+                                            acc
+                                    )
+                                    Nothing
+                                    allModulePaths
+                        in
+                        case maybeModulePathAndPkg of
                             Nothing ->
                                 Task.pure Nothing
 
-                            Just path ->
-                                File.readUtf8 path
-                                    |> Task.map
-                                        (\content ->
-                                            let
-                                                syntaxVersion =
-                                                    SV.fileSyntaxVersion path
-                                            in
-                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                                                Ok (Src.Module _ _ (A.At _ exports) _ _ targetValues _ _ _ effects) ->
-                                                    let
-                                                        findValue =
-                                                            List.stoppableFoldl
-                                                                (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) acc ->
-                                                                    if valueName == name then
-                                                                        List.Stop (Just ( path, valueRegion ))
+                            Just ( path, pkgName ) ->
+                                let
+                                    getProjectType : Task Never (Maybe Parse.ProjectType)
+                                    getProjectType =
+                                        if pkgName == Pkg.dummyName then
+                                            -- Current project: read outline to determine if app or package
+                                            Outline.read root
+                                                |> Task.fmap
+                                                    (\outlineResult ->
+                                                        case outlineResult of
+                                                            Ok (Outline.App _) ->
+                                                                Just Parse.Application
 
-                                                                    else
-                                                                        List.Continue acc
-                                                                )
-                                                                Nothing
-                                                                targetValues
+                                                            Ok (Outline.Pkg (Outline.GuidaPkgOutline pkgOutlineName _ _ _ _ _ _ _)) ->
+                                                                Just (Parse.Package pkgOutlineName)
 
-                                                        findPort =
-                                                            case effects of
-                                                                Src.Ports portsList ->
-                                                                    List.stoppableFoldl
-                                                                        (\(Src.Port _ ( _, A.At regionPort portName ) _) acc ->
-                                                                            if portName == name then
-                                                                                List.Stop (Just ( path, regionPort ))
+                                                            Ok (Outline.Pkg (Outline.ElmPkgOutline pkgOutlineName _ _ _ _ _ _ _)) ->
+                                                                Just (Parse.Package pkgOutlineName)
 
-                                                                            else
-                                                                                List.Continue acc
-                                                                        )
+                                                            Err _ ->
+                                                                Just Parse.Application
+                                                    )
+
+                                        else
+                                            -- Dependency: use its package name
+                                            Task.pure (Just (Parse.Package pkgName))
+                                in
+                                getProjectType
+                                    |> Task.andThen
+                                        (\maybeProjectType ->
+                                            case maybeProjectType of
+                                                Nothing ->
+                                                    Task.pure Nothing
+
+                                                Just projectType ->
+                                                    File.readUtf8 path
+                                                        |> Task.map
+                                                            (\content ->
+                                                                let
+                                                                    syntaxVersion =
+                                                                        SV.fileSyntaxVersion path
+                                                                in
+                                                                case Parse.fromByteString Target.GuidaTarget syntaxVersion projectType content of
+                                                                    Ok (Src.Module _ _ (A.At _ exports) _ _ targetValues _ _ _ effects) ->
+                                                                        let
+                                                                            findValue =
+                                                                                List.stoppableFoldl
+                                                                                    (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) acc ->
+                                                                                        if valueName == name then
+                                                                                            List.Stop (Just ( path, valueRegion ))
+
+                                                                                        else
+                                                                                            List.Continue acc
+                                                                                    )
+                                                                                    Nothing
+                                                                                    targetValues
+
+                                                                            findPort =
+                                                                                case effects of
+                                                                                    Src.Ports portsList ->
+                                                                                        List.stoppableFoldl
+                                                                                            (\(Src.Port _ ( _, A.At regionPort portName ) _) acc ->
+                                                                                                if portName == name then
+                                                                                                    List.Stop (Just ( path, regionPort ))
+
+                                                                                                else
+                                                                                                    List.Continue acc
+                                                                                            )
+                                                                                            Nothing
+                                                                                            portsList
+
+                                                                                    _ ->
+                                                                                        Nothing
+                                                                        in
+                                                                        case exports of
+                                                                            Src.Open _ _ ->
+                                                                                Maybe.or findValue findPort
+
+                                                                            Src.Explicit (A.At _ exposedList) ->
+                                                                                let
+                                                                                    isExposed =
+                                                                                        List.any
+                                                                                            (\( _, e ) ->
+                                                                                                case e of
+                                                                                                    Src.Lower (A.At _ exposedName) ->
+                                                                                                        exposedName == name
+
+                                                                                                    _ ->
+                                                                                                        False
+                                                                                            )
+                                                                                            exposedList
+                                                                                in
+                                                                                if isExposed then
+                                                                                    Maybe.or findValue findPort
+
+                                                                                else
+                                                                                    Nothing
+
+                                                                    Err _ ->
                                                                         Nothing
-                                                                        portsList
-
-                                                                _ ->
-                                                                    Nothing
-                                                    in
-                                                    case exports of
-                                                        Src.Open _ _ ->
-                                                            Maybe.or findValue findPort
-
-                                                        Src.Explicit (A.At _ exposedList) ->
-                                                            let
-                                                                isExposed =
-                                                                    List.any
-                                                                        (\( _, e ) ->
-                                                                            case e of
-                                                                                Src.Lower (A.At _ exposedName) ->
-                                                                                    exposedName == name
-
-                                                                                _ ->
-                                                                                    False
-                                                                        )
-                                                                        exposedList
-                                                            in
-                                                            if isExposed then
-                                                                Maybe.or findValue findPort
-
-                                                            else
-                                                                Nothing
-
-                                                Err _ ->
-                                                    Nothing
+                                                            )
                                         )
                     )
 
