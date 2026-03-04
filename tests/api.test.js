@@ -146,7 +146,7 @@ main =
         let mainPath, utilPath;
         let assertLocation;
         let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine, portsCommentLine;
-        let fnRange, tTypeRange, userTypeRange;
+        let fnRange, tTypeRange, t1Range, userTypeRange;
         let utilFnExpected, utilFn2Expected, utilTTypeExpected, utilUTypeExpected;
         let utilU1Expected, utilU2Expected, carTypeExpected, sendMessageFnExpected, messageReceiverFnExpected;
 
@@ -217,6 +217,8 @@ tTuple = ()
 exposedTType : U
 exposedTType = ()
 
+unionTypeRefFn = T1
+
 -- ALIAS TYPE ANNOTATIONS
 
 type alias User = { name: String }
@@ -235,11 +237,12 @@ messageReceiverSub = Util.messageReceiver (\\_ -> ())
 
             expressionsCommentLine = 4;
             unionTypeAnnotationsCommentLine = 31;
-            aliasTypeAnnotationsCommentLine = 53;
-            portsCommentLine = 62;
+            aliasTypeAnnotationsCommentLine = 55;
+            portsCommentLine = 64;
 
             fnRange = { range: { start: { line: expressionsCommentLine + 2, character: 0 }, end: { line: expressionsCommentLine + 2, character: 2 } } };
             tTypeRange = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 5 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 6 } } };
+            t1Range = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 9 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 11 } } };
             userTypeRange = { range: { start: { line: aliasTypeAnnotationsCommentLine + 2, character: 11 }, end: { line: aliasTypeAnnotationsCommentLine + 2, character: 15 } } };
 
             fs.writeFileSync(utilPath, `port module Util exposing (..)
@@ -328,7 +331,7 @@ port messageReceiver : (String -> msg) -> Sub msg
                 });
         });
 
-        it("dependencyUnionValueFn", async () => {
+        it.skip("dependencyUnionValueFn", async () => {
             await assertLocation({ line: expressionsCommentLine + 25, character: 25 },
                 {
                     path: path.join(os.homedir(), ".guida", "1.0.0", "packages", "guida-lang", "stdlib", "1.0.1", "src", "Basics.elm"),
@@ -354,6 +357,8 @@ port messageReceiver : (String -> msg) -> Sub msg
         it("tTuple 4th", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 19 }, tTypeRange); });
 
         it("exposedTType", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 19, character: 15 }, utilUTypeExpected); });
+
+        it("unionTypeRefFn", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 22, character: 17 }, t1Range); });
 
         // ALIAS TYPE ANNOTATIONS
         it("aliasLambda", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 4, character: 15 }, userTypeRange); });

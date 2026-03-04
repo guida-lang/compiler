@@ -111,6 +111,7 @@ findReferencesHelp root path requestLine requestChar =
                             case findLocalReferenceTarget requestLine requestChar values of
                                 Just ( targetName, declarationRegion, body ) ->
                                     let
+                                        matches : List A.Region
                                         matches =
                                             collectVarReferences targetName body
                                     in
@@ -121,6 +122,7 @@ findReferencesHelp root path requestLine requestChar =
 
                                     else
                                         let
+                                            argLoc : List Location
                                             argLoc =
                                                 [ regionToLocation ( path, declarationRegion ) ]
                                         in
@@ -135,36 +137,6 @@ findReferencesHelp root path requestLine requestChar =
                             Task.pure (Err ())
                 )
         )
-
-
-findFocusedPatternRegion : Int -> Int -> List (A.Located Src.Value) -> Maybe A.Region
-findFocusedPatternRegion line char values =
-    case values of
-        [] ->
-            Nothing
-
-        (A.At valueRegion (Src.Value _ _ args ( _, _ ) _)) :: rest ->
-            if regionContainsPosition valueRegion line char then
-                findPatternRegionInArgs line char args
-                    |> Maybe.orElse (findFocusedPatternRegion line char rest)
-
-            else
-                findFocusedPatternRegion line char rest
-
-
-findPatternRegionInArgs : Int -> Int -> List (Src.C1 Src.Pattern) -> Maybe A.Region
-findPatternRegionInArgs line char args =
-    case args of
-        [] ->
-            Nothing
-
-        pattern_ :: rest ->
-            case findPatternRegionAt line char (Src.c1Value pattern_) of
-                Just foundRegion ->
-                    Just foundRegion
-
-                Nothing ->
-                    findPatternRegionInArgs line char rest
 
 
 findPatternRegionAt : Int -> Int -> Src.Pattern -> Maybe A.Region
@@ -254,23 +226,22 @@ findLocalReferenceTarget line char values =
 
 findLocalBodyReferenceTarget : Int -> Int -> List (Src.C1 Src.Pattern) -> Src.Expr -> Maybe ( Name, A.Region, Src.Expr )
 findLocalBodyReferenceTarget line char args body =
-    let
-        argNames : List Name
-        argNames =
-            collectPatternBinderNamesInArgs args
-    in
-    case findBodyUsageNameAt line char body of
-        Just name ->
-            if List.member name argNames then
-                findPatternRegionByNameInArgs name args
-                    |> Maybe.map (\declarationRegion -> ( name, declarationRegion, body ))
+    findBodyUsageNameAt line char body
+        |> Maybe.andThen
+            (\name ->
+                let
+                    argNames : List Name
+                    argNames =
+                        collectPatternBinderNamesInArgs args
+                in
+                if List.member name argNames then
+                    findPatternRegionByNameInArgs name args
+                        |> Maybe.map (\declarationRegion -> ( name, declarationRegion, body ))
 
-            else
-                findBodyUsageRegionAt line char body
-                    |> Maybe.map (\usageRegion -> ( name, usageRegion, body ))
-
-        Nothing ->
-            Nothing
+                else
+                    findBodyUsageRegionAt line char body
+                        |> Maybe.map (\usageRegion -> ( name, usageRegion, body ))
+            )
 
 
 collectPatternBinderNamesInArgs : List (Src.C1 Src.Pattern) -> List Name
@@ -841,7 +812,7 @@ findLocalValueHover requestLine requestChar docs values =
         [] ->
             Nothing
 
-        (A.At valueRegion (Src.Value _ ( _, A.At nameRegion valueName ) _ _ _)) :: rest ->
+        (A.At valueRegion (Src.Value _ ( _, A.At nameRegion _ ) _ _ _)) :: rest ->
             if regionContainsPosition valueRegion requestLine requestChar || regionContainsPosition nameRegion requestLine requestChar then
                 extractHoverFromDocs valueRegion docs values
 
@@ -927,10 +898,12 @@ findSymbolAt root path line char imports values unions aliases =
 
                             Src.Explicit (A.At _ exposedList) ->
                                 let
+                                    exposedWithRegion : List ( A.Region, Src.Exposed )
                                     exposedWithRegion =
                                         List.map
                                             (\c2 ->
                                                 let
+                                                    e : Src.Exposed
                                                     e =
                                                         Src.c2Value c2
                                                 in
@@ -946,6 +919,7 @@ findSymbolAt root path line char imports values unions aliases =
                                             )
                                             exposedList
 
+                                    found : Maybe ImportSymbol
                                     found =
                                         List.stoppableFoldl
                                             (\( region, e ) innerAcc ->
@@ -987,6 +961,7 @@ findSymbolAt root path line char imports values unions aliases =
                                     |> Task.map
                                         (\content ->
                                             let
+                                                syntaxVersion : SV.SyntaxVersion
                                                 syntaxVersion =
                                                     SV.fileSyntaxVersion importPath
                                             in
@@ -1017,12 +992,14 @@ findSymbolAt root path line char imports values unions aliases =
                                     |> Task.map
                                         (\content ->
                                             let
+                                                syntaxVersion : SV.SyntaxVersion
                                                 syntaxVersion =
                                                     SV.fileSyntaxVersion importPath
                                             in
                                             case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                 Ok (Src.Module _ _ _ _ _ targetValues _ _ _ _) ->
                                                     let
+                                                        found : Maybe ( Utils.FilePath, A.Region )
                                                         found =
                                                             List.stoppableFoldl
                                                                 (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
@@ -1265,6 +1242,7 @@ findSymbolAtExpr line char (A.At region expr_) =
 
             Src.Let defs _ body ->
                 let
+                    defToExpr : ( a, A.Located Src.Def ) -> Src.Expr
                     defToExpr ( _, def ) =
                         case A.toValue def of
                             Src.Define _ _ ( _, defBody ) _ ->
@@ -1356,6 +1334,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
         Var Src.LowVar name ->
             let
                 -- 1. Check local definitions
+                maybeLocal : Maybe ( String, A.Region )
                 maybeLocal =
                     List.stoppableFoldl
                         (\(A.At _ (Src.Value _ ( _, A.At region valueName ) _ _ _)) acc ->
@@ -1381,6 +1360,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                     findInImport : Src.Import -> Task Never (Maybe ( String, A.Region ))
                                     findInImport (Src.Import ( _, A.At _ importName ) _ ( _, exposing_ )) =
                                         let
+                                            isExposed : Bool
                                             isExposed =
                                                 case exposing_ of
                                                     Src.Open _ _ ->
@@ -1408,6 +1388,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                         |> Task.map
                                                             (\content ->
                                                                 let
+                                                                    syntaxVersion : SV.SyntaxVersion
                                                                     syntaxVersion =
                                                                         SV.fileSyntaxVersion path
                                                                 in
@@ -1454,113 +1435,151 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                             )
 
         Var Src.CapVar name ->
-            Outline.getAllModulePaths root
-                |> Task.andThen
-                    (\allModulePaths ->
-                        let
-                            findCtorInImport (Src.Import ( _, A.At _ importName ) _ _) =
-                                case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
-                                    Nothing ->
-                                        Task.pure Nothing
+            let
+                -- 1. Check local definitions
+                maybeLocal : Maybe ( String, A.Region )
+                maybeLocal =
+                    List.stoppableFoldl
+                        (\(A.At _ (Src.Union ( _, A.At _ _ ) _ ctors)) acc ->
+                            case
+                                List.stoppableFoldl
+                                    (\( A.At ctorRegion ctorName, _ ) acc2 ->
+                                        if ctorName == name then
+                                            List.Stop (Just ( initialPath, ctorRegion ))
 
-                                    Just path ->
-                                        File.readUtf8 path
-                                            |> Task.map
-                                                (\content ->
-                                                    let
-                                                        syntaxVersion =
-                                                            SV.fileSyntaxVersion path
-                                                    in
-                                                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                                                        Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions _ _ _) ->
+                                        else
+                                            List.Continue acc2
+                                    )
+                                    Nothing
+                                    (List.map Src.c2EolValue ctors)
+                            of
+                                Just foundCtor ->
+                                    List.Stop (Just foundCtor)
+
+                                Nothing ->
+                                    List.Continue acc
+                        )
+                        Nothing
+                        unions
+            in
+            case maybeLocal of
+                Just found ->
+                    Task.pure (Just found)
+
+                Nothing ->
+                    -- 2. Check imports and their exposing lists
+                    Outline.getAllModulePaths root
+                        |> Task.andThen
+                            (\allModulePaths ->
+                                let
+                                    findCtorInImport : Src.Import -> Task Never (Maybe ( Utils.FilePath, A.Region ))
+                                    findCtorInImport (Src.Import ( _, A.At _ importName ) _ _) =
+                                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                                            Nothing ->
+                                                Task.pure Nothing
+
+                                            Just path ->
+                                                File.readUtf8 path
+                                                    |> Task.map
+                                                        (\content ->
                                                             let
-                                                                findCtor =
-                                                                    List.stoppableFoldl
-                                                                        (\(A.At _ (Src.Union ( _, A.At _ _ ) _ ctors)) acc ->
-                                                                            case
-                                                                                List.stoppableFoldl
-                                                                                    (\( A.At ctorRegion ctorName, _ ) acc2 ->
-                                                                                        if ctorName == name then
-                                                                                            List.Stop (Just ( path, ctorRegion ))
-
-                                                                                        else
-                                                                                            List.Continue acc2
-                                                                                    )
-                                                                                    Nothing
-                                                                                    (List.map Src.c2EolValue ctors)
-                                                                            of
-                                                                                Just foundCtor ->
-                                                                                    List.Stop (Just foundCtor)
-
-                                                                                Nothing ->
-                                                                                    List.Continue acc
-                                                                        )
-                                                                        Nothing
-                                                                        targetUnions
+                                                                syntaxVersion : SV.SyntaxVersion
+                                                                syntaxVersion =
+                                                                    SV.fileSyntaxVersion path
                                                             in
-                                                            case exports of
-                                                                Src.Open _ _ ->
-                                                                    findCtor
-
-                                                                Src.Explicit (A.At _ exposedList) ->
+                                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                                Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions _ _ _) ->
                                                                     let
-                                                                        isExposed =
-                                                                            List.any
-                                                                                (\( _, e ) ->
-                                                                                    case e of
-                                                                                        Src.Upper (A.At _ exposedName) ( _, Src.Public _ ) ->
-                                                                                            -- U(..) exposes all ctors for union U
-                                                                                            List.any
-                                                                                                (\(A.At _ (Src.Union ( _, A.At _ unionName ) ctors _)) ->
-                                                                                                    (unionName == exposedName)
-                                                                                                        && List.any
-                                                                                                            (\c ->
-                                                                                                                case Src.c1Value c of
-                                                                                                                    A.At _ ctorName ->
-                                                                                                                        ctorName == name
-                                                                                                            )
-                                                                                                            ctors
-                                                                                                )
-                                                                                                targetUnions
+                                                                        findCtor : Maybe ( Utils.FilePath, A.Region )
+                                                                        findCtor =
+                                                                            List.stoppableFoldl
+                                                                                (\(A.At _ (Src.Union ( _, A.At _ _ ) _ ctors)) acc ->
+                                                                                    case
+                                                                                        List.stoppableFoldl
+                                                                                            (\( A.At ctorRegion ctorName, _ ) acc2 ->
+                                                                                                if ctorName == name then
+                                                                                                    List.Stop (Just ( path, ctorRegion ))
 
-                                                                                        Src.Upper (A.At _ exposedName) ( _, Src.Private ) ->
-                                                                                            -- U2 is directly exposed
-                                                                                            name == exposedName
+                                                                                                else
+                                                                                                    List.Continue acc2
+                                                                                            )
+                                                                                            Nothing
+                                                                                            (List.map Src.c2EolValue ctors)
+                                                                                    of
+                                                                                        Just foundCtor ->
+                                                                                            List.Stop (Just foundCtor)
 
-                                                                                        _ ->
-                                                                                            False
+                                                                                        Nothing ->
+                                                                                            List.Continue acc
                                                                                 )
-                                                                                exposedList
+                                                                                Nothing
+                                                                                targetUnions
                                                                     in
-                                                                    if isExposed then
-                                                                        findCtor
+                                                                    case exports of
+                                                                        Src.Open _ _ ->
+                                                                            findCtor
 
-                                                                    else
-                                                                        Nothing
+                                                                        Src.Explicit (A.At _ exposedList) ->
+                                                                            let
+                                                                                isExposed : Bool
+                                                                                isExposed =
+                                                                                    List.any
+                                                                                        (\( _, e ) ->
+                                                                                            case e of
+                                                                                                Src.Upper (A.At _ exposedName) ( _, Src.Public _ ) ->
+                                                                                                    -- U(..) exposes all ctors for union U
+                                                                                                    List.any
+                                                                                                        (\(A.At _ (Src.Union ( _, A.At _ unionName ) ctors _)) ->
+                                                                                                            (unionName == exposedName)
+                                                                                                                && List.any
+                                                                                                                    (\c ->
+                                                                                                                        case Src.c1Value c of
+                                                                                                                            A.At _ ctorName ->
+                                                                                                                                ctorName == name
+                                                                                                                    )
+                                                                                                                    ctors
+                                                                                                        )
+                                                                                                        targetUnions
 
-                                                        Err _ ->
-                                                            Nothing
-                                                )
+                                                                                                Src.Upper (A.At _ exposedName) ( _, Src.Private ) ->
+                                                                                                    -- U2 is directly exposed
+                                                                                                    name == exposedName
 
-                            tryImports importsList =
-                                case importsList of
-                                    [] ->
-                                        Task.pure Nothing
+                                                                                                _ ->
+                                                                                                    False
+                                                                                        )
+                                                                                        exposedList
+                                                                            in
+                                                                            if isExposed then
+                                                                                findCtor
 
-                                    i :: is ->
-                                        findCtorInImport i
-                                            |> Task.andThen
-                                                (\res ->
-                                                    case res of
-                                                        Just _ ->
-                                                            Task.pure res
+                                                                            else
+                                                                                Nothing
 
-                                                        Nothing ->
-                                                            tryImports is
-                                                )
-                        in
-                        tryImports imports
-                    )
+                                                                Err _ ->
+                                                                    Nothing
+                                                        )
+
+                                    tryImports : List Src.Import -> Task Never (Maybe ( Utils.FilePath, A.Region ))
+                                    tryImports importsList =
+                                        case importsList of
+                                            [] ->
+                                                Task.pure Nothing
+
+                                            i :: is ->
+                                                findCtorInImport i
+                                                    |> Task.andThen
+                                                        (\res ->
+                                                            case res of
+                                                                Just _ ->
+                                                                    Task.pure res
+
+                                                                Nothing ->
+                                                                    tryImports is
+                                                        )
+                                in
+                                tryImports imports
+                            )
 
         VarQual Src.CapVar prefix name ->
             Outline.getAllModulePaths root
@@ -1575,16 +1594,19 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                     |> Task.map
                                         (\content ->
                                             let
+                                                syntaxVersion : SV.SyntaxVersion
                                                 syntaxVersion =
                                                     SV.fileSyntaxVersion path
                                             in
                                             case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                 Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions targetAliases _ _) ->
                                                     let
+                                                        findCtor : Maybe ( Utils.FilePath, A.Region )
                                                         findCtor =
                                                             List.stoppableFoldl
                                                                 (\(A.At _ (Src.Union _ _ ctors)) acc ->
                                                                     let
+                                                                        maybeFoundCtor : Maybe ( Utils.FilePath, A.Region )
                                                                         maybeFoundCtor =
                                                                             List.stoppableFoldl
                                                                                 (\( A.At ctorRegion ctorName, _ ) acc2 ->
@@ -1607,6 +1629,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                 Nothing
                                                                 targetUnions
 
+                                                        findAlias : Maybe ( Utils.FilePath, A.Region )
                                                         findAlias =
                                                             List.stoppableFoldl
                                                                 (\(A.At _ (Src.Alias _ ( _, A.At regionName aliasName ) _ _)) acc ->
@@ -1625,6 +1648,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
 
                                                         Src.Explicit (A.At _ exposedList) ->
                                                             let
+                                                                isExposed : Bool
                                                                 isExposed =
                                                                     List.any
                                                                         (\( _, e ) ->
@@ -1709,12 +1733,14 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                         |> Task.map
                                                             (\content ->
                                                                 let
+                                                                    syntaxVersion : SV.SyntaxVersion
                                                                     syntaxVersion =
                                                                         SV.fileSyntaxVersion path
                                                                 in
                                                                 case Parse.fromByteString Target.GuidaTarget syntaxVersion projectType content of
                                                                     Ok (Src.Module _ _ (A.At _ exports) _ _ targetValues _ _ _ effects) ->
                                                                         let
+                                                                            findValue : Maybe ( Utils.FilePath, A.Region )
                                                                             findValue =
                                                                                 List.stoppableFoldl
                                                                                     (\(A.At _ (Src.Value _ ( _, A.At valueRegion valueName ) _ _ _)) acc ->
@@ -1727,6 +1753,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                                     Nothing
                                                                                     targetValues
 
+                                                                            findPort : Maybe ( Utils.FilePath, A.Region )
                                                                             findPort =
                                                                                 case effects of
                                                                                     Src.Ports portsList ->
@@ -1750,6 +1777,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
 
                                                                             Src.Explicit (A.At _ exposedList) ->
                                                                                 let
+                                                                                    isExposed : Bool
                                                                                     isExposed =
                                                                                         List.any
                                                                                             (\( _, e ) ->
@@ -1816,8 +1844,10 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                         |> Task.andThen
                             (\allModulePaths ->
                                 let
+                                    findTypeInImport : Src.Import -> Task Never (Maybe ( String, A.Region ))
                                     findTypeInImport (Src.Import ( _, A.At _ importName ) _ ( _, exposing_ )) =
                                         let
+                                            isExposed : Bool
                                             isExposed =
                                                 case exposing_ of
                                                     Src.Open _ _ ->
@@ -1845,12 +1875,14 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                         |> Task.map
                                                             (\content ->
                                                                 let
+                                                                    syntaxVersion : SV.SyntaxVersion
                                                                     syntaxVersion =
                                                                         SV.fileSyntaxVersion path
                                                                 in
                                                                 case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                                     Ok (Src.Module _ _ (A.At _ _) _ _ _ extUnions extAliases _ _) ->
                                                                         let
+                                                                            unionRegion : Maybe ( Utils.FilePath, A.Region )
                                                                             unionRegion =
                                                                                 List.stoppableFoldl
                                                                                     (\(A.At _ (Src.Union ( _, A.At regionName unionName ) _ _)) acc ->
@@ -1863,6 +1895,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                                     Nothing
                                                                                     extUnions
 
+                                                                            aliasRegion : Maybe ( Utils.FilePath, A.Region )
                                                                             aliasRegion =
                                                                                 List.stoppableFoldl
                                                                                     (\(A.At _ (Src.Alias _ ( _, A.At regionName aliasName ) _ _)) acc ->
@@ -1884,6 +1917,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                         else
                                             Task.pure Nothing
 
+                                    tryImports : List Src.Import -> Task Never (Maybe ( String, A.Region ))
                                     tryImports importsList =
                                         case importsList of
                                             [] ->
@@ -1917,14 +1951,17 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                     |> Task.map
                                         (\content ->
                                             let
+                                                syntaxVersion : SV.SyntaxVersion
                                                 syntaxVersion =
                                                     SV.fileSyntaxVersion path
                                             in
                                             case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
                                                 Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions targetAliases _ _) ->
                                                     let
+                                                        findType : Maybe ( Utils.FilePath, A.Region )
                                                         findType =
                                                             let
+                                                                unionRegion : Maybe ( Utils.FilePath, A.Region )
                                                                 unionRegion =
                                                                     List.stoppableFoldl
                                                                         (\(A.At _ (Src.Union ( _, A.At regionName unionName ) _ _)) acc ->
@@ -1937,6 +1974,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                         Nothing
                                                                         targetUnions
 
+                                                                aliasRegion : Maybe ( Utils.FilePath, A.Region )
                                                                 aliasRegion =
                                                                     List.stoppableFoldl
                                                                         (\(A.At _ (Src.Alias _ ( _, A.At regionName aliasName ) _ _)) acc ->
@@ -1957,6 +1995,7 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
 
                                                         Src.Explicit (A.At _ exposedList) ->
                                                             let
+                                                                isExposed : Bool
                                                                 isExposed =
                                                                     List.any
                                                                         (\( _, e ) ->

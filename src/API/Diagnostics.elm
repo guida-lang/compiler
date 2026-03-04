@@ -10,8 +10,7 @@ import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
 import Task exposing (Task)
-import Terminal.Terminal.Internal exposing (Parser(..))
-import Utils.Main as Utils exposing (FilePath)
+import Utils.Main exposing (FilePath)
 import Utils.Task.Extra as Task
 
 
