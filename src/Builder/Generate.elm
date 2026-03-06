@@ -38,7 +38,7 @@ import Utils.Task.Extra as Task
 
 
 debug : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
-debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots modules) =
+debug withSourceMaps leadingLines root details (Build.Artifacts _ pkg ifaces roots modules) =
     loadObjects (Stuff.rootPath root) details modules
         |> Task.bind
             (\loading ->
@@ -69,7 +69,7 @@ debug withSourceMaps leadingLines root details (Build.Artifacts pkg ifaces roots
 
 
 dev : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
-dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
+dev withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
         |> Task.bind
             (\objects ->
@@ -92,7 +92,7 @@ dev withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots module
 
 
 prod : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
-prod withSourceMaps leadingLines root details (Build.Artifacts pkg _ roots modules) =
+prod withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
     Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
         |> Task.bind
             (\objects ->

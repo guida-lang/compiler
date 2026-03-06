@@ -46,6 +46,7 @@ import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Reporting.Warning as W
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
@@ -208,7 +209,7 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
 
 
 type Artifacts
-    = Artifacts Pkg.Name Dependencies (NE.Nonempty Root) (List Module)
+    = Artifacts (List W.Module) Pkg.Name Dependencies (NE.Nonempty Root) (List Module)
 
 
 type Module
@@ -300,7 +301,7 @@ fromPaths style root details paths =
 
 
 getRootNames : Artifacts -> NE.Nonempty ModuleName.Raw
-getRootNames (Artifacts _ _ roots _) =
+getRootNames (Artifacts _ _ _ roots _) =
     NE.map getRootName roots
 
 
@@ -486,9 +487,9 @@ type alias ResultDict =
 
 
 type BResult
-    = RNew Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
-    | RSame Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
-    | RCached Bool Details.BuildID (MVar CachedInterface)
+    = RNew W.Module Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
+    | RSame W.Module Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
+    | RCached (Maybe W.Module) Bool Details.BuildID (MVar CachedInterface)
     | RNotFound Import.Problem
     | RProblem Error.Module
     | RBlocked
@@ -528,10 +529,14 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                     )
 
                                         DepsSame _ _ ->
-                                            Utils.newMVar cachedInterfaceEncoder Unneeded
-                                                |> Task.fmap
-                                                    (\mvar ->
-                                                        RCached hasMain lastChange mvar
+                                            File.readBinary W.moduleDecoder (Stuff.guidaw (Stuff.rootPath root) name)
+                                                |> Task.bind
+                                                    (\maybeWarningModule ->
+                                                        Utils.newMVar cachedInterfaceEncoder Unneeded
+                                                            |> Task.fmap
+                                                                (\mvar ->
+                                                                    RCached maybeWarningModule hasMain lastChange mvar
+                                                                )
                                                     )
 
                                         DepsBlock ->
@@ -641,13 +646,13 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
                 |> Task.bind
                     (\result ->
                         case result of
-                            RNew (Details.Local _ _ _ _ lastChange _) iface _ _ ->
+                            RNew _ (Details.Local _ _ _ _ lastChange _) iface _ _ ->
                                 checkDepsHelp root results otherDeps (( dep, iface ) :: new) same cached importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
-                            RSame (Details.Local _ _ _ _ lastChange _) iface _ _ ->
+                            RSame _ (Details.Local _ _ _ _ lastChange _) iface _ _ ->
                                 checkDepsHelp root results otherDeps new (( dep, iface ) :: same) cached importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
-                            RCached _ lastChange mvar ->
+                            RCached _ _ lastChange mvar ->
                                 checkDepsHelp root results otherDeps new same (( dep, mvar ) :: cached) importProblems isBlocked (max lastChange lastDepChange) lastCompile
 
                             RNotFound prob ->
@@ -966,7 +971,7 @@ checkInside name p1 status =
 
 
 compile : Target -> Env -> DocsNeed -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never BResult
-compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local path time deps main lastChange _) source ifaces modul =
+compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ((File.Time posix) as time) deps main lastChange _) source ifaces modul =
     let
         pkg : Pkg.Name
         pkg =
@@ -974,7 +979,7 @@ compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local 
     in
     Compile.compile target root pkg ifaces modul
         |> Task.bind
-            (\result ->
+            (\( warnings, result ) ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
                         case makeDocs target docsNeed canonical of
@@ -1000,56 +1005,65 @@ compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local 
                                 File.writeBinary Opt.localGraphEncoder (Stuff.guidao (Stuff.rootPath root) name) objects
                                     |> Task.bind
                                         (\_ ->
-                                            File.readBinary I.interfaceDecoder guidai
+                                            let
+                                                warningModule : W.Module
+                                                warningModule =
+                                                    W.Module (Src.getName modul) path posix source warnings
+                                            in
+                                            File.writeBinary W.moduleEncoder (Stuff.guidaw (Stuff.rootPath root) name) warningModule
                                                 |> Task.bind
-                                                    (\maybeOldi ->
-                                                        case maybeOldi of
-                                                            Just oldi ->
-                                                                if oldi == iface then
-                                                                    -- iface should be fully forced by equality check
-                                                                    Reporting.report key Reporting.BDone
-                                                                        |> Task.fmap
-                                                                            (\_ ->
-                                                                                let
-                                                                                    local : Details.Local
-                                                                                    local =
-                                                                                        Details.Local path time deps main lastChange buildID
-                                                                                in
-                                                                                RSame local iface objects docs
-                                                                            )
-
-                                                                else
-                                                                    File.writeBinary I.interfaceEncoder guidai iface
-                                                                        |> Task.bind
-                                                                            (\_ ->
+                                                    (\_ ->
+                                                        File.readBinary I.interfaceDecoder guidai
+                                                            |> Task.bind
+                                                                (\maybeOldi ->
+                                                                    case maybeOldi of
+                                                                        Just oldi ->
+                                                                            if oldi == iface then
+                                                                                -- iface should be fully forced by equality check
                                                                                 Reporting.report key Reporting.BDone
                                                                                     |> Task.fmap
                                                                                         (\_ ->
                                                                                             let
                                                                                                 local : Details.Local
                                                                                                 local =
-                                                                                                    Details.Local path time deps main buildID buildID
+                                                                                                    Details.Local path time deps main lastChange buildID
                                                                                             in
-                                                                                            RNew local iface objects docs
+                                                                                            RSame warningModule local iface objects docs
                                                                                         )
-                                                                            )
 
-                                                            _ ->
-                                                                -- iface may be lazy still
-                                                                File.writeBinary I.interfaceEncoder guidai iface
-                                                                    |> Task.bind
-                                                                        (\_ ->
-                                                                            Reporting.report key Reporting.BDone
-                                                                                |> Task.fmap
+                                                                            else
+                                                                                File.writeBinary I.interfaceEncoder guidai iface
+                                                                                    |> Task.bind
+                                                                                        (\_ ->
+                                                                                            Reporting.report key Reporting.BDone
+                                                                                                |> Task.fmap
+                                                                                                    (\_ ->
+                                                                                                        let
+                                                                                                            local : Details.Local
+                                                                                                            local =
+                                                                                                                Details.Local path time deps main buildID buildID
+                                                                                                        in
+                                                                                                        RNew warningModule local iface objects docs
+                                                                                                    )
+                                                                                        )
+
+                                                                        _ ->
+                                                                            -- iface may be lazy still
+                                                                            File.writeBinary I.interfaceEncoder guidai iface
+                                                                                |> Task.bind
                                                                                     (\_ ->
-                                                                                        let
-                                                                                            local : Details.Local
-                                                                                            local =
-                                                                                                Details.Local path time deps main buildID buildID
-                                                                                        in
-                                                                                        RNew local iface objects docs
+                                                                                        Reporting.report key Reporting.BDone
+                                                                                            |> Task.fmap
+                                                                                                (\_ ->
+                                                                                                    let
+                                                                                                        local : Details.Local
+                                                                                                        local =
+                                                                                                            Details.Local path time deps main buildID buildID
+                                                                                                    in
+                                                                                                    RNew warningModule local iface objects docs
+                                                                                                )
                                                                                     )
-                                                                        )
+                                                                )
                                                     )
                                         )
 
@@ -1083,13 +1097,13 @@ writeDetails root (Details.Details time outline buildID locals foreigns extras) 
 addNewLocal : ModuleName.Raw -> BResult -> Dict String ModuleName.Raw Details.Local -> Dict String ModuleName.Raw Details.Local
 addNewLocal name result locals =
     case result of
-        RNew local _ _ _ ->
+        RNew _ local _ _ _ ->
             Dict.insert identity name local locals
 
-        RSame local _ _ _ ->
+        RSame _ local _ _ _ ->
             Dict.insert identity name local locals
 
-        RCached _ _ _ ->
+        RCached _ _ _ _ ->
             locals
 
         RNotFound _ ->
@@ -1130,13 +1144,13 @@ finalizeExposed root docsGoal exposed results =
 addErrors : BResult -> List Error.Module -> List Error.Module
 addErrors result errors =
     case result of
-        RNew _ _ _ _ ->
+        RNew _ _ _ _ _ ->
             errors
 
-        RSame _ _ _ _ ->
+        RSame _ _ _ _ _ ->
             errors
 
-        RCached _ _ _ ->
+        RCached _ _ _ _ ->
             errors
 
         RNotFound _ ->
@@ -1155,16 +1169,47 @@ addErrors result errors =
             errors
 
 
+gatherWarnings : BResult -> List W.Module -> List W.Module
+gatherWarnings result warnings =
+    case result of
+        RNew ws _ _ _ _ ->
+            ws :: warnings
+
+        RSame ws _ _ _ _ ->
+            ws :: warnings
+
+        RCached Nothing _ _ _ ->
+            warnings
+
+        RCached (Just ws) _ _ _ ->
+            ws :: warnings
+
+        RNotFound _ ->
+            warnings
+
+        RProblem _ ->
+            warnings
+
+        RBlocked ->
+            warnings
+
+        RForeign _ ->
+            warnings
+
+        RKernel ->
+            warnings
+
+
 addImportProblems : Dict String ModuleName.Raw BResult -> ModuleName.Raw -> List ( ModuleName.Raw, Import.Problem ) -> List ( ModuleName.Raw, Import.Problem )
 addImportProblems results name problems =
     case Utils.find identity name results of
-        RNew _ _ _ _ ->
+        RNew _ _ _ _ _ ->
             problems
 
-        RSame _ _ _ _ ->
+        RSame _ _ _ _ _ ->
             problems
 
-        RCached _ _ _ ->
+        RCached _ _ _ _ ->
             problems
 
         RNotFound p ->
@@ -1255,13 +1300,13 @@ finalizeDocs goal results =
 toDocs : BResult -> Maybe Docs.Module
 toDocs result =
     case result of
-        RNew _ _ _ d ->
+        RNew _ _ _ _ d ->
             d
 
-        RSame _ _ _ d ->
+        RSame _ _ _ _ d ->
             d
 
-        RCached _ _ _ ->
+        RCached _ _ _ _ ->
             Nothing
 
         RNotFound _ ->
@@ -1380,7 +1425,7 @@ finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Mod
         compileInput ifaces =
             Compile.compile (Stuff.rootToTarget root) root pkg ifaces modul
                 |> Task.fmap
-                    (\result ->
+                    (\( _, result ) ->
                         case result of
                             Ok (Compile.Artifacts ((Can.Module name _ _ _ _ _ _ _) as canonical) annotations objects) ->
                                 let
@@ -1739,7 +1784,7 @@ compileOutside (Env key root projectType _ _ _ _) (Details.Local path time _ _ _
     in
     Compile.compile (Stuff.rootToTarget root) root pkg ifaces modul
         |> Task.bind
-            (\result ->
+            (\( _, result ) ->
                 case result of
                     Ok (Compile.Artifacts canonical annotations objects) ->
                         Reporting.report key Reporting.BDone
@@ -1766,8 +1811,13 @@ toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
             Err (Exit.BuildBadModules (Stuff.rootPath root) e es)
 
         Ok roots ->
+            let
+                warnings : List W.Module
+                warnings =
+                    Dict.foldr compare (\_ -> gatherWarnings) [] results
+            in
             Ok <|
-                Artifacts (projectTypeToPkg projectType) foreigns roots <|
+                Artifacts warnings (projectTypeToPkg projectType) foreigns roots <|
                     Dict.foldr compare addInside (NE.foldr addOutside [] rootResults) results
 
 
@@ -1819,13 +1869,13 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
 addInside : ModuleName.Raw -> BResult -> List Module -> List Module
 addInside name result modules =
     case result of
-        RNew _ iface objs _ ->
+        RNew _ _ iface objs _ ->
             Fresh name iface objs :: modules
 
-        RSame _ iface objs _ ->
+        RSame _ _ iface objs _ ->
             Fresh name iface objs :: modules
 
-        RCached main _ mvar ->
+        RCached _ main _ mvar ->
             Cached name main mvar :: modules
 
         RNotFound _ ->
@@ -1877,27 +1927,30 @@ dictRawMVarBResultEncoder =
 bResultEncoder : BResult -> BE.Encoder
 bResultEncoder bResult =
     case bResult of
-        RNew local iface objects docs ->
+        RNew warnings local iface objects docs ->
             BE.sequence
                 [ BE.unsignedInt8 0
+                , W.moduleEncoder warnings
                 , Details.localEncoder local
                 , I.interfaceEncoder iface
                 , Opt.localGraphEncoder objects
                 , BE.maybe Docs.bytesModuleEncoder docs
                 ]
 
-        RSame local iface objects docs ->
+        RSame warnings local iface objects docs ->
             BE.sequence
                 [ BE.unsignedInt8 1
+                , W.moduleEncoder warnings
                 , Details.localEncoder local
                 , I.interfaceEncoder iface
                 , Opt.localGraphEncoder objects
                 , BE.maybe Docs.bytesModuleEncoder docs
                 ]
 
-        RCached main lastChange (MVar ref) ->
+        RCached warnings main lastChange (MVar ref) ->
             BE.sequence
                 [ BE.unsignedInt8 2
+                , BE.maybe W.moduleEncoder warnings
                 , BE.bool main
                 , BE.int lastChange
                 , BE.int ref
@@ -1935,21 +1988,24 @@ bResultDecoder =
             (\idx ->
                 case idx of
                     0 ->
-                        BD.map4 RNew
+                        BD.map5 RNew
+                            W.moduleDecoder
                             Details.localDecoder
                             I.interfaceDecoder
                             Opt.localGraphDecoder
                             (BD.maybe Docs.bytesModuleDecoder)
 
                     1 ->
-                        BD.map4 RSame
+                        BD.map5 RSame
+                            W.moduleDecoder
                             Details.localDecoder
                             I.interfaceDecoder
                             Opt.localGraphDecoder
                             (BD.maybe Docs.bytesModuleDecoder)
 
                     2 ->
-                        BD.map3 RCached
+                        BD.map4 RCached
+                            (BD.maybe W.moduleDecoder)
                             BD.bool
                             BD.int
                             (BD.map MVar BD.int)
@@ -2256,9 +2312,10 @@ docsNeedDecoder =
 
 
 artifactsEncoder : Artifacts -> BE.Encoder
-artifactsEncoder (Artifacts pkg ifaces roots modules) =
+artifactsEncoder (Artifacts warnings pkg ifaces roots modules) =
     BE.sequence
-        [ Pkg.nameEncoder pkg
+        [ BE.list W.moduleEncoder warnings
+        , Pkg.nameEncoder pkg
         , dependenciesEncoder ifaces
         , BE.nonempty rootEncoder roots
         , BE.list moduleEncoder modules
@@ -2267,7 +2324,8 @@ artifactsEncoder (Artifacts pkg ifaces roots modules) =
 
 artifactsDecoder : BD.Decoder Artifacts
 artifactsDecoder =
-    BD.map4 Artifacts
+    BD.map5 Artifacts
+        (BD.list W.moduleDecoder)
         Pkg.nameDecoder
         dependenciesDecoder
         (BD.nonempty rootDecoder)

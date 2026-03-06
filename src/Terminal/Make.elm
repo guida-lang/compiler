@@ -18,11 +18,18 @@ import Builder.Generate as Generate
 import Builder.Guida.Details as Details
 import Builder.Reporting as Reporting
 import Builder.Reporting.Exit as Exit
+import Builder.Reporting.Exit.Help as Help
 import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Reporting.Doc as D
+import Compiler.Reporting.Render.Code as Code
+import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Reporting.Report as Report
+import Compiler.Reporting.Warning as W
 import Maybe.Extra as Maybe
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
@@ -94,51 +101,55 @@ runHelp root paths style (Flags debug optimize withSourceMaps maybeOutput _ mayb
                                                     buildPaths style root details (NE.Nonempty p ps)
                                                         |> Task.bind
                                                             (\artifacts ->
-                                                                case maybeOutput of
-                                                                    Nothing ->
-                                                                        case getMains artifacts of
-                                                                            [] ->
-                                                                                Task.pure ()
+                                                                Task.io (reportWarnings root artifacts)
+                                                                    |> Task.bind
+                                                                        (\_ ->
+                                                                            case maybeOutput of
+                                                                                Nothing ->
+                                                                                    case getMains artifacts of
+                                                                                        [] ->
+                                                                                            Task.pure ()
 
-                                                                            [ name ] ->
-                                                                                toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                                    |> Task.bind
-                                                                                        (\builder ->
-                                                                                            generate style "index.html" (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
-                                                                                        )
+                                                                                        [ name ] ->
+                                                                                            toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
+                                                                                                |> Task.bind
+                                                                                                    (\builder ->
+                                                                                                        generate style "index.html" (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
+                                                                                                    )
 
-                                                                            name :: names ->
-                                                                                toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                                                    |> Task.bind
-                                                                                        (\builder ->
-                                                                                            generate style "guida.js" builder (NE.Nonempty name names)
-                                                                                        )
+                                                                                        name :: names ->
+                                                                                            toBuilder withSourceMaps 0 root details desiredMode artifacts
+                                                                                                |> Task.bind
+                                                                                                    (\builder ->
+                                                                                                        generate style "guida.js" builder (NE.Nonempty name names)
+                                                                                                    )
 
-                                                                    Just DevNull ->
-                                                                        Task.pure ()
+                                                                                Just DevNull ->
+                                                                                    Task.pure ()
 
-                                                                    Just (JS target) ->
-                                                                        case getNoMains artifacts of
-                                                                            [] ->
-                                                                                toBuilder withSourceMaps 0 root details desiredMode artifacts
-                                                                                    |> Task.bind
-                                                                                        (\builder ->
-                                                                                            generate style target builder (Build.getRootNames artifacts)
-                                                                                        )
+                                                                                Just (JS target) ->
+                                                                                    case getNoMains artifacts of
+                                                                                        [] ->
+                                                                                            toBuilder withSourceMaps 0 root details desiredMode artifacts
+                                                                                                |> Task.bind
+                                                                                                    (\builder ->
+                                                                                                        generate style target builder (Build.getRootNames artifacts)
+                                                                                                    )
 
-                                                                            name :: names ->
-                                                                                Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
+                                                                                        name :: names ->
+                                                                                            Task.throw (Exit.MakeNonMainFilesIntoJavaScript name names)
 
-                                                                    Just (Html target) ->
-                                                                        hasOneMain artifacts
-                                                                            |> Task.bind
-                                                                                (\name ->
-                                                                                    toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
+                                                                                Just (Html target) ->
+                                                                                    hasOneMain artifacts
                                                                                         |> Task.bind
-                                                                                            (\builder ->
-                                                                                                generate style target (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
+                                                                                            (\name ->
+                                                                                                toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
+                                                                                                    |> Task.bind
+                                                                                                        (\builder ->
+                                                                                                            generate style target (Html.sandwich (Stuff.rootToTarget root) name builder) (NE.Nonempty name [])
+                                                                                                        )
                                                                                             )
-                                                                                )
+                                                                        )
                                                             )
                                         )
                             )
@@ -230,7 +241,7 @@ buildPaths style root details paths =
 
 
 getMains : Build.Artifacts -> List ModuleName.Raw
-getMains (Build.Artifacts _ _ roots modules) =
+getMains (Build.Artifacts _ _ _ roots modules) =
     List.filterMap (getMain modules) (NE.toList roots)
 
 
@@ -264,7 +275,7 @@ isMain targetName modul =
 
 
 hasOneMain : Build.Artifacts -> Task Exit.Make ModuleName.Raw
-hasOneMain (Build.Artifacts _ _ roots modules) =
+hasOneMain (Build.Artifacts _ _ _ roots modules) =
     case roots of
         NE.Nonempty root [] ->
             Task.mio Exit.MakeNoMain (Task.pure <| getMain modules root)
@@ -278,7 +289,7 @@ hasOneMain (Build.Artifacts _ _ roots modules) =
 
 
 getNoMains : Build.Artifacts -> List ModuleName.Raw
-getNoMains (Build.Artifacts _ _ roots modules) =
+getNoMains (Build.Artifacts _ _ _ roots modules) =
     List.filterMap (getNoMain modules) (NE.toList roots)
 
 
@@ -299,6 +310,70 @@ getNoMain modules root =
 
                 Nothing ->
                     Just name
+
+
+
+-- WARNINGS
+
+
+reportWarnings : Stuff.Root -> Build.Artifacts -> Task Never ()
+reportWarnings root (Build.Artifacts warnings _ _ _ _) =
+    if List.isEmpty warnings then
+        Task.pure ()
+
+    else
+        let
+            rootPath : FilePath
+            rootPath =
+                Stuff.rootPath root
+
+            target : Target
+            target =
+                Stuff.rootToTarget root
+        in
+        Utils.listTraverse (warningToDoc target rootPath) warnings
+            |> Task.bind (\docs -> Help.toStderr (D.vcat (docs ++ [ D.fromChars "" ])))
+
+
+warningToDoc : Target -> FilePath -> W.Module -> Task Never D.Doc
+warningToDoc target rootPath { absolutePath, warnings } =
+    File.readUtf8 absolutePath
+        |> Task.fmap
+            (\sourceCode ->
+                let
+                    reports : List Report.Report
+                    reports =
+                        List.map (W.toReport target L.empty (Code.toSource sourceCode)) warnings
+                in
+                D.vcat (List.map (reportToDoc rootPath absolutePath) reports)
+            )
+
+
+reportToDoc : FilePath -> FilePath -> Report.Report -> D.Doc
+reportToDoc rootPath absolutePath (Report.Report title _ _ message) =
+    D.vcat
+        [ toMessageBar title (Utils.fpMakeRelative rootPath absolutePath)
+        , D.fromChars ""
+        , message
+        , D.fromChars ""
+        ]
+
+
+toMessageBar : String -> String -> D.Doc
+toMessageBar title filePath =
+    let
+        usedSpace : Int
+        usedSpace =
+            4 + String.length title + 1 + String.length filePath
+    in
+    D.yellow <|
+        D.fromChars <|
+            "-- "
+                ++ title
+                ++ " "
+                ++ String.repeat (max 1 (80 - usedSpace)) "-"
+                ++ " "
+                ++ filePath
 
 
 

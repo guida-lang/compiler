@@ -13,6 +13,7 @@ module API.Make exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
+import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Guida.Details as Details
 import Builder.Reporting as Reporting
@@ -21,7 +22,12 @@ import Builder.Stuff as Stuff
 import Compiler.AST.Optimized as Opt
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
+import Compiler.Generate.Target exposing (Target)
 import Compiler.Guida.ModuleName as ModuleName
+import Compiler.Reporting.Render.Code as Code
+import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Reporting.Report as Report
+import Compiler.Reporting.Warning as W
 import Maybe.Extra as Maybe
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
@@ -52,7 +58,7 @@ type ReportType
 -- RUN
 
 
-run : String -> Flags -> Task Never (Result Exit.Make String)
+run : String -> Flags -> Task Never (Result Exit.Make ( String, List Report.WarningModuleReport ))
 run path flags =
     Stuff.findRoot
         |> Task.bind
@@ -66,7 +72,7 @@ run path flags =
             )
 
 
-runHelp : Stuff.Root -> String -> Flags -> Task Never (Result Exit.Make String)
+runHelp : Stuff.Root -> String -> Flags -> Task Never (Result Exit.Make ( String, List Report.WarningModuleReport ))
 runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
@@ -85,15 +91,30 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                                         (\details ->
                                             buildPaths style root details (NE.Nonempty path [])
                                                 |> Task.bind
-                                                    (\artifacts ->
+                                                    (\((Build.Artifacts warnings _ _ _ _) as artifacts) ->
                                                         case getMains artifacts of
                                                             [] ->
                                                                 -- Task.pure ()
                                                                 crash "No main!"
 
                                                             [ name ] ->
-                                                                toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                    |> Task.bind (Task.pure << Html.sandwich (Stuff.rootToTarget root) name)
+                                                                let
+                                                                    target : Target
+                                                                    target =
+                                                                        Stuff.rootToTarget root
+
+                                                                    buildOutput : Task Exit.Make String
+                                                                    buildOutput =
+                                                                        toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
+                                                                            |> Task.fmap (Html.sandwich target name)
+
+                                                                    buildWarnings : Task Exit.Make (List Report.WarningModuleReport)
+                                                                    buildWarnings =
+                                                                        warnings
+                                                                            |> Utils.listTraverse (warningToReport target)
+                                                                            |> Task.mapError never
+                                                                in
+                                                                Task.map2 Tuple.pair buildOutput buildWarnings
 
                                                             _ ->
                                                                 crash "TODO"
@@ -135,11 +156,27 @@ buildPaths style root details paths =
 
 
 
+-- EXTRACT WARNINGS
+
+
+warningToReport : Target -> W.Module -> Task Never Report.WarningModuleReport
+warningToReport target { absolutePath, name, warnings } =
+    File.readUtf8 absolutePath
+        |> Task.fmap
+            (\sourceCode ->
+                { path = absolutePath
+                , name = name
+                , warnings = List.map (W.toReport target L.empty (Code.toSource sourceCode)) warnings
+                }
+            )
+
+
+
 -- GET MAINS
 
 
 getMains : Build.Artifacts -> List ModuleName.Raw
-getMains (Build.Artifacts _ _ roots modules) =
+getMains (Build.Artifacts _ _ _ roots modules) =
     List.filterMap (getMain modules) (NE.toList roots)
 
 

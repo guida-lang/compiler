@@ -18,6 +18,7 @@ import Compiler.Optimize.Module as Optimize
 import Compiler.Reporting.Error as E
 import Compiler.Reporting.Render.Type.Localizer as Localizer
 import Compiler.Reporting.Result as R
+import Compiler.Reporting.Warning as W
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
@@ -34,39 +35,48 @@ type Artifacts
     = Artifacts Can.Module (Dict String Name Can.Annotation) Opt.LocalGraph
 
 
-compile : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
+compile : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never ( List W.Warning, Result E.Error Artifacts )
 compile target root pkg ifaces modul =
-    Task.pure (canonicalize target root pkg ifaces modul)
-        |> Task.fmap
-            (\canonicalResult ->
-                case canonicalResult of
-                    Ok canonical ->
-                        Result.map2 (\annotations () -> annotations)
-                            (typeCheck target modul canonical)
-                            (nitpick target canonical)
-                            |> Result.andThen
-                                (\annotations ->
-                                    optimize target modul annotations canonical
-                                        |> Result.map (\objects -> Artifacts canonical annotations objects)
-                                )
+    let
+        ( canonicalWarnings, canonicalResult ) =
+            canonicalize target root pkg ifaces modul
+    in
+    case canonicalResult of
+        Ok canonical ->
+            case
+                Result.map2 (\annotations () -> annotations)
+                    (typeCheck target modul canonical)
+                    (nitpick target canonical)
+            of
+                Ok annotations ->
+                    let
+                        ( optWarnings, optResult ) =
+                            optimize target modul annotations canonical
+                    in
+                    Task.pure
+                        ( canonicalWarnings ++ optWarnings
+                        , Result.map (\objects -> Artifacts canonical annotations objects) optResult
+                        )
 
-                    Err err ->
-                        Err err
-            )
+                Err err ->
+                    Task.pure ( canonicalWarnings, Err err )
+
+        Err err ->
+            Task.pure ( canonicalWarnings, Err err )
 
 
 
 -- PHASES
 
 
-canonicalize : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Result E.Error Can.Module
+canonicalize : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> ( List W.Warning, Result E.Error Can.Module )
 canonicalize target root pkg ifaces modul =
-    case Tuple.second (R.run (Canonicalize.canonicalize target root pkg ifaces modul)) of
-        Ok canonical ->
-            Ok canonical
+    case R.run (Canonicalize.canonicalize target root pkg ifaces modul) of
+        ( warnings, Ok canonical ) ->
+            ( warnings, Ok canonical )
 
-        Err errors ->
-            Err (E.BadNames errors)
+        ( warnings, Err errors ) ->
+            ( warnings, Err (E.BadNames errors) )
 
 
 typeCheck : Target -> Src.Module -> Can.Module -> Result E.Error (Dict String Name Can.Annotation)
@@ -89,11 +99,11 @@ nitpick target canonical =
             Err (E.BadPatterns errors)
 
 
-optimize : Target -> Src.Module -> Dict String Name.Name Can.Annotation -> Can.Module -> Result E.Error Opt.LocalGraph
+optimize : Target -> Src.Module -> Dict String Name.Name Can.Annotation -> Can.Module -> ( List W.Warning, Result E.Error Opt.LocalGraph )
 optimize target ((Src.Module syntaxVersion _ _ _ _ _ _ _ _ _) as modul) annotations canonical =
-    case Tuple.second (R.run (Optimize.optimize target syntaxVersion annotations canonical)) of
-        Ok localGraph ->
-            Ok localGraph
+    case R.run (Optimize.optimize target syntaxVersion annotations canonical) of
+        ( warnings, Ok localGraph ) ->
+            ( warnings, Ok localGraph )
 
-        Err errors ->
-            Err (E.BadMains (Localizer.fromModule modul) errors)
+        ( warnings, Err errors ) ->
+            ( warnings, Err (E.BadMains (Localizer.fromModule modul) errors) )

@@ -462,8 +462,8 @@ toFinalMessage done result =
                 Exit.BuildBadModules _ _ [] ->
                     "Detected problems in 1 module."
 
-                Exit.BuildBadModules _ _ (_ :: ps) ->
-                    "Detected problems in " ++ String.fromInt (2 + List.length ps) ++ " modules."
+                Exit.BuildBadModules _ _ ps ->
+                    "Detected problems in " ++ String.fromInt (1 + List.length ps) ++ " modules."
 
                 Exit.BuildProjectProblem _ ->
                     "Detected a problem."
