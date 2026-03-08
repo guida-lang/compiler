@@ -370,8 +370,8 @@ type alias BResult a =
     Result Exit.BuildProblem a
 
 
-trackBuild : BD.Decoder a -> (a -> BE.Encoder) -> Style -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
-trackBuild decoder encoder style callback =
+trackBuild : BD.Decoder a -> (a -> BE.Encoder) -> Style -> (a -> ( Int, Bool )) -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
+trackBuild decoder encoder style extractWarningInfo callback =
     case style of
         Silent ->
             callback (Key (\_ -> Task.pure ()))
@@ -391,7 +391,7 @@ trackBuild decoder encoder style callback =
                         Utils.forkIO
                             (Utils.takeMVar (BD.succeed ()) mvar
                                 |> Task.bind (\_ -> putStrFlush "Compiling ...")
-                                |> Task.bind (\_ -> buildLoop decoder chan 0)
+                                |> Task.bind (\_ -> buildLoop decoder chan 0 extractWarningInfo)
                                 |> Task.bind (\_ -> Utils.putMVar (\_ -> BE.bool True) mvar ())
                             )
                             |> Task.bind (\_ -> callback (Key (Utils.writeChan chanEncoder chan << Err)))
@@ -407,8 +407,8 @@ type BMsg
     = BDone
 
 
-buildLoop : BD.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> Task Never ()
-buildLoop decoder chan done =
+buildLoop : BD.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> (a -> ( Int, Bool )) -> Task Never ()
+buildLoop decoder chan done extractWarningInfo =
     Utils.readChan (BD.result bMsgDecoder (bResultDecoder decoder)) chan
         |> Task.bind
             (\msg ->
@@ -420,13 +420,13 @@ buildLoop decoder chan done =
                                 done + 1
                         in
                         putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
-                            |> Task.bind (\_ -> buildLoop decoder chan done1)
+                            |> Task.bind (\_ -> buildLoop decoder chan done1 extractWarningInfo)
 
                     Ok result ->
                         let
                             message : String
                             message =
-                                toFinalMessage done result
+                                toFinalMessage done extractWarningInfo result
 
                             width : Int
                             width =
@@ -443,19 +443,48 @@ buildLoop decoder chan done =
             )
 
 
-toFinalMessage : Int -> BResult a -> String
-toFinalMessage done result =
+toFinalMessage : Int -> (a -> ( Int, Bool )) -> BResult a -> String
+toFinalMessage done extractWarningInfo result =
     case result of
-        Ok _ ->
-            case done of
-                0 ->
-                    "Success!"
+        Ok value ->
+            let
+                ( warningCount, denyWarnings ) =
+                    extractWarningInfo value
+            in
+            if denyWarnings && warningCount > 0 then
+                let
+                    warningWord : String
+                    warningWord =
+                        if warningCount == 1 then
+                            "warning"
 
-                1 ->
-                    "Success! Compiled 1 module."
+                        else
+                            "warnings"
+                in
+                "Failed! " ++ String.fromInt warningCount ++ " " ++ warningWord ++ " with --deny-warnings enabled."
 
-                n ->
-                    "Success! Compiled " ++ String.fromInt n ++ " modules."
+            else
+                let
+                    warningNote : String
+                    warningNote =
+                        if warningCount == 0 then
+                            ""
+
+                        else if warningCount == 1 then
+                            " (1 warning)"
+
+                        else
+                            " (" ++ String.fromInt warningCount ++ " warnings)"
+                in
+                case done of
+                    0 ->
+                        "Success!" ++ warningNote
+
+                    1 ->
+                        "Success! Compiled 1 module." ++ warningNote
+
+                    n ->
+                        "Success! Compiled " ++ String.fromInt n ++ " modules." ++ warningNote
 
         Err problem ->
             case problem of

@@ -48,7 +48,7 @@ app =
                                 )
 
                     MakeArgs path debug optimize withSourceMaps ->
-                        Make.run path (Make.Flags debug optimize withSourceMaps)
+                        Make.run path (Make.Flags debug optimize withSourceMaps False)
                             |> Task.bind
                                 (\result ->
                                     case result of
@@ -123,7 +123,7 @@ app =
                                     )
 
                     DiagnosticsArgs (DiagnosticsSourcePath path) ->
-                        Make.run path (Make.Flags False False False)
+                        Make.run path (Make.Flags False False False False)
                             |> Task.bind
                                 (\result ->
                                     case result of
