@@ -41,7 +41,7 @@ import Utils.Task.Extra as Task
 
 
 type Flags
-    = Flags Bool Bool Bool Bool
+    = Flags Bool Bool Bool
 
 
 type Output
@@ -73,7 +73,7 @@ run path flags =
 
 
 runHelp : Stuff.Root -> String -> Flags -> Task Never (Result Exit.Make ( String, List Report.WarningModuleReport ))
-runHelp root path (Flags debug optimize withSourceMaps denyWarnings) =
+runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock (Stuff.rootPath root) <|
@@ -89,7 +89,7 @@ runHelp root path (Flags debug optimize withSourceMaps denyWarnings) =
                                 Task.eio Exit.MakeBadDetails (Details.load style scope root)
                                     |> Task.bind
                                         (\details ->
-                                            buildPaths style root details denyWarnings (NE.Nonempty path [])
+                                            buildPaths style root details False (NE.Nonempty path [])
                                                 |> Task.bind
                                                     (\((Build.Artifacts warnings _ _ _ _) as artifacts) ->
                                                         case getMains artifacts of

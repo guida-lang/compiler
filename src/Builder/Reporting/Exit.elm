@@ -3505,6 +3505,7 @@ toRedirectDoc response =
 type Make
     = MakeNoOutline
     | MakeCannotOptimizeAndDebug
+    | MakeCannotSuppressAndDenyWarnings
     | MakeBadDetails Details
     | MakeAppNeedsFileNames
     | MakeGuidaPkgNeedsExposing
@@ -3546,6 +3547,27 @@ makeToReport make =
                 )
                 [ D.reflow
                     "I need to take away information to optimize things, and I need to add information to add the debugger. It is impossible to do both at once though! Pick just one of those flags and it should work!"
+                ]
+
+        MakeCannotSuppressAndDenyWarnings ->
+            Help.docReport "CLASHING FLAGS"
+                Nothing
+                (D.fillSep
+                    [ D.fromChars "I"
+                    , D.fromChars "cannot"
+                    , D.fromChars "compile"
+                    , D.fromChars "with"
+                    , D.red (D.fromChars "--no-warnings")
+                    , D.fromChars "and"
+                    , D.red (D.fromChars "--deny-warnings")
+                    , D.fromChars "at"
+                    , D.fromChars "the"
+                    , D.fromChars "same"
+                    , D.fromChars "time."
+                    ]
+                )
+                [ D.reflow
+                    "The --no-warnings flag suppresses all warnings, while --deny-warnings treats them as errors. These are contradictory! Pick just one of those flags and it should work!"
                 ]
 
         MakeBadDetails detailsProblem ->
