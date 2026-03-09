@@ -223,7 +223,7 @@ type alias Dependencies =
 
 fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> Bool -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
 fromPaths style root details suppressWarnings denyWarnings paths =
-    Reporting.trackBuild artifactsDecoder artifactsEncoder style (\(Artifacts warnings _ _ _ _) -> ( List.length warnings, suppressWarnings, denyWarnings )) <|
+    Reporting.trackBuild artifactsDecoder artifactsEncoder style (\(Artifacts warnModules _ _ _ _) -> ( List.length (List.concatMap .warnings warnModules), suppressWarnings, denyWarnings )) <|
         \key ->
             makeEnv key root details
                 |> Task.bind
