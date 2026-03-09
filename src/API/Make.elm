@@ -89,7 +89,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                                 Task.eio Exit.MakeBadDetails (Details.load style scope root)
                                     |> Task.bind
                                         (\details ->
-                                            buildPaths style root details False (NE.Nonempty path [])
+                                            buildPaths style root details False False (NE.Nonempty path [])
                                                 |> Task.bind
                                                     (\((Build.Artifacts warnings _ _ _ _) as artifacts) ->
                                                         case getMains artifacts of
@@ -149,10 +149,10 @@ getMode debug optimize =
 -- BUILD PROJECTS
 
 
-buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
-buildPaths style root details denyWarnings paths =
+buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> Bool -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
+buildPaths style root details suppressWarnings denyWarnings paths =
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromPaths style root details denyWarnings paths
+        Build.fromPaths style root details suppressWarnings denyWarnings paths
 
 
 

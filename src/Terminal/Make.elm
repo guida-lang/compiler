@@ -257,17 +257,16 @@ buildExposed style root details maybeDocs exposed =
 buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Warnings -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
 buildPaths style root details warnings paths =
     let
-        denyWarnings : Bool
-        denyWarnings =
+        ( suppressWarnings, denyWarnings ) =
             case warnings of
                 NoWarnings ->
-                    False
+                    ( True, False )
 
                 Warnings deny ->
-                    deny
+                    ( False, deny )
     in
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromPaths style root details denyWarnings paths
+        Build.fromPaths style root details suppressWarnings denyWarnings paths
 
 
 

@@ -370,7 +370,7 @@ type alias BResult a =
     Result Exit.BuildProblem a
 
 
-trackBuild : BD.Decoder a -> (a -> BE.Encoder) -> Style -> (a -> ( Int, Bool )) -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
+trackBuild : BD.Decoder a -> (a -> BE.Encoder) -> Style -> (a -> ( Int, Bool, Bool )) -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
 trackBuild decoder encoder style extractWarningInfo callback =
     case style of
         Silent ->
@@ -407,7 +407,7 @@ type BMsg
     = BDone
 
 
-buildLoop : BD.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> (a -> ( Int, Bool )) -> Task Never ()
+buildLoop : BD.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> (a -> ( Int, Bool, Bool )) -> Task Never ()
 buildLoop decoder chan done extractWarningInfo =
     Utils.readChan (BD.result bMsgDecoder (bResultDecoder decoder)) chan
         |> Task.bind
@@ -443,12 +443,12 @@ buildLoop decoder chan done extractWarningInfo =
             )
 
 
-toFinalMessage : Int -> (a -> ( Int, Bool )) -> BResult a -> String
+toFinalMessage : Int -> (a -> ( Int, Bool, Bool )) -> BResult a -> String
 toFinalMessage done extractWarningInfo result =
     case result of
         Ok value ->
             let
-                ( warningCount, denyWarnings ) =
+                ( warningCount, suppressWarnings, denyWarnings ) =
                     extractWarningInfo value
             in
             if denyWarnings && warningCount > 0 then
@@ -467,7 +467,7 @@ toFinalMessage done extractWarningInfo result =
                 let
                     warningNote : String
                     warningNote =
-                        if warningCount == 0 then
+                        if suppressWarnings || warningCount == 0 then
                             ""
 
                         else if warningCount == 1 then

@@ -135,7 +135,7 @@ forkWithKey toComparable keyComparison encoder func dict =
 
 fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> Stuff.Root -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
-    Reporting.trackBuild docsDecoder docsEncoder style (\_ -> ( 0, False )) <|
+    Reporting.trackBuild docsDecoder docsEncoder style (\_ -> ( 0, False, False )) <|
         \key ->
             makeEnv key root details
                 |> Task.bind
@@ -221,9 +221,9 @@ type alias Dependencies =
     Dict (List String) TypeCheck.Canonical I.DependencyInterface
 
 
-fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
-fromPaths style root details denyWarnings paths =
-    Reporting.trackBuild artifactsDecoder artifactsEncoder style (\(Artifacts warnings _ _ _ _) -> ( List.length warnings, denyWarnings )) <|
+fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> Bool -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
+fromPaths style root details suppressWarnings denyWarnings paths =
+    Reporting.trackBuild artifactsDecoder artifactsEncoder style (\(Artifacts warnings _ _ _ _) -> ( List.length warnings, suppressWarnings, denyWarnings )) <|
         \key ->
             makeEnv key root details
                 |> Task.bind
