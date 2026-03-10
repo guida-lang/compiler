@@ -22,6 +22,7 @@ import Compiler.Reporting.Warning as W
 import Compiler.Type.Constrain.Module as Type
 import Compiler.Type.Solve as Type
 import Data.Map exposing (Dict)
+import Data.Set as EverySet
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Task.Extra as Task
@@ -71,11 +72,11 @@ compile target root pkg ifaces modul =
 
 canonicalize : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> ( List W.Warning, Result E.Error Can.Module )
 canonicalize target root pkg ifaces modul =
-    case R.run (Canonicalize.canonicalize target root pkg ifaces modul) of
-        ( warnings, Ok canonical ) ->
+    case R.runWithInfo EverySet.empty (Canonicalize.canonicalize target root pkg ifaces modul) of
+        ( _, warnings, Ok canonical ) ->
             ( warnings, Ok canonical )
 
-        ( warnings, Err errors ) ->
+        ( _, warnings, Err errors ) ->
             ( warnings, Err (E.BadNames errors) )
 
 
