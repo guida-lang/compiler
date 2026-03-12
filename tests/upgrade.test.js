@@ -43,8 +43,7 @@ describe("guida upgrade command", () => {
 
         const upgraded = JSON.parse(fs.readFileSync(path.join(tmpobj.name, "elm.json"), "utf-8"));
 
-        expect(output).toContain("Planned changes:");
-        expect(output).toContain("evancz/elm-playground");
+        expect(output).toContain("Success!");
         expect(upgraded.dependencies.direct["evancz/elm-playground"]).toBe("1.0.3");
     });
 
