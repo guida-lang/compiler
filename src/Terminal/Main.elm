@@ -18,6 +18,7 @@ import Terminal.Terminal.Helpers as Terminal
 import Terminal.Terminal.Internal as Terminal
 import Terminal.Test as Test
 import Terminal.Uninstall as Uninstall
+import Terminal.Upgrade as Upgrade
 import Utils.Impure as Impure
 import Utils.Task.Extra as Task
 
@@ -45,6 +46,7 @@ app =
         , make
         , install
         , uninstall
+        , upgrade
         , bump
         , diff
         , publish
@@ -362,6 +364,44 @@ uninstall =
                 )
                 |> Tuple.second
                 |> Result.map (\( args, flags ) -> Uninstall.run args flags)
+
+
+
+-- UPGRADE
+
+
+upgrade : Terminal.Command
+upgrade =
+    let
+        details : String
+        details =
+            "The `upgrade` command updates your direct dependencies to the newest compatible versions:"
+
+        example : D.Doc
+        example =
+            reflow "This upgrades direct dependencies (including direct test dependencies) while keeping upgrades within the same major version."
+
+        upgradeFlags : Terminal.Flags
+        upgradeFlags =
+            Terminal.flags
+                |> Terminal.more (Terminal.onOff "yes" "Reply 'yes' to all automated prompts.")
+    in
+    Terminal.Command "upgrade" Terminal.Uncommon details example Terminal.noArgs upgradeFlags <|
+        \chunks ->
+            Chomp.chomp Nothing
+                chunks
+                [ Chomp.chompExactly (Chomp.pure Upgrade.NoArgs)
+                ]
+                (Chomp.pure Upgrade.Flags
+                    |> Chomp.apply (Chomp.chompOnOffFlag "yes")
+                    |> Chomp.bind
+                        (\value ->
+                            Chomp.checkForUnknownFlags upgradeFlags
+                                |> Chomp.fmap (\_ -> value)
+                        )
+                )
+                |> Tuple.second
+                |> Result.map (\( args, flags ) -> Upgrade.run args flags)
 
 
 

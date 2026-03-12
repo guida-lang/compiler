@@ -6,6 +6,7 @@ import API.Init as Init
 import API.Install as Install
 import API.Make as Make
 import API.Uninstall as Uninstall
+import API.Upgrade as Upgrade
 import Builder.Reporting.Exit as Exit
 import Compiler.Generate.Target as Target
 import Compiler.Guida.Package as Pkg
@@ -84,6 +85,10 @@ app =
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
+
+                    UpgradeArgs ->
+                        Upgrade.run
+                            |> Task.bind (\_ -> exitWithResponse Encode.null)
 
                     DiagnosticsArgs (DiagnosticsSourceContent src) ->
                         -- FIXME target
@@ -180,6 +185,7 @@ type Args
     | FormatArgs String
     | InstallArgs String
     | UninstallArgs String
+    | UpgradeArgs
     | DiagnosticsArgs DiagnosticsSource
     | GetDefinitionLocationArgs String Int Int
 
@@ -217,6 +223,9 @@ argsDecoder =
                     "uninstall" ->
                         Decode.map UninstallArgs
                             (Decode.field "pkg" Decode.string)
+
+                    "upgrade" ->
+                        Decode.succeed UpgradeArgs
 
                     "diagnostics" ->
                         Decode.map DiagnosticsArgs

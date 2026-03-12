@@ -19,6 +19,7 @@ module Builder.Reporting.Exit exposing
     , Solver(..)
     , Test(..)
     , Uninstall(..)
+    , Upgrade(..)
     , buildProblemDecoder
     , buildProblemEncoder
     , buildProjectProblemDecoder
@@ -39,6 +40,7 @@ module Builder.Reporting.Exit exposing
     , toJson
     , toStderr
     , uninstallToReport
+    , upgradeToReport
     )
 
 import Builder.File as File
@@ -1540,8 +1542,7 @@ installToReport exit =
                     "I was not able to connect to "
                         ++ registryDomain
                         ++ " though, so I was only able to look through packages that you have downloaded in the past."
-                , D.reflow <|
-                    "Try again later when you have internet!"
+                , D.reflow "Try again later when you have internet!"
                 ]
 
         InstallElmNoOfflineAppSolution registryDomain pkg ->
@@ -1552,8 +1553,7 @@ installToReport exit =
                     "I was not able to connect to "
                         ++ registryDomain
                         ++ " though, so I was only able to look through packages that you have downloaded in the past."
-                , D.reflow <|
-                    "Try again later when you have internet!"
+                , D.reflow "Try again later when you have internet!"
                 ]
 
         InstallGuidaNoOnlinePkgSolution pkg ->
@@ -1753,6 +1753,91 @@ uninstallToReport exit =
 
         UninstallBadDetails details ->
             toDetailsReport details
+
+
+
+-- UPGRADE
+
+
+type Upgrade
+    = UpgradeNoOutline
+    | UpgradeBadOutline Outline
+    | UpgradeBadRegistry RegistryProblem
+    | UpgradeGuidaNoOnlineSolution
+    | UpgradeElmNoOnlineSolution
+    | UpgradeGuidaNoOfflineSolution String
+    | UpgradeElmNoOfflineSolution String
+    | UpgradeHadSolverTrouble Solver
+    | UpgradeBadDetails Details
+    | UpgradeCannotBuildSafeConstraint Pkg.Name
+
+
+upgradeToReport : Upgrade -> Help.Report
+upgradeToReport exit =
+    case exit of
+        UpgradeNoOutline ->
+            Help.report "NEW PROJECT?"
+                Nothing
+                "Are you trying to start a new project? Try this command instead:"
+                [ D.indent 4 <| D.green (D.fromChars "guida init")
+                , D.reflow "It will help you get started!"
+                ]
+
+        UpgradeBadOutline outline ->
+            toOutlineReport outline
+
+        UpgradeBadRegistry problem ->
+            toRegistryProblemReport "PROBLEM LOADING PACKAGE LIST" problem <|
+                "I need the list of published packages to figure out how to upgrade dependencies"
+
+        UpgradeGuidaNoOnlineSolution ->
+            Help.report "CANNOT FIND COMPATIBLE UPGRADE"
+                (Just "guida.json")
+                "I could not find a safe set of upgraded dependency versions that still works for your project."
+                [ D.reflow "I tried to update your direct dependencies while keeping major versions stable, but there was no valid solution."
+                ]
+
+        UpgradeElmNoOnlineSolution ->
+            Help.report "CANNOT FIND COMPATIBLE UPGRADE"
+                (Just "elm.json")
+                "I could not find a safe set of upgraded dependency versions that still works for your project."
+                [ D.reflow "I tried to update your direct dependencies while keeping major versions stable, but there was no valid solution."
+                ]
+
+        UpgradeGuidaNoOfflineSolution registryDomain ->
+            Help.report "CANNOT FIND COMPATIBLE UPGRADE LOCALLY"
+                (Just "guida.json")
+                "I could not find a safe upgrade using only locally cached package data."
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow "Try again later when you have internet!"
+                ]
+
+        UpgradeElmNoOfflineSolution registryDomain ->
+            Help.report "CANNOT FIND COMPATIBLE UPGRADE LOCALLY"
+                (Just "elm.json")
+                "I could not find a safe upgrade using only locally cached package data."
+                [ D.reflow <|
+                    "I was not able to connect to "
+                        ++ registryDomain
+                        ++ " though, so I was only able to look through packages that you have downloaded in the past."
+                , D.reflow "Try again later when you have internet!"
+                ]
+
+        UpgradeHadSolverTrouble solver ->
+            toSolverReport solver
+
+        UpgradeBadDetails details ->
+            toDetailsReport details
+
+        UpgradeCannotBuildSafeConstraint pkg ->
+            Help.report "INVALID DEPENDENCY CONSTRAINT"
+                Nothing
+                ("I could not find a safe upgrade range for " ++ Pkg.toChars pkg ++ ".")
+                [ D.reflow "Try adjusting that dependency constraint manually, then run `guida upgrade` again."
+                ]
 
 
 
