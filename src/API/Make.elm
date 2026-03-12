@@ -13,7 +13,6 @@ module API.Make exposing
 
 import Builder.BackgroundWriter as BW
 import Builder.Build as Build
-import Builder.File as File
 import Builder.Generate as Generate
 import Builder.Guida.Details as Details
 import Builder.Reporting as Reporting
@@ -160,15 +159,12 @@ buildPaths style root details suppressWarnings denyWarnings paths =
 
 
 warningToReport : Target -> W.Module -> Task Never Report.WarningModuleReport
-warningToReport target { absolutePath, name, warnings } =
-    File.readUtf8 absolutePath
-        |> Task.fmap
-            (\sourceCode ->
-                { path = absolutePath
-                , name = name
-                , warnings = List.map (W.toReport target L.empty (Code.toSource sourceCode)) warnings
-                }
-            )
+warningToReport target { absolutePath, name, source, warnings } =
+    Task.pure
+        { path = absolutePath
+        , name = name
+        , warnings = List.map (W.toReport target L.empty (Code.toSource source)) warnings
+        }
 
 
 

@@ -461,7 +461,7 @@ toFinalMessage done extractWarningInfo result =
                         else
                             "warnings"
                 in
-                "Failed! " ++ String.fromInt warningCount ++ " " ++ warningWord ++ " with --deny-warnings enabled."
+                "Failed! (" ++ String.fromInt warningCount ++ " " ++ warningWord ++ ")"
 
             else
                 let
