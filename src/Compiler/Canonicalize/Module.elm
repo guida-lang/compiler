@@ -1,4 +1,8 @@
-module Compiler.Canonicalize.Module exposing (MResult, canonicalize)
+module Compiler.Canonicalize.Module exposing
+    ( MResult
+    , UsedModules
+    , canonicalize
+    )
 
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
@@ -228,6 +232,7 @@ extractUsedFromExpr (A.At _ expr_) =
 
         Can.Update expr fields ->
             let
+                extractFromFieldUpdate : ( a, Can.FieldUpdate ) -> MResult UsedModules (List W.Warning) ()
                 extractFromFieldUpdate ( _, Can.FieldUpdate _ e ) =
                     extractUsedFromExpr e
             in
