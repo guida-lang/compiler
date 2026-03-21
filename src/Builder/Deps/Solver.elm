@@ -27,7 +27,9 @@ import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Compiler.Json.Decode as D
+import Control.Concurrent.MVar as MVar
 import Data.Map as Dict exposing (Dict)
+import Process
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
@@ -842,10 +844,10 @@ type Env
 
 initEnv : Task Never (Result Exit.RegistryProblem Env)
 initEnv =
-    Utils.newEmptyMVar
+    MVar.newEmptyMVar
         |> Task.bind
             (\mvar ->
-                Utils.forkIO (Task.bind (Utils.putMVar Http.managerEncoder mvar) Http.getManager)
+                Process.spawn (Task.bind (MVar.putMVar mvar) Http.getManager)
                     |> Task.bind
                         (\_ ->
                             Stuff.getPackageCache
@@ -855,7 +857,7 @@ initEnv =
                                             (Registry.read cache
                                                 |> Task.bind
                                                     (\maybeRegistry ->
-                                                        Utils.readMVar Http.managerDecoder mvar
+                                                        MVar.readMVar mvar
                                                             |> Task.bind
                                                                 (\manager ->
                                                                     case maybeRegistry of

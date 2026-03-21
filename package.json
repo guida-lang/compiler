@@ -24,7 +24,6 @@
     "test:elm-format-validate": "elm-format . --validate",
     "test:jest": "jest",
     "test:elm": "elm-test",
-    "test:elm-review": "elm-review",
     "elm-format": "elm-format . --yes",
     "prepare": "npm run build"
   },
@@ -42,7 +41,6 @@
     "@types/node": "^24.10.1",
     "elm": "^0.19.1-6",
     "elm-format": "^0.8.7",
-    "elm-review": "^2.13.2",
     "elm-test": "^0.19.1-revision15",
     "eslint": "^9.23.0",
     "eslint-plugin-jest": "^28.11.0",

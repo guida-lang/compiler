@@ -26,8 +26,6 @@ import Compiler.Guida.ModuleName as ModuleName
 import Maybe.Extra as Maybe
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 import Utils.Main as Utils exposing (FilePath)
 import Utils.Task.Extra as Task
 
@@ -210,9 +208,7 @@ buildExposed style root details maybeDocs exposed =
             Maybe.unwrap Build.ignoreDocs Build.writeDocs maybeDocs
     in
     Task.eio Exit.MakeCannotBuild <|
-        Build.fromExposed BD.unit
-            BE.unit
-            style
+        Build.fromExposed style
             root
             details
             docsGoal

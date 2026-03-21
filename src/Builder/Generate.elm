@@ -22,13 +22,13 @@ import Compiler.Guida.Interface as I
 import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Nitpick.Debug as Nitpick
+import Control.Concurrent.MVar as MVar exposing (MVar)
 import Data.Map as Dict exposing (Dict)
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
-import Utils.Bytes.Decode as BD
-import Utils.Main as Utils exposing (FilePath, MVar)
+import Utils.Main as Utils exposing (FilePath)
 import Utils.Task.Extra as Task
-
+import Process
 
 
 -- NOTE: This is used by Make, Repl, and Reactor right now. But it may be
@@ -209,14 +209,14 @@ loadObject : FilePath -> Build.Module -> Task Never ( ModuleName.Raw, MVar (Mayb
 loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
-            Utils.newMVar (Utils.maybeEncoder Opt.localGraphEncoder) (Just graph)
+            MVar.newMVar (Just graph)
                 |> Task.fmap (\mvar -> ( name, mvar ))
 
         Build.Cached name _ _ ->
-            Utils.newEmptyMVar
+            MVar.newEmptyMVar
                 |> Task.bind
                     (\mvar ->
-                        Utils.forkIO (Task.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
+                        Process.spawn (Task.bind (MVar.putMVar mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
                             |> Task.fmap (\_ -> ( name, mvar ))
                     )
 
@@ -232,10 +232,10 @@ type Objects
 finalizeObjects : LoadingObjects -> Task Exit.Generate Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
-        (Utils.readMVar (BD.maybe Opt.globalGraphDecoder) mvar
+        (MVar.readMVar mvar
             |> Task.bind
                 (\result ->
-                    Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe Opt.localGraphDecoder)) mvars
+                    Utils.mapTraverse identity compare MVar.readMVar mvars
                         |> Task.fmap
                             (\results ->
                                 case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
@@ -269,7 +269,7 @@ loadTypes root ifaces modules =
                         foreigns =
                             Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
                     in
-                    Utils.listTraverse (Utils.readMVar (BD.maybe Extract.typesDecoder)) mvars
+                    Utils.listTraverse MVar.readMVar mvars
                         |> Task.fmap
                             (\results ->
                                 case Utils.sequenceListMaybe results of
@@ -287,30 +287,30 @@ loadTypesHelp : FilePath -> Build.Module -> Task Never (MVar (Maybe Extract.Type
 loadTypesHelp root modul =
     case modul of
         Build.Fresh name iface _ ->
-            Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+            MVar.newMVar (Just (Extract.fromInterface name iface))
 
         Build.Cached name _ ciMVar ->
-            Utils.readMVar Build.cachedInterfaceDecoder ciMVar
+            MVar.readMVar ciMVar
                 |> Task.bind
                     (\cachedInterface ->
                         case cachedInterface of
                             Build.Unneeded ->
-                                Utils.newEmptyMVar
+                                MVar.newEmptyMVar
                                     |> Task.bind
                                         (\mvar ->
-                                            Utils.forkIO
+                                            Process.spawn
                                                 (File.readBinary I.interfaceDecoder (Stuff.guidai root name)
                                                     |> Task.bind
                                                         (\maybeIface ->
-                                                            Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)
+                                                            MVar.putMVar mvar (Maybe.map (Extract.fromInterface name) maybeIface)
                                                         )
                                                 )
                                                 |> Task.fmap (\_ -> mvar)
                                         )
 
                             Build.Loaded iface ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) (Just (Extract.fromInterface name iface))
+                                MVar.newMVar (Just (Extract.fromInterface name iface))
 
                             Build.Corrupted ->
-                                Utils.newMVar (Utils.maybeEncoder Extract.typesEncoder) Nothing
+                                MVar.newMVar Nothing
                     )

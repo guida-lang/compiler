@@ -7,7 +7,6 @@ module Builder.Build exposing
     , Module(..)
     , ReplArtifacts(..)
     , Root(..)
-    , cachedInterfaceDecoder
     , fromExposed
     , fromPaths
     , fromRepl
@@ -46,15 +45,15 @@ import Compiler.Reporting.Error.Docs as EDocs
 import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Syntax as Syntax
 import Compiler.Reporting.Render.Type.Localizer as L
+import Control.Concurrent.MVar as MVar exposing (MVar)
 import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
+import Process
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
-import Utils.Main as Utils exposing (FilePath, MVar(..))
+import Utils.Main as Utils exposing (FilePath)
 import Utils.Task.Extra as Task
 
 
@@ -113,28 +112,28 @@ addRelative (AbsoluteSrcDir srcDir) path =
 described in Chapter 13 of Parallel and Concurrent Programming in Haskell by Simon Marlow
 <https://www.oreilly.com/library/view/parallel-and-concurrent/9781449335939/ch13.html#sec_conc-par-overhead>
 -}
-fork : (a -> BE.Encoder) -> Task Never a -> Task Never (MVar a)
-fork encoder work =
-    Utils.newEmptyMVar
+fork : Task Never a -> Task Never (MVar a)
+fork work =
+    MVar.newEmptyMVar
         |> Task.bind
             (\mvar ->
-                Utils.forkIO (Task.bind (Utils.putMVar encoder mvar) work)
+                Process.spawn (Task.bind (MVar.putMVar mvar) work)
                     |> Task.fmap (\_ -> mvar)
             )
 
 
-forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (b -> BE.Encoder) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k (MVar b))
-forkWithKey toComparable keyComparison encoder func dict =
-    Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork encoder (func k v)) dict
+forkWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k (MVar b))
+forkWithKey toComparable keyComparison func dict =
+    Utils.mapTraverseWithKey toComparable keyComparison (\k v -> fork (func k v)) dict
 
 
 
 -- FROM EXPOSED
 
 
-fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> Stuff.Root -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
-fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
-    Reporting.trackBuild docsDecoder docsEncoder style <|
+fromExposed : Reporting.Style -> Stuff.Root -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
+fromExposed style root details docsGoal ((NE.Nonempty e es) as exposed) =
+    Reporting.trackBuild style <|
         \key ->
             makeEnv key root details
                 |> Task.bind
@@ -143,7 +142,7 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                             |> Task.bind
                                 (\dmvar ->
                                     -- crawl
-                                    Utils.newEmptyMVar
+                                    MVar.newEmptyMVar
                                         |> Task.bind
                                             (\mvar ->
                                                 let
@@ -151,16 +150,16 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                     docsNeed =
                                                         toDocsNeed docsGoal
                                                 in
-                                                Map.fromKeysA identity (fork statusEncoder << crawlModule (Stuff.rootToTarget root) env mvar docsNeed) (e :: es)
+                                                Map.fromKeysA identity (fork << crawlModule (Stuff.rootToTarget root) env mvar docsNeed) (e :: es)
                                                     |> Task.bind
                                                         (\roots ->
-                                                            Utils.putMVar statusDictEncoder mvar roots
+                                                            MVar.putMVar mvar roots
                                                                 |> Task.bind
                                                                     (\_ ->
-                                                                        Utils.dictMapM_ compare (Utils.readMVar statusDecoder) roots
+                                                                        Utils.dictMapM_ compare MVar.readMVar roots
                                                                             |> Task.bind
                                                                                 (\_ ->
-                                                                                    Task.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                                                    Task.bind (Utils.mapTraverse identity compare MVar.readMVar) (MVar.readMVar mvar)
                                                                                         |> Task.bind
                                                                                             (\statuses ->
                                                                                                 -- compile
@@ -172,16 +171,16 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
                                                                                                                     Task.pure (Err (Exit.BuildProjectProblem problem))
 
                                                                                                                 Ok foreigns ->
-                                                                                                                    Utils.newEmptyMVar
+                                                                                                                    MVar.newEmptyMVar
                                                                                                                         |> Task.bind
                                                                                                                             (\rmvar ->
-                                                                                                                                forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                                                forkWithKey identity compare (checkModule env foreigns rmvar) statuses
                                                                                                                                     |> Task.bind
                                                                                                                                         (\resultMVars ->
-                                                                                                                                            Utils.putMVar dictRawMVarBResultEncoder rmvar resultMVars
+                                                                                                                                            MVar.putMVar rmvar resultMVars
                                                                                                                                                 |> Task.bind
                                                                                                                                                     (\_ ->
-                                                                                                                                                        Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
+                                                                                                                                                        Utils.mapTraverse identity compare MVar.readMVar resultMVars
                                                                                                                                                             |> Task.bind
                                                                                                                                                                 (\results ->
                                                                                                                                                                     writeDetails (Stuff.rootPath root) details results
@@ -222,7 +221,7 @@ type alias Dependencies =
 
 fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
 fromPaths style root details paths =
-    Reporting.trackBuild artifactsDecoder artifactsEncoder style <|
+    Reporting.trackBuild style <|
         \key ->
             makeEnv key root details
                 |> Task.bind
@@ -239,16 +238,16 @@ fromPaths style root details paths =
                                             Details.loadInterfaces (Stuff.rootPath root) details
                                                 |> Task.bind
                                                     (\dmvar ->
-                                                        Utils.newMVar statusDictEncoder Dict.empty
+                                                        MVar.newMVar Dict.empty
                                                             |> Task.bind
                                                                 (\smvar ->
-                                                                    Utils.nonEmptyListTraverse (fork rootStatusEncoder << crawlRoot env smvar) lroots
+                                                                    Utils.nonEmptyListTraverse (fork << crawlRoot env smvar) lroots
                                                                         |> Task.bind
                                                                             (\srootMVars ->
-                                                                                Utils.nonEmptyListTraverse (Utils.readMVar rootStatusDecoder) srootMVars
+                                                                                Utils.nonEmptyListTraverse MVar.readMVar srootMVars
                                                                                     |> Task.bind
                                                                                         (\sroots ->
-                                                                                            Task.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder smvar)
+                                                                                            Task.bind (Utils.mapTraverse identity compare MVar.readMVar) (MVar.readMVar smvar)
                                                                                                 |> Task.bind
                                                                                                     (\statuses ->
                                                                                                         checkMidpointAndRoots (Stuff.rootToTarget root) dmvar statuses sroots
@@ -260,25 +259,25 @@ fromPaths style root details paths =
 
                                                                                                                         Ok foreigns ->
                                                                                                                             -- compile
-                                                                                                                            Utils.newEmptyMVar
+                                                                                                                            MVar.newEmptyMVar
                                                                                                                                 |> Task.bind
                                                                                                                                     (\rmvar ->
-                                                                                                                                        forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                                                        forkWithKey identity compare (checkModule env foreigns rmvar) statuses
                                                                                                                                             |> Task.bind
                                                                                                                                                 (\resultsMVars ->
-                                                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultsMVars
+                                                                                                                                                    MVar.putMVar rmvar resultsMVars
                                                                                                                                                         |> Task.bind
                                                                                                                                                             (\_ ->
-                                                                                                                                                                Utils.nonEmptyListTraverse (fork rootResultEncoder << checkRoot env resultsMVars) sroots
+                                                                                                                                                                Utils.nonEmptyListTraverse (fork << checkRoot env resultsMVars) sroots
                                                                                                                                                                     |> Task.bind
                                                                                                                                                                         (\rrootMVars ->
-                                                                                                                                                                            Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultsMVars
+                                                                                                                                                                            Utils.mapTraverse identity compare MVar.readMVar resultsMVars
                                                                                                                                                                                 |> Task.bind
                                                                                                                                                                                     (\results ->
                                                                                                                                                                                         writeDetails (Stuff.rootPath root) details results
                                                                                                                                                                                             |> Task.bind
                                                                                                                                                                                                 (\_ ->
-                                                                                                                                                                                                    Task.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse (Utils.readMVar rootResultDecoder) rrootMVars)
+                                                                                                                                                                                                    Task.fmap (toArtifacts env foreigns results) (Utils.nonEmptyListTraverse MVar.readMVar rrootMVars)
                                                                                                                                                                                                 )
                                                                                                                                                                                     )
                                                                                                                                                                         )
@@ -336,9 +335,9 @@ crawlDeps target env mvar deps blockedValue =
     let
         crawlNew : ModuleName.Raw -> () -> Task Never (MVar Status)
         crawlNew name () =
-            fork statusEncoder (crawlModule target env mvar (DocsNeed False) name)
+            fork (crawlModule target env mvar (DocsNeed False) name)
     in
-    Utils.takeMVar statusDictDecoder mvar
+    MVar.takeMVar mvar
         |> Task.bind
             (\statusDict ->
                 let
@@ -353,10 +352,10 @@ crawlDeps target env mvar deps blockedValue =
                 Utils.mapTraverseWithKey identity compare crawlNew newsDict
                     |> Task.bind
                         (\statuses ->
-                            Utils.putMVar statusDictEncoder mvar (Dict.union statuses statusDict)
+                            MVar.putMVar mvar (Dict.union statuses statusDict)
                                 |> Task.bind
                                     (\_ ->
-                                        Utils.dictMapM_ compare (Utils.readMVar statusDecoder) statuses
+                                        Utils.dictMapM_ compare MVar.readMVar statuses
                                             |> Task.fmap (\_ -> blockedValue)
                                     )
                         )
@@ -506,7 +505,7 @@ checkModule : Env -> Dependencies -> MVar ResultDict -> ModuleName.Raw -> Status
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
         SCached ((Details.Local path time deps hasMain lastChange lastCompile) as local) ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            MVar.readMVar resultsMVar
                 |> Task.bind
                     (\results ->
                         checkDeps (Stuff.rootPath root) results deps lastCompile
@@ -528,7 +527,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                                                     )
 
                                         DepsSame _ _ ->
-                                            Utils.newMVar cachedInterfaceEncoder Unneeded
+                                            MVar.newMVar Unneeded
                                                 |> Task.fmap
                                                     (\mvar ->
                                                         RCached hasMain lastChange mvar
@@ -555,7 +554,7 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
                     )
 
         SChanged ((Details.Local path time deps _ _ lastCompile) as local) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) docsNeed ->
-            Utils.readMVar resultDictDecoder resultsMVar
+            MVar.readMVar resultsMVar
                 |> Task.bind
                     (\results ->
                         checkDeps (Stuff.rootPath root) results deps lastCompile
@@ -637,7 +636,7 @@ checkDepsHelp : FilePath -> ResultDict -> List ModuleName.Raw -> List Dep -> Lis
 checkDepsHelp root results deps new same cached importProblems isBlocked lastDepChange lastCompile =
     case deps of
         dep :: otherDeps ->
-            Utils.readMVar bResultDecoder (Utils.find identity dep results)
+            MVar.readMVar (Utils.find identity dep results)
                 |> Task.bind
                     (\result ->
                         case result of
@@ -729,10 +728,10 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 
 loadInterfaces : FilePath -> List Dep -> List CDep -> Task Never (Maybe (Dict String ModuleName.Raw I.Interface))
 loadInterfaces root same cached =
-    Utils.listTraverse (fork maybeDepEncoder << loadInterface root) cached
+    Utils.listTraverse (fork << loadInterface root) cached
         |> Task.bind
             (\loading ->
-                Utils.listTraverse (Utils.readMVar maybeDepDecoder) loading
+                Utils.listTraverse MVar.readMVar loading
                     |> Task.bind
                         (\maybeLoaded ->
                             case Utils.sequenceListMaybe maybeLoaded of
@@ -747,16 +746,16 @@ loadInterfaces root same cached =
 
 loadInterface : FilePath -> CDep -> Task Never (Maybe Dep)
 loadInterface root ( name, ciMvar ) =
-    Utils.takeMVar cachedInterfaceDecoder ciMvar
+    MVar.takeMVar ciMvar
         |> Task.bind
             (\cachedInterface ->
                 case cachedInterface of
                     Corrupted ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        MVar.putMVar ciMvar cachedInterface
                             |> Task.fmap (\_ -> Nothing)
 
                     Loaded iface ->
-                        Utils.putMVar cachedInterfaceEncoder ciMvar cachedInterface
+                        MVar.putMVar ciMvar cachedInterface
                             |> Task.fmap (\_ -> Just ( name, iface ))
 
                     Unneeded ->
@@ -765,11 +764,11 @@ loadInterface root ( name, ciMvar ) =
                                 (\maybeIface ->
                                     case maybeIface of
                                         Nothing ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar Corrupted
+                                            MVar.putMVar ciMvar Corrupted
                                                 |> Task.fmap (\_ -> Nothing)
 
                                         Just iface ->
-                                            Utils.putMVar cachedInterfaceEncoder ciMvar (Loaded iface)
+                                            MVar.putMVar ciMvar (Loaded iface)
                                                 |> Task.fmap (\_ -> Just ( name, iface ))
                                 )
             )
@@ -783,7 +782,7 @@ checkMidpoint : Target -> MVar (Maybe Dependencies) -> Dict String ModuleName.Ra
 checkMidpoint target dmvar statuses =
     case checkForCycles statuses of
         Nothing ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            MVar.readMVar dmvar
                 |> Task.fmap
                     (\maybeForeigns ->
                         case maybeForeigns of
@@ -795,7 +794,7 @@ checkMidpoint target dmvar statuses =
                     )
 
         Just (NE.Nonempty name names) ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            MVar.readMVar dmvar
                 |> Task.fmap (\_ -> Err (Exit.BP_Cycle target name names))
 
 
@@ -805,7 +804,7 @@ checkMidpointAndRoots target dmvar statuses sroots =
         Nothing ->
             case checkUniqueRoots statuses sroots of
                 Nothing ->
-                    Utils.readMVar maybeDependenciesDecoder dmvar
+                    MVar.readMVar dmvar
                         |> Task.bind
                             (\maybeForeigns ->
                                 case maybeForeigns of
@@ -817,11 +816,11 @@ checkMidpointAndRoots target dmvar statuses sroots =
                             )
 
                 Just problem ->
-                    Utils.readMVar maybeDependenciesDecoder dmvar
+                    MVar.readMVar dmvar
                         |> Task.fmap (\_ -> Err problem)
 
         Just (NE.Nonempty name names) ->
-            Utils.readMVar maybeDependenciesDecoder dmvar
+            MVar.readMVar dmvar
                 |> Task.fmap (\_ -> Err (Exit.BP_Cycle target name names))
 
 
@@ -1319,13 +1318,13 @@ fromRepl root details source =
                                         deps =
                                             List.map Src.getImportName imports
                                     in
-                                    Utils.newMVar statusDictEncoder Dict.empty
+                                    MVar.newMVar Dict.empty
                                         |> Task.bind
                                             (\mvar ->
                                                 crawlDeps (Stuff.rootToTarget root) env mvar deps ()
                                                     |> Task.bind
                                                         (\_ ->
-                                                            Task.bind (Utils.mapTraverse identity compare (Utils.readMVar statusDecoder)) (Utils.readMVar statusDictDecoder mvar)
+                                                            Task.bind (Utils.mapTraverse identity compare MVar.readMVar) (MVar.readMVar mvar)
                                                                 |> Task.bind
                                                                     (\statuses ->
                                                                         checkMidpoint (Stuff.rootToTarget root) dmvar statuses
@@ -1336,16 +1335,16 @@ fromRepl root details source =
                                                                                             Task.pure <| Err <| Exit.ReplProjectProblem problem
 
                                                                                         Ok foreigns ->
-                                                                                            Utils.newEmptyMVar
+                                                                                            MVar.newEmptyMVar
                                                                                                 |> Task.bind
                                                                                                     (\rmvar ->
-                                                                                                        forkWithKey identity compare bResultEncoder (checkModule env foreigns rmvar) statuses
+                                                                                                        forkWithKey identity compare (checkModule env foreigns rmvar) statuses
                                                                                                             |> Task.bind
                                                                                                                 (\resultMVars ->
-                                                                                                                    Utils.putMVar resultDictEncoder rmvar resultMVars
+                                                                                                                    MVar.putMVar rmvar resultMVars
                                                                                                                         |> Task.bind
                                                                                                                             (\_ ->
-                                                                                                                                Utils.mapTraverse identity compare (Utils.readMVar bResultDecoder) resultMVars
+                                                                                                                                Utils.mapTraverse identity compare MVar.readMVar resultMVars
                                                                                                                                     |> Task.bind
                                                                                                                                         (\results ->
                                                                                                                                             writeDetails (Stuff.rootPath root) details results
@@ -1449,10 +1448,10 @@ type RootLocation
 
 findRoots : Env -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProjectProblem (NE.Nonempty RootLocation))
 findRoots env paths =
-    Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
+    Utils.nonEmptyListTraverse (fork << getRootInfo env) paths
         |> Task.bind
             (\mvars ->
-                Utils.nonEmptyListTraverse (Utils.readMVar resultBuildProjectProblemRootInfoDecoder) mvars
+                Utils.nonEmptyListTraverse MVar.readMVar mvars
                     |> Task.bind
                         (\einfos ->
                             Task.pure (Result.andThen checkRoots (Utils.sequenceNonemptyListResult einfos))
@@ -1632,16 +1631,16 @@ crawlRoot : Env -> MVar StatusDict -> RootLocation -> Task Never RootStatus
 crawlRoot ((Env _ root projectType _ buildID _ _) as env) mvar rootLocation =
     case rootLocation of
         LInside name ->
-            Utils.newEmptyMVar
+            MVar.newEmptyMVar
                 |> Task.bind
                     (\statusMVar ->
-                        Utils.takeMVar statusDictDecoder mvar
+                        MVar.takeMVar mvar
                             |> Task.bind
                                 (\statusDict ->
-                                    Utils.putMVar statusDictEncoder mvar (Dict.insert identity name statusMVar statusDict)
+                                    MVar.putMVar mvar (Dict.insert identity name statusMVar statusDict)
                                         |> Task.bind
                                             (\_ ->
-                                                Task.bind (Utils.putMVar statusEncoder statusMVar) (crawlModule (Stuff.rootToTarget root) env mvar (DocsNeed False) name)
+                                                Task.bind (MVar.putMVar statusMVar) (crawlModule (Stuff.rootToTarget root) env mvar (DocsNeed False) name)
                                                     |> Task.fmap (\_ -> SInside name)
                                             )
                                 )
@@ -1863,553 +1862,3 @@ addOutside root modules =
 
         ROutsideBlocked ->
             modules
-
-
-
--- ENCODERS and DECODERS
-
-
-dictRawMVarBResultEncoder : Dict String ModuleName.Raw (MVar BResult) -> BE.Encoder
-dictRawMVarBResultEncoder =
-    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
-
-
-bResultEncoder : BResult -> BE.Encoder
-bResultEncoder bResult =
-    case bResult of
-        RNew local iface objects docs ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , Details.localEncoder local
-                , I.interfaceEncoder iface
-                , Opt.localGraphEncoder objects
-                , BE.maybe Docs.bytesModuleEncoder docs
-                ]
-
-        RSame local iface objects docs ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , Details.localEncoder local
-                , I.interfaceEncoder iface
-                , Opt.localGraphEncoder objects
-                , BE.maybe Docs.bytesModuleEncoder docs
-                ]
-
-        RCached main lastChange (MVar ref) ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , BE.bool main
-                , BE.int lastChange
-                , BE.int ref
-                ]
-
-        RNotFound importProblem ->
-            BE.sequence
-                [ BE.unsignedInt8 3
-                , Import.problemEncoder importProblem
-                ]
-
-        RProblem e ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , Error.moduleEncoder e
-                ]
-
-        RBlocked ->
-            BE.unsignedInt8 5
-
-        RForeign iface ->
-            BE.sequence
-                [ BE.unsignedInt8 6
-                , I.interfaceEncoder iface
-                ]
-
-        RKernel ->
-            BE.unsignedInt8 7
-
-
-bResultDecoder : BD.Decoder BResult
-bResultDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map4 RNew
-                            Details.localDecoder
-                            I.interfaceDecoder
-                            Opt.localGraphDecoder
-                            (BD.maybe Docs.bytesModuleDecoder)
-
-                    1 ->
-                        BD.map4 RSame
-                            Details.localDecoder
-                            I.interfaceDecoder
-                            Opt.localGraphDecoder
-                            (BD.maybe Docs.bytesModuleDecoder)
-
-                    2 ->
-                        BD.map3 RCached
-                            BD.bool
-                            BD.int
-                            (BD.map MVar BD.int)
-
-                    3 ->
-                        BD.map RNotFound Import.problemDecoder
-
-                    4 ->
-                        BD.map RProblem Error.moduleDecoder
-
-                    5 ->
-                        BD.succeed RBlocked
-
-                    6 ->
-                        BD.map RForeign I.interfaceDecoder
-
-                    7 ->
-                        BD.succeed RKernel
-
-                    _ ->
-                        BD.fail
-            )
-
-
-statusDictEncoder : StatusDict -> BE.Encoder
-statusDictEncoder statusDict =
-    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder statusDict
-
-
-statusDictDecoder : BD.Decoder StatusDict
-statusDictDecoder =
-    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
-
-
-statusEncoder : Status -> BE.Encoder
-statusEncoder status =
-    case status of
-        SCached local ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , Details.localEncoder local
-                ]
-
-        SChanged local iface objects docs ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , Details.localEncoder local
-                , BE.string iface
-                , Src.moduleEncoder objects
-                , docsNeedEncoder docs
-                ]
-
-        SBadImport importProblem ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , Import.problemEncoder importProblem
-                ]
-
-        SBadSyntax path time source err ->
-            BE.sequence
-                [ BE.unsignedInt8 3
-                , BE.string path
-                , File.timeEncoder time
-                , BE.string source
-                , Syntax.errorEncoder err
-                ]
-
-        SForeign home ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , Pkg.nameEncoder home
-                ]
-
-        SKernel ->
-            BE.unsignedInt8 5
-
-
-statusDecoder : BD.Decoder Status
-statusDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map SCached Details.localDecoder
-
-                    1 ->
-                        BD.map4 SChanged
-                            Details.localDecoder
-                            BD.string
-                            Src.moduleDecoder
-                            docsNeedDecoder
-
-                    2 ->
-                        BD.map SBadImport Import.problemDecoder
-
-                    3 ->
-                        BD.map4 SBadSyntax
-                            BD.string
-                            File.timeDecoder
-                            BD.string
-                            Syntax.errorDecoder
-
-                    4 ->
-                        BD.map SForeign Pkg.nameDecoder
-
-                    5 ->
-                        BD.succeed SKernel
-
-                    _ ->
-                        BD.fail
-            )
-
-
-rootStatusEncoder : RootStatus -> BE.Encoder
-rootStatusEncoder rootStatus =
-    case rootStatus of
-        SInside name ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , ModuleName.rawEncoder name
-                ]
-
-        SOutsideOk local source modul ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , Details.localEncoder local
-                , BE.string source
-                , Src.moduleEncoder modul
-                ]
-
-        SOutsideErr err ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , Error.moduleEncoder err
-                ]
-
-
-rootStatusDecoder : BD.Decoder RootStatus
-rootStatusDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map SInside ModuleName.rawDecoder
-
-                    1 ->
-                        BD.map3 SOutsideOk
-                            Details.localDecoder
-                            BD.string
-                            Src.moduleDecoder
-
-                    2 ->
-                        BD.map SOutsideErr Error.moduleDecoder
-
-                    _ ->
-                        BD.fail
-            )
-
-
-resultDictEncoder : ResultDict -> BE.Encoder
-resultDictEncoder =
-    BE.assocListDict compare ModuleName.rawEncoder Utils.mVarEncoder
-
-
-resultDictDecoder : BD.Decoder ResultDict
-resultDictDecoder =
-    BD.assocListDict identity ModuleName.rawDecoder Utils.mVarDecoder
-
-
-rootResultEncoder : RootResult -> BE.Encoder
-rootResultEncoder rootResult =
-    case rootResult of
-        RInside name ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , ModuleName.rawEncoder name
-                ]
-
-        ROutsideOk name iface objs ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , ModuleName.rawEncoder name
-                , I.interfaceEncoder iface
-                , Opt.localGraphEncoder objs
-                ]
-
-        ROutsideErr err ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , Error.moduleEncoder err
-                ]
-
-        ROutsideBlocked ->
-            BE.unsignedInt8 3
-
-
-rootResultDecoder : BD.Decoder RootResult
-rootResultDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map RInside ModuleName.rawDecoder
-
-                    1 ->
-                        BD.map3 ROutsideOk
-                            ModuleName.rawDecoder
-                            I.interfaceDecoder
-                            Opt.localGraphDecoder
-
-                    2 ->
-                        BD.map ROutsideErr Error.moduleDecoder
-
-                    3 ->
-                        BD.succeed ROutsideBlocked
-
-                    _ ->
-                        BD.fail
-            )
-
-
-maybeDepEncoder : Maybe Dep -> BE.Encoder
-maybeDepEncoder =
-    BE.maybe depEncoder
-
-
-maybeDepDecoder : BD.Decoder (Maybe Dep)
-maybeDepDecoder =
-    BD.maybe depDecoder
-
-
-depEncoder : Dep -> BE.Encoder
-depEncoder =
-    BE.jsonPair ModuleName.rawEncoder I.interfaceEncoder
-
-
-depDecoder : BD.Decoder Dep
-depDecoder =
-    BD.jsonPair ModuleName.rawDecoder I.interfaceDecoder
-
-
-maybeDependenciesDecoder : BD.Decoder (Maybe Dependencies)
-maybeDependenciesDecoder =
-    BD.maybe (BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder)
-
-
-resultBuildProjectProblemRootInfoEncoder : Result Exit.BuildProjectProblem RootInfo -> BE.Encoder
-resultBuildProjectProblemRootInfoEncoder =
-    BE.result Exit.buildProjectProblemEncoder rootInfoEncoder
-
-
-resultBuildProjectProblemRootInfoDecoder : BD.Decoder (Result Exit.BuildProjectProblem RootInfo)
-resultBuildProjectProblemRootInfoDecoder =
-    BD.result Exit.buildProjectProblemDecoder rootInfoDecoder
-
-
-cachedInterfaceEncoder : CachedInterface -> BE.Encoder
-cachedInterfaceEncoder cachedInterface =
-    case cachedInterface of
-        Unneeded ->
-            BE.unsignedInt8 0
-
-        Loaded iface ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , I.interfaceEncoder iface
-                ]
-
-        Corrupted ->
-            BE.unsignedInt8 2
-
-
-cachedInterfaceDecoder : BD.Decoder CachedInterface
-cachedInterfaceDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.succeed Unneeded
-
-                    1 ->
-                        BD.map Loaded I.interfaceDecoder
-
-                    2 ->
-                        BD.succeed Corrupted
-
-                    _ ->
-                        BD.fail
-            )
-
-
-docsNeedEncoder : DocsNeed -> BE.Encoder
-docsNeedEncoder (DocsNeed isNeeded) =
-    BE.bool isNeeded
-
-
-docsNeedDecoder : BD.Decoder DocsNeed
-docsNeedDecoder =
-    BD.map DocsNeed BD.bool
-
-
-artifactsEncoder : Artifacts -> BE.Encoder
-artifactsEncoder (Artifacts pkg ifaces roots modules) =
-    BE.sequence
-        [ Pkg.nameEncoder pkg
-        , dependenciesEncoder ifaces
-        , BE.nonempty rootEncoder roots
-        , BE.list moduleEncoder modules
-        ]
-
-
-artifactsDecoder : BD.Decoder Artifacts
-artifactsDecoder =
-    BD.map4 Artifacts
-        Pkg.nameDecoder
-        dependenciesDecoder
-        (BD.nonempty rootDecoder)
-        (BD.list moduleDecoder)
-
-
-dependenciesEncoder : Dependencies -> BE.Encoder
-dependenciesEncoder =
-    BE.assocListDict ModuleName.compareCanonical ModuleName.canonicalEncoder I.dependencyInterfaceEncoder
-
-
-dependenciesDecoder : BD.Decoder Dependencies
-dependenciesDecoder =
-    BD.assocListDict ModuleName.toComparableCanonical ModuleName.canonicalDecoder I.dependencyInterfaceDecoder
-
-
-rootEncoder : Root -> BE.Encoder
-rootEncoder root =
-    case root of
-        Inside name ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , ModuleName.rawEncoder name
-                ]
-
-        Outside name main mvar ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , ModuleName.rawEncoder name
-                , I.interfaceEncoder main
-                , Opt.localGraphEncoder mvar
-                ]
-
-
-rootDecoder : BD.Decoder Root
-rootDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map Inside ModuleName.rawDecoder
-
-                    1 ->
-                        BD.map3 Outside
-                            ModuleName.rawDecoder
-                            I.interfaceDecoder
-                            Opt.localGraphDecoder
-
-                    _ ->
-                        BD.fail
-            )
-
-
-moduleEncoder : Module -> BE.Encoder
-moduleEncoder modul =
-    case modul of
-        Fresh name iface objs ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , ModuleName.rawEncoder name
-                , I.interfaceEncoder iface
-                , Opt.localGraphEncoder objs
-                ]
-
-        Cached name main mvar ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , ModuleName.rawEncoder name
-                , BE.bool main
-                , Utils.mVarEncoder mvar
-                ]
-
-
-moduleDecoder : BD.Decoder Module
-moduleDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map3 Fresh
-                            ModuleName.rawDecoder
-                            I.interfaceDecoder
-                            Opt.localGraphDecoder
-
-                    1 ->
-                        BD.map3 Cached
-                            ModuleName.rawDecoder
-                            BD.bool
-                            Utils.mVarDecoder
-
-                    _ ->
-                        BD.fail
-            )
-
-
-rootInfoEncoder : RootInfo -> BE.Encoder
-rootInfoEncoder (RootInfo absolute relative location) =
-    BE.sequence
-        [ BE.string absolute
-        , BE.string relative
-        , rootLocationEncoder location
-        ]
-
-
-rootInfoDecoder : BD.Decoder RootInfo
-rootInfoDecoder =
-    BD.map3 RootInfo
-        BD.string
-        BD.string
-        rootLocationDecoder
-
-
-rootLocationEncoder : RootLocation -> BE.Encoder
-rootLocationEncoder rootLocation =
-    case rootLocation of
-        LInside name ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , ModuleName.rawEncoder name
-                ]
-
-        LOutside path ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , BE.string path
-                ]
-
-
-rootLocationDecoder : BD.Decoder RootLocation
-rootLocationDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map LInside ModuleName.rawDecoder
-
-                    1 ->
-                        BD.map LOutside BD.string
-
-                    _ ->
-                        BD.fail
-            )

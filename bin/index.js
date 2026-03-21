@@ -20,9 +20,8 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 
-let nextCounter = 0, mVarsNextCounter = 0;
+let nextCounter = 0;
 let stateT = { imports: {}, types: {}, decls: {} };
-const mVars = {};
 const lockedFiles = {};
 const processes = {};
 
@@ -369,73 +368,6 @@ server.post("getStateT", (request) => {
   request.respond(200, null, stateT.buffer);
 });
 
-// MVARS
-server.post("newEmptyMVar", (request) => {
-  mVarsNextCounter += 1;
-  mVars[mVarsNextCounter] = { subscribers: [], value: undefined };
-  request.respond(200, null, mVarsNextCounter);
-});
-
-server.post("readMVar", (request) => {
-  const id = request.body;
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].subscribers.push({ action: "read", request });
-  } else {
-    request.respond(200, null, mVars[id].value.buffer);
-  }
-});
-
-server.post("takeMVar", (request) => {
-  const id = request.body;
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].subscribers.push({ action: "take", request });
-  } else {
-    const value = mVars[id].value;
-    mVars[id].value = undefined;
-
-    if (
-      mVars[id].subscribers.length > 0 &&
-      mVars[id].subscribers[0].action === "put"
-    ) {
-      const subscriber = mVars[id].subscribers.shift();
-      mVars[id].value = subscriber.value;
-      request.respond(200);
-    }
-
-    request.respond(200, null, value.buffer);
-  }
-});
-
-server.post("putMVar", (request) => {
-  const id = request.requestHeaders.getHeader("id");
-  const value = request.body;
-  if (typeof mVars[id].value === "undefined") {
-    mVars[id].value = value;
-
-    mVars[id].subscribers = mVars[id].subscribers.filter((subscriber) => {
-      if (subscriber.action === "read") {
-        subscriber.request.respond(200, null, value.buffer);
-      }
-
-      return subscriber.action !== "read";
-    });
-
-    const subscriber = mVars[id].subscribers.shift();
-
-    if (subscriber) {
-      subscriber.request.respond(200, null, value.buffer);
-
-      if (subscriber.action === "take") {
-        mVars[id].value = undefined;
-      }
-    }
-
-    request.respond(200);
-  } else {
-    mVars[id].subscribers.push({ action: "put", request, value });
-  }
-});
-
 // NODE.JS SPECIFIC
 server.post("nodeGetDirname", (request) => {
   request.respond(200, null, __dirname);
@@ -488,6 +420,6 @@ server.setDefaultHandler((request) => {
 
 server.install();
 
-const { Elm } = require("./guida.min.js");
+const { Guida } = require("./guida.min.js");
 
-Elm.Terminal.Main.init();
+Guida.Terminal.Main.init();

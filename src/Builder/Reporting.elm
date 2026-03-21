@@ -1,6 +1,7 @@
 module Builder.Reporting exposing
     ( BKey
     , BMsg(..)
+    , BResult
     , DKey
     , DMsg(..)
     , Key
@@ -26,12 +27,12 @@ import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Compiler.Json.Encode as Encode
 import Compiler.Reporting.Doc as D
+import Control.Concurrent.MVar as MVar exposing (MVar)
+import Process
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
-import Utils.Bytes.Decode as BD
-import Utils.Bytes.Encode as BE
-import Utils.Main as Utils exposing (Chan, MVar)
+import Utils.Main as Utils exposing (Chan)
 import Utils.Task.Extra as Task
 
 
@@ -57,7 +58,7 @@ json =
 
 terminal : Task Never Style
 terminal =
-    Task.fmap Terminal (Utils.newMVar (\_ -> BE.bool True) ())
+    Task.fmap Terminal (MVar.newMVar ())
 
 
 
@@ -100,7 +101,7 @@ attemptWithStyle style toReport work =
                                     |> Task.bind (\_ -> Exit.exitFailure)
 
                             Terminal mvar ->
-                                Utils.readMVar (BD.map (\_ -> ()) BD.bool) mvar
+                                MVar.readMVar mvar
                                     |> Task.bind (\_ -> Exit.toStderr (toReport x))
                                     |> Task.bind (\_ -> Exit.exitFailure)
             )
@@ -209,25 +210,20 @@ trackDetails style callback =
             callback (Key (\_ -> Task.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan
                 |> Task.bind
                     (\chan ->
-                        Utils.forkIO
-                            (Utils.takeMVar (BD.succeed ()) mvar
+                        Process.spawn
+                            (MVar.takeMVar mvar
                                 |> Task.bind (\_ -> detailsLoop chan (DState 0 0 0 0 0 0 0))
-                                |> Task.bind (\_ -> Utils.putMVar (\_ -> BE.bool True) mvar ())
+                                |> Task.bind (\_ -> MVar.putMVar mvar ())
                             )
                             |> Task.bind
                                 (\_ ->
-                                    let
-                                        encoder : Maybe DMsg -> BE.Encoder
-                                        encoder =
-                                            BE.maybe dMsgEncoder
-                                    in
-                                    callback (Key (Utils.writeChan encoder chan << Just))
+                                    callback (Key (Utils.writeChan chan << Just))
                                         |> Task.bind
                                             (\answer ->
-                                                Utils.writeChan encoder chan Nothing
+                                                Utils.writeChan chan Nothing
                                                     |> Task.fmap (\_ -> answer)
                                             )
                                 )
@@ -236,7 +232,7 @@ trackDetails style callback =
 
 detailsLoop : Chan (Maybe DMsg) -> DState -> Task Never ()
 detailsLoop chan ((DState total _ _ _ _ built _) as state) =
-    Utils.readChan (BD.maybe dMsgDecoder) chan
+    Utils.readChan chan
         |> Task.bind
             (\msg ->
                 case msg of
@@ -370,8 +366,8 @@ type alias BResult a =
     Result Exit.BuildProblem a
 
 
-trackBuild : BD.Decoder a -> (a -> BE.Encoder) -> Style -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
-trackBuild decoder encoder style callback =
+trackBuild : Style -> (BKey -> Task Never (BResult a)) -> Task Never (BResult a)
+trackBuild style callback =
     case style of
         Silent ->
             callback (Key (\_ -> Task.pure ()))
@@ -380,24 +376,19 @@ trackBuild decoder encoder style callback =
             callback (Key (\_ -> Task.pure ()))
 
         Terminal mvar ->
-            Utils.newChan Utils.mVarEncoder
+            Utils.newChan
                 |> Task.bind
                     (\chan ->
-                        let
-                            chanEncoder : Result BMsg (BResult a) -> BE.Encoder
-                            chanEncoder =
-                                BE.result bMsgEncoder (bResultEncoder encoder)
-                        in
-                        Utils.forkIO
-                            (Utils.takeMVar (BD.succeed ()) mvar
+                        Process.spawn
+                            (MVar.takeMVar mvar
                                 |> Task.bind (\_ -> putStrFlush "Compiling ...")
-                                |> Task.bind (\_ -> buildLoop decoder chan 0)
-                                |> Task.bind (\_ -> Utils.putMVar (\_ -> BE.bool True) mvar ())
+                                |> Task.bind (\_ -> buildLoop chan 0)
+                                |> Task.bind (\_ -> MVar.putMVar mvar ())
                             )
-                            |> Task.bind (\_ -> callback (Key (Utils.writeChan chanEncoder chan << Err)))
+                            |> Task.bind (\_ -> callback (Key (Utils.writeChan chan << Err)))
                             |> Task.bind
                                 (\result ->
-                                    Utils.writeChan chanEncoder chan (Ok result)
+                                    Utils.writeChan chan (Ok result)
                                         |> Task.fmap (\_ -> result)
                                 )
                     )
@@ -407,9 +398,9 @@ type BMsg
     = BDone
 
 
-buildLoop : BD.Decoder a -> Chan (Result BMsg (BResult a)) -> Int -> Task Never ()
-buildLoop decoder chan done =
-    Utils.readChan (BD.result bMsgDecoder (bResultDecoder decoder)) chan
+buildLoop : Chan (Result BMsg (BResult a)) -> Int -> Task Never ()
+buildLoop chan done =
+    Utils.readChan chan
         |> Task.bind
             (\msg ->
                 case msg of
@@ -420,7 +411,7 @@ buildLoop decoder chan done =
                                 done + 1
                         in
                         putStrFlush ("\u{000D}Compiling (" ++ String.fromInt done1 ++ ")")
-                            |> Task.bind (\_ -> buildLoop decoder chan done1)
+                            |> Task.bind (\_ -> buildLoop chan done1)
 
                     Ok result ->
                         let
@@ -483,7 +474,7 @@ reportGenerate style names output =
             Task.pure ()
 
         Terminal mvar ->
-            Utils.readMVar (BD.map (\_ -> ()) BD.bool) mvar
+            MVar.readMVar mvar
                 |> Task.bind
                     (\_ ->
                         let
@@ -565,108 +556,3 @@ putStrFlush : String -> Task Never ()
 putStrFlush str =
     IO.hPutStr IO.stdout str
         |> Task.bind (\_ -> IO.hFlush IO.stdout)
-
-
-
--- ENCODERS and DECODERS
-
-
-dMsgEncoder : DMsg -> BE.Encoder
-dMsgEncoder dMsg =
-    case dMsg of
-        DStart numDependencies ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , BE.int numDependencies
-                ]
-
-        DCached ->
-            BE.unsignedInt8 1
-
-        DRequested ->
-            BE.unsignedInt8 2
-
-        DReceived pkg vsn ->
-            BE.sequence
-                [ BE.unsignedInt8 3
-                , Pkg.nameEncoder pkg
-                , V.versionEncoder vsn
-                ]
-
-        DFailed pkg vsn ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , Pkg.nameEncoder pkg
-                , V.versionEncoder vsn
-                ]
-
-        DBuilt ->
-            BE.unsignedInt8 5
-
-        DBroken ->
-            BE.unsignedInt8 6
-
-
-dMsgDecoder : BD.Decoder DMsg
-dMsgDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map DStart BD.int
-
-                    1 ->
-                        BD.succeed DCached
-
-                    2 ->
-                        BD.succeed DRequested
-
-                    3 ->
-                        BD.map2 DReceived
-                            Pkg.nameDecoder
-                            V.versionDecoder
-
-                    4 ->
-                        BD.map2 DFailed
-                            Pkg.nameDecoder
-                            V.versionDecoder
-
-                    5 ->
-                        BD.succeed DBuilt
-
-                    6 ->
-                        BD.succeed DBroken
-
-                    _ ->
-                        BD.fail
-            )
-
-
-bMsgEncoder : BMsg -> BE.Encoder
-bMsgEncoder _ =
-    BE.unsignedInt8 0
-
-
-bMsgDecoder : BD.Decoder BMsg
-bMsgDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.succeed BDone
-
-                    _ ->
-                        BD.fail
-            )
-
-
-bResultEncoder : (a -> BE.Encoder) -> BResult a -> BE.Encoder
-bResultEncoder encoder bResult =
-    BE.result Exit.buildProblemEncoder encoder bResult
-
-
-bResultDecoder : BD.Decoder a -> BD.Decoder (BResult a)
-bResultDecoder decoder =
-    BD.result Exit.buildProblemDecoder decoder

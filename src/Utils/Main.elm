@@ -8,13 +8,11 @@ module Utils.Main exposing
     , HttpResponseHeaders
     , HttpStatus(..)
     , LockSharedExclusive(..)
-    , MVar(..)
     , ReplCompletion(..)
     , ReplCompletionFunc
     , ReplInputT
     , ReplSettings(..)
     , SomeException(..)
-    , ThreadId
     , ZipArchive(..)
     , ZipEntry(..)
     , binaryDecodeFileOrFail
@@ -44,7 +42,6 @@ module Utils.Main exposing
     , foldM
     , foldl1_
     , foldr1
-    , forkIO
     , fpAddExtension
     , fpAddTrailingPathSeparator
     , fpCombine
@@ -77,8 +74,6 @@ module Utils.Main exposing
     , listTraverse
     , listTraverse_
     , lockWithFileLock
-    , mVarDecoder
-    , mVarEncoder
     , mapFindMin
     , mapFromKeys
     , mapFromListWith
@@ -101,14 +96,10 @@ module Utils.Main exposing
     , maybeMapM
     , maybeTraverseTask
     , newChan
-    , newEmptyMVar
-    , newMVar
     , nodeGetDirname
     , nodeMathRandom
     , nonEmptyListTraverse
-    , putMVar
     , readChan
-    , readMVar
     , replCompleteWord
     , replGetInputLine
     , replGetInputLineWithInitial
@@ -122,7 +113,6 @@ module Utils.Main exposing
     , sequenceNonemptyListResult
     , someExceptionDecoder
     , someExceptionEncoder
-    , takeMVar
     , unlines
     , unzip3
     , writeChan
@@ -133,6 +123,7 @@ import Basics.Extra exposing (flip)
 import Compiler.Data.Index as Index
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Reporting.Result as R
+import Control.Concurrent.MVar as MVar exposing (MVar)
 import Control.Monad.State.Strict as State
 import Data.Map as Map exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
@@ -1003,80 +994,6 @@ bracket_ before after thing =
 
 
 
--- Control.Concurrent
-
-
-type alias ThreadId =
-    Process.Id
-
-
-forkIO : Task Never () -> Task Never ThreadId
-forkIO =
-    Process.spawn
-
-
-
--- Control.Concurrent.MVar
-
-
-type MVar a
-    = MVar Int
-
-
-newMVar : (a -> BE.Encoder) -> a -> Task Never (MVar a)
-newMVar toEncoder value =
-    newEmptyMVar
-        |> Task.bind
-            (\mvar ->
-                putMVar toEncoder mvar value
-                    |> Task.fmap (\_ -> mvar)
-            )
-
-
-readMVar : BD.Decoder a -> MVar a -> Task Never a
-readMVar decoder (MVar ref) =
-    Impure.task "readMVar"
-        []
-        (Impure.StringBody (String.fromInt ref))
-        (Impure.BytesResolver decoder)
-
-
-modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> Task Never ( a, b )) -> Task Never b
-modifyMVar decoder toEncoder m io =
-    takeMVar decoder m
-        |> Task.bind io
-        |> Task.bind
-            (\( a, b ) ->
-                putMVar toEncoder m a
-                    |> Task.fmap (\_ -> b)
-            )
-
-
-takeMVar : BD.Decoder a -> MVar a -> Task Never a
-takeMVar decoder (MVar ref) =
-    Impure.task "takeMVar"
-        []
-        (Impure.StringBody (String.fromInt ref))
-        (Impure.BytesResolver decoder)
-
-
-putMVar : (a -> BE.Encoder) -> MVar a -> a -> Task Never ()
-putMVar encoder (MVar ref) value =
-    Impure.task "putMVar"
-        [ Http.header "id" (String.fromInt ref) ]
-        (Impure.BytesBody (encoder value))
-        (Impure.Always ())
-
-
-newEmptyMVar : Task Never (MVar a)
-newEmptyMVar =
-    Impure.task "newEmptyMVar"
-        []
-        Impure.EmptyBody
-        (Impure.DecoderResolver (Decode.map MVar Decode.int))
-
-
-
 -- Control.Concurrent.Chan
 
 
@@ -1092,15 +1009,15 @@ type ChItem a
     = ChItem a (Stream a)
 
 
-newChan : (MVar (ChItem a) -> BE.Encoder) -> Task Never (Chan a)
-newChan toEncoder =
-    newEmptyMVar
+newChan : Task Never (Chan a)
+newChan =
+    MVar.newEmptyMVar
         |> Task.bind
             (\hole ->
-                newMVar toEncoder hole
+                MVar.newMVar hole
                     |> Task.bind
                         (\readVar ->
-                            newMVar toEncoder hole
+                            MVar.newMVar hole
                                 |> Task.fmap
                                     (\writeVar ->
                                         Chan readVar writeVar
@@ -1109,29 +1026,29 @@ newChan toEncoder =
             )
 
 
-readChan : BD.Decoder a -> Chan a -> Task Never a
-readChan decoder (Chan readVar _) =
-    modifyMVar mVarDecoder mVarEncoder readVar <|
+readChan : Chan a -> Task Never a
+readChan (Chan readVar _) =
+    MVar.modifyMVar readVar <|
         \read_end ->
-            readMVar (chItemDecoder decoder) read_end
+            -- Use readMVar here, not takeMVar,
+            -- else dupChan doesn't work
+            MVar.readMVar read_end
                 |> Task.fmap
                     (\(ChItem val new_read_end) ->
-                        -- Use readMVar here, not takeMVar,
-                        -- else dupChan doesn't work
                         ( new_read_end, val )
                     )
 
 
-writeChan : (a -> BE.Encoder) -> Chan a -> a -> Task Never ()
-writeChan toEncoder (Chan _ writeVar) val =
-    newEmptyMVar
+writeChan : Chan a -> a -> Task Never ()
+writeChan (Chan _ writeVar) val =
+    MVar.newEmptyMVar
         |> Task.bind
             (\new_hole ->
-                takeMVar mVarDecoder writeVar
+                MVar.takeMVar writeVar
                     |> Task.bind
                         (\old_hole ->
-                            putMVar (chItemEncoder toEncoder) old_hole (ChItem val new_hole)
-                                |> Task.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                            MVar.putMVar old_hole (ChItem val new_hole)
+                                |> Task.bind (\_ -> MVar.putMVar writeVar new_hole)
                         )
             )
 
@@ -1240,31 +1157,6 @@ nodeMathRandom =
 
 
 -- ENCODERS and DECODERS
-
-
-mVarDecoder : BD.Decoder (MVar a)
-mVarDecoder =
-    BD.map MVar BD.int
-
-
-mVarEncoder : MVar a -> BE.Encoder
-mVarEncoder (MVar ref) =
-    BE.int ref
-
-
-chItemEncoder : (a -> BE.Encoder) -> ChItem a -> BE.Encoder
-chItemEncoder valueEncoder (ChItem value hole) =
-    BE.sequence
-        [ valueEncoder value
-        , mVarEncoder hole
-        ]
-
-
-chItemDecoder : BD.Decoder a -> BD.Decoder (ChItem a)
-chItemDecoder decoder =
-    BD.map2 ChItem
-        decoder
-        mVarDecoder
 
 
 someExceptionEncoder : SomeException -> BE.Encoder

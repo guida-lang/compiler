@@ -3,18 +3,11 @@
     "source-directories": [
         "src"
     ],
-    "elm-version": "0.19.1",
+    "guida-version": "1.0.0",
     "dependencies": {
         "direct": {
             "Janiczek/elm-vlq": "1.0.0",
             "dasch/levenshtein": "1.0.3",
-            "elm/bytes": "1.0.8",
-            "elm/core": "1.0.5",
-            "elm/http": "2.0.0",
-            "elm/json": "1.1.4",
-            "elm/regex": "1.0.0",
-            "elm/time": "1.0.0",
-            "elm/url": "1.0.0",
             "elm-community/array-extra": "2.6.0",
             "elm-community/basics-extra": "4.1.0",
             "elm-community/list-extra": "8.7.0",
@@ -22,6 +15,7 @@
             "elm-community/result-extra": "2.4.0",
             "guida-lang/glsl": "1.0.0",
             "guida-lang/graph": "1.0.1",
+            "guida-lang/stdlib": "2.0.1",
             "jxxcarlson/hex": "4.0.1",
             "obiloud/numeric-decimal": "3.0.1",
             "rtfeldman/elm-hex": "1.0.0",
@@ -30,21 +24,13 @@
         },
         "indirect": {
             "andre-dietrich/parser-combinators": "4.1.0",
-            "elm/file": "1.0.5",
-            "elm/parser": "1.1.0",
             "fredcy/elm-parseint": "2.0.1",
             "pilatch/flip": "1.0.0",
             "zwilias/elm-rosetree": "1.5.0"
         }
     },
     "test-dependencies": {
-        "direct": {
-            "elm-explorations/test": "2.2.1"
-        },
-        "indirect": {
-            "elm/html": "1.0.1",
-            "elm/random": "1.0.0",
-            "elm/virtual-dom": "1.0.5"
-        }
+        "direct": {},
+        "indirect": {}
     }
 }

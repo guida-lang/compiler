@@ -77,8 +77,6 @@ You should now be able to run `guida`:
 guida --help
 ```
 
-To compare the performance of guida with elm, you can run `./scripts/performance-comparison.sh`.
-
 ## Watch mode
 
 You can run the following command to `build:bin` when anything is added, changed or deleted within the `src` directory:
@@ -128,12 +126,6 @@ Run `elm-test` tests:
 
 ```
 npm run test:elm
-```
-
-Run `elm-review` tests:
-
-```
-npm run test:elm-review
 ```
 
 Run `elm-format` validation:
